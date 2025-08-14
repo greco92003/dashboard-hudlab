@@ -1,0 +1,161 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+// Create Supabase client with service role key for cron operations
+async function createSupabaseServer() {
+  const cookieStore = await cookies();
+
+  // Use service role key for cron operations to bypass RLS
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
+}
+
+// Removed shouldSync function - cron will always sync like manual button
+
+// Cron job endpoint - runs daily at 6 AM
+// Uses same logic as manual sync button (always syncs, 90 days period)
+export async function GET(request: NextRequest) {
+  try {
+    // Verify this is a legitimate cron request
+    const authHeader = request.headers.get("authorization");
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      console.log("Unauthorized cron request");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    console.log(
+      "🚀 Cron job triggered - starting sync (same as manual button)..."
+    );
+
+    // Use same logic as manual sync button - always sync with 90 days period
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (same as manual)
+
+    const syncResponse = await fetch(
+      `${
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      }/api/test/robust-deals-sync`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!syncResponse.ok) {
+      const errorText = await syncResponse.text();
+      console.error("Sync failed:", errorText);
+      return NextResponse.json(
+        { error: `Sync failed: ${errorText}` },
+        { status: 500 }
+      );
+    }
+
+    const syncResult = await syncResponse.json();
+    console.log("✅ Cron sync completed successfully:", syncResult);
+
+    return NextResponse.json({
+      message: "Cron sync completed successfully",
+      timestamp: new Date().toISOString(),
+      syncResult,
+    });
+  } catch (error) {
+    console.error("Cron job error:", error);
+
+    let errorMessage = "Erro desconhecido";
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        errorMessage = "Sincronização cancelada por timeout (5 minutos)";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+
+    return NextResponse.json(
+      {
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Manual trigger endpoint (for testing) - same logic as GET and manual button
+export async function POST() {
+  try {
+    console.log(
+      "🚀 Manual cron trigger requested - using same logic as manual button..."
+    );
+
+    // Use same logic as manual sync button and GET endpoint
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (same as manual)
+
+    const syncResponse = await fetch(
+      `${
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      }/api/test/robust-deals-sync`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!syncResponse.ok) {
+      const errorText = await syncResponse.text();
+      throw new Error(`Sync failed: ${errorText}`);
+    }
+
+    const syncResult = await syncResponse.json();
+    console.log("✅ Manual cron trigger completed successfully:", syncResult);
+
+    return NextResponse.json({
+      message: "Manual cron trigger completed successfully",
+      timestamp: new Date().toISOString(),
+      syncResult,
+    });
+  } catch (error) {
+    console.error("Manual cron trigger error:", error);
+
+    let errorMessage = "Erro desconhecido";
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        errorMessage = "Sincronização cancelada por timeout (5 minutos)";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}
+
+// Set timeout for this API route - same as manual button (5 minutes)
+export const config = {
+  maxDuration: 300, // 5 minutes (same as manual button)
+};

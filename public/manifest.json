@@ -1,0 +1,146 @@
+{
+  "name": "HudLab Dashboard",
+  "short_name": "HudLab",
+  "description": "Dashboard de gestão e análise de vendas HudLab",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/dashboard",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "splash_pages": [
+    {
+      "src": "/splash/splash-640x1136.png",
+      "sizes": "640x1136",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-750x1334.png",
+      "sizes": "750x1334",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-828x1792.png",
+      "sizes": "828x1792",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1125x2436.png",
+      "sizes": "1125x2436",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1242x2208.png",
+      "sizes": "1242x2208",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1242x2688.png",
+      "sizes": "1242x2688",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1170x2532.png",
+      "sizes": "1170x2532",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1179x2556.png",
+      "sizes": "1179x2556",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1284x2778.png",
+      "sizes": "1284x2778",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1536x2048.png",
+      "sizes": "1536x2048",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1668x2224.png",
+      "sizes": "1668x2224",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-1668x2388.png",
+      "sizes": "1668x2388",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-2048x2732.png",
+      "sizes": "2048x2732",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-320x568.png",
+      "sizes": "320x568",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-414x896.png",
+      "sizes": "414x896",
+      "type": "image/png"
+    },
+    {
+      "src": "/splash/splash-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "pt-BR",
+  "dir": "ltr"
+}

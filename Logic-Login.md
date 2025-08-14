@@ -1,0 +1,1 @@
+A lógica do nosso login é ter um cache ou cookie de 7 dias no localstorage para que os dados do usuário sejam persistentes e não tenham que ser sempre re-renderizados em nossa aplicação. Mas deve ser possível abrirmos o profile-settings e editar estas informações e também clicar no botão sair e conseguir sair da aplicação autenticada.
