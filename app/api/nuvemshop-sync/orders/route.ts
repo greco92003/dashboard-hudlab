@@ -407,34 +407,6 @@ export async function GET(request: NextRequest) {
     const customer = searchParams.get("customer");
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
 
-    let query = supabase
-      .from("nuvemshop_orders")
-      .select("*")
-      .eq("sync_status", "synced")
-      .eq("payment_status", "paid") // Only show orders with payment status "paid"
-      .order("created_at_nuvemshop", { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    // Add date filters if provided
-    if (startDate && endDate) {
-      // Use created_at_nuvemshop for date filtering since completed_at is often null
-      // Add full time range to include the entire day
-      query = query
-        .gte("created_at_nuvemshop", `${startDate}T00:00:00.000Z`)
-        .lte("created_at_nuvemshop", `${endDate}T23:59:59.999Z`);
-    }
-
-    // Add customer filter if provided
-    if (customer) {
-      query = query.ilike("contact_name", `%${customer}%`);
-    }
-
-    const { data: orders, error } = await query;
-
-    if (error) {
-      throw new Error(`Database error: ${error.message}`);
-    }
-
     // Determine which brand to filter by
     let brandToFilter: string | null = null;
 
@@ -450,12 +422,45 @@ export async function GET(request: NextRequest) {
       // If selectedBrand is "all" or null, brandToFilter remains null (no filtering)
     }
 
-    // Filter orders by brand if needed
-    let filteredOrders = orders || [];
+    const query = supabase
+      .from("nuvemshop_orders")
+      .select("*")
+      .eq("sync_status", "synced")
+      .eq("payment_status", "paid"); // Only show orders with payment status "paid"
+
+    // Simple approach: get all orders, filter by brand if needed, then paginate
+    let allQuery = supabase
+      .from("nuvemshop_orders")
+      .select("*")
+      .eq("sync_status", "synced")
+      .eq("payment_status", "paid")
+      .order("created_at_nuvemshop", { ascending: false });
+
+    // Add date filters if provided
+    if (startDate && endDate) {
+      allQuery = allQuery
+        .gte("created_at_nuvemshop", `${startDate}T00:00:00.000Z`)
+        .lte("created_at_nuvemshop", `${endDate}T23:59:59.999Z`);
+    }
+
+    // Add customer filter if provided
+    if (customer) {
+      allQuery = allQuery.ilike("contact_name", `%${customer}%`);
+    }
+
+    const { data: allOrders, error: allOrdersError } = await allQuery;
+
+    if (allOrdersError) {
+      throw new Error(`Database error: ${allOrdersError.message}`);
+    }
+
+    let finalOrders = allOrders || [];
+
+    // Filter by brand if specified
     if (brandToFilter) {
       // Get all product IDs from orders
       const productIds = new Set<string>();
-      (orders || []).forEach((order) => {
+      finalOrders.forEach((order) => {
         if (order.products && Array.isArray(order.products)) {
           order.products.forEach((product: any) => {
             if (product.product_id) {
@@ -465,63 +470,52 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      // Get products with their brands from nuvemshop_products table
-      const { data: productsWithBrands } = await supabase
-        .from("nuvemshop_products")
-        .select("product_id, brand")
-        .in("product_id", Array.from(productIds));
+      if (productIds.size > 0) {
+        // Get products with their brands from nuvemshop_products table
+        const { data: productsWithBrands } = await supabase
+          .from("nuvemshop_products")
+          .select("product_id, brand")
+          .in("product_id", Array.from(productIds));
 
-      // Create a map of product_id to brand
-      const productBrandMap = new Map<string, string>();
-      (productsWithBrands || []).forEach((product) => {
-        if (product.product_id && product.brand) {
-          productBrandMap.set(product.product_id.toString(), product.brand);
-        }
-      });
-
-      // Filter orders based on brand information
-      filteredOrders = (orders || []).filter((order) => {
-        if (!order.products || !Array.isArray(order.products)) {
-          return false;
-        }
-
-        // Check if any product in the order matches the target brand
-        return order.products.some((product: any) => {
-          if (!product.product_id) return false;
-          const productBrand = productBrandMap.get(
-            product.product_id.toString()
-          );
-          return productBrand === brandToFilter;
+        // Create a map of product_id to brand
+        const productBrandMap = new Map<string, string>();
+        (productsWithBrands || []).forEach((product) => {
+          if (product.product_id && product.brand) {
+            productBrandMap.set(product.product_id.toString(), product.brand);
+          }
         });
-      });
+
+        // Filter orders based on brand information
+        finalOrders = finalOrders.filter((order) => {
+          if (!order.products || !Array.isArray(order.products)) {
+            return false;
+          }
+
+          // Check if any product in the order matches the target brand
+          return order.products.some((product: any) => {
+            if (!product.product_id) return false;
+            const productBrand = productBrandMap.get(
+              product.product_id.toString()
+            );
+            return productBrand === brandToFilter;
+          });
+        });
+      }
     }
 
-    // Get total count for pagination with same filters
-    let countQuery = supabase
-      .from("nuvemshop_orders")
-      .select("*", { count: "exact", head: true })
-      .eq("sync_status", "synced")
-      .eq("payment_status", "paid"); // Only count orders with payment status "paid"
+    // Apply pagination to final results
+    const totalCount = finalOrders.length;
+    const paginatedOrders = finalOrders.slice(offset, offset + limit);
 
-    // Apply same date filters for count
-    if (startDate && endDate) {
-      countQuery = countQuery
-        .gte("created_at_nuvemshop", `${startDate}T00:00:00.000Z`)
-        .lte("created_at_nuvemshop", `${endDate}T23:59:59.999Z`);
-    }
-
-    // Apply same customer filter for count
-    if (customer) {
-      countQuery = countQuery.ilike("contact_name", `%${customer}%`);
-    }
-
-    const { count: totalCount } = await countQuery;
+    console.log(
+      `API Response: total=${totalCount}, count=${paginatedOrders.length}, brand=${brandToFilter}`
+    );
 
     return NextResponse.json({
       success: true,
-      orders: filteredOrders,
-      total: totalCount || 0,
-      count: filteredOrders.length,
+      orders: paginatedOrders,
+      total: totalCount,
+      count: paginatedOrders.length,
       filtered_by_brand: brandToFilter,
     });
   } catch (error) {

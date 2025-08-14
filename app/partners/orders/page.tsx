@@ -112,7 +112,7 @@ export default function PartnersOrdersPage() {
     string | null
   >(null);
 
-  const itemsPerPage = 10;
+  const itemsPerPage = 5;
 
   // Check permissions
   const canViewPage = isOwnerOrAdmin || isPartnersMedia;
@@ -245,7 +245,7 @@ export default function PartnersOrdersPage() {
 
         const data = await response.json();
         setOrders(data.orders || []);
-        setTotalOrders(data.count || 0);
+        setTotalOrders(data.total || 0);
       } catch (error) {
         console.error("Error fetching orders:", error);
         toast.error("Erro ao carregar pedidos");

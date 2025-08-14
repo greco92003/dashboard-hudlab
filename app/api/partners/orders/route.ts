@@ -66,7 +66,8 @@ export async function GET(request: NextRequest) {
       )
       .eq("payment_status", "paid") // Only show orders with payment status "paid"
       .not("total", "is", null) // Only orders with valid total
-      .order("created_at_nuvemshop", { ascending: false });
+      .order("created_at_nuvemshop", { ascending: false })
+      .limit(2000); // Increase limit to get more orders before filtering
 
     // Apply date filtering - use created_at_nuvemshop as fallback for completed_at
     if (startDate && endDate) {
@@ -182,6 +183,10 @@ export async function GET(request: NextRequest) {
     const totalOrders = filteredOrders?.length || 0;
     const totalRevenue =
       filteredOrders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0;
+
+    console.log(
+      `Dashboard API: total orders before filter=${orders?.length}, after filter=${totalOrders}, brand=${brandToFilter}`
+    );
 
     // Group by province for state analysis
     const provinceStats =

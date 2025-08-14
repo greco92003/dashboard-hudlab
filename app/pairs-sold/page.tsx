@@ -51,12 +51,12 @@ export default function PairsSoldPage() {
   } = useGlobalDateRange();
 
   // Helper function to format date as local YYYY-MM-DD without timezone conversion
-  const formatDateToLocal = (date: Date): string => {
+  const formatDateToLocal = useCallback((date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
-  };
+  }, []);
 
   // Helper function to parse ISO date string as local date without timezone conversion
   const parseLocalDateFromISO = (isoString: string): Date => {
@@ -168,122 +168,129 @@ export default function PairsSoldPage() {
   // ];
 
   // Fetch deals data based on the selected period or custom date range using cached data
-  const fetchDeals = async (
-    selectedPeriod?: number,
-    customDateRange?: DateRange
-  ) => {
-    setLoading(true);
-    try {
-      let url = "/api/deals-cache";
+  const fetchDeals = useCallback(
+    async (selectedPeriod?: number, customDateRange?: DateRange) => {
+      setLoading(true);
+      try {
+        let url = "/api/deals-cache";
 
-      if (customDateRange?.from && customDateRange?.to) {
-        // Use custom date range - format as local date to avoid timezone issues
-        const startDate = formatDateToLocal(customDateRange.from);
-        const endDate = formatDateToLocal(customDateRange.to);
-        console.log("Pairs-sold: Custom date range selected:", {
-          originalFrom: customDateRange.from,
-          originalTo: customDateRange.to,
-          formattedStart: startDate,
-          formattedEnd: endDate,
-        });
-        url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
-      } else if (selectedPeriod) {
-        // Use period-based filtering
-        url = `/api/deals-cache?period=${selectedPeriod}`;
-      }
-
-      // Use cached API call with retry logic
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.deals) {
-        setDeals(data.deals);
-
-        // Calculate total value - divide by 100
-        const total = data.deals.reduce((sum: number, item: Deal) => {
-          return sum + (item.value || 0) / 100;
-        }, 0);
-
-        setTotalValue(total);
-
-        // Calculate total pairs sold directly from quantidade-de-pares field
-        const totalPairs = data.deals.reduce((sum: number, item: Deal) => {
-          const quantidadePares = parseInt(item["quantidade-de-pares"] || "0");
-          return sum + quantidadePares;
-        }, 0);
-
-        setTotalPairsSold(totalPairs);
-
-        // Calculate pairs sold per day based on working days (excluding weekends)
-        let workingDays = 22; // default for 30 days (último mês)
-
-        // Use parameters passed to function instead of global variables to avoid sync issues
-        const isUsingCustomRange = customDateRange?.from && customDateRange?.to;
-        const currentPeriod = selectedPeriod || 30; // Use default instead of global period
-
-        console.log("Pairs-sold: Working days calculation:", {
-          isUsingCustomRange,
-          currentPeriod,
-          customDateRange,
-          selectedPeriod,
-        });
-
-        if (isUsingCustomRange && customDateRange.from && customDateRange.to) {
-          // For custom date range, calculate working days excluding weekends
-          workingDays = 0;
-          const currentDate = new Date(customDateRange.from);
-          const endDate = new Date(customDateRange.to);
-
-          while (currentDate <= endDate) {
-            const dayOfWeek = currentDate.getDay();
-            // 0 = Sunday, 6 = Saturday - exclude these
-            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-              workingDays++;
-            }
-            currentDate.setDate(currentDate.getDate() + 1);
-          }
-        } else {
-          // For fixed periods, use predefined working days
-          if (currentPeriod === 60) {
-            workingDays = 44; // 2 meses
-          } else if (currentPeriod === 90) {
-            workingDays = 66; // 3 meses
-          }
-          // currentPeriod === 30 already defaults to 22
+        if (customDateRange?.from && customDateRange?.to) {
+          // Use custom date range - format as local date to avoid timezone issues
+          const startDate = formatDateToLocal(customDateRange.from);
+          const endDate = formatDateToLocal(customDateRange.to);
+          console.log("Pairs-sold: Custom date range selected:", {
+            originalFrom: customDateRange.from,
+            originalTo: customDateRange.to,
+            formattedStart: startDate,
+            formattedEnd: endDate,
+          });
+          url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
+        } else if (selectedPeriod) {
+          // Use period-based filtering
+          url = `/api/deals-cache?period=${selectedPeriod}`;
         }
 
-        const calculatedPairsSoldPerDay =
-          workingDays > 0 ? Math.round(totalPairs / workingDays) : 0;
+        // Use cached API call with retry logic
+        const response = await fetch(url);
 
-        console.log("Pairs-sold: Final calculation:", {
-          totalPairs,
-          workingDays,
-          pairsSoldPerDay: calculatedPairsSoldPerDay,
-        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
-        setPairsSoldPerDay(calculatedPairsSoldPerDay);
-      } else {
+        const data = await response.json();
+
+        if (data.deals) {
+          setDeals(data.deals);
+
+          // Calculate total value - divide by 100
+          const total = data.deals.reduce((sum: number, item: Deal) => {
+            return sum + (item.value || 0) / 100;
+          }, 0);
+
+          setTotalValue(total);
+
+          // Calculate total pairs sold directly from quantidade-de-pares field
+          const totalPairs = data.deals.reduce((sum: number, item: Deal) => {
+            const quantidadePares = parseInt(
+              item["quantidade-de-pares"] || "0"
+            );
+            return sum + quantidadePares;
+          }, 0);
+
+          setTotalPairsSold(totalPairs);
+
+          // Calculate pairs sold per day based on working days (excluding weekends)
+          let workingDays = 22; // default for 30 days (último mês)
+
+          // Use parameters passed to function instead of global variables to avoid sync issues
+          const isUsingCustomRange =
+            customDateRange?.from && customDateRange?.to;
+          const currentPeriod = selectedPeriod || 30; // Use default instead of global period
+
+          console.log("Pairs-sold: Working days calculation:", {
+            isUsingCustomRange,
+            currentPeriod,
+            customDateRange,
+            selectedPeriod,
+          });
+
+          if (
+            isUsingCustomRange &&
+            customDateRange.from &&
+            customDateRange.to
+          ) {
+            // For custom date range, calculate working days excluding weekends
+            workingDays = 0;
+            const currentDate = new Date(customDateRange.from);
+            const endDate = new Date(customDateRange.to);
+
+            while (currentDate <= endDate) {
+              const dayOfWeek = currentDate.getDay();
+              // 0 = Sunday, 6 = Saturday - exclude these
+              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                workingDays++;
+              }
+              currentDate.setDate(currentDate.getDate() + 1);
+            }
+          } else {
+            // For fixed periods, use predefined working days
+            if (currentPeriod === 60) {
+              workingDays = 44; // 2 meses
+            } else if (currentPeriod === 90) {
+              workingDays = 66; // 3 meses
+            }
+            // currentPeriod === 30 already defaults to 22
+          }
+
+          const calculatedPairsSoldPerDay =
+            workingDays > 0 ? Math.round(totalPairs / workingDays) : 0;
+
+          console.log("Pairs-sold: Final calculation:", {
+            totalPairs,
+            workingDays,
+            pairsSoldPerDay: calculatedPairsSoldPerDay,
+          });
+
+          setPairsSoldPerDay(calculatedPairsSoldPerDay);
+        } else {
+          setDeals([]);
+          setTotalValue(0);
+          setTotalPairsSold(0);
+          setPairsSoldPerDay(0);
+        }
+      } catch (error) {
+        console.error("Error fetching deals:", error);
         setDeals([]);
         setTotalValue(0);
-        setTotalPairsSold(0);
-        setPairsSoldPerDay(0);
-      }
-    } catch (error) {
-      console.error("Error fetching deals:", error);
-      setDeals([]);
-      setTotalValue(0);
 
-      // Show user-friendly error message
-      // You could add a toast notification here
-    } finally {
-      setLoading(false);
-    }
-  };
+        // Show user-friendly error message
+        // You could add a toast notification here
+      } finally {
+        setLoading(false);
+      }
+    },
+    [formatDateToLocal]
+  );
 
   // Note: Total pairs sold is now calculated directly from deals data in fetchDeals function
 
@@ -322,7 +329,7 @@ export default function PairsSoldPage() {
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, isHydrated]); // Removed fetchDeals dependency
+  }, [period, useCustomPeriod, dateRange, isHydrated, fetchDeals]);
 
   // Function to refresh pairs sold data
   const refreshPairsSoldData = useCallback(() => {
@@ -336,7 +343,7 @@ export default function PairsSoldPage() {
     } else {
       fetchDeals(period);
     }
-  }, [useCustomPeriod, dateRange, period]); // Removed fetchDeals dependency
+  }, [useCustomPeriod, dateRange, period, fetchDeals]);
 
   // Register this page for automatic refresh after sync
   useDataRefresh("pairs-sold", refreshPairsSoldData);
