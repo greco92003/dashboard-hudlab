@@ -59,7 +59,6 @@ export default function DashboardPage() {
     dateRange,
     period,
     useCustomPeriod,
-    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
   } = useGlobalDateRange();
@@ -282,21 +281,13 @@ export default function DashboardPage() {
   // Note: Total pairs sold is now fetched from dedicated API instead of calculated
 
   // Handle period change using global hook
-  const handlePeriodChangeLocal = async (newPeriod: number) => {
+  const handlePeriodChangeLocal = (newPeriod: number) => {
     handlePeriodChange(newPeriod);
-    fetchDeals(newPeriod);
-    fetchTotalPairsSold(newPeriod);
   };
 
   // Handle custom date range change using global hook
-  const handleDateRangeChangeLocal = async (
-    newDateRange: DateRange | undefined
-  ) => {
+  const handleDateRangeChangeLocal = (newDateRange: DateRange | undefined) => {
     handleDateRangeChange(newDateRange);
-    if (newDateRange?.from && newDateRange?.to) {
-      fetchDeals(undefined, newDateRange);
-      fetchTotalPairsSold(undefined, newDateRange);
-    }
   };
 
   // Fetch total pairs sold from dedicated API
@@ -336,40 +327,20 @@ export default function DashboardPage() {
     []
   );
 
-  // Initial data fetch using global date state - only after hydration
+  // Initial data fetch using global date state
   useEffect(() => {
-    if (!isHydrated) return;
-
-    console.log("Dashboard: Initializing data after hydration:", {
-      useCustomPeriod,
-      dateRange,
-      period,
-      isHydrated,
-    });
-
     const initializeData = async () => {
-      if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-        // Use custom date range
-        console.log("Dashboard: Using custom date range");
-        fetchDeals(undefined, dateRange);
-        fetchTotalPairsSold(undefined, dateRange);
+      if (!useCustomPeriod) {
+        await fetchDeals(period);
+        await fetchTotalPairsSold(period);
       } else {
-        // Use period-based filtering
-        console.log("Dashboard: Using period-based filtering, period:", period);
-        fetchDeals(period);
-        fetchTotalPairsSold(period);
+        await fetchDeals(period, dateRange);
+        await fetchTotalPairsSold(period, dateRange);
       }
     };
 
     initializeData();
-  }, [
-    period,
-    useCustomPeriod,
-    dateRange,
-    fetchDeals,
-    fetchTotalPairsSold,
-    isHydrated,
-  ]);
+  }, [period, useCustomPeriod, dateRange, fetchDeals, fetchTotalPairsSold]);
 
   // Function to refresh all dashboard data
   const refreshDashboardData = useCallback(() => {

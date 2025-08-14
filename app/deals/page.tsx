@@ -49,7 +49,6 @@ export default function DealsPage() {
     dateRange,
     period,
     useCustomPeriod,
-    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
     getApiUrl,
@@ -392,42 +391,25 @@ export default function DealsPage() {
   // Handle period change using global hook
   const handlePeriodChangeLocal = (newPeriod: number) => {
     handlePeriodChange(newPeriod);
-    fetchDeals(newPeriod);
   };
 
   // Handle custom date range change using global hook
   const handleDateRangeChangeLocal = (newDateRange: DateRange | undefined) => {
     handleDateRangeChange(newDateRange);
-    if (newDateRange?.from && newDateRange?.to) {
-      fetchDeals(undefined, newDateRange);
-    }
   };
 
-  // Initial data fetch using global date state - only after hydration
+  // Initial data fetch using global date state
   useEffect(() => {
-    if (!isHydrated) return;
-
-    console.log("Deals: Initializing data after hydration:", {
-      useCustomPeriod,
-      dateRange,
-      period,
-      isHydrated,
-    });
-
-    const initializeData = () => {
-      if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-        // Use custom date range
-        console.log("Deals: Using custom date range");
-        fetchDeals(undefined, dateRange);
+    const initializeData = async () => {
+      if (!useCustomPeriod) {
+        await fetchDeals(period);
       } else {
-        // Use period-based filtering
-        console.log("Deals: Using period-based filtering, period:", period);
-        fetchDeals(period);
+        await fetchDeals(period, dateRange);
       }
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
+  }, [period, useCustomPeriod, dateRange, fetchDeals]);
 
   // Function to refresh deals data
   const refreshDealsData = useCallback(() => {

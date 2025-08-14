@@ -197,14 +197,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     // Prevent hydration mismatch
     setIsHydrated(true);
 
-    // Initialize with sync manager state after hydration
-    setIsSyncing(syncManager.isSyncing);
     // Subscribe to sync manager updates
     const unsubscribe = syncManager.subscribe((newState) => {
       setIsSyncing(newState);
     });
 
-    // Initialize with current state
+    // Initialize with current state after subscription
     setIsSyncing(syncManager.isSyncing);
 
     return unsubscribe;

@@ -168,175 +168,175 @@ export default function PairsSoldPage() {
   // ];
 
   // Fetch deals data based on the selected period or custom date range using cached data
-  const fetchDeals = useCallback(
-    async (selectedPeriod?: number, customDateRange?: DateRange) => {
-      setLoading(true);
-      try {
-        let url = "/api/deals-cache";
+  const fetchDeals = async (
+    selectedPeriod?: number,
+    customDateRange?: DateRange
+  ) => {
+    setLoading(true);
+    try {
+      let url = "/api/deals-cache";
 
-        if (customDateRange?.from && customDateRange?.to) {
-          // Use custom date range - format as local date to avoid timezone issues
-          const startDate = formatDateToLocal(customDateRange.from);
-          const endDate = formatDateToLocal(customDateRange.to);
-          console.log("Pairs-sold: Custom date range selected:", {
-            originalFrom: customDateRange.from,
-            originalTo: customDateRange.to,
-            formattedStart: startDate,
-            formattedEnd: endDate,
-          });
-          url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
-        } else if (selectedPeriod) {
-          // Use period-based filtering
-          url = `/api/deals-cache?period=${selectedPeriod}`;
-        }
+      if (customDateRange?.from && customDateRange?.to) {
+        // Use custom date range - format as local date to avoid timezone issues
+        const startDate = formatDateToLocal(customDateRange.from);
+        const endDate = formatDateToLocal(customDateRange.to);
+        console.log("Pairs-sold: Custom date range selected:", {
+          originalFrom: customDateRange.from,
+          originalTo: customDateRange.to,
+          formattedStart: startDate,
+          formattedEnd: endDate,
+        });
+        url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
+      } else if (selectedPeriod) {
+        // Use period-based filtering
+        url = `/api/deals-cache?period=${selectedPeriod}`;
+      }
 
-        // Use cached API call with retry logic
-        const response = await fetch(url);
+      // Use cached API call with retry logic
+      const response = await fetch(url);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.deals) {
-          setDeals(data.deals);
+      if (data.deals) {
+        setDeals(data.deals);
 
-          // Calculate total value - divide by 100
-          const total = data.deals.reduce((sum: number, item: Deal) => {
-            return sum + (item.value || 0) / 100;
-          }, 0);
+        // Calculate total value - divide by 100
+        const total = data.deals.reduce((sum: number, item: Deal) => {
+          return sum + (item.value || 0) / 100;
+        }, 0);
 
-          setTotalValue(total);
+        setTotalValue(total);
 
-          // Calculate total pairs sold directly from quantidade-de-pares field
-          const totalPairs = data.deals.reduce((sum: number, item: Deal) => {
-            const quantidadePares = parseInt(
-              item["quantidade-de-pares"] || "0"
-            );
-            return sum + quantidadePares;
-          }, 0);
+        // Calculate total pairs sold directly from quantidade-de-pares field
+        const totalPairs = data.deals.reduce((sum: number, item: Deal) => {
+          const quantidadePares = parseInt(item["quantidade-de-pares"] || "0");
+          return sum + quantidadePares;
+        }, 0);
 
-          setTotalPairsSold(totalPairs);
+        setTotalPairsSold(totalPairs);
 
-          // Calculate pairs sold per day based on working days (excluding weekends)
-          let workingDays = 22; // default for 30 days (último mês)
+        // Calculate pairs sold per day based on working days (excluding weekends)
+        let workingDays = 22; // default for 30 days (último mês)
 
-          // Use parameters passed to function instead of global variables to avoid sync issues
-          const isUsingCustomRange =
-            customDateRange?.from && customDateRange?.to;
-          const currentPeriod = selectedPeriod || period;
+        // Use parameters passed to function instead of global variables to avoid sync issues
+        const isUsingCustomRange = customDateRange?.from && customDateRange?.to;
+        const currentPeriod = selectedPeriod || 30; // Use default instead of global period
 
-          console.log("Pairs-sold: Working days calculation:", {
-            isUsingCustomRange,
-            currentPeriod,
-            customDateRange,
-            selectedPeriod,
-            globalPeriod: period,
-            globalUseCustomPeriod: useCustomPeriod,
-            globalDateRange: dateRange,
-          });
+        console.log("Pairs-sold: Working days calculation:", {
+          isUsingCustomRange,
+          currentPeriod,
+          customDateRange,
+          selectedPeriod,
+        });
 
-          if (
-            isUsingCustomRange &&
-            customDateRange.from &&
-            customDateRange.to
-          ) {
-            // For custom date range, calculate working days excluding weekends
-            workingDays = 0;
-            const currentDate = new Date(customDateRange.from);
-            const endDate = new Date(customDateRange.to);
+        if (isUsingCustomRange && customDateRange.from && customDateRange.to) {
+          // For custom date range, calculate working days excluding weekends
+          workingDays = 0;
+          const currentDate = new Date(customDateRange.from);
+          const endDate = new Date(customDateRange.to);
 
-            while (currentDate <= endDate) {
-              const dayOfWeek = currentDate.getDay();
-              // 0 = Sunday, 6 = Saturday - exclude these
-              if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                workingDays++;
-              }
-              currentDate.setDate(currentDate.getDate() + 1);
+          while (currentDate <= endDate) {
+            const dayOfWeek = currentDate.getDay();
+            // 0 = Sunday, 6 = Saturday - exclude these
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+              workingDays++;
             }
-          } else {
-            // For fixed periods, use predefined working days
-            if (currentPeriod === 60) {
-              workingDays = 44; // 2 meses
-            } else if (currentPeriod === 90) {
-              workingDays = 66; // 3 meses
-            }
-            // currentPeriod === 30 already defaults to 22
+            currentDate.setDate(currentDate.getDate() + 1);
           }
-
-          const calculatedPairsSoldPerDay =
-            workingDays > 0 ? Math.round(totalPairs / workingDays) : 0;
-
-          console.log("Pairs-sold: Final calculation:", {
-            totalPairs,
-            workingDays,
-            pairsSoldPerDay: calculatedPairsSoldPerDay,
-          });
-
-          setPairsSoldPerDay(calculatedPairsSoldPerDay);
         } else {
-          setDeals([]);
-          setTotalValue(0);
-          setTotalPairsSold(0);
-          setPairsSoldPerDay(0);
+          // For fixed periods, use predefined working days
+          if (currentPeriod === 60) {
+            workingDays = 44; // 2 meses
+          } else if (currentPeriod === 90) {
+            workingDays = 66; // 3 meses
+          }
+          // currentPeriod === 30 already defaults to 22
         }
-      } catch (error) {
-        console.error("Error fetching deals:", error);
+
+        const calculatedPairsSoldPerDay =
+          workingDays > 0 ? Math.round(totalPairs / workingDays) : 0;
+
+        console.log("Pairs-sold: Final calculation:", {
+          totalPairs,
+          workingDays,
+          pairsSoldPerDay: calculatedPairsSoldPerDay,
+        });
+
+        setPairsSoldPerDay(calculatedPairsSoldPerDay);
+      } else {
         setDeals([]);
         setTotalValue(0);
-
-        // Show user-friendly error message
-        // You could add a toast notification here
-      } finally {
-        setLoading(false);
+        setTotalPairsSold(0);
+        setPairsSoldPerDay(0);
       }
-    },
-    [period, useCustomPeriod, dateRange] // Include all dependencies used in calculations
-  );
+    } catch (error) {
+      console.error("Error fetching deals:", error);
+      setDeals([]);
+      setTotalValue(0);
+
+      // Show user-friendly error message
+      // You could add a toast notification here
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Note: Total pairs sold is now calculated directly from deals data in fetchDeals function
 
   // Handle period change using global hook
   const handlePeriodChangeLocal = (newPeriod: number) => {
     handlePeriodChange(newPeriod); // This will clear dateRange and set useCustomPeriod to false
-    fetchDeals(newPeriod);
   };
 
   // Handle custom date range change using global hook
   const handleDateRangeChangeLocal = (newDateRange: DateRange | undefined) => {
     handleDateRangeChange(newDateRange);
-    if (newDateRange?.from && newDateRange?.to) {
-      fetchDeals(undefined, newDateRange);
-    }
   };
 
   // Initial data fetch using global date state - only after hydration
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated) {
+      console.log("Pairs-sold: Waiting for hydration...");
+      return;
+    }
 
-    const initializeData = () => {
-      if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-        // Use custom date range
-        fetchDeals(undefined, dateRange);
+    console.log("Pairs-sold: useEffect triggered", {
+      period,
+      useCustomPeriod,
+      dateRange,
+      isHydrated,
+    });
+
+    const initializeData = async () => {
+      if (!useCustomPeriod) {
+        console.log("Pairs-sold: Fetching with period:", period);
+        await fetchDeals(period);
       } else {
-        // Use period-based filtering
-        fetchDeals(period);
+        console.log("Pairs-sold: Fetching with custom date range:", dateRange);
+        await fetchDeals(period, dateRange);
       }
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
+  }, [period, useCustomPeriod, dateRange, isHydrated]); // Removed fetchDeals dependency
 
   // Function to refresh pairs sold data
   const refreshPairsSoldData = useCallback(() => {
-    console.log("🔄 Pairs-sold: Refreshing data after sync...");
+    console.log("🔄 Pairs-sold: Refreshing data after sync...", {
+      useCustomPeriod,
+      dateRange,
+      period,
+    });
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
       fetchDeals(undefined, dateRange);
     } else {
       fetchDeals(period);
     }
-  }, [useCustomPeriod, dateRange, period, fetchDeals]);
+  }, [useCustomPeriod, dateRange, period]); // Removed fetchDeals dependency
 
   // Register this page for automatic refresh after sync
   useDataRefresh("pairs-sold", refreshPairsSoldData);
@@ -347,7 +347,7 @@ export default function PairsSoldPage() {
         Pares Vendidos por Período
       </h1>
 
-      {isHydrated && (
+      {isHydrated ? (
         <div className="flex flex-col gap-4 mb-4 mt-2">
           {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
@@ -392,6 +392,20 @@ export default function PairsSoldPage() {
                 hideLabel
               />
             </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 mb-4 mt-2">
+          {/* Skeleton for period buttons */}
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+            <Skeleton className="h-10 w-full sm:w-32" />
+            <Skeleton className="h-10 w-full sm:w-40" />
+            <Skeleton className="h-10 w-full sm:w-40" />
+          </div>
+          {/* Skeleton for calendar */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-10 w-56" />
           </div>
         </div>
       )}
