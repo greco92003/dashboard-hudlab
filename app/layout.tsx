@@ -218,7 +218,7 @@ export default async function Layout({
               <SyncProvider>
                 <ThemeProvider
                   attribute="class"
-                  defaultTheme="dark"
+                  defaultTheme="light"
                   enableSystem
                   disableTransitionOnChange
                 >
