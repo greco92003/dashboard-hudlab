@@ -29,10 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar configurações de comissão
+    // Buscar configurações de comissão para a marca específica
     const { data: commissionSettings } = await supabase
       .from("partners_commission_settings")
       .select("percentage")
+      .eq("brand", brand)
       .order("updated_at", { ascending: false })
       .limit(1)
       .single();

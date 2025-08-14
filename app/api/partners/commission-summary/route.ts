@@ -60,10 +60,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get commission settings
+    // Get commission settings for the specific brand
     const { data: commissionSettings } = await supabase
       .from("partners_commission_settings")
       .select("percentage")
+      .eq("brand", targetBrand)
       .order("updated_at", { ascending: false })
       .limit(1)
       .single();

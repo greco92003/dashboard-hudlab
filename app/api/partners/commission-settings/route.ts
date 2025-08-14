@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
 
@@ -18,7 +18,7 @@ export async function GET() {
     // Check if user is approved and has permission to view commission settings
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("approved, role")
+      .select("approved, role, assigned_brand")
       .eq("id", user.id)
       .single();
 
@@ -36,10 +36,38 @@ export async function GET() {
       );
     }
 
-    // Get current commission settings
+    // Parse query parameters
+    const { searchParams } = new URL(request.url);
+    const requestedBrand = searchParams.get("brand");
+
+    // Determine which brand to get settings for
+    let targetBrand: string | null = null;
+
+    if (profile.role === "partners-media") {
+      // Partners-media can only see their assigned brand
+      if (!profile.assigned_brand) {
+        return NextResponse.json(
+          { error: "No brand assigned" },
+          { status: 403 }
+        );
+      }
+      targetBrand = profile.assigned_brand;
+    } else if (requestedBrand) {
+      // Owners/admins can request specific brand
+      targetBrand = requestedBrand;
+    } else {
+      // If no brand specified, return error for owners/admins
+      return NextResponse.json(
+        { error: "Brand parameter is required" },
+        { status: 400 }
+      );
+    }
+
+    // Get commission settings for the specific brand
     const { data: settings, error } = await supabase
       .from("partners_commission_settings")
       .select("*")
+      .eq("brand", targetBrand)
       .order("updated_at", { ascending: false })
       .limit(1)
       .single();
@@ -52,10 +80,11 @@ export async function GET() {
       );
     }
 
-    // If no settings exist, return default
+    // If no settings exist for this brand, return default
     if (!settings) {
       return NextResponse.json({
         percentage: 5.0,
+        brand: targetBrand,
         updated_by: null,
         updated_at: null,
         created_at: null,
@@ -109,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { percentage } = body;
+    const { percentage, brand } = body;
 
     if (typeof percentage !== "number" || percentage < 0 || percentage > 100) {
       return NextResponse.json(
@@ -118,17 +147,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if settings already exist
+    if (!brand || typeof brand !== "string") {
+      return NextResponse.json(
+        { error: "Brand is required and must be a string." },
+        { status: 400 }
+      );
+    }
+
+    // Check if settings already exist for this brand
     const { data: existingSettings } = await supabase
       .from("partners_commission_settings")
       .select("id")
+      .eq("brand", brand)
       .limit(1)
       .single();
 
     let result;
 
     if (existingSettings) {
-      // Update existing settings
+      // Update existing settings for this brand
       const { data, error } = await supabase
         .from("partners_commission_settings")
         .update({
@@ -149,11 +186,12 @@ export async function POST(request: NextRequest) {
 
       result = data;
     } else {
-      // Create new settings
+      // Create new settings for this brand
       const { data, error } = await supabase
         .from("partners_commission_settings")
         .insert({
           percentage,
+          brand,
           updated_by: user.id,
         })
         .select()

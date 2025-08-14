@@ -587,7 +587,7 @@ function PartnersDashboardPage() {
 
   // Update commission percentage
   const updateCommissionPercentage = async () => {
-    if (!isOwnerOrAdmin) return;
+    if (!isOwnerOrAdmin || !effectiveBrand) return;
 
     try {
       setCommissionLoading(true);
@@ -598,6 +598,7 @@ function PartnersDashboardPage() {
         },
         body: JSON.stringify({
           percentage: newCommissionPercentage,
+          brand: effectiveBrand,
         }),
       });
 
@@ -605,18 +606,30 @@ function PartnersDashboardPage() {
         setCommissionPercentage(newCommissionPercentage);
         setTotalCommission((totalSales * newCommissionPercentage) / 100);
         setShowCommissionSettings(false);
+        toast.success(
+          `Comissão atualizada para ${effectiveBrand}: ${newCommissionPercentage}%`
+        );
+      } else {
+        const errorData = await response.json();
+        toast.error(`Erro ao atualizar comissão: ${errorData.error}`);
       }
     } catch (error) {
       console.error("Error updating commission percentage:", error);
+      toast.error("Erro ao atualizar comissão");
     } finally {
       setCommissionLoading(false);
     }
   };
 
   // Fetch commission settings (stable function)
-  const fetchCommissionSettingsStable = useCallback(async () => {
+  const fetchCommissionSettingsStable = useCallback(async (brand?: string) => {
     try {
-      const response = await fetch("/api/partners/commission-settings");
+      let url = "/api/partners/commission-settings";
+      if (brand) {
+        url += `?brand=${encodeURIComponent(brand)}`;
+      }
+
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setCommissionPercentage(data.percentage || 5);
@@ -630,11 +643,6 @@ function PartnersDashboardPage() {
   // Initial data fetch and brand change handler
   useEffect(() => {
     const initializeData = async () => {
-      // Only fetch commission settings on initial load
-      if (isInitialLoad.current) {
-        await fetchCommissionSettingsStable();
-      }
-
       // Wait for brand filter to be hydrated before making API calls
       if (!isHydrated) {
         return;
@@ -649,6 +657,11 @@ function PartnersDashboardPage() {
         setChartData([]);
         setLoading(false);
         return;
+      }
+
+      // Fetch commission settings for the effective brand
+      if (effectiveBrand) {
+        await fetchCommissionSettingsStable(effectiveBrand);
       }
 
       // Show toast notification when brand changes (only for owners/admins and not on initial load)
@@ -953,14 +966,20 @@ function PartnersDashboardPage() {
               <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm sm:text-base">
                   Valor Total de Comissão ({commissionPercentage}%)
+                  {effectiveBrand && (
+                    <div className="text-xs text-muted-foreground font-normal mt-1">
+                      Marca: {effectiveBrand}
+                    </div>
+                  )}
                 </CardTitle>
-                {isOwnerOrAdmin && (
+                {isOwnerOrAdmin && effectiveBrand && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() =>
                       setShowCommissionSettings(!showCommissionSettings)
                     }
+                    title={`Configurar comissão para ${effectiveBrand}`}
                   >
                     <Settings className="h-4 w-4" />
                   </Button>
@@ -976,8 +995,16 @@ function PartnersDashboardPage() {
                 )}
 
                 {/* Commission Settings */}
-                {showCommissionSettings && isOwnerOrAdmin && (
+                {showCommissionSettings && isOwnerOrAdmin && effectiveBrand && (
                   <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium">
+                        Configuração de Comissão - {effectiveBrand}
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Esta configuração é específica para a marca selecionada
+                      </p>
+                    </div>
                     <div className="flex items-center gap-2 mb-2">
                       <Label htmlFor="commission-percentage">
                         Porcentagem de Comissão:
