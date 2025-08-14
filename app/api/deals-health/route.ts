@@ -226,13 +226,32 @@ export async function POST() {
   try {
     console.log("Emergency sync triggered via health endpoint");
 
+    // Check if there's already a sync running
+    const supabase = await createSupabaseServer();
+    const { data: runningSyncs } = await supabase
+      .from("deals_sync_log")
+      .select("id, sync_status")
+      .eq("sync_status", "running")
+      .limit(1);
+
+    if (runningSyncs && runningSyncs.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+          isRunning: true,
+        },
+        { status: 409 } // Conflict status
+      );
+    }
+
     // Trigger sync
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/deals-sync`,
+      }/api/test/robust-deals-sync`,
       {
-        method: "POST",
+        method: "GET",
       }
     );
 

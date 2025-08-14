@@ -11,7 +11,7 @@
   ],
   "functions": {
     "app/api/test/robust-deals-sync/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 600
     },
     "app/api/deals-cache/route.ts": {
       "maxDuration": 30

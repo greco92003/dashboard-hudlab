@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -146,6 +147,25 @@ export async function GET(request: NextRequest) {
 export async function POST() {
   try {
     console.log("Manual sync trigger requested");
+
+    // Check if there's already a sync running
+    const supabase = await createSupabaseServer();
+    const { data: runningSyncs } = await supabase
+      .from("deals_sync_log")
+      .select("id, sync_status")
+      .eq("sync_status", "running")
+      .limit(1);
+
+    if (runningSyncs && runningSyncs.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+          isRunning: true,
+        },
+        { status: 409 } // Conflict status
+      );
+    }
 
     // Trigger sync
     const syncResponse = await fetch(

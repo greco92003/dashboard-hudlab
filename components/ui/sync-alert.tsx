@@ -9,6 +9,7 @@ class SimpleSyncManager {
   private listeners = new Set<(isSyncing: boolean) => void>();
   private _isSyncing = false;
   private checkInterval: NodeJS.Timeout | null = null;
+  private isChecking = false;
 
   static getInstance(): SimpleSyncManager {
     if (!SimpleSyncManager.instance) {
@@ -85,10 +86,25 @@ class SimpleSyncManager {
       return;
     }
 
-    // Check API every 2 seconds
-    this.checkInterval = setInterval(() => {
-      this.checkApiSync();
-    }, 2000);
+    // Smart polling: only check frequently when sync is running
+    const smartCheck = async () => {
+      if (!this.isChecking) return; // Stop if no more listeners
+
+      await this.checkApiSync();
+
+      if (!this.isChecking) return; // Check again after async operation
+
+      if (this._isSyncing) {
+        // If sync is running, check every 2 seconds
+        setTimeout(smartCheck, 2000);
+      } else {
+        // If no sync, check every 10 seconds for new syncs
+        setTimeout(smartCheck, 10000);
+      }
+    };
+
+    // Start smart checking
+    smartCheck();
   }
 
   private notifyListeners() {
@@ -103,10 +119,11 @@ class SimpleSyncManager {
     this.listeners.add(listener);
 
     // Start API checking when first listener subscribes
-    if (this.listeners.size === 1 && !this.checkInterval) {
+    if (this.listeners.size === 1 && !this.isChecking) {
       console.log(
         "🔗 SimpleSyncManager: Starting API checking (first subscriber)"
       );
+      this.isChecking = true;
       this.startApiChecking();
     }
 
@@ -122,11 +139,11 @@ class SimpleSyncManager {
       this.listeners.delete(listener);
 
       // Stop API checking when no more listeners
-      if (this.listeners.size === 0 && this.checkInterval) {
+      if (this.listeners.size === 0 && this.isChecking) {
         console.log(
           "🔌 SimpleSyncManager: Stopping API checking (no more subscribers)"
         );
-        clearInterval(this.checkInterval);
+        this.isChecking = false;
         this.checkInterval = null;
       }
     };

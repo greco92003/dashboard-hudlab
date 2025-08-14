@@ -36,7 +36,7 @@ async function createSupabaseServer() {
   );
 }
 
-async function fetchJSON(url: string, timeout = 15000) {
+async function fetchJSON(url: string, timeout = 60000) {
   console.log("Fetching URL:", url);
   try {
     const controller = new AbortController();
@@ -60,6 +60,33 @@ async function fetchJSON(url: string, timeout = 15000) {
     console.error("Fetch error:", error);
     throw error;
   }
+}
+
+async function fetchJSONWithRetry(
+  url: string,
+  maxRetries = 3,
+  timeout = 60000
+) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Attempt ${attempt}/${maxRetries} for URL: ${url}`);
+      return await fetchJSON(url, timeout);
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ Attempt ${attempt} failed:`, error);
+
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+        console.log(`⏳ Waiting ${delay}ms before retry...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  console.error(`❌ All ${maxRetries} attempts failed for URL: ${url}`);
+  throw lastError;
 }
 
 // Date conversion function
@@ -103,7 +130,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createSupabaseServer();
 
-    // Create sync log entry
+    // Use a more robust approach with atomic check-and-insert
+    console.log("🔍 Performing atomic check for running syncs...");
+
+    // First, try to insert a new sync log entry
+    // This will help us detect race conditions
     const { data: syncLog, error: syncLogError } = await supabase
       .from("deals_sync_log")
       .insert({
@@ -114,13 +145,54 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (syncLogError) {
-      console.error("Error creating sync log:", syncLogError);
+      console.error("❌ Error creating sync log:", syncLogError);
       return NextResponse.json(
         { error: "Failed to create sync log" },
         { status: 500 }
       );
     }
 
+    console.log(`✅ Created sync log entry:`, syncLog);
+
+    // Now check if there are any OTHER running syncs (excluding the one we just created)
+    const { data: otherRunningSyncs, error: checkError } = await supabase
+      .from("deals_sync_log")
+      .select("id, sync_status, sync_started_at")
+      .eq("sync_status", "running")
+      .neq("id", syncLog.id) // Exclude the one we just created
+      .limit(1);
+
+    if (checkError) {
+      console.error("❌ Error checking for other running syncs:", checkError);
+    }
+
+    console.log(
+      `🔍 Found ${otherRunningSyncs?.length || 0} other running syncs:`,
+      otherRunningSyncs
+    );
+
+    if (otherRunningSyncs && otherRunningSyncs.length > 0) {
+      console.log(
+        "❌ Another sync is already running, cleaning up and rejecting"
+      );
+      console.log("❌ Other running sync details:", otherRunningSyncs[0]);
+
+      // Clean up the sync log we just created
+      await supabase.from("deals_sync_log").delete().eq("id", syncLog.id);
+
+      return NextResponse.json(
+        {
+          error:
+            "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+          isRunning: true,
+          runningSyncId: otherRunningSyncs[0].id,
+          runningSyncStartedAt: otherRunningSyncs[0].sync_started_at,
+        },
+        { status: 409 } // Conflict status
+      );
+    }
+
+    console.log("✅ No other running syncs found, proceeding with sync...");
     console.log(`🚀 Starting test sync job ${syncLog.id}...`);
 
     if (!BASE_URL || !API_TOKEN) {
@@ -163,35 +235,48 @@ export async function GET(request: NextRequest) {
     let hasMoreData = true;
 
     while (hasMoreData) {
-      const dealsUrl = new URL(`${BASE_URL}/api/3/deals`);
-      dealsUrl.searchParams.set("limit", limit.toString());
-      dealsUrl.searchParams.set("offset", offset.toString());
+      try {
+        const dealsUrl = new URL(`${BASE_URL}/api/3/deals`);
+        dealsUrl.searchParams.set("limit", limit.toString());
+        dealsUrl.searchParams.set("offset", offset.toString());
 
-      console.log(`📄 Fetching deals: offset=${offset}, limit=${limit}`);
+        console.log(`📄 Fetching deals: offset=${offset}, limit=${limit}`);
 
-      const response = await fetchJSON(dealsUrl.toString());
-      const deals = response.deals || [];
+        const response = await fetchJSONWithRetry(dealsUrl.toString());
+        const deals = response.deals || [];
 
-      if (deals.length === 0) {
-        hasMoreData = false;
-        console.log(`✅ No more deals at offset ${offset}`);
-      } else {
-        allDeals = [...allDeals, ...deals];
-        offset += limit;
-
-        console.log(
-          `📦 Fetched ${deals.length} deals, total: ${allDeals.length}`
-        );
-
-        if (deals.length < limit) {
+        if (deals.length === 0) {
           hasMoreData = false;
-          console.log(
-            `✅ Reached end of deals (got ${deals.length} < ${limit})`
-          );
-        }
+          console.log(`✅ No more deals at offset ${offset}`);
+        } else {
+          allDeals = [...allDeals, ...deals];
+          offset += limit;
 
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
+          console.log(
+            `📦 Fetched ${deals.length} deals, total: ${allDeals.length}`
+          );
+
+          if (deals.length < limit) {
+            hasMoreData = false;
+            console.log(
+              `✅ Reached end of deals (got ${deals.length} < ${limit})`
+            );
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`❌ Error fetching deals at offset ${offset}:`, error);
+        // Continue with next batch instead of failing completely
+        offset += limit;
+        if (offset > 10000) {
+          // Safety limit to prevent infinite loop
+          console.error(
+            `❌ Too many failed attempts, stopping at offset ${offset}`
+          );
+          hasMoreData = false;
+        }
       }
     }
 
@@ -204,37 +289,53 @@ export async function GET(request: NextRequest) {
     hasMoreData = true;
 
     while (hasMoreData) {
-      const customFieldUrl = new URL(`${BASE_URL}/api/3/dealCustomFieldData`);
-      customFieldUrl.searchParams.set("limit", limit.toString());
-      customFieldUrl.searchParams.set("offset", offset.toString());
-
-      console.log(
-        `📄 Fetching custom fields: offset=${offset}, limit=${limit}`
-      );
-
-      const response = await fetchJSON(customFieldUrl.toString());
-      const customFieldData = response.dealCustomFieldData || [];
-
-      if (customFieldData.length === 0) {
-        hasMoreData = false;
-        console.log(`✅ No more custom field data at offset ${offset}`);
-      } else {
-        allCustomFieldData = [...allCustomFieldData, ...customFieldData];
-        offset += limit;
+      try {
+        const customFieldUrl = new URL(`${BASE_URL}/api/3/dealCustomFieldData`);
+        customFieldUrl.searchParams.set("limit", limit.toString());
+        customFieldUrl.searchParams.set("offset", offset.toString());
 
         console.log(
-          `📦 Fetched ${customFieldData.length} custom field entries, total: ${allCustomFieldData.length}`
+          `📄 Fetching custom fields: offset=${offset}, limit=${limit}`
         );
 
-        if (customFieldData.length < limit) {
-          hasMoreData = false;
-          console.log(
-            `✅ Reached end of custom field data (got ${customFieldData.length} < ${limit})`
-          );
-        }
+        const response = await fetchJSONWithRetry(customFieldUrl.toString());
+        const customFieldData = response.dealCustomFieldData || [];
 
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (customFieldData.length === 0) {
+          hasMoreData = false;
+          console.log(`✅ No more custom field data at offset ${offset}`);
+        } else {
+          allCustomFieldData = [...allCustomFieldData, ...customFieldData];
+          offset += limit;
+
+          console.log(
+            `📦 Fetched ${customFieldData.length} custom field entries, total: ${allCustomFieldData.length}`
+          );
+
+          if (customFieldData.length < limit) {
+            hasMoreData = false;
+            console.log(
+              `✅ Reached end of custom field data (got ${customFieldData.length} < ${limit})`
+            );
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(
+          `❌ Error fetching custom fields at offset ${offset}:`,
+          error
+        );
+        // Continue with next batch instead of failing completely
+        offset += limit;
+        if (offset > 10000) {
+          // Safety limit to prevent infinite loop
+          console.error(
+            `❌ Too many failed attempts, stopping at offset ${offset}`
+          );
+          hasMoreData = false;
+        }
       }
     }
 
@@ -358,37 +459,45 @@ export async function GET(request: NextRequest) {
     let dealsUpserted = 0;
     const upsertBatchSize = 100; // Upsert 100 deals at once for better performance
 
+    let failedBatches = 0;
+
     for (let i = 0; i < processedDeals.length; i += upsertBatchSize) {
       const batch = processedDeals.slice(i, i + upsertBatchSize);
+      const batchNumber = Math.floor(i / upsertBatchSize) + 1;
+      const totalBatches = Math.ceil(processedDeals.length / upsertBatchSize);
 
       console.log(
-        `📦 Upserting batch ${Math.floor(i / upsertBatchSize) + 1}/${Math.ceil(
-          processedDeals.length / upsertBatchSize
-        )} (${batch.length} deals)...`
+        `📦 Upserting batch ${batchNumber}/${totalBatches} (${batch.length} deals)...`
       );
 
-      const { error } = await supabase.from("deals_cache").upsert(batch, {
-        onConflict: "deal_id",
-        ignoreDuplicates: false,
-      });
+      try {
+        const { error } = await supabase.from("deals_cache").upsert(batch, {
+          onConflict: "deal_id",
+          ignoreDuplicates: false,
+        });
 
-      if (error) {
-        console.error(
-          `❌ Error upserting batch ${Math.floor(i / upsertBatchSize) + 1}:`,
-          error
-        );
+        if (error) {
+          console.error(`❌ Error upserting batch ${batchNumber}:`, error);
+          failedBatches++;
+          // Continue with next batch even if this one fails
+        } else {
+          dealsUpserted += batch.length;
+          console.log(
+            `✅ Successfully upserted ${batch.length} deals in batch ${batchNumber}`
+          );
+        }
+      } catch (error) {
+        console.error(`❌ Exception upserting batch ${batchNumber}:`, error);
+        failedBatches++;
         // Continue with next batch even if this one fails
-      } else {
-        dealsUpserted += batch.length;
-        console.log(
-          `✅ Successfully upserted ${batch.length} deals in batch ${
-            Math.floor(i / upsertBatchSize) + 1
-          }`
-        );
       }
 
       // Small delay between batches to avoid overwhelming the database
       await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    if (failedBatches > 0) {
+      console.warn(`⚠️ ${failedBatches} batches failed during upsert`);
     }
 
     console.log(
@@ -448,6 +557,17 @@ export async function GET(request: NextRequest) {
       const supabase = await createSupabaseServer();
       console.log(`📝 Updating sync log with error status...`);
 
+      // Try to get some stats even if sync failed
+      let partialStats = {};
+      try {
+        const { count: totalDealsInCache } = await supabase
+          .from("deals_cache")
+          .select("*", { count: "exact", head: true });
+        partialStats = { totalDealsInCache };
+      } catch (statsError) {
+        console.error("Could not get partial stats:", statsError);
+      }
+
       const { error: updateError } = await supabase
         .from("deals_sync_log")
         .update({
@@ -474,6 +594,8 @@ export async function GET(request: NextRequest) {
         error: errorMessage,
         success: false,
         syncDurationSeconds: syncDuration,
+        message:
+          "Sync failed but may have processed some data. Check logs for details.",
       },
       { status: 500 }
     );

@@ -18,6 +18,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useSyncContext } from "@/contexts/SyncContext";
+import { toast } from "sonner";
 
 interface HealthData {
   status: "healthy" | "warning" | "critical";
@@ -69,7 +70,43 @@ export function DealsCacheMonitor() {
     }
   };
 
+  // Check if there's already a sync running via API
+  const checkSyncStatus = async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/deals-health", {
+        method: "GET",
+        cache: "no-cache",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.sync?.isRunning || false;
+      }
+    } catch (error) {
+      console.warn("❌ Error checking sync status:", error);
+    }
+    return false;
+  };
+
   const triggerSync = async () => {
+    // Check if there's already a sync running BEFORE activating loading state
+    const isAlreadyRunning = await checkSyncStatus();
+    if (isAlreadyRunning) {
+      toast.warning(
+        "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+        {
+          duration: 4000,
+          position: "bottom-right", // Toast no rodapé, diferente do alert superior
+        }
+      );
+      return; // Return early WITHOUT activating loading state
+    }
+
     // Marca no localStorage que a sincronização começou
     localStorage.setItem("hudlab_sync_state", "true");
     localStorage.setItem("hudlab_sync_start_time", Date.now().toString());
@@ -80,13 +117,42 @@ export function DealsCacheMonitor() {
       });
 
       if (response.ok) {
+        // Show success toast
+        toast.success("Sincronização concluída com sucesso!", {
+          duration: 4000,
+        });
+
         // Wait a bit then refresh health data
         setTimeout(() => {
           fetchHealthData();
         }, 2000);
+      } else if (response.status === 409) {
+        // Handle conflict status (409) - sync already running
+        try {
+          const errorData = await response.json();
+          toast.warning(
+            errorData.error ||
+              "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+            {
+              duration: 4000,
+            }
+          );
+        } catch (parseError) {
+          toast.warning(
+            "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+            {
+              duration: 4000,
+            }
+          );
+        }
+      } else {
+        const errorText = await response.text();
+        console.error("Sync failed:", errorText);
+        toast.error("Erro ao iniciar sincronização");
       }
     } catch (error) {
       console.error("Error triggering sync:", error);
+      toast.error("Erro ao conectar com o servidor");
     } finally {
       // Remove do localStorage que a sincronização terminou
       localStorage.removeItem("hudlab_sync_state");
@@ -98,9 +164,28 @@ export function DealsCacheMonitor() {
   useEffect(() => {
     fetchHealthData();
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchHealthData, 30000);
-    return () => clearInterval(interval);
+    // Smart polling: frequent updates only when sync is running
+    const setupPolling = () => {
+      const checkAndPoll = async () => {
+        await fetchHealthData();
+
+        // Check if sync is running
+        const isRunning = await checkSyncStatus();
+
+        if (isRunning) {
+          // If sync is running, poll every 5 seconds
+          setTimeout(checkAndPoll, 5000);
+        } else {
+          // If no sync, poll every 30 seconds
+          setTimeout(checkAndPoll, 30000);
+        }
+      };
+
+      // Start the smart polling
+      setTimeout(checkAndPoll, 5000); // First check in 5 seconds
+    };
+
+    setupPolling();
   }, []);
 
   const getStatusIcon = (status: string) => {

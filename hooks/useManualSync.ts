@@ -1,25 +1,127 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { useSyncContext } from "@/contexts/SyncContext";
 
 export function useManualSync() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [globalSyncRunning, setGlobalSyncRunning] = useState(false);
 
   // Prevent hydration mismatch by only showing sync state after hydration
   useEffect(() => {
     setIsHydrated(true);
   }, []);
 
+  // Smart polling: only poll when sync is running
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    let activePollingInterval: NodeJS.Timeout | null = null;
+    let checkForNewSyncInterval: NodeJS.Timeout | null = null;
+
+    const checkGlobalSync = async () => {
+      const isRunning = await checkSyncStatus();
+      const wasRunning = globalSyncRunning;
+
+      setGlobalSyncRunning(isRunning);
+
+      // If sync just started, start active polling
+      if (isRunning && !wasRunning) {
+        console.log("🚀 Sync detected, starting active polling...");
+        startActivePolling();
+      }
+
+      // If sync just finished, stop active polling
+      if (!isRunning && wasRunning) {
+        console.log("✅ Sync finished, stopping active polling...");
+        stopActivePolling();
+      }
+    };
+
+    const startActivePolling = () => {
+      if (activePollingInterval) return; // Already polling
+
+      activePollingInterval = setInterval(async () => {
+        const isRunning = await checkSyncStatus();
+        setGlobalSyncRunning(isRunning);
+
+        if (!isRunning) {
+          console.log("✅ Sync completed, stopping active polling...");
+          stopActivePolling();
+        }
+      }, 2000); // Poll every 2 seconds while sync is running
+    };
+
+    const stopActivePolling = () => {
+      if (activePollingInterval) {
+        clearInterval(activePollingInterval);
+        activePollingInterval = null;
+      }
+    };
+
+    const startCheckForNewSync = () => {
+      // Check for new syncs every 10 seconds when no sync is running
+      checkForNewSyncInterval = setInterval(checkGlobalSync, 10000);
+    };
+
+    // Initial check
+    checkGlobalSync();
+
+    // Start checking for new syncs periodically
+    startCheckForNewSync();
+
+    return () => {
+      stopActivePolling();
+      if (checkForNewSyncInterval) {
+        clearInterval(checkForNewSyncInterval);
+      }
+    };
+  }, [isHydrated, globalSyncRunning]);
+
+  // Check if there's already a sync running via API
+  const checkSyncStatus = async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/deals-health", {
+        method: "GET",
+        cache: "no-cache",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.sync?.isRunning || false;
+      }
+    } catch (error) {
+      console.warn("❌ Error checking sync status:", error);
+    }
+    return false;
+  };
+
   const handleManualSync = async () => {
-    if (isSyncing) return;
+    // Check if there's already a sync running (local or global) BEFORE any action
+    if (isSyncing || globalSyncRunning) {
+      toast.warning(
+        "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+        {
+          duration: 4000,
+          position: "bottom-right", // Toast no rodapé, diferente do alert superior
+        }
+      );
+      return; // Return early WITHOUT activating loading state
+    }
 
     console.log("🚀 useManualSync: Starting sync");
     setIsSyncing(true);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
+      const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
       const response = await fetch("/api/test/robust-deals-sync", {
         method: "GET",
@@ -33,6 +135,30 @@ export function useManualSync() {
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        // Handle conflict status (409) - sync already running
+        if (response.status === 409) {
+          try {
+            const errorData = JSON.parse(errorText);
+            toast.warning(
+              errorData.error ||
+                "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+              {
+                duration: 4000,
+              }
+            );
+            return; // Don't throw error, just return
+          } catch (parseError) {
+            toast.warning(
+              "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
+              {
+                duration: 4000,
+              }
+            );
+            return;
+          }
+        }
+
         throw new Error(`Sync failed: ${errorText}`);
       }
 
@@ -50,7 +176,7 @@ export function useManualSync() {
       let errorMessage = "Erro desconhecido";
       if (error instanceof Error) {
         if (error.name === "AbortError") {
-          errorMessage = "Sincronização cancelada por timeout (5 minutos)";
+          errorMessage = "Sincronização cancelada por timeout (10 minutos)";
         } else {
           errorMessage = error.message;
         }
@@ -65,7 +191,7 @@ export function useManualSync() {
   };
 
   return {
-    isSyncing: isHydrated ? isSyncing : false, // Prevent hydration mismatch
+    isSyncing: isHydrated ? isSyncing || globalSyncRunning : false, // Show loading if local OR global sync is running
     handleManualSync,
   };
 }
