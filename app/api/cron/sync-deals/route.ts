@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     // Use same logic as manual sync button - always sync with 90 days period
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 
     const syncResponse = await fetch(
       `${
@@ -109,7 +109,7 @@ export async function POST() {
 
     // Use same logic as manual sync button and GET endpoint
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 
     const syncResponse = await fetch(
       `${
@@ -145,7 +145,7 @@ export async function POST() {
     let errorMessage = "Erro desconhecido";
     if (error instanceof Error) {
       if (error.name === "AbortError") {
-        errorMessage = "Sincronização cancelada por timeout (10 minutos)";
+        errorMessage = "Sincronização cancelada por timeout (5 minutos)";
       } else {
         errorMessage = error.message;
       }
@@ -155,7 +155,7 @@ export async function POST() {
   }
 }
 
-// Set timeout for this API route - 10 minutes
+// Set timeout for this API route - 5 minutes (Hobby plan limit)
 export const config = {
-  maxDuration: 600, // 10 minutes
+  maxDuration: 300, // 5 minutes
 };
