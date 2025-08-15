@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  calculateBrazilDateRange,
+  formatBrazilDateToLocal,
+  logTimezoneDebug,
+} from "@/lib/utils/timezone";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -50,17 +55,22 @@ export async function GET(request: NextRequest) {
         formattedEnd: formatDateToLocal(endDate),
       });
     } else {
-      // Calculate date range - Month-based logic (same day of previous months)
-      endDate = new Date();
-      endDate.setHours(23, 59, 59, 999);
+      // Calculate date range in Brazilian timezone - Month-based logic (same day of previous months)
+      logTimezoneDebug("pairs-sold-total API");
+      const brazilDateRange = calculateBrazilDateRange(period);
+      startDate = brazilDateRange.startDate;
+      endDate = brazilDateRange.endDate;
 
-      startDate = new Date();
-      let monthsToSubtract = 1;
-      if (period === 60) monthsToSubtract = 2;
-      else if (period === 90) monthsToSubtract = 3;
-
-      startDate.setMonth(startDate.getMonth() - monthsToSubtract);
-      startDate.setHours(0, 0, 0, 0);
+      console.log(
+        "Pairs API: Period-based date range calculated in Brazil timezone:",
+        {
+          period,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          formattedStart: formatBrazilDateToLocal(startDate),
+          formattedEnd: formatBrazilDateToLocal(endDate),
+        }
+      );
     }
 
     // Fetch deals from cache and sum quantidade-de-pares field
@@ -69,8 +79,8 @@ export async function GET(request: NextRequest) {
       .select('"quantidade-de-pares"')
       .eq("sync_status", "synced")
       .not("closing_date", "is", null)
-      .gte("closing_date", startDateParam || formatDateToLocal(startDate))
-      .lte("closing_date", endDateParam || formatDateToLocal(endDate));
+      .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
+      .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate));
 
     if (error) {
       console.error("Error fetching deals from cache:", error);
@@ -107,8 +117,8 @@ export async function GET(request: NextRequest) {
             ? { startDate: startDateParam, endDate: endDateParam }
             : null,
         dateRange: {
-          start: formatDateToLocal(startDate),
-          end: formatDateToLocal(endDate),
+          start: formatBrazilDateToLocal(startDate),
+          end: formatBrazilDateToLocal(endDate),
         },
         totalDealsAnalyzed: deals?.length || 0,
       },

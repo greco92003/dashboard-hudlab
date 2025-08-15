@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  calculateBrazilDayRange,
+  logTimezoneDebug,
+} from "@/lib/utils/timezone";
 
 export async function GET(request: NextRequest) {
   try {
@@ -76,17 +80,25 @@ export async function GET(request: NextRequest) {
         `and(completed_at.gte.${startDate}T00:00:00.000Z,completed_at.lte.${endDate}T23:59:59.999Z),and(completed_at.is.null,created_at_nuvemshop.gte.${startDate}T00:00:00.000Z,created_at_nuvemshop.lte.${endDate}T23:59:59.999Z)`
       );
     } else if (period) {
-      // Period-based filtering
+      // Period-based filtering in Brazilian timezone
       const days = parseInt(period);
       if (!isNaN(days) && days > 0) {
-        const endDateTime = new Date();
-        const startDateTime = new Date();
-        startDateTime.setDate(endDateTime.getDate() - days + 1);
-        startDateTime.setHours(0, 0, 0, 0);
-        endDateTime.setHours(23, 59, 59, 999);
+        logTimezoneDebug("partners/orders API");
+        const brazilDateRange = calculateBrazilDayRange(days);
+        const startDateTime = brazilDateRange.startDate;
+        const endDateTime = brazilDateRange.endDate;
 
         const startISO = startDateTime.toISOString();
         const endISO = endDateTime.toISOString();
+
+        console.log(
+          "Partners Orders API: Period-based date range calculated in Brazil timezone:",
+          {
+            days,
+            startDateTime: startDateTime.toISOString(),
+            endDateTime: endDateTime.toISOString(),
+          }
+        );
 
         // Filter by completed_at if available, otherwise created_at_nuvemshop
         query = query.or(

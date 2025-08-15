@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import {
+  calculateBrazilDateRange,
+  formatBrazilDateToLocal,
+  logTimezoneDebug,
+} from "@/lib/utils/timezone";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -55,17 +60,22 @@ export async function GET(request: NextRequest) {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
     } else {
-      // Calculate date range - Month-based logic (same day of previous months)
-      endDate = new Date();
-      endDate.setHours(23, 59, 59, 999);
+      // Calculate date range in Brazilian timezone - Month-based logic (same day of previous months)
+      logTimezoneDebug("deals-cache API");
+      const brazilDateRange = calculateBrazilDateRange(period);
+      startDate = brazilDateRange.startDate;
+      endDate = brazilDateRange.endDate;
 
-      startDate = new Date();
-      let monthsToSubtract = 1;
-      if (period === 60) monthsToSubtract = 2;
-      else if (period === 90) monthsToSubtract = 3;
-
-      startDate.setMonth(startDate.getMonth() - monthsToSubtract);
-      startDate.setHours(0, 0, 0, 0);
+      console.log(
+        "API: Period-based date range calculated in Brazil timezone:",
+        {
+          period,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          formattedStart: formatBrazilDateToLocal(startDate),
+          formattedEnd: formatBrazilDateToLocal(endDate),
+        }
+      );
     }
 
     // Fetch deals from cache (updated by cron) - include all custom fields
@@ -82,8 +92,8 @@ export async function GET(request: NextRequest) {
       )
       .eq("sync_status", "synced")
       .not("closing_date", "is", null)
-      .gte("closing_date", startDateParam || formatDateToLocal(startDate))
-      .lte("closing_date", endDateParam || formatDateToLocal(endDate))
+      .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
+      .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate))
       .order("closing_date", { ascending: false });
 
     if (error) {
@@ -122,8 +132,8 @@ export async function GET(request: NextRequest) {
           fetchedAt: new Date().toISOString(),
           periodDays: startDateParam && endDateParam ? null : period,
           dateRange: {
-            startDate: formatDateToLocal(startDate),
-            endDate: formatDateToLocal(endDate),
+            startDate: formatBrazilDateToLocal(startDate),
+            endDate: formatBrazilDateToLocal(endDate),
           },
         },
       },
