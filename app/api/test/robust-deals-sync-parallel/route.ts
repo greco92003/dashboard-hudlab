@@ -451,115 +451,28 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Step 6: Upsert deals into Supabase with parallel batching and deadlock handling
+    // Step 6: Upsert deals into Supabase test table with parallel batching
     console.log(
-      "🎯 STEP 6: Upserting deals into Supabase with parallel processing and deadlock protection..."
+      "🎯 STEP 6: Upserting deals into test table with parallel processing..."
     );
     let dealsUpserted = 0;
     const upsertBatchSize = 100;
-    let parallelBatches = 3; // Number of parallel upsert operations (will be reduced if deadlocks occur)
+    const parallelBatches = 3; // Number of parallel upsert operations
+    const testBatch = `parallel_test_${Date.now()}`; // Unique identifier for this test run
 
-    // Function to detect transient errors that should be retried
-    const isRetriableError = (error: any): boolean => {
-      // PostgreSQL Class 40 - Transaction Rollback errors
-      const retriableCodes = [
-        "40P01", // deadlock_detected
-        "40001", // serialization_failure
-        "40002", // transaction_integrity_constraint_violation
-        "40003", // statement_completion_unknown
-      ];
-
-      return (
-        retriableCodes.includes(error?.code) ||
-        error?.message?.includes("deadlock detected") ||
-        error?.details?.includes("deadlock detected") ||
-        error?.message?.includes("could not serialize access") ||
-        error?.message?.includes("serialization failure")
-      );
-    };
-
-    // Function to retry upsert with exponential backoff and jitter
-    const retryUpsertWithDeadlockHandling = async (
-      batch: any[],
-      batchNumber: number,
-      maxRetries: number = 3
-    ): Promise<{ success: boolean; error?: any; count: number }> => {
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          const { error } = await supabase
-            .from("deals_cache")
-            .upsert(batch, { onConflict: "deal_id" });
-
-          if (error) {
-            if (isRetriableError(error) && attempt < maxRetries) {
-              // Calculate exponential backoff with jitter
-              const baseDelay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-              const jitter = Math.random() * 1000; // 0-1s random jitter
-              const delay = baseDelay + jitter;
-
-              console.warn(
-                `⚠️ Transient error (${
-                  (error as any)?.code || "unknown"
-                }) in batch ${batchNumber}, attempt ${attempt}/${maxRetries}. Retrying in ${Math.round(
-                  delay
-                )}ms...`
-              );
-
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
-            }
-
-            console.error(`❌ Upsert error in batch ${batchNumber}:`, error);
-            return { success: false, error, count: 0 };
-          }
-
-          console.log(
-            `✅ Upserted batch ${batchNumber}: ${batch.length} deals${
-              attempt > 1 ? ` (succeeded on attempt ${attempt})` : ""
-            }`
-          );
-          return { success: true, count: batch.length };
-        } catch (error) {
-          if (isRetriableError(error) && attempt < maxRetries) {
-            const baseDelay = Math.pow(2, attempt - 1) * 1000;
-            const jitter = Math.random() * 1000;
-            const delay = baseDelay + jitter;
-
-            console.warn(
-              `⚠️ Transient exception (${
-                (error as any)?.code || "unknown"
-              }) in batch ${batchNumber}, attempt ${attempt}/${maxRetries}. Retrying in ${Math.round(
-                delay
-              )}ms...`
-            );
-
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
-          }
-
-          console.error(`❌ Upsert exception in batch ${batchNumber}:`, error);
-          return { success: false, error, count: 0 };
-        }
-      }
-
-      return {
-        success: false,
-        error: new Error(
-          `Max retries (${maxRetries}) exceeded for batch ${batchNumber}`
-        ),
-        count: 0,
-      };
-    };
+    // Add test batch identifier to all deals
+    const dealsWithTestBatch = processedDeals.map((deal) => ({
+      ...deal,
+      test_batch: testBatch,
+    }));
 
     const dealBatches: any[][] = [];
-    for (let i = 0; i < processedDeals.length; i += upsertBatchSize) {
-      dealBatches.push(processedDeals.slice(i, i + upsertBatchSize));
+    for (let i = 0; i < dealsWithTestBatch.length; i += upsertBatchSize) {
+      dealBatches.push(dealsWithTestBatch.slice(i, i + upsertBatchSize));
     }
 
     console.log(`📊 Created ${dealBatches.length} batches for parallel upsert`);
-
-    let deadlockCount = 0;
-    const maxDeadlocks = 5; // If we hit this many deadlocks, reduce parallelism
+    console.log(`🏷️ Test batch ID: ${testBatch}`);
 
     // Process batches in parallel groups
     for (let i = 0; i < dealBatches.length; i += parallelBatches) {
@@ -567,48 +480,47 @@ export async function GET(request: NextRequest) {
       console.log(
         `💾 Processing upsert batch group ${
           Math.floor(i / parallelBatches) + 1
-        }/${Math.ceil(
-          dealBatches.length / parallelBatches
-        )} (parallelism: ${parallelBatches})`
+        }/${Math.ceil(dealBatches.length / parallelBatches)}`
       );
 
       const upsertPromises = batchGroup.map(async (batch, batchIndex) => {
-        const actualBatchNumber = i + batchIndex + 1;
-        return await retryUpsertWithDeadlockHandling(batch, actualBatchNumber);
+        try {
+          const { error } = await supabase
+            .from("deals_parallel_test")
+            .upsert(batch, { onConflict: "deal_id" });
+
+          if (error) {
+            console.error(
+              `❌ Upsert error in batch ${i + batchIndex + 1}:`,
+              error
+            );
+            return { success: false, error, count: 0 };
+          }
+
+          console.log(
+            `✅ Upserted batch ${i + batchIndex + 1}: ${batch.length} deals`
+          );
+          return { success: true, count: batch.length };
+        } catch (error) {
+          console.error(
+            `❌ Upsert exception in batch ${i + batchIndex + 1}:`,
+            error
+          );
+          return { success: false, error, count: 0 };
+        }
       });
 
       const batchResults = await Promise.allSettled(upsertPromises);
 
-      // Check for transient errors and adjust parallelism
-      let groupTransientErrorCount = 0;
       batchResults.forEach((result) => {
-        if (result.status === "fulfilled") {
-          if (result.value.success) {
-            dealsUpserted += result.value.count;
-          } else if (isRetriableError(result.value.error)) {
-            groupTransientErrorCount++;
-          }
+        if (result.status === "fulfilled" && result.value.success) {
+          dealsUpserted += result.value.count;
         }
       });
 
-      deadlockCount += groupTransientErrorCount;
-
-      // Reduce parallelism if too many transient errors
-      if (deadlockCount >= maxDeadlocks && parallelBatches > 1) {
-        parallelBatches = Math.max(1, Math.floor(parallelBatches / 2));
-        console.warn(
-          `⚠️ Too many transient errors detected (${deadlockCount}). Reducing parallelism to ${parallelBatches}`
-        );
-        deadlockCount = 0; // Reset counter after adjustment
-      }
-
-      // Adaptive delay between batch groups based on transient error frequency
+      // Small delay between batch groups to avoid overwhelming the database
       if (i + parallelBatches < dealBatches.length) {
-        const adaptiveDelay =
-          groupTransientErrorCount > 0
-            ? 500 + groupTransientErrorCount * 200
-            : 100;
-        await new Promise((resolve) => setTimeout(resolve, adaptiveDelay));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
@@ -619,6 +531,10 @@ export async function GET(request: NextRequest) {
       success: true,
       dryRun: false,
       message: "Parallel deals sync completed successfully",
+      testBatch: testBatch,
+      viewDealsUrl: `${
+        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      }/api/test/deals-parallel-test?testBatch=${testBatch}`,
       summary: {
         totalDeals: allDeals.length,
         totalCustomFieldEntries: allCustomFieldData.length,
