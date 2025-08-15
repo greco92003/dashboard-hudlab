@@ -8,6 +8,7 @@ import { ConditionalSidebar } from "@/components/ConditionalSidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { PWAWrapper } from "@/components/PWAWrapper";
 import { CacheRecoveryProvider } from "@/components/CacheRecoveryProvider";
+import { SyncChecker } from "@/components/ui/sync-checker";
 
 export const metadata: Metadata = {
   title: "Dashboard Hud Lab",
@@ -226,6 +227,7 @@ export default async function Layout({
                     {children}
                   </ConditionalSidebar>
                   <Toaster />
+                  <SyncChecker />
                 </ThemeProvider>
               </SyncProvider>
             </OptimizedAuthProvider>

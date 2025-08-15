@@ -192,6 +192,7 @@ function convertDateFormat(dateString: string): string | null {
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
+  let syncLogId: string | null = null;
 
   try {
     console.log("=== ROBUST DEALS SYNC PARALLEL ===");
@@ -224,6 +225,31 @@ export async function GET(request: NextRequest) {
     );
 
     const supabase = await createSupabaseServer();
+
+    // Create sync log entry (only for live updates, not dry runs)
+    if (!dryRun) {
+      console.log("📝 Creating sync log entry...");
+      const { data: syncLog, error: syncLogError } = await supabase
+        .from("deals_sync_log")
+        .insert({
+          sync_started_at: new Date().toISOString(),
+          sync_status: "running",
+          deals_processed: 0,
+          deals_added: 0,
+          deals_updated: 0,
+          deals_deleted: 0,
+        })
+        .select("id")
+        .single();
+
+      if (syncLogError) {
+        console.error("❌ Error creating sync log:", syncLogError);
+        throw new Error(`Failed to create sync log: ${syncLogError.message}`);
+      }
+
+      syncLogId = syncLog.id;
+      console.log(`✅ Sync log created with ID: ${syncLogId}`);
+    }
 
     // Step 0: Clear deals_cache if requested
     if (clearFirst && !dryRun) {
@@ -615,6 +641,29 @@ export async function GET(request: NextRequest) {
     const syncDuration = (Date.now() - startTime) / 1000;
     console.log(`🎉 PARALLEL SYNC COMPLETED in ${syncDuration}s`);
 
+    // Update sync log with completion (only for live updates)
+    if (!dryRun && syncLogId) {
+      console.log("📝 Updating sync log with completion...");
+      const { error: updateError } = await supabase
+        .from("deals_sync_log")
+        .update({
+          sync_completed_at: new Date().toISOString(),
+          sync_status: "completed",
+          deals_processed: processedDeals.length,
+          deals_added: dealsUpserted, // Simplified - in reality this would be new vs updated
+          deals_updated: 0, // Would need more complex logic to track this
+          deals_deleted: 0,
+          sync_duration_seconds: Math.round(syncDuration),
+        })
+        .eq("id", syncLogId);
+
+      if (updateError) {
+        console.error("❌ Error updating sync log:", updateError);
+      } else {
+        console.log("✅ Sync log updated successfully");
+      }
+    }
+
     return NextResponse.json({
       success: true,
       dryRun: false,
@@ -640,6 +689,28 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("❌ Sync error:", error);
     const syncDuration = (Date.now() - startTime) / 1000;
+
+    // Update sync log with error (only for live updates)
+    if (syncLogId) {
+      console.log("📝 Updating sync log with error...");
+      const supabase = await createSupabaseServer();
+      const { error: updateError } = await supabase
+        .from("deals_sync_log")
+        .update({
+          sync_completed_at: new Date().toISOString(),
+          sync_status: "failed",
+          sync_duration_seconds: Math.round(syncDuration),
+          error_message:
+            error instanceof Error ? error.message : "Unknown error",
+        })
+        .eq("id", syncLogId);
+
+      if (updateError) {
+        console.error("❌ Error updating sync log with error:", updateError);
+      } else {
+        console.log("✅ Sync log updated with error");
+      }
+    }
 
     return NextResponse.json(
       {
