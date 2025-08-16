@@ -43,6 +43,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
 
 // FontAwesome Meta icon wrapper component
 const MetaIcon = ({ className }: { className?: string }) => (
@@ -154,6 +156,8 @@ export function AppSidebar() {
   const {
     isPartnersMedia,
     isUser,
+    isOwner,
+    isAdmin,
     loading: permissionsLoading,
   } = usePermissions();
 
@@ -189,6 +193,23 @@ export function AppSidebar() {
       <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3">
         <Logo className="h-14 w-max mb-6" />
         <ThemeToggle />
+        {/* Banco de Imagens - visível apenas para admin, owner e user */}
+        {(isOwner || isAdmin || isUser) && (
+          <Button
+            onClick={() =>
+              window.open(
+                "https://drive.google.com/drive/folders/11aZgYke5pbAagggBhA0ayWTK0z38V-CK?usp=sharing",
+                "_blank"
+              )
+            }
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1.5 cursor-pointer w-full"
+          >
+            <ExternalLink className="h-3 w-3" />
+            <span className="text-xs">Banco de Imagens</span>
+          </Button>
+        )}
       </SidebarHeader>
       <SidebarContent>
         {filteredMenuGroups.map((group) => (
