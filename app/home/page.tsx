@@ -18,7 +18,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, LogIn, CheckCircle } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import Link from "next/link";
-import Image from "next/image";
+import HeroImage from "@/components/HeroImage";
 
 function HomeLoginForm() {
   const [email, setEmail] = useState("");
@@ -94,29 +94,7 @@ function HomeLoginForm() {
     <div className="min-h-screen flex">
       {/* Left side - Image (hidden on mobile) */}
       <div className="hidden lg:flex lg:w-1/2 relative">
-        {/* Hero image - replace with your actual image */}
-        <div className="w-full h-full relative">
-          <Image
-            src="/images/hero-image.jpg"
-            alt="HUD LAB Dashboard Analytics"
-            fill
-            className="object-cover"
-            priority
-            quality={100}
-            sizes="50vw"
-            onError={(e) => {
-              // Fallback to placeholder if image doesn't exist
-              const target = e.target as HTMLImageElement;
-              target.style.display = "none";
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = `
-                  <div class="w-full h-full bg-pink-400"></div>
-                `;
-              }
-            }}
-          />
-        </div>
+        <HeroImage />
       </div>
 
       {/* Right side - Login form */}
