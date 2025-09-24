@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  calculateFranchiseRevenue,
+  isZenithProduct,
+  getFranchiseFromOrderProduct,
+} from "@/types/franchise";
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,6 +43,7 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
+    const selectedFranchise = searchParams.get("franchise"); // Franchise filter for Zenith brand
 
     // Determine which brand to calculate for
     let targetBrand: string | null = null;
@@ -81,6 +87,7 @@ export async function GET(request: NextRequest) {
       .from("nuvemshop_orders")
       .select(
         `
+        order_id,
         subtotal,
         promotional_discount,
         discount_coupon,
@@ -110,7 +117,7 @@ export async function GET(request: NextRequest) {
     console.log(
       `[Commission Summary] Found ${
         orders?.length || 0
-      } orders for brand ${targetBrand} since ${commissionStartDate}`
+      } orders for brand ${targetBrand} since ${commissionStartDate}, franchise filter: ${selectedFranchise}`
     );
 
     // Get all product IDs from orders to filter by brand (same logic as orders API)
@@ -177,33 +184,55 @@ export async function GET(request: NextRequest) {
 
       if (!hasBrandProducts) continue;
 
+      // For Zenith brand with franchise filter, check if order has products from the selected franchise
+      if (selectedFranchise && targetBrand && isZenithProduct(targetBrand)) {
+        const hasFranchiseProducts = orderProducts.some((product: any) => {
+          const productFranchise = getFranchiseFromOrderProduct(product);
+          return productFranchise === selectedFranchise;
+        });
+
+        if (!hasFranchiseProducts) continue;
+      }
+
       processedOrders++;
 
-      // Calculate real revenue (same logic as dashboard)
-      const subtotal =
-        typeof order.subtotal === "string"
-          ? parseFloat(order.subtotal)
-          : order.subtotal || 0;
+      // Calculate commission based on franchise filter
+      let commission = 0;
 
-      const promotionalDiscount =
-        typeof order.promotional_discount === "string"
-          ? parseFloat(order.promotional_discount)
-          : order.promotional_discount || 0;
+      if (selectedFranchise && targetBrand && isZenithProduct(targetBrand)) {
+        // For Zenith with franchise filter, calculate revenue only for franchise products
+        const franchiseRevenue = calculateFranchiseRevenue(
+          order,
+          selectedFranchise
+        );
+        commission =
+          Math.max(0, franchiseRevenue) * (commissionPercentage / 100);
+      } else {
+        // Standard commission calculation
+        const subtotal =
+          typeof order.subtotal === "string"
+            ? parseFloat(order.subtotal)
+            : order.subtotal || 0;
 
-      const discountCoupon =
-        typeof order.discount_coupon === "string"
-          ? parseFloat(order.discount_coupon)
-          : order.discount_coupon || 0;
+        const promotionalDiscount =
+          typeof order.promotional_discount === "string"
+            ? parseFloat(order.promotional_discount)
+            : order.promotional_discount || 0;
 
-      const discountGateway =
-        typeof order.discount_gateway === "string"
-          ? parseFloat(order.discount_gateway)
-          : order.discount_gateway || 0;
+        const discountCoupon =
+          typeof order.discount_coupon === "string"
+            ? parseFloat(order.discount_coupon)
+            : order.discount_coupon || 0;
 
-      const realRevenue =
-        subtotal - promotionalDiscount - discountCoupon - discountGateway;
-      const commission =
-        Math.max(0, realRevenue) * (commissionPercentage / 100);
+        const discountGateway =
+          typeof order.discount_gateway === "string"
+            ? parseFloat(order.discount_gateway)
+            : order.discount_gateway || 0;
+
+        const realRevenue =
+          subtotal - promotionalDiscount - discountCoupon - discountGateway;
+        commission = Math.max(0, realRevenue) * (commissionPercentage / 100);
+      }
 
       totalCommissionEarned += commission;
     }
@@ -248,6 +277,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       brand: targetBrand,
+      franchise: selectedFranchise,
       commission_percentage: commissionPercentage,
       total_earned: totalCommissionEarned,
       total_paid: totalPaid,

@@ -4,6 +4,73 @@ import {
   calculateBrazilDayRange,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
+import {
+  calculateFranchiseRevenue,
+  isZenithProduct,
+  getFranchiseFromOrderProduct,
+  type NuvemshopOrder,
+} from "@/types/franchise";
+
+// Interface for database order data
+interface DatabaseOrder {
+  id: any;
+  order_id: any;
+  order_number: any;
+  completed_at: any;
+  created_at_nuvemshop: any;
+  total: any;
+  subtotal: any;
+  promotional_discount: any;
+  discount_coupon: any;
+  discount_gateway: any;
+  shipping_cost_customer: any;
+  province: any;
+  products: any;
+  contact_name: any;
+  status: any;
+}
+
+// Helper function to filter database orders by franchise
+function filterDatabaseOrdersByFranchise(
+  orders: DatabaseOrder[],
+  franchise: string | null
+): DatabaseOrder[] {
+  if (!franchise) return orders;
+
+  return orders
+    .map((order) => {
+      // Filter products to only include those from the selected franchise
+      const filteredProducts = (order.products || []).filter((product: any) => {
+        const productFranchise = getFranchiseFromOrderProduct(product);
+
+        // If no franchise info, it's not a Zenith product, so include it
+        if (!productFranchise) return true;
+
+        // If it has franchise info, only include if it matches
+        return productFranchise === franchise;
+      });
+
+      return {
+        ...order,
+        products: filteredProducts,
+      };
+    })
+    .filter((order) => (order.products || []).length > 0); // Only keep orders with products
+}
+
+// Helper function to convert database order to NuvemshopOrder for revenue calculation
+function convertToNuvemshopOrder(dbOrder: DatabaseOrder): NuvemshopOrder {
+  return {
+    order_id: dbOrder.order_id,
+    products: dbOrder.products || [],
+    subtotal: dbOrder.subtotal || 0,
+    promotional_discount: dbOrder.promotional_discount || 0,
+    discount_coupon: dbOrder.discount_coupon || 0,
+    discount_gateway: dbOrder.discount_gateway || 0,
+    completed_at: dbOrder.completed_at,
+    created_at_nuvemshop: dbOrder.created_at_nuvemshop,
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,6 +113,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("start_date");
     const endDate = searchParams.get("end_date");
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
+    const selectedFranchise = searchParams.get("franchise"); // Franchise filter for Zenith brand
 
     let query = supabase
       .from("nuvemshop_orders")
@@ -191,16 +259,39 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Calculate summary statistics
+    // Apply franchise filtering for Zenith brand
+    if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
+      filteredOrders = filterDatabaseOrdersByFranchise(
+        filteredOrders,
+        selectedFranchise
+      );
+    }
+
+    // Calculate summary statistics with franchise-aware revenue calculation
     const totalOrders = filteredOrders?.length || 0;
-    const totalRevenue =
-      filteredOrders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0;
+    let totalRevenue = 0;
+
+    if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
+      // For Zenith with franchise filter, calculate revenue only for franchise products
+      totalRevenue =
+        filteredOrders?.reduce((sum, order) => {
+          const nuvemshopOrder = convertToNuvemshopOrder(order);
+          return (
+            sum + calculateFranchiseRevenue(nuvemshopOrder, selectedFranchise)
+          );
+        }, 0) || 0;
+    } else {
+      // Standard revenue calculation
+      totalRevenue =
+        filteredOrders?.reduce((sum, order) => sum + (order.total || 0), 0) ||
+        0;
+    }
 
     console.log(
-      `Dashboard API: total orders before filter=${orders?.length}, after filter=${totalOrders}, brand=${brandToFilter}`
+      `Dashboard API: total orders before filter=${orders?.length}, after filter=${totalOrders}, brand=${brandToFilter}, franchise=${selectedFranchise}`
     );
 
-    // Group by province for state analysis
+    // Group by province for state analysis with franchise-aware revenue
     const provinceStats =
       filteredOrders?.reduce((acc, order) => {
         const province = order.province || "Não informado";
@@ -211,7 +302,22 @@ export async function GET(request: NextRequest) {
           };
         }
         acc[province].count += 1;
-        acc[province].revenue += order.total || 0;
+
+        // Use franchise-aware revenue calculation if applicable
+        if (
+          selectedFranchise &&
+          brandToFilter &&
+          isZenithProduct(brandToFilter)
+        ) {
+          const nuvemshopOrder = convertToNuvemshopOrder(order);
+          acc[province].revenue += calculateFranchiseRevenue(
+            nuvemshopOrder,
+            selectedFranchise
+          );
+        } else {
+          acc[province].revenue += order.total || 0;
+        }
+
         return acc;
       }, {} as Record<string, { count: number; revenue: number }>) || {};
 
@@ -223,6 +329,7 @@ export async function GET(request: NextRequest) {
         provinceStats,
       },
       filtered_by_brand: brandToFilter,
+      filtered_by_franchise: selectedFranchise,
     });
   } catch (error) {
     console.error("Error in partners orders API:", error);

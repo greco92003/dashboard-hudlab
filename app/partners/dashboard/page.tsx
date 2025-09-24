@@ -26,9 +26,11 @@ import { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
+import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
 import { RefreshCw, Settings, Package, Tag, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
+import { FranchiseSelector } from "@/components/FranchiseSelector";
 import { useNuvemshopSync } from "@/hooks/useNuvemshopSync";
 
 import { toast } from "sonner";
@@ -101,6 +103,8 @@ function PartnersDashboardPage() {
     shouldFilterByBrand,
     loading: brandFilterLoading,
   } = useBrandFilter();
+  const { selectedFranchise, shouldShowFranchiseFilter } =
+    useFranchiseFilter(selectedBrand);
   const { isSyncing, syncFull } = useNuvemshopSync();
   const {
     period,
@@ -467,6 +471,11 @@ function PartnersDashboardPage() {
           params.append("brand", effectiveBrand);
         }
 
+        // Add franchise filter for Zenith brand
+        if (selectedFranchise) {
+          params.append("franchise", selectedFranchise);
+        }
+
         // Add cache buster to prevent caching
         params.append("_t", Date.now().toString());
 
@@ -527,6 +536,7 @@ function PartnersDashboardPage() {
       formatDateToLocal,
       commissionPercentage,
       effectiveBrand,
+      selectedFranchise,
       calculateRealRevenue,
     ]
   );
@@ -835,6 +845,16 @@ function PartnersDashboardPage() {
                   {selectedBrand}
                 </Badge>
               )}
+            </div>
+          )}
+
+          {/* Franchise Selection for Zenith brand */}
+          {shouldShowFranchiseFilter && isHydrated && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <FranchiseSelector
+                className="w-full sm:max-w-xs"
+                selectedBrand={selectedBrand}
+              />
             </div>
           )}
 

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
+import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
 import { useNuvemshopSync } from "@/hooks/useNuvemshopSync";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
   Tag,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FranchiseSelector } from "@/components/FranchiseSelector";
 
 interface OrderProduct {
   name: string;
@@ -88,6 +90,10 @@ export default function PartnersOrdersPage() {
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [selectedBrand, setSelectedBrandState] = useState<string | null>(null);
   const [isBrandHydrated, setIsBrandHydrated] = useState(false);
+
+  // Franchise filter hook - must be after selectedBrand declaration
+  const { selectedFranchise, shouldShowFranchiseFilter } =
+    useFranchiseFilter(selectedBrand);
 
   // Use global date range hook
   const {
@@ -235,6 +241,11 @@ export default function PartnersOrdersPage() {
           params.append("brand", effectiveBrand);
         }
 
+        // Add franchise filter for Zenith brand
+        if (selectedFranchise) {
+          params.append("franchise", selectedFranchise);
+        }
+
         const response = await fetch(`/api/nuvemshop-sync/orders?${params}`, {
           cache: "no-store", // Disable caching
         });
@@ -253,7 +264,7 @@ export default function PartnersOrdersPage() {
         setLoading(false);
       }
     },
-    [currentPage, itemsPerPage, effectiveBrand]
+    [currentPage, itemsPerPage, effectiveBrand, selectedFranchise]
   );
 
   // Function to check for recent updates
@@ -663,6 +674,16 @@ export default function PartnersOrdersPage() {
                 {selectedBrand}
               </Badge>
             )}
+          </div>
+        )}
+
+        {/* Franchise Selection for Zenith brand */}
+        {shouldShowFranchiseFilter && isBrandHydrated && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <FranchiseSelector
+              className="w-full sm:max-w-xs"
+              selectedBrand={selectedBrand}
+            />
           </div>
         )}
 

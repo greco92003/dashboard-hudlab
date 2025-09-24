@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
+import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
 import { useNuvemshopSync } from "@/hooks/useNuvemshopSync";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,7 @@ import { RefreshCw, Package, ExternalLink, Tag } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
+import { FranchiseSelector } from "@/components/FranchiseSelector";
 
 interface ProductVariant {
   id: string;
@@ -77,6 +79,10 @@ export default function PartnersProductsPage() {
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [selectedBrand, setSelectedBrandState] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+
+  // Franchise filter hook - must be after selectedBrand declaration
+  const { selectedFranchise, shouldShowFranchiseFilter } =
+    useFranchiseFilter(selectedBrand);
 
   // Use selected brand for API calls if available, otherwise fall back to assigned brand
   const effectiveBrand = selectedBrand || assignedBrand;
@@ -180,6 +186,11 @@ export default function PartnersProductsPage() {
         params.append("brand", effectiveBrand);
       }
 
+      // Add franchise filter for Zenith brand
+      if (selectedFranchise) {
+        params.append("franchise", selectedFranchise);
+      }
+
       const response = await fetch(`/api/nuvemshop-sync/products?${params}`, {
         cache: "no-store", // Disable caching
       });
@@ -197,7 +208,7 @@ export default function PartnersProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, itemsPerPage, effectiveBrand]);
+  }, [currentPage, itemsPerPage, effectiveBrand, selectedFranchise]);
 
   // Function to check for recent updates
   const checkForUpdates = useCallback(async () => {
@@ -444,6 +455,16 @@ export default function PartnersProductsPage() {
                 {selectedBrand}
               </Badge>
             )}
+          </div>
+        )}
+
+        {/* Franchise Selection for Zenith brand */}
+        {shouldShowFranchiseFilter && isHydrated && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <FranchiseSelector
+              className="w-full sm:max-w-xs"
+              selectedBrand={selectedBrand || assignedBrand}
+            />
           </div>
         )}
 

@@ -17,7 +17,9 @@ import {
 } from "@/components/ui/select";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
+import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
+import { FranchiseSelector } from "@/components/FranchiseSelector";
 import {
   Home,
   Link,
@@ -183,11 +185,14 @@ export default function PartnersHomePage() {
     isPartnersMedia,
     loading: permissionsLoading,
   } = usePermissions();
+
   const {
     assignedBrand,
     isPartnersMediaWithBrand,
     loading: brandFilterLoading,
   } = useBrandFilter();
+  const { selectedFranchise, shouldShowFranchiseFilter } =
+    useFranchiseFilter(selectedBrand);
 
   // Use selected brand for API calls if available, otherwise fall back to assigned brand
   const effectiveBrand = selectedBrand || assignedBrand;
@@ -1434,6 +1439,16 @@ export default function PartnersHomePage() {
                 {selectedBrand}
               </Badge>
             )}
+          </div>
+        )}
+
+        {/* Franchise Selection for Zenith brand */}
+        {shouldShowFranchiseFilter && isHydrated && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <FranchiseSelector
+              className="w-full sm:max-w-xs"
+              selectedBrand={selectedBrand || assignedBrand}
+            />
           </div>
         )}
 
