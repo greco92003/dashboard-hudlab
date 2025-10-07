@@ -82,20 +82,28 @@ export function UserInfoPopover({
           </Avatar>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="end">
+      <PopoverContent
+        className="w-56 sm:w-64 p-3 max-w-[calc(100vw-2rem)]"
+        align="end"
+        side="bottom"
+        avoidCollisions={true}
+        collisionPadding={8}
+      >
         <div className="flex items-start space-x-3">
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-10 w-10 flex-shrink-0">
             <AvatarImage
               src={createdByAvatarUrl || undefined}
               alt={displayName}
             />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-1 min-w-0">
             <div className="space-y-1">
-              <p className="text-sm font-medium leading-none">{displayName}</p>
+              <p className="text-sm font-medium leading-none truncate">
+                {displayName}
+              </p>
               {createdByEmail && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground truncate">
                   {createdByEmail}
                 </p>
               )}

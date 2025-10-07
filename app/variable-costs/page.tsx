@@ -134,10 +134,24 @@ export default function VariableCostsPage() {
     "none"
   );
   const [tag, setTag] = useState("");
+  const [isCustomTag, setIsCustomTag] = useState(false);
+  const [customTag, setCustomTag] = useState("");
 
   // Handle value change
   const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleMoneyInputChange(value, e.target.value, setValue);
+  };
+
+  // Handle tag change
+  const handleTagChange = (value: string) => {
+    if (value === "outro") {
+      setIsCustomTag(true);
+      setTag("");
+    } else {
+      setIsCustomTag(false);
+      setCustomTag("");
+      setTag(value);
+    }
   };
 
   // Load data from Supabase on initial render
@@ -300,16 +314,19 @@ export default function VariableCostsPage() {
     {
       id: "created_by",
       header: "Criado por",
+      size: 80,
       cell: ({ row }) => {
         const cost = row.original;
         return (
-          <UserInfoPopover
-            createdByUserId={cost.created_by_user_id}
-            createdByName={cost.created_by_name}
-            createdByEmail={cost.created_by_email}
-            createdByAvatarUrl={cost.created_by_avatar_url}
-            createdAt={cost.created_at}
-          />
+          <div className="flex justify-center">
+            <UserInfoPopover
+              createdByUserId={cost.created_by_user_id}
+              createdByName={cost.created_by_name}
+              createdByEmail={cost.created_by_email}
+              createdByAvatarUrl={cost.created_by_avatar_url}
+              createdAt={cost.created_at}
+            />
+          </div>
         );
       },
     },
@@ -372,7 +389,8 @@ export default function VariableCostsPage() {
 
   // Add new variable cost
   const handleAddCost = async () => {
-    if (!description || !date || !value || !tag) return;
+    const finalTag = isCustomTag ? customTag : tag;
+    if (!description || !date || !value || !finalTag) return;
 
     // Converte o valor formatado para número
     const numericValue = parseCurrencyValue(value);
@@ -388,7 +406,7 @@ export default function VariableCostsPage() {
           date: date.toISOString().split("T")[0], // Format as YYYY-MM-DD
           value: numericValue,
           recurrence,
-          tag,
+          tag: finalTag,
         }),
       });
 
@@ -404,6 +422,8 @@ export default function VariableCostsPage() {
         setValue("");
         setRecurrence("none");
         setTag("");
+        setIsCustomTag(false);
+        setCustomTag("");
         setIsDialogOpen(false);
       } else {
         console.error("Error adding variable cost:", result.error);
@@ -459,13 +479,35 @@ export default function VariableCostsPage() {
     setDate(cost.date); // A data já está corretamente parseada
     setValue(formatCurrencyDisplay(cost.value)); // Formata o valor ao editar
     setRecurrence(cost.recurrence);
-    setTag(cost.tag);
+
+    // Check if the tag is one of the predefined options
+    const predefinedTags = [
+      "marketing",
+      "logística",
+      "insumos",
+      "escritório",
+      "comida",
+      "hospedagem",
+      "viagem",
+      "colaboradores",
+    ];
+    if (predefinedTags.includes(cost.tag)) {
+      setTag(cost.tag);
+      setIsCustomTag(false);
+      setCustomTag("");
+    } else {
+      setTag("");
+      setIsCustomTag(true);
+      setCustomTag(cost.tag);
+    }
+
     setIsEditDialogOpen(true);
   };
 
   // Save edited cost - agora só para itens sem recorrência
   const handleSaveEdit = async () => {
-    if (!editingCost || !description || !date || !value || !tag) return;
+    const finalTag = isCustomTag ? customTag : tag;
+    if (!editingCost || !description || !date || !value || !finalTag) return;
 
     // Se não tem recorrência, editar diretamente
     await performEdit("single");
@@ -473,7 +515,8 @@ export default function VariableCostsPage() {
 
   // Função para executar a edição baseada no modo selecionado
   const performEdit = async (mode: "single" | "all") => {
-    if (!editingCost || !description || !date || !value || !tag) return;
+    const finalTag = isCustomTag ? customTag : tag;
+    if (!editingCost || !description || !date || !value || !finalTag) return;
 
     // Converte o valor formatado para número
     const numericValue = parseCurrencyValue(value);
@@ -490,7 +533,7 @@ export default function VariableCostsPage() {
           date: date.toISOString().split("T")[0], // Format as YYYY-MM-DD
           value: numericValue,
           recurrence,
-          tag,
+          tag: finalTag,
           editMode: mode, // Adicionar o modo de edição
           originalDescription: editingCost.description,
           originalRecurrence: editingCost.recurrence,
@@ -511,6 +554,8 @@ export default function VariableCostsPage() {
         setValue("");
         setRecurrence("none");
         setTag("");
+        setIsCustomTag(false);
+        setCustomTag("");
         setIsEditDialogOpen(false);
       } else {
         console.error("Error updating variable cost:", result.error);
@@ -650,7 +695,10 @@ export default function VariableCostsPage() {
 
               <div className="grid gap-2">
                 <Label htmlFor="tag">Tag</Label>
-                <Select value={tag} onValueChange={setTag}>
+                <Select
+                  value={isCustomTag ? "outro" : tag}
+                  onValueChange={handleTagChange}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma tag" />
                   </SelectTrigger>
@@ -663,8 +711,17 @@ export default function VariableCostsPage() {
                     <SelectItem value="hospedagem">Hospedagem</SelectItem>
                     <SelectItem value="viagem">Viagem</SelectItem>
                     <SelectItem value="colaboradores">Colaboradores</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
                   </SelectContent>
                 </Select>
+                {isCustomTag && (
+                  <Input
+                    value={customTag}
+                    onChange={(e) => setCustomTag(e.target.value)}
+                    placeholder="Digite uma tag personalizada"
+                    className="mt-2"
+                  />
+                )}
               </div>
             </div>
 
@@ -736,7 +793,10 @@ export default function VariableCostsPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="edit-tag">Tag</Label>
-              <Select value={tag} onValueChange={setTag}>
+              <Select
+                value={isCustomTag ? "outro" : tag}
+                onValueChange={handleTagChange}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma tag" />
                 </SelectTrigger>
@@ -749,8 +809,17 @@ export default function VariableCostsPage() {
                   <SelectItem value="hospedagem">Hospedagem</SelectItem>
                   <SelectItem value="viagem">Viagem</SelectItem>
                   <SelectItem value="colaboradores">Colaboradores</SelectItem>
+                  <SelectItem value="outro">Outro</SelectItem>
                 </SelectContent>
               </Select>
+              {isCustomTag && (
+                <Input
+                  value={customTag}
+                  onChange={(e) => setCustomTag(e.target.value)}
+                  placeholder="Digite uma tag personalizada"
+                  className="mt-2"
+                />
+              )}
             </div>
           </div>
 
