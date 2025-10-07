@@ -245,11 +245,11 @@ export async function POST() {
       );
     }
 
-    // Trigger sync
+    // Trigger sync using parallel endpoint (for automated/emergency syncs)
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync`,
+      }/api/test/robust-deals-sync-parallel`,
       {
         method: "GET",
       }

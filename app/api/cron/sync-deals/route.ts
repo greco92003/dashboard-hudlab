@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 
 // Create Supabase client with service role key for cron operations
-async function createSupabaseServer() {
-  const cookieStore = await cookies();
+// This bypasses RLS policies and allows full database access for automated tasks
+function createSupabaseServiceClient() {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    throw new Error("Missing Supabase environment variables");
+  }
 
-  // Use service role key for cron operations to bypass RLS
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
     {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     }
   );
@@ -49,7 +47,7 @@ export async function GET(request: NextRequest) {
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync`,
+      }/api/test/robust-deals-sync-parallel`,
       {
         method: "GET",
         headers: {
@@ -114,7 +112,7 @@ export async function POST() {
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync`,
+      }/api/test/robust-deals-sync-parallel`,
       {
         method: "GET",
         headers: {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserProfile } from "@/lib/auth-utils";
+import type { Database } from "@/types/supabase";
 
 // GET - Buscar notificações do usuário
 export async function GET(request: NextRequest) {
@@ -121,28 +122,31 @@ export async function POST(request: NextRequest) {
     const serviceSupabase = createServiceClient();
 
     // Criar notificação
-    const { data: notification, error: notificationError } =
-      await serviceSupabase
-        .from("notifications")
-        .insert({
-          title,
-          message,
-          type,
-          data,
-          created_by_user_id: profile.id,
-          created_by_name: `${profile.first_name || ""} ${
-            profile.last_name || ""
-          }`.trim(),
-          created_by_email: profile.email,
-          target_type,
-          target_roles,
-          target_user_ids,
-          target_brand,
-          send_push,
-          status: "draft",
-        })
-        .select()
-        .single();
+    const insertData = {
+      title,
+      message,
+      type: type as "info" | "success" | "warning" | "error" | "sale",
+      data,
+      created_by_user_id: profile.id,
+      created_by_name: `${profile.first_name || ""} ${
+        profile.last_name || ""
+      }`.trim(),
+      created_by_email: profile.email,
+      target_type: target_type as "role" | "user" | "brand_partners",
+      target_roles,
+      target_user_ids,
+      target_brand,
+      send_push,
+      status: "draft" as const,
+    };
+
+    const { data: notification, error: notificationError } = await (
+      serviceSupabase as any
+    )
+      .from("notifications")
+      .insert(insertData)
+      .select()
+      .single();
 
     if (notificationError) {
       console.error("Error creating notification:", notificationError);
@@ -223,7 +227,7 @@ export async function POST(request: NextRequest) {
       is_read: false,
     }));
 
-    const { error: userNotificationsError } = await serviceSupabase
+    const { error: userNotificationsError } = await (serviceSupabase as any)
       .from("user_notifications")
       .insert(userNotifications);
 
@@ -239,7 +243,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Atualizar status da notificação para "sent"
-    await serviceSupabase
+    await (serviceSupabase as any)
       .from("notifications")
       .update({
         status: "sent",

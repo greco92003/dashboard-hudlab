@@ -123,7 +123,27 @@ export function useManualSync() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
-      const response = await fetch("/api/test/robust-deals-sync", {
+      // Always use tracking-enabled endpoint for manual sync button
+      // This provides better performance and monitoring for user-initiated syncs
+      const syncEndpoint = "/api/test/robust-deals-sync-parallel-with-tracking";
+
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1");
+
+      const isDev = process.env.NODE_ENV === "development" || isLocalhost;
+
+      console.log(`🔄 Manual sync using tracking endpoint: ${syncEndpoint}`);
+      console.log(
+        `🔍 Environment: ${isDev ? "development" : "production"}, NODE_ENV: ${
+          process.env.NODE_ENV
+        }, hostname: ${
+          typeof window !== "undefined" ? window.location.hostname : "server"
+        }`
+      );
+
+      const response = await fetch(syncEndpoint, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",

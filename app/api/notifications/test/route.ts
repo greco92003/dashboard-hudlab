@@ -25,31 +25,32 @@ export async function POST(request: NextRequest) {
     const serviceSupabase = createServiceClient();
 
     // Criar notificação de teste
-    const { data: notification, error: notificationError } =
-      await serviceSupabase
-        .from("notifications")
-        .insert({
-          title,
-          message,
-          type,
-          data: {
-            isTest: true,
-            sentBy: profile.email,
-            timestamp: new Date().toISOString(),
-          },
-          created_by_user_id: profile.id,
-          created_by_name: `${profile.first_name || ""} ${
-            profile.last_name || ""
-          }`.trim(),
-          created_by_email: profile.email,
-          target_type: "user",
-          target_user_ids: [userId],
-          send_push: true,
-          status: "sent",
-          sent_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+    const { data: notification, error: notificationError } = await (
+      serviceSupabase as any
+    )
+      .from("notifications")
+      .insert({
+        title,
+        message,
+        type,
+        data: {
+          isTest: true,
+          sentBy: profile.email,
+          timestamp: new Date().toISOString(),
+        },
+        created_by_user_id: profile.id,
+        created_by_name: `${profile.first_name || ""} ${
+          profile.last_name || ""
+        }`.trim(),
+        created_by_email: profile.email,
+        target_type: "user",
+        target_user_ids: [userId],
+        send_push: true,
+        status: "sent",
+        sent_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
     if (notificationError) {
       console.error("Error creating test notification:", notificationError);
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar user_notification usando service client
-    const { error: userNotificationError } = await serviceSupabase
+    const { error: userNotificationError } = await (serviceSupabase as any)
       .from("user_notifications")
       .insert({
         notification_id: notification.id,

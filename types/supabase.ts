@@ -1092,241 +1092,241 @@ export interface Database {
       };
       Relationships: [];
     };
+    notifications: {
+      Row: {
+        id: string;
+        title: string;
+        message: string;
+        type: "info" | "success" | "warning" | "error" | "sale";
+        data: any;
+        created_by_user_id: string | null;
+        created_by_name: string | null;
+        created_by_email: string | null;
+        target_type: "role" | "user" | "brand_partners";
+        target_roles: string[] | null;
+        target_user_ids: string[] | null;
+        target_brand: string | null;
+        status: "draft" | "sent" | "failed";
+        sent_at: string | null;
+        send_push: boolean;
+        push_sent_count: number;
+        push_failed_count: number;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        title: string;
+        message: string;
+        type: "info" | "success" | "warning" | "error" | "sale";
+        data?: any;
+        created_by_user_id?: string | null;
+        created_by_name?: string | null;
+        created_by_email?: string | null;
+        target_type: "role" | "user" | "brand_partners";
+        target_roles?: string[] | null;
+        target_user_ids?: string[] | null;
+        target_brand?: string | null;
+        status?: "draft" | "sent" | "failed";
+        sent_at?: string | null;
+        send_push?: boolean;
+        push_sent_count?: number;
+        push_failed_count?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        title?: string;
+        message?: string;
+        type?: "info" | "success" | "warning" | "error" | "sale";
+        data?: any;
+        created_by_user_id?: string | null;
+        created_by_name?: string | null;
+        created_by_email?: string | null;
+        target_type?: "role" | "user" | "brand_partners";
+        target_roles?: string[] | null;
+        target_user_ids?: string[] | null;
+        target_brand?: string | null;
+        status?: "draft" | "sent" | "failed";
+        sent_at?: string | null;
+        send_push?: boolean;
+        push_sent_count?: number;
+        push_failed_count?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [
+        {
+          foreignKeyName: "notifications_created_by_user_id_fkey";
+          columns: ["created_by_user_id"];
+          referencedRelation: "user_profiles";
+          referencedColumns: ["id"];
+        }
+      ];
+    };
+    user_notifications: {
+      Row: {
+        id: string;
+        notification_id: string;
+        user_id: string;
+        is_read: boolean;
+        read_at: string | null;
+        push_sent: boolean;
+        push_sent_at: string | null;
+        push_error: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        notification_id: string;
+        user_id: string;
+        is_read?: boolean;
+        read_at?: string | null;
+        push_sent?: boolean;
+        push_sent_at?: string | null;
+        push_error?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        notification_id?: string;
+        user_id?: string;
+        is_read?: boolean;
+        read_at?: string | null;
+        push_sent?: boolean;
+        push_sent_at?: string | null;
+        push_error?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [
+        {
+          foreignKeyName: "user_notifications_notification_id_fkey";
+          columns: ["notification_id"];
+          referencedRelation: "notifications";
+          referencedColumns: ["id"];
+        },
+        {
+          foreignKeyName: "user_notifications_user_id_fkey";
+          columns: ["user_id"];
+          referencedRelation: "user_profiles";
+          referencedColumns: ["id"];
+        }
+      ];
+    };
+    push_subscriptions: {
+      Row: {
+        id: string;
+        user_id: string;
+        endpoint: string;
+        p256dh_key: string;
+        auth_key: string;
+        user_agent: string | null;
+        device_type: string | null;
+        browser_name: string | null;
+        is_active: boolean;
+        last_used_at: string;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        user_id: string;
+        endpoint: string;
+        p256dh_key: string;
+        auth_key: string;
+        user_agent?: string | null;
+        device_type?: string | null;
+        browser_name?: string | null;
+        is_active?: boolean;
+        last_used_at?: string;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        user_id?: string;
+        endpoint?: string;
+        p256dh_key?: string;
+        auth_key?: string;
+        user_agent?: string | null;
+        device_type?: string | null;
+        browser_name?: string | null;
+        is_active?: boolean;
+        last_used_at?: string;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [
+        {
+          foreignKeyName: "push_subscriptions_user_id_fkey";
+          columns: ["user_id"];
+          referencedRelation: "user_profiles";
+          referencedColumns: ["id"];
+        }
+      ];
+    };
+    notification_settings: {
+      Row: {
+        id: string;
+        user_id: string | null;
+        enable_push_notifications: boolean;
+        enable_sale_notifications: boolean;
+        enable_admin_notifications: boolean;
+        enable_system_notifications: boolean;
+        quiet_hours_start: string | null;
+        quiet_hours_end: string | null;
+        quiet_hours_timezone: string;
+        max_notifications_per_hour: number;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        user_id?: string | null;
+        enable_push_notifications?: boolean;
+        enable_sale_notifications?: boolean;
+        enable_admin_notifications?: boolean;
+        enable_system_notifications?: boolean;
+        quiet_hours_start?: string | null;
+        quiet_hours_end?: string | null;
+        quiet_hours_timezone?: string;
+        max_notifications_per_hour?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        user_id?: string | null;
+        enable_push_notifications?: boolean;
+        enable_sale_notifications?: boolean;
+        enable_admin_notifications?: boolean;
+        enable_system_notifications?: boolean;
+        quiet_hours_start?: string | null;
+        quiet_hours_end?: string | null;
+        quiet_hours_timezone?: string;
+        max_notifications_per_hour?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [
+        {
+          foreignKeyName: "notification_settings_user_id_fkey";
+          columns: ["user_id"];
+          referencedRelation: "user_profiles";
+          referencedColumns: ["id"];
+        }
+      ];
+    };
   };
   Views: {
     [_ in never]: never;
   };
   Functions: {
     [_ in never]: never;
-  };
-  notifications: {
-    Row: {
-      id: string;
-      title: string;
-      message: string;
-      type: "info" | "success" | "warning" | "error" | "sale";
-      data: any;
-      created_by_user_id: string | null;
-      created_by_name: string | null;
-      created_by_email: string | null;
-      target_type: "role" | "user" | "brand_partners";
-      target_roles: string[] | null;
-      target_user_ids: string[] | null;
-      target_brand: string | null;
-      status: "draft" | "sent" | "failed";
-      sent_at: string | null;
-      send_push: boolean;
-      push_sent_count: number;
-      push_failed_count: number;
-      created_at: string;
-      updated_at: string;
-    };
-    Insert: {
-      id?: string;
-      title: string;
-      message: string;
-      type: "info" | "success" | "warning" | "error" | "sale";
-      data?: any;
-      created_by_user_id?: string | null;
-      created_by_name?: string | null;
-      created_by_email?: string | null;
-      target_type: "role" | "user" | "brand_partners";
-      target_roles?: string[] | null;
-      target_user_ids?: string[] | null;
-      target_brand?: string | null;
-      status?: "draft" | "sent" | "failed";
-      sent_at?: string | null;
-      send_push?: boolean;
-      push_sent_count?: number;
-      push_failed_count?: number;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Update: {
-      id?: string;
-      title?: string;
-      message?: string;
-      type?: "info" | "success" | "warning" | "error" | "sale";
-      data?: any;
-      created_by_user_id?: string | null;
-      created_by_name?: string | null;
-      created_by_email?: string | null;
-      target_type?: "role" | "user" | "brand_partners";
-      target_roles?: string[] | null;
-      target_user_ids?: string[] | null;
-      target_brand?: string | null;
-      status?: "draft" | "sent" | "failed";
-      sent_at?: string | null;
-      send_push?: boolean;
-      push_sent_count?: number;
-      push_failed_count?: number;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Relationships: [
-      {
-        foreignKeyName: "notifications_created_by_user_id_fkey";
-        columns: ["created_by_user_id"];
-        referencedRelation: "user_profiles";
-        referencedColumns: ["id"];
-      }
-    ];
-  };
-  user_notifications: {
-    Row: {
-      id: string;
-      notification_id: string;
-      user_id: string;
-      is_read: boolean;
-      read_at: string | null;
-      push_sent: boolean;
-      push_sent_at: string | null;
-      push_error: string | null;
-      created_at: string;
-      updated_at: string;
-    };
-    Insert: {
-      id?: string;
-      notification_id: string;
-      user_id: string;
-      is_read?: boolean;
-      read_at?: string | null;
-      push_sent?: boolean;
-      push_sent_at?: string | null;
-      push_error?: string | null;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Update: {
-      id?: string;
-      notification_id?: string;
-      user_id?: string;
-      is_read?: boolean;
-      read_at?: string | null;
-      push_sent?: boolean;
-      push_sent_at?: string | null;
-      push_error?: string | null;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Relationships: [
-      {
-        foreignKeyName: "user_notifications_notification_id_fkey";
-        columns: ["notification_id"];
-        referencedRelation: "notifications";
-        referencedColumns: ["id"];
-      },
-      {
-        foreignKeyName: "user_notifications_user_id_fkey";
-        columns: ["user_id"];
-        referencedRelation: "user_profiles";
-        referencedColumns: ["id"];
-      }
-    ];
-  };
-  push_subscriptions: {
-    Row: {
-      id: string;
-      user_id: string;
-      endpoint: string;
-      p256dh_key: string;
-      auth_key: string;
-      user_agent: string | null;
-      device_type: string | null;
-      browser_name: string | null;
-      is_active: boolean;
-      last_used_at: string;
-      created_at: string;
-      updated_at: string;
-    };
-    Insert: {
-      id?: string;
-      user_id: string;
-      endpoint: string;
-      p256dh_key: string;
-      auth_key: string;
-      user_agent?: string | null;
-      device_type?: string | null;
-      browser_name?: string | null;
-      is_active?: boolean;
-      last_used_at?: string;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Update: {
-      id?: string;
-      user_id?: string;
-      endpoint?: string;
-      p256dh_key?: string;
-      auth_key?: string;
-      user_agent?: string | null;
-      device_type?: string | null;
-      browser_name?: string | null;
-      is_active?: boolean;
-      last_used_at?: string;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Relationships: [
-      {
-        foreignKeyName: "push_subscriptions_user_id_fkey";
-        columns: ["user_id"];
-        referencedRelation: "user_profiles";
-        referencedColumns: ["id"];
-      }
-    ];
-  };
-  notification_settings: {
-    Row: {
-      id: string;
-      user_id: string | null;
-      enable_push_notifications: boolean;
-      enable_sale_notifications: boolean;
-      enable_admin_notifications: boolean;
-      enable_system_notifications: boolean;
-      quiet_hours_start: string | null;
-      quiet_hours_end: string | null;
-      quiet_hours_timezone: string;
-      max_notifications_per_hour: number;
-      created_at: string;
-      updated_at: string;
-    };
-    Insert: {
-      id?: string;
-      user_id?: string | null;
-      enable_push_notifications?: boolean;
-      enable_sale_notifications?: boolean;
-      enable_admin_notifications?: boolean;
-      enable_system_notifications?: boolean;
-      quiet_hours_start?: string | null;
-      quiet_hours_end?: string | null;
-      quiet_hours_timezone?: string;
-      max_notifications_per_hour?: number;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Update: {
-      id?: string;
-      user_id?: string | null;
-      enable_push_notifications?: boolean;
-      enable_sale_notifications?: boolean;
-      enable_admin_notifications?: boolean;
-      enable_system_notifications?: boolean;
-      quiet_hours_start?: string | null;
-      quiet_hours_end?: string | null;
-      quiet_hours_timezone?: string;
-      max_notifications_per_hour?: number;
-      created_at?: string;
-      updated_at?: string;
-    };
-    Relationships: [
-      {
-        foreignKeyName: "notification_settings_user_id_fkey";
-        columns: ["user_id"];
-        referencedRelation: "user_profiles";
-        referencedColumns: ["id"];
-      }
-    ];
   };
   Enums: {
     [_ in never]: never;
