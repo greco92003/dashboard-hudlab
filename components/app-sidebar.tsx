@@ -178,12 +178,24 @@ export function AppSidebar() {
       // Partners-media users can only see the "Parceiros" group
       return menuGroups.filter((group) => group.label === "Parceiros");
     }
+
+    let filteredGroups = menuGroups;
+
     // Users with role "user" cannot see the "Parceiros" group
     if (isUser) {
-      return menuGroups.filter((group) => group.label !== "Parceiros");
+      filteredGroups = filteredGroups.filter(
+        (group) => group.label !== "Parceiros"
+      );
     }
-    // Other users (admin, owner, manager) can see all groups
-    return menuGroups;
+
+    // Only owners and admins can see the "Custos" group
+    if (!isOwner && !isAdmin) {
+      filteredGroups = filteredGroups.filter(
+        (group) => group.label !== "Custos"
+      );
+    }
+
+    return filteredGroups;
   };
 
   const filteredMenuGroups = getFilteredMenuGroups();

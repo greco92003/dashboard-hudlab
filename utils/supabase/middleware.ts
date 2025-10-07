@@ -78,6 +78,14 @@ export async function updateSession(request: NextRequest) {
       "/goals",
     ];
 
+    // Define routes that require admin or owner role
+    const adminOwnerRoutes = [
+      "/direct-costs",
+      "/taxes",
+      "/fixed-costs",
+      "/variable-costs",
+    ];
+
     const authRoutes = [
       "/home",
       "/login",
@@ -210,6 +218,25 @@ export async function updateSession(request: NextRequest) {
       if (userProfile.role === "user" && isPartnersRoute) {
         if (process.env.NODE_ENV === "production") {
           console.log("Blocking user role from accessing partners routes:", {
+            path: request.nextUrl.pathname,
+            userId: user.id,
+            role: userProfile.role,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
+
+      // Only admins and owners can access cost management routes
+      const isAdminOwnerRoute = adminOwnerRoutes.some((route) =>
+        request.nextUrl.pathname.startsWith(route)
+      );
+
+      if (isAdminOwnerRoute && !["admin", "owner"].includes(userProfile.role)) {
+        if (process.env.NODE_ENV === "production") {
+          console.log("Blocking non-admin/owner from accessing cost routes:", {
             path: request.nextUrl.pathname,
             userId: user.id,
             role: userProfile.role,

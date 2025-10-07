@@ -46,6 +46,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if user is admin or owner
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role, approved")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      profileError ||
+      !profile?.approved ||
+      !["admin", "owner"].includes(profile.role)
+    ) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
@@ -91,12 +109,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user profile for additional info
-    const { data: userProfile } = await supabase
+    // Check if user is admin or owner and get user profile
+    const { data: userProfile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("first_name, last_name, email, avatar_url")
+      .select("role, approved, first_name, last_name, email, avatar_url")
       .eq("id", user.id)
       .single();
+
+    if (
+      profileError ||
+      !userProfile?.approved ||
+      !["admin", "owner"].includes(userProfile.role)
+    ) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const { description, date, value, recurrence, tag } = body;
@@ -235,6 +264,24 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if user is admin or owner
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role, approved")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      profileError ||
+      !profile?.approved ||
+      !["admin", "owner"].includes(profile.role)
+    ) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const {
       id,
@@ -333,6 +380,24 @@ export async function DELETE(request: NextRequest) {
     } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Check if user is admin or owner
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role, approved")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      profileError ||
+      !profile?.approved ||
+      !["admin", "owner"].includes(profile.role)
+    ) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
