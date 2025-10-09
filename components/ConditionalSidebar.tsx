@@ -6,6 +6,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { useHydrationFix } from "@/hooks/useHydrationFix";
+import { AIAnalystWrapper } from "@/components/ai-analyst/AIAnalystWrapper";
 
 interface ConditionalSidebarProps {
   children: React.ReactNode;
@@ -151,6 +152,8 @@ export function ConditionalSidebar({
         <SiteHeader />
         <div className="p-4 pt-6 md:p-6 md:pt-8">{children}</div>
       </SidebarInset>
+      {/* AI Analyst - Botão flutuante e sidebar de chat */}
+      <AIAnalystWrapper />
     </SidebarProvider>
   );
 }

@@ -123,9 +123,9 @@ export function useManualSync() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
-      // Always use tracking-enabled endpoint for manual sync button
-      // This provides better performance and monitoring for user-initiated syncs
-      const syncEndpoint = "/api/test/robust-deals-sync-parallel-with-tracking";
+      // Use robust-deals-sync-parallel endpoint for manual sync button
+      // This endpoint syncs all deals from ActiveCampaign
+      const syncEndpoint = "/api/test/robust-deals-sync-parallel?allDeals=true";
 
       const isLocalhost =
         typeof window !== "undefined" &&
@@ -134,7 +134,9 @@ export function useManualSync() {
 
       const isDev = process.env.NODE_ENV === "development" || isLocalhost;
 
-      console.log(`🔄 Manual sync using tracking endpoint: ${syncEndpoint}`);
+      console.log(
+        `🔄 Manual sync using robust-deals-sync-parallel endpoint: ${syncEndpoint}`
+      );
       console.log(
         `🔍 Environment: ${isDev ? "development" : "production"}, NODE_ENV: ${
           process.env.NODE_ENV

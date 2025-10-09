@@ -451,28 +451,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Step 6: Upsert deals into Supabase test table with parallel batching
+    // Step 6: Upsert deals into Supabase deals_cache table with parallel batching
     console.log(
-      "🎯 STEP 6: Upserting deals into test table with parallel processing..."
+      "🎯 STEP 6: Upserting deals into deals_cache table with parallel processing..."
     );
     let dealsUpserted = 0;
     const upsertBatchSize = 100;
     const parallelBatches = 3; // Number of parallel upsert operations
-    const testBatch = `parallel_test_${Date.now()}`; // Unique identifier for this test run
-
-    // Add test batch identifier to all deals
-    const dealsWithTestBatch = processedDeals.map((deal) => ({
-      ...deal,
-      test_batch: testBatch,
-    }));
 
     const dealBatches: any[][] = [];
-    for (let i = 0; i < dealsWithTestBatch.length; i += upsertBatchSize) {
-      dealBatches.push(dealsWithTestBatch.slice(i, i + upsertBatchSize));
+    for (let i = 0; i < processedDeals.length; i += upsertBatchSize) {
+      dealBatches.push(processedDeals.slice(i, i + upsertBatchSize));
     }
 
     console.log(`📊 Created ${dealBatches.length} batches for parallel upsert`);
-    console.log(`🏷️ Test batch ID: ${testBatch}`);
 
     // Process batches in parallel groups
     for (let i = 0; i < dealBatches.length; i += parallelBatches) {
@@ -486,7 +478,7 @@ export async function GET(request: NextRequest) {
       const upsertPromises = batchGroup.map(async (batch, batchIndex) => {
         try {
           const { error } = await supabase
-            .from("deals_parallel_test")
+            .from("deals_cache")
             .upsert(batch, { onConflict: "deal_id" });
 
           if (error) {
@@ -530,11 +522,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       dryRun: false,
-      message: "Parallel deals sync completed successfully",
-      testBatch: testBatch,
-      viewDealsUrl: `${
-        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/deals-parallel-test?testBatch=${testBatch}`,
+      message:
+        "Parallel deals sync completed successfully - deals saved to deals_cache table",
       summary: {
         totalDeals: allDeals.length,
         totalCustomFieldEntries: allCustomFieldData.length,

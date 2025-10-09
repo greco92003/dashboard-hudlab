@@ -191,4 +191,34 @@
   [data-sidebar="menu-button"] {
     @apply justify-start;
   }
+
+  /* AI Analyst Styles */
+  .ai-chat-message {
+    @apply break-words;
+  }
+
+  .ai-chat-message p {
+    @apply mb-2;
+  }
+
+  .ai-chat-message ul,
+  .ai-chat-message ol {
+    @apply ml-4 mb-2;
+  }
+
+  .ai-chat-message li {
+    @apply mb-1;
+  }
+
+  .ai-chat-message strong {
+    @apply font-semibold;
+  }
+
+  .ai-chat-message code {
+    @apply bg-muted px-1 py-0.5 rounded text-sm;
+  }
+
+  .ai-chat-message pre {
+    @apply bg-muted p-2 rounded my-2 overflow-x-auto;
+  }
 }

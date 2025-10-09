@@ -40,14 +40,14 @@ export async function GET(request: NextRequest) {
       "🚀 Cron job triggered - starting sync (same as manual button)..."
     );
 
-    // Use same logic as manual sync button - always sync with 90 days period
+    // Use same logic as manual sync button - sync all deals from ActiveCampaign
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync-parallel`,
+      }/api/test/robust-deals-sync-parallel?allDeals=true`,
       {
         method: "GET",
         headers: {
@@ -105,14 +105,14 @@ export async function POST() {
       "🚀 Manual cron trigger requested - using same logic as manual button..."
     );
 
-    // Use same logic as manual sync button and GET endpoint
+    // Use same logic as manual sync button and GET endpoint - sync all deals
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync-parallel`,
+      }/api/test/robust-deals-sync-parallel?allDeals=true`,
       {
         method: "GET",
         headers: {
