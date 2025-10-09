@@ -155,10 +155,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if there's already an active link for this brand
+    // Check if there's already an active link with this exact URL
     const { data: existingLinks, error: checkError } = await supabase
       .from("affiliate_links")
-      .select("id")
+      .select("id, url")
       .eq("is_active", true)
       .eq("brand", brand);
 
@@ -170,7 +170,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (existingLinks && existingLinks.length > 0) {
+    // Check if this exact URL already exists
+    const urlExists = existingLinks?.some((link) => link.url === url.trim());
+    if (urlExists) {
+      return NextResponse.json(
+        {
+          error: `Já existe um link de afiliado com esta URL. Por favor, edite o existente.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // For non-Zenith brands, only allow one link per brand
+    const isZenith = brand.toLowerCase().trim() === "zenith";
+    if (!isZenith && existingLinks && existingLinks.length > 0) {
       return NextResponse.json(
         {
           error: `Já existe um link de afiliado ativo para a marca "${brand}". Por favor, edite o existente.`,

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
 import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
+import { isZenithProduct } from "@/types/franchise";
 import { useNuvemshopSync } from "@/hooks/useNuvemshopSync";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { Button } from "@/components/ui/button";
@@ -371,29 +372,35 @@ export default function PartnersOrdersPage() {
       return;
     }
 
-    if (canViewPage) {
-      const initializeData = () => {
-        if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-          // Use custom date range
-          fetchOrders(undefined, dateRange);
-        } else {
-          // Use period-based filtering
-          fetchOrders(period);
-        }
-      };
-
-      initializeData();
+    // Wait for brand to be hydrated
+    if (!isBrandHydrated) {
+      return;
     }
+
+    // Only fetch data if we should show data
+    if (canViewPage && shouldShowData) {
+      if (useCustomPeriod && dateRange?.from && dateRange?.to) {
+        // Use custom date range
+        fetchOrders(undefined, dateRange);
+      } else {
+        // Use period-based filtering
+        fetchOrders(period);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     permissionsLoading,
     canViewPage,
+    shouldShowData,
     currentPage,
     period,
     useCustomPeriod,
     dateRange,
     isHydrated,
-    effectiveBrand,
-    fetchOrders,
+    isBrandHydrated,
+    selectedBrand, // Track selected brand changes
+    selectedFranchise, // Track selected franchise changes
+    // fetchOrders is intentionally omitted - it's stable via useCallback with the right deps
   ]);
 
   // Set up polling for updates every 10 seconds
@@ -682,7 +689,7 @@ export default function PartnersOrdersPage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <FranchiseSelector
               className="w-full sm:max-w-xs"
-              selectedBrand={selectedBrand}
+              selectedBrand={effectiveBrand}
             />
           </div>
         )}
@@ -733,276 +740,109 @@ export default function PartnersOrdersPage() {
         </div>
       )}
 
-      {/* Orders Content - Only show when brand is selected or user doesn't need brand filter */}
-      {shouldShowData && (
-        <>
-          {/* Period Selector */}
-          <div className="flex flex-col gap-4">
-            {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-              <Button
-                variant={
-                  !useCustomPeriod && period === 30 ? "default" : "outline"
-                }
-                onClick={() => handlePeriodChangeLocal(30)}
-                className="w-full sm:w-auto"
-              >
-                Último mês
-              </Button>
-              <Button
-                variant={
-                  !useCustomPeriod && period === 60 ? "default" : "outline"
-                }
-                onClick={() => handlePeriodChangeLocal(60)}
-                className="w-full sm:w-auto"
-              >
-                Últimos 2 meses
-              </Button>
-              <Button
-                variant={
-                  !useCustomPeriod && period === 90 ? "default" : "outline"
-                }
-                onClick={() => handlePeriodChangeLocal(90)}
-                className="w-full sm:w-auto"
-              >
-                Últimos 3 meses
-              </Button>
-            </div>
-
-            {/* Calendar Section - Stack on mobile */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <Label className="text-sm sm:text-base whitespace-nowrap">
-                Selecione o período desejado:
-              </Label>
-              <div className="w-full sm:min-w-[250px] sm:w-auto">
-                <Calendar23
-                  value={dateRange}
-                  onChange={handleDateRangeChangeLocal}
-                  hideLabel
-                />
-              </div>
+      {/* Message when Zenith brand is selected but no franchise is chosen */}
+      {shouldShowData &&
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        !selectedFranchise && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center space-y-4">
+              <div className="text-6xl">🏪</div>
+              <h3 className="text-xl font-semibold text-muted-foreground">
+                Selecione uma franquia para ver os pedidos
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-md">
+                A marca Zenith possui múltiplas franquias. Escolha uma franquia
+                específica para visualizar os pedidos.
+              </p>
             </div>
           </div>
+        )}
 
-          {/* Orders List */}
-          {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Card key={i}>
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* Order Info */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <Skeleton className="h-5 w-24" />
-                          <Skeleton className="h-6 w-20" />
-                        </div>
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-4 w-40" />
-                      </div>
+      {/* Orders Content - Only show when brand is selected or user doesn't need brand filter */}
+      {shouldShowData &&
+        (!effectiveBrand ||
+          !isZenithProduct(effectiveBrand) ||
+          selectedFranchise) && (
+          <>
+            {/* Period Selector */}
+            <div className="flex flex-col gap-4">
+              {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <Button
+                  variant={
+                    !useCustomPeriod && period === 30 ? "default" : "outline"
+                  }
+                  onClick={() => handlePeriodChangeLocal(30)}
+                  className="w-full sm:w-auto"
+                >
+                  Último mês
+                </Button>
+                <Button
+                  variant={
+                    !useCustomPeriod && period === 60 ? "default" : "outline"
+                  }
+                  onClick={() => handlePeriodChangeLocal(60)}
+                  className="w-full sm:w-auto"
+                >
+                  Últimos 2 meses
+                </Button>
+                <Button
+                  variant={
+                    !useCustomPeriod && period === 90 ? "default" : "outline"
+                  }
+                  onClick={() => handlePeriodChangeLocal(90)}
+                  className="w-full sm:w-auto"
+                >
+                  Últimos 3 meses
+                </Button>
+              </div>
 
-                      {/* Customer Info */}
-                      <div className="space-y-3">
-                        <Skeleton className="h-5 w-28" />
-                        <Skeleton className="h-4 w-36" />
-                        <Skeleton className="h-4 w-44" />
-                      </div>
-
-                      {/* Products */}
-                      <div className="space-y-3">
-                        <Skeleton className="h-5 w-20" />
-                        <div className="space-y-2">
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-4 w-3/4" />
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {/* Calendar Section - Stack on mobile */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <Label className="text-sm sm:text-base whitespace-nowrap">
+                  Selecione o período desejado:
+                </Label>
+                <div className="w-full sm:min-w-[250px] sm:w-auto">
+                  <Calendar23
+                    value={dateRange}
+                    onChange={handleDateRangeChangeLocal}
+                    hideLabel
+                  />
+                </div>
+              </div>
             </div>
-          ) : orders.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">
-                  Nenhum pedido encontrado
-                </h3>
-                <p className="text-muted-foreground">
-                  {canSync
-                    ? "Clique em 'Sincronizar Pedidos' para importar pedidos da Nuvemshop."
-                    : "Não há pedidos disponíveis no momento."}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
+
+            {/* Orders List */}
+            {loading ? (
               <div className="space-y-4">
-                {orders.map((order) => (
-                  <Card
-                    key={order.id}
-                    className="hover:shadow-lg transition-shadow"
-                  >
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Card key={i}>
                     <CardContent className="p-6">
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Order Info */}
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-lg">
-                              Pedido #{order.order_number || order.order_id}
-                            </h3>
-                            <Badge variant="outline">{order.sync_status}</Badge>
+                            <Skeleton className="h-5 w-24" />
+                            <Skeleton className="h-6 w-20" />
                           </div>
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-4 w-40" />
+                        </div>
 
-                          <div className="space-y-2 text-sm">
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-muted-foreground" />
-                              <span>
-                                {order.contact_name || "Cliente não informado"}
-                              </span>
-                            </div>
-
-                            {order.province && (
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-4 w-4 text-muted-foreground" />
-                                <span>{order.province}</span>
-                              </div>
-                            )}
-
-                            <div className="text-muted-foreground">
-                              {formatDate(order.created_at_nuvemshop)}
-                            </div>
-
-                            <div>{getPaymentMethodBadge(order)}</div>
-                          </div>
+                        {/* Customer Info */}
+                        <div className="space-y-3">
+                          <Skeleton className="h-5 w-28" />
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-4 w-44" />
                         </div>
 
                         {/* Products */}
                         <div className="space-y-3">
-                          <h4 className="font-medium flex items-center gap-2">
-                            <Package className="h-4 w-4" />
-                            Produtos ({order.products.length})
-                          </h4>
-
-                          <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {order.products.map((product, index) => (
-                              <div
-                                key={index}
-                                className="text-sm border-l-2 border-gray-200 pl-3"
-                              >
-                                <div className="font-medium">
-                                  {product.name}
-                                </div>
-                                <div className="text-muted-foreground">
-                                  {product.quantity}x{" "}
-                                  {formatCurrency(product.price)}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Financial Summary */}
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Resumo Financeiro</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span>Subtotal:</span>
-                              <span>{formatCurrency(order.subtotal)}</span>
-                            </div>
-
-                            {/* Always show shipping cost if it exists */}
-                            {order.shipping_cost_customer !== null &&
-                              order.shipping_cost_customer !== undefined &&
-                              order.shipping_cost_customer !== "null" &&
-                              order.shipping_cost_customer !== "undefined" && (
-                                <div className="flex justify-between">
-                                  <span>Frete:</span>
-                                  <span>
-                                    {formatCurrency(
-                                      order.shipping_cost_customer
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-
-                            {/* Always show coupon section */}
-                            <div className="flex justify-between">
-                              <span>Cupom:</span>
-                              <span className="text-blue-600">
-                                {order.coupon &&
-                                order.coupon.trim() !== "" &&
-                                order.coupon !== "null" &&
-                                order.coupon !== "undefined"
-                                  ? order.coupon
-                                  : "Sem cupom"}
-                              </span>
-                            </div>
-
-                            {/* Always show discount fields if they exist, including 0.00 values */}
-                            {order.discount_coupon !== null &&
-                              order.discount_coupon !== undefined &&
-                              order.discount_coupon !== "null" &&
-                              order.discount_coupon !== "undefined" && (
-                                <div className="flex justify-between">
-                                  <span>Desconto cupom:</span>
-                                  <span>
-                                    -{formatCurrency(order.discount_coupon)}
-                                  </span>
-                                </div>
-                              )}
-
-                            {order.promotional_discount !== null &&
-                              order.promotional_discount !== undefined &&
-                              order.promotional_discount !== "null" &&
-                              order.promotional_discount !== "undefined" && (
-                                <div className="flex justify-between">
-                                  <span>Desconto promocional:</span>
-                                  <span>
-                                    -
-                                    {formatCurrency(order.promotional_discount)}
-                                  </span>
-                                </div>
-                              )}
-
-                            {order.total_discount_amount !== null &&
-                              order.total_discount_amount !== undefined &&
-                              order.total_discount_amount !== "null" &&
-                              order.total_discount_amount !== "undefined" && (
-                                <div className="flex justify-between">
-                                  <span>Desconto total:</span>
-                                  <span>
-                                    -
-                                    {formatCurrency(
-                                      order.total_discount_amount
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-
-                            {order.discount_gateway !== null &&
-                              order.discount_gateway !== undefined &&
-                              order.discount_gateway !== "null" &&
-                              order.discount_gateway !== "undefined" && (
-                                <div className="flex justify-between">
-                                  <span>Desconto pagamento:</span>
-                                  <span>
-                                    -{formatCurrency(order.discount_gateway)}
-                                  </span>
-                                </div>
-                              )}
-
-                            <div className="flex justify-between font-semibold border-t pt-2">
-                              <span>Total:</span>
-                              <span className="text-primary">
-                                {formatCurrency(order.total)}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between">
-                              <span>Pagamento:</span>
-                              {getPaymentMethodBadge(order)}
-                            </div>
+                          <Skeleton className="h-5 w-20" />
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-3/4" />
                           </div>
                         </div>
                       </div>
@@ -1010,41 +850,237 @@ export default function PartnersOrdersPage() {
                   </Card>
                 ))}
               </div>
+            ) : orders.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    Nenhum pedido encontrado
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {canSync
+                      ? "Clique em 'Sincronizar Pedidos' para importar pedidos da Nuvemshop."
+                      : "Não há pedidos disponíveis no momento."}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {orders.map((order) => (
+                    <Card
+                      key={order.id}
+                      className="hover:shadow-lg transition-shadow"
+                    >
+                      <CardContent className="p-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          {/* Order Info */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-semibold text-lg">
+                                Pedido #{order.order_number || order.order_id}
+                              </h3>
+                              <Badge variant="outline">
+                                {order.sync_status}
+                              </Badge>
+                            </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.max(1, prev - 1))
-                    }
-                    disabled={currentPage === 1}
-                  >
-                    Anterior
-                  </Button>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                                <span>
+                                  {order.contact_name ||
+                                    "Cliente não informado"}
+                                </span>
+                              </div>
 
-                  <span className="text-sm text-muted-foreground">
-                    Página {currentPage} de {totalPages} ({totalOrders} pedidos)
-                  </span>
+                              {order.province && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span>{order.province}</span>
+                                </div>
+                              )}
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-                    }
-                    disabled={currentPage === totalPages}
-                  >
-                    Próxima
-                  </Button>
+                              <div className="text-muted-foreground">
+                                {formatDate(order.created_at_nuvemshop)}
+                              </div>
+
+                              <div>{getPaymentMethodBadge(order)}</div>
+                            </div>
+                          </div>
+
+                          {/* Products */}
+                          <div className="space-y-3">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <Package className="h-4 w-4" />
+                              Produtos ({order.products.length})
+                            </h4>
+
+                            <div className="space-y-2 max-h-32 overflow-y-auto">
+                              {order.products.map((product, index) => (
+                                <div
+                                  key={index}
+                                  className="text-sm border-l-2 border-gray-200 pl-3"
+                                >
+                                  <div className="font-medium">
+                                    {product.name}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {product.quantity}x{" "}
+                                    {formatCurrency(product.price)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Financial Summary */}
+                          <div className="space-y-3">
+                            <h4 className="font-medium">Resumo Financeiro</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Subtotal:</span>
+                                <span>{formatCurrency(order.subtotal)}</span>
+                              </div>
+
+                              {/* Always show shipping cost if it exists */}
+                              {order.shipping_cost_customer !== null &&
+                                order.shipping_cost_customer !== undefined &&
+                                order.shipping_cost_customer !== "null" &&
+                                order.shipping_cost_customer !==
+                                  "undefined" && (
+                                  <div className="flex justify-between">
+                                    <span>Frete:</span>
+                                    <span>
+                                      {formatCurrency(
+                                        order.shipping_cost_customer
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Always show coupon section */}
+                              <div className="flex justify-between">
+                                <span>Cupom:</span>
+                                <span className="text-blue-600">
+                                  {order.coupon &&
+                                  order.coupon.trim() !== "" &&
+                                  order.coupon !== "null" &&
+                                  order.coupon !== "undefined"
+                                    ? order.coupon
+                                    : "Sem cupom"}
+                                </span>
+                              </div>
+
+                              {/* Always show discount fields if they exist, including 0.00 values */}
+                              {order.discount_coupon !== null &&
+                                order.discount_coupon !== undefined &&
+                                order.discount_coupon !== "null" &&
+                                order.discount_coupon !== "undefined" && (
+                                  <div className="flex justify-between">
+                                    <span>Desconto cupom:</span>
+                                    <span>
+                                      -{formatCurrency(order.discount_coupon)}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {order.promotional_discount !== null &&
+                                order.promotional_discount !== undefined &&
+                                order.promotional_discount !== "null" &&
+                                order.promotional_discount !== "undefined" && (
+                                  <div className="flex justify-between">
+                                    <span>Desconto promocional:</span>
+                                    <span>
+                                      -
+                                      {formatCurrency(
+                                        order.promotional_discount
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {order.total_discount_amount !== null &&
+                                order.total_discount_amount !== undefined &&
+                                order.total_discount_amount !== "null" &&
+                                order.total_discount_amount !== "undefined" && (
+                                  <div className="flex justify-between">
+                                    <span>Desconto total:</span>
+                                    <span>
+                                      -
+                                      {formatCurrency(
+                                        order.total_discount_amount
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {order.discount_gateway !== null &&
+                                order.discount_gateway !== undefined &&
+                                order.discount_gateway !== "null" &&
+                                order.discount_gateway !== "undefined" && (
+                                  <div className="flex justify-between">
+                                    <span>Desconto pagamento:</span>
+                                    <span>
+                                      -{formatCurrency(order.discount_gateway)}
+                                    </span>
+                                  </div>
+                                )}
+
+                              <div className="flex justify-between font-semibold border-t pt-2">
+                                <span>Total:</span>
+                                <span className="text-primary">
+                                  {formatCurrency(order.total)}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between">
+                                <span>Pagamento:</span>
+                                {getPaymentMethodBadge(order)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              )}
-            </>
-          )}
-        </>
-      )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
+                      disabled={currentPage === 1}
+                    >
+                      Anterior
+                    </Button>
+
+                    <span className="text-sm text-muted-foreground">
+                      Página {currentPage} de {totalPages} ({totalOrders}{" "}
+                      pedidos)
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                      }
+                      disabled={currentPage === totalPages}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
     </div>
   );
 }

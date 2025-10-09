@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
 import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
+import { isZenithProduct } from "@/types/franchise";
 import { RefreshCw, Settings, Package, Tag, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
@@ -728,6 +729,32 @@ function PartnersDashboardPage() {
     }
   }, [selectedBrand, isHydrated, commissionPercentage]);
 
+  // Reload data when franchise changes for Zenith brand
+  useEffect(() => {
+    if (!isHydrated || !effectiveBrand || !shouldShowFranchiseFilter) return;
+
+    console.log(
+      "[Franchise Change] Reloading dashboard data for franchise:",
+      selectedFranchise
+    );
+
+    // Reload orders with current period/date range
+    if (useCustomPeriod && dateRange?.from && dateRange?.to) {
+      fetchOrders(undefined, dateRange);
+    } else {
+      fetchOrders(period);
+    }
+  }, [
+    selectedFranchise,
+    isHydrated,
+    effectiveBrand,
+    shouldShowFranchiseFilter,
+    fetchOrders,
+    useCustomPeriod,
+    dateRange,
+    period,
+  ]);
+
   // Set up polling for updates every 10 seconds
   useEffect(() => {
     if (!isOwnerOrAdmin && !isPartnersMediaWithBrand) return;
@@ -853,7 +880,7 @@ function PartnersDashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <FranchiseSelector
                 className="w-full sm:max-w-xs"
-                selectedBrand={selectedBrand}
+                selectedBrand={effectiveBrand}
               />
             </div>
           )}
@@ -958,158 +985,191 @@ function PartnersDashboardPage() {
         </div>
       )}
 
+      {/* Message when Zenith brand is selected but no franchise is chosen */}
+      {!isInitialLoading &&
+        shouldShowData &&
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        !selectedFranchise && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center space-y-4">
+              <div className="text-6xl">🏪</div>
+              <h3 className="text-xl font-semibold text-muted-foreground">
+                Selecione uma franquia para ver os dados do dashboard
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-md">
+                A marca Zenith possui múltiplas franquias. Escolha uma franquia
+                específica para visualizar as métricas e dados de vendas.
+              </p>
+            </div>
+          </div>
+        )}
+
       {/* Main Content */}
-      {!isInitialLoading && shouldShowData && (
-        <>
-          {/* Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            {/* Total Sales */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm sm:text-base">
-                  Faturamento Real
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {loading ? (
-                  <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
-                ) : (
-                  <p className="text-lg sm:text-xl lg:text-2xl font-bold">
-                    {formatCurrency(totalSales, "BRL")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Total Commission */}
-            <Card>
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm sm:text-base">
-                  Valor Total de Comissão ({commissionPercentage}%)
-                  {effectiveBrand && (
-                    <div className="text-xs text-muted-foreground font-normal mt-1">
-                      Marca: {effectiveBrand}
-                    </div>
+      {!isInitialLoading &&
+        shouldShowData &&
+        (!effectiveBrand ||
+          !isZenithProduct(effectiveBrand) ||
+          selectedFranchise) && (
+          <>
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {/* Total Sales */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm sm:text-base">
+                    Faturamento Real
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {loading ? (
+                    <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
+                  ) : (
+                    <p className="text-lg sm:text-xl lg:text-2xl font-bold">
+                      {formatCurrency(totalSales, "BRL")}
+                    </p>
                   )}
-                </CardTitle>
-                {isOwnerOrAdmin && effectiveBrand && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setShowCommissionSettings(!showCommissionSettings)
-                    }
-                    title={`Configurar comissão para ${effectiveBrand}`}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent className="pt-0">
+                </CardContent>
+              </Card>
+
+              {/* Total Commission */}
+              <Card>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm sm:text-base">
+                    Valor Total de Comissão ({commissionPercentage}%)
+                    {effectiveBrand && (
+                      <div className="text-xs text-muted-foreground font-normal mt-1 flex items-center gap-2 flex-wrap">
+                        <span>Marca: {effectiveBrand}</span>
+                        {selectedFranchise &&
+                          isZenithProduct(effectiveBrand) && (
+                            <Badge variant="outline" className="text-xs">
+                              🏪 {selectedFranchise}
+                            </Badge>
+                          )}
+                      </div>
+                    )}
+                  </CardTitle>
+                  {isOwnerOrAdmin && effectiveBrand && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setShowCommissionSettings(!showCommissionSettings)
+                      }
+                      title={`Configurar comissão para ${effectiveBrand}`}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {loading ? (
+                    <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
+                  ) : (
+                    <p className="text-lg sm:text-xl lg:text-2xl font-bold">
+                      {formatCurrency(totalCommission, "BRL")}
+                    </p>
+                  )}
+
+                  {/* Commission Settings */}
+                  {showCommissionSettings &&
+                    isOwnerOrAdmin &&
+                    effectiveBrand && (
+                      <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                        <div className="mb-3">
+                          <h4 className="text-sm font-medium">
+                            Configuração de Comissão - {effectiveBrand}
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            Esta configuração é específica para a marca
+                            selecionada
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Label htmlFor="commission-percentage">
+                            Porcentagem de Comissão:
+                          </Label>
+                          <input
+                            id="commission-percentage"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={newCommissionPercentage}
+                            onChange={(e) =>
+                              setNewCommissionPercentage(
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-20 px-2 py-1 border rounded text-sm"
+                          />
+                          <span>%</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={updateCommissionPercentage}
+                            disabled={commissionLoading}
+                          >
+                            {commissionLoading ? "Salvando..." : "Salvar"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setShowCommissionSettings(false);
+                              setNewCommissionPercentage(commissionPercentage);
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              {/* Sales Chart */}
+              <div className="w-full">
                 {loading ? (
-                  <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
+                  <Skeleton className="h-[400px] w-full" />
                 ) : (
-                  <p className="text-lg sm:text-xl lg:text-2xl font-bold">
-                    {formatCurrency(totalCommission, "BRL")}
-                  </p>
+                  <ChartAreaGradient
+                    title="Vendas por Período"
+                    description={
+                      useCustomPeriod && dateRange?.from && dateRange?.to
+                        ? `Vendas de ${dateRange.from.toLocaleDateString(
+                            "pt-BR"
+                          )} até ${dateRange.to.toLocaleDateString("pt-BR")}`
+                        : `Vendas nos últimos ${period} dias`
+                    }
+                    data={chartData}
+                    period={period}
+                  />
                 )}
+              </div>
 
-                {/* Commission Settings */}
-                {showCommissionSettings && isOwnerOrAdmin && effectiveBrand && (
-                  <div className="mt-4 p-4 border rounded-lg bg-muted/50">
-                    <div className="mb-3">
-                      <h4 className="text-sm font-medium">
-                        Configuração de Comissão - {effectiveBrand}
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Esta configuração é específica para a marca selecionada
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Label htmlFor="commission-percentage">
-                        Porcentagem de Comissão:
-                      </Label>
-                      <input
-                        id="commission-percentage"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={newCommissionPercentage}
-                        onChange={(e) =>
-                          setNewCommissionPercentage(
-                            parseFloat(e.target.value) || 0
-                          )
-                        }
-                        className="w-20 px-2 py-1 border rounded text-sm"
-                      />
-                      <span>%</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={updateCommissionPercentage}
-                        disabled={commissionLoading}
-                      >
-                        {commissionLoading ? "Salvando..." : "Salvar"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setShowCommissionSettings(false);
-                          setNewCommissionPercentage(commissionPercentage);
-                        }}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-            {/* Sales Chart */}
-            <div className="w-full">
-              {loading ? (
-                <Skeleton className="h-[400px] w-full" />
-              ) : (
-                <ChartAreaGradient
-                  title="Vendas por Período"
-                  description={
-                    useCustomPeriod && dateRange?.from && dateRange?.to
-                      ? `Vendas de ${dateRange.from.toLocaleDateString(
-                          "pt-BR"
-                        )} até ${dateRange.to.toLocaleDateString("pt-BR")}`
-                      : `Vendas nos últimos ${period} dias`
-                  }
-                  data={chartData}
-                  period={period}
-                />
-              )}
+              {/* States Chart */}
+              <div className="w-full">
+                <ChartPieEstadosNuvemshop orders={orders} loading={loading} />
+              </div>
             </div>
 
-            {/* States Chart */}
+            {/* Most Sold Product */}
             <div className="w-full">
-              <ChartPieEstadosNuvemshop orders={orders} loading={loading} />
+              <TopProductCard
+                period={period}
+                dateRange={dateRange}
+                useCustomPeriod={useCustomPeriod}
+                selectedBrand={effectiveBrand}
+                orders={orders}
+              />
             </div>
-          </div>
-
-          {/* Most Sold Product */}
-          <div className="w-full">
-            <TopProductCard
-              period={period}
-              dateRange={dateRange}
-              useCustomPeriod={useCustomPeriod}
-              selectedBrand={effectiveBrand}
-              orders={orders}
-            />
-          </div>
-        </>
-      )}
+          </>
+        )}
     </div>
   );
 }

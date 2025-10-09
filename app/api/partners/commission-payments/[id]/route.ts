@@ -47,6 +47,7 @@ export async function PUT(
       payment_method,
       payment_reference,
       status,
+      franchise,
     } = body;
 
     // Validate amount if provided
@@ -100,6 +101,7 @@ export async function PUT(
     if (payment_reference !== undefined)
       updateData.payment_reference = payment_reference;
     if (status !== undefined) updateData.status = status;
+    if (franchise !== undefined) updateData.franchise = franchise || null;
 
     const { data: payment, error } = await supabase
       .from("commission_payments")

@@ -71,21 +71,13 @@ export function FranchiseSelector({
 
       <div className="flex items-center gap-2">
         <Select
-          value={selectedFranchise || "all"}
-          onValueChange={(value) =>
-            setSelectedFranchise(value === "all" ? null : value)
-          }
+          value={selectedFranchise || availableFranchises[0]?.name || ""}
+          onValueChange={(value) => setSelectedFranchise(value)}
         >
           <SelectTrigger className={`${sizeClasses[size]} min-w-[180px]`}>
-            <SelectValue placeholder="Todas as franquias" />
+            <SelectValue placeholder="Selecione uma franquia" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span>Todas as franquias</span>
-              </div>
-            </SelectItem>
             {availableFranchises.map((franchise) => (
               <SelectItem key={franchise.id} value={franchise.name}>
                 <div className="flex items-center gap-2">
@@ -96,16 +88,6 @@ export function FranchiseSelector({
             ))}
           </SelectContent>
         </Select>
-
-        {selectedFranchise && (
-          <button
-            onClick={clearFranchiseFilter}
-            className="p-1 hover:bg-muted rounded-md transition-colors"
-            title="Limpar filtro de franquia"
-          >
-            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
       </div>
 
       {showBadge && selectedFranchise && (

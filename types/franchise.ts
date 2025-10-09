@@ -48,6 +48,7 @@ export interface OrderProduct {
   name: string;
   price: number;
   quantity: number;
+  variant_values?: string[]; // Array of variant values from Nuvemshop
   variant?: {
     values?: Array<{ pt: string }>;
   };
@@ -78,7 +79,16 @@ export function getFranchiseFromVariant(
 export function getFranchiseFromOrderProduct(
   product: OrderProduct
 ): string | null {
-  // Check if product has variant with franchise information
+  // Check if product has variant_values array (from Nuvemshop orders)
+  // Format: ["42/43", "Taquara - RS"] where [0] is size and [1] is franchise
+  if (product.variant_values && product.variant_values.length > 1) {
+    const franchiseValue = product.variant_values[1];
+    if (franchiseValue && typeof franchiseValue === "string") {
+      return franchiseValue;
+    }
+  }
+
+  // Fallback: Check if product has variant with franchise information (old format)
   if (
     product.variant?.values &&
     product.variant.values.length > 1 &&
@@ -86,6 +96,7 @@ export function getFranchiseFromOrderProduct(
   ) {
     return product.variant.values[1].pt;
   }
+
   return null;
 }
 

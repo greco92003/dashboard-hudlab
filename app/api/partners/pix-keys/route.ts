@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const brand = searchParams.get("brand");
+    const franchise = searchParams.get("franchise");
 
     // Get current user
     const {
@@ -61,6 +62,11 @@ export async function GET(request: NextRequest) {
     }
     // If no brand filter and user is owner/admin, return all pix keys
 
+    // Apply franchise filter for Zenith
+    if (franchise) {
+      query = query.eq("franchise", franchise);
+    }
+
     const { data: pixKeys, error } = await query;
 
     if (error) {
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-    const { pix_key, brand, pix_type = "random" } = body;
+    const { pix_key, brand, pix_type = "random", franchise } = body;
 
     if (!pix_key || !brand) {
       return NextResponse.json(
@@ -150,30 +156,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if pix key already exists for this brand
-    const { data: existingPixKey } = await supabase
-      .from("partner_pix_keys")
-      .select("id")
-      .eq("brand", brand)
-      .single();
+    // Check if pix key already exists for this brand + franchise combination
+    const isZenith = brand.toLowerCase().trim() === "zenith";
 
-    if (existingPixKey) {
+    let existingPixKeyQuery = supabase
+      .from("partner_pix_keys")
+      .select("id, franchise")
+      .eq("brand", brand);
+
+    // For Zenith with franchise, check brand + franchise combination
+    if (isZenith && franchise) {
+      existingPixKeyQuery = existingPixKeyQuery.eq("franchise", franchise);
+    }
+
+    const { data: existingPixKeys } = await existingPixKeyQuery;
+
+    // For Zenith: allow multiple pix keys (one per franchise)
+    // For other brands: only one pix key allowed
+    if (!isZenith && existingPixKeys && existingPixKeys.length > 0) {
       return NextResponse.json(
         { error: "Pix key already exists for this brand" },
         { status: 409 }
       );
     }
 
+    // For Zenith: check if pix key exists for this specific franchise
+    if (
+      isZenith &&
+      franchise &&
+      existingPixKeys &&
+      existingPixKeys.length > 0
+    ) {
+      return NextResponse.json(
+        { error: `Pix key already exists for Zenith - ${franchise}` },
+        { status: 409 }
+      );
+    }
+
     // Create new pix key
+    const pixKeyData: any = {
+      pix_key,
+      brand,
+      pix_type,
+      created_by: user.id,
+      updated_by: user.id,
+    };
+
+    // Add franchise for Zenith
+    if (isZenith && franchise) {
+      pixKeyData.franchise = franchise;
+    }
+
     const { data: pixKey, error } = await supabase
       .from("partner_pix_keys")
-      .insert({
-        pix_key,
-        brand,
-        pix_type,
-        created_by: user.id,
-        updated_by: user.id,
-      })
+      .insert(pixKeyData)
       .select()
       .single();
 

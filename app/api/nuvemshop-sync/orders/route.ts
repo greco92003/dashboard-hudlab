@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import {
+  isZenithProduct,
+  getFranchiseFromOrderProduct,
+} from "@/types/franchise";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -97,6 +101,48 @@ function extractProvince(shippingAddress: any): string | null {
     shippingAddress.region ||
     null
   );
+}
+
+// Helper function to filter orders by franchise
+function filterOrdersByFranchise(
+  orders: any[],
+  franchise: string | null
+): any[] {
+  if (!franchise) return orders;
+
+  return orders
+    .map((order) => {
+      // Filter products to only include those from the selected franchise
+      const filteredProducts = (order.products || []).filter((product: any) => {
+        const productFranchise = getFranchiseFromOrderProduct(product);
+
+        console.log(
+          `[filterOrdersByFranchise] Product: ${
+            product.name
+          }, Franchise: "${productFranchise}", Looking for: "${franchise}", Match: ${
+            productFranchise === franchise
+          }`
+        );
+
+        // If no franchise info, it's not a Zenith product with franchise, so exclude it
+        if (!productFranchise) return false;
+
+        // If it has franchise info, only include if it matches
+        return productFranchise === franchise;
+      });
+
+      if (filteredProducts.length > 0) {
+        console.log(
+          `[filterOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`
+        );
+      }
+
+      return {
+        ...order,
+        products: filteredProducts,
+      };
+    })
+    .filter((order) => (order.products || []).length > 0); // Only keep orders with products
 }
 
 // Function to extract payment method from payment details
@@ -406,6 +452,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date");
     const customer = searchParams.get("customer");
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
+    const selectedFranchise = searchParams.get("franchise"); // Franchise filter for Zenith brand
 
     // Determine which brand to filter by
     let brandToFilter: string | null = null;
@@ -503,12 +550,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Apply franchise filtering for Zenith brand
+    if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
+      console.log(
+        `[Orders API] Filtering ${finalOrders.length} orders by franchise: ${selectedFranchise}`
+      );
+      finalOrders = filterOrdersByFranchise(finalOrders, selectedFranchise);
+      console.log(
+        `[Orders API] After franchise filter: ${finalOrders.length} orders`
+      );
+    }
+
     // Apply pagination to final results
     const totalCount = finalOrders.length;
     const paginatedOrders = finalOrders.slice(offset, offset + limit);
 
     console.log(
-      `API Response: total=${totalCount}, count=${paginatedOrders.length}, brand=${brandToFilter}`
+      `API Response: total=${totalCount}, count=${
+        paginatedOrders.length
+      }, brand=${brandToFilter}, franchise=${selectedFranchise || "none"}`
     );
 
     return NextResponse.json({

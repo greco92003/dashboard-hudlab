@@ -20,6 +20,7 @@ import { useBrandFilter } from "@/hooks/useBrandFilter";
 import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
+import { isZenithProduct } from "@/types/franchise";
 import {
   Home,
   Link,
@@ -75,6 +76,7 @@ interface Brand {
 interface PartnershipContract {
   id: string;
   brand: string;
+  franchise?: string;
   contract_url: string;
   created_at: string;
   updated_at: string;
@@ -85,6 +87,7 @@ interface PartnershipContract {
 interface PartnerPixKey {
   id: string;
   brand: string;
+  franchise?: string;
   pix_key: string;
   pix_type: string;
   created_at: string;
@@ -96,6 +99,7 @@ interface PartnerPixKey {
 interface CommissionPayment {
   id: string;
   brand: string;
+  franchise: string | null;
   partner_user_id: string | null;
   amount: number;
   payment_date: string;
@@ -191,11 +195,12 @@ export default function PartnersHomePage() {
     isPartnersMediaWithBrand,
     loading: brandFilterLoading,
   } = useBrandFilter();
-  const { selectedFranchise, shouldShowFranchiseFilter } =
-    useFranchiseFilter(selectedBrand);
 
   // Use selected brand for API calls if available, otherwise fall back to assigned brand
   const effectiveBrand = selectedBrand || assignedBrand;
+
+  const { selectedFranchise, shouldShowFranchiseFilter } =
+    useFranchiseFilter(effectiveBrand);
 
   // Check permissions
   const canViewPage = isOwnerOrAdmin || isPartnersMedia;
@@ -308,17 +313,43 @@ export default function PartnersHomePage() {
       }
 
       const data = await response.json();
-      // Get the first (and only) link
-      setAffiliateLink(
-        data.links && data.links.length > 0 ? data.links[0] : null
-      );
+
+      // For Zenith brand, filter by selected franchise
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        selectedFranchise
+      ) {
+        // Find the link that matches the selected franchise
+        const franchiseSearchTerm = selectedFranchise.replace(/\s+/g, "-");
+        console.log(
+          `🔍 Buscando link da Zenith para franquia: ${selectedFranchise}`
+        );
+        console.log(`🔍 Termo de busca: ${franchiseSearchTerm}`);
+        console.log(
+          `🔍 Links disponíveis:`,
+          data.links?.map((l: AffiliateLink) => l.url)
+        );
+
+        const franchiseLink = data.links?.find((link: AffiliateLink) =>
+          link.url.includes(franchiseSearchTerm)
+        );
+
+        console.log(`🔍 Link encontrado:`, franchiseLink?.url || "NENHUM");
+        setAffiliateLink(franchiseLink || null);
+      } else {
+        // For other brands or when no franchise is selected, get the first link
+        setAffiliateLink(
+          data.links && data.links.length > 0 ? data.links[0] : null
+        );
+      }
     } catch (error) {
       console.error("Error fetching affiliate link:", error);
       toast.error("Erro ao carregar link de afiliado");
     } finally {
       setLoading(false);
     }
-  }, [effectiveBrand]);
+  }, [effectiveBrand, selectedFranchise]);
 
   const fetchGeneratedCoupons = useCallback(async () => {
     try {
@@ -396,12 +427,31 @@ export default function PartnersHomePage() {
         return;
       }
 
+      // For Zenith, don't fetch if no franchise is selected
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        !selectedFranchise
+      ) {
+        setContract(null);
+        return;
+      }
+
       let url = "/api/partners/contracts";
       const params = new URLSearchParams();
 
       // Add brand filter for owners/admins or partners-media with assigned brand
       if (effectiveBrand) {
         params.append("brand", effectiveBrand);
+      }
+
+      // Add franchise filter for Zenith
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        selectedFranchise
+      ) {
+        params.append("franchise", selectedFranchise);
       }
 
       // Add cache buster to prevent caching
@@ -420,20 +470,43 @@ export default function PartnersHomePage() {
       }
 
       const data = await response.json();
-      // Get the first (and only) contract for the brand
-      setContract(
-        data.contracts && data.contracts.length > 0 ? data.contracts[0] : null
-      );
+
+      // For Zenith, filter by franchise
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        selectedFranchise
+      ) {
+        const franchiseContract = data.contracts?.find(
+          (c: PartnershipContract) => c.franchise === selectedFranchise
+        );
+        setContract(franchiseContract || null);
+      } else {
+        // Get the first (and only) contract for the brand
+        setContract(
+          data.contracts && data.contracts.length > 0 ? data.contracts[0] : null
+        );
+      }
     } catch (error) {
       console.error("Error fetching contract:", error);
       toast.error("Erro ao carregar contrato");
     }
-  }, [effectiveBrand, isOwnerOrAdmin]);
+  }, [effectiveBrand, isOwnerOrAdmin, selectedFranchise]);
 
   const fetchPixKey = useCallback(async () => {
     try {
       // Don't fetch if no effective brand is selected for owners/admins
       if (!effectiveBrand && isOwnerOrAdmin) {
+        setPixKey(null);
+        return;
+      }
+
+      // For Zenith, don't fetch if no franchise is selected
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        !selectedFranchise
+      ) {
         setPixKey(null);
         return;
       }
@@ -444,6 +517,15 @@ export default function PartnersHomePage() {
       // Add brand filter for owners/admins or partners-media with assigned brand
       if (effectiveBrand) {
         params.append("brand", effectiveBrand);
+      }
+
+      // Add franchise filter for Zenith
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        selectedFranchise
+      ) {
+        params.append("franchise", selectedFranchise);
       }
 
       // Add cache buster to prevent caching
@@ -462,15 +544,28 @@ export default function PartnersHomePage() {
       }
 
       const data = await response.json();
-      // Get the first (and only) pix key for the brand
-      setPixKey(
-        data.pixKeys && data.pixKeys.length > 0 ? data.pixKeys[0] : null
-      );
+
+      // For Zenith, filter by franchise
+      if (
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand) &&
+        selectedFranchise
+      ) {
+        const franchisePixKey = data.pixKeys?.find(
+          (p: PartnerPixKey) => p.franchise === selectedFranchise
+        );
+        setPixKey(franchisePixKey || null);
+      } else {
+        // Get the first (and only) pix key for the brand
+        setPixKey(
+          data.pixKeys && data.pixKeys.length > 0 ? data.pixKeys[0] : null
+        );
+      }
     } catch (error) {
       console.error("Error fetching pix key:", error);
       toast.error("Erro ao carregar chave pix");
     }
-  }, [effectiveBrand, isOwnerOrAdmin]);
+  }, [effectiveBrand, isOwnerOrAdmin, selectedFranchise]);
 
   const fetchCommissionSummary = useCallback(async () => {
     try {
@@ -480,9 +575,18 @@ export default function PartnersHomePage() {
         return;
       }
 
+      // For Zenith brand, don't fetch if no franchise is selected
+      if (isZenithProduct(effectiveBrand) && !selectedFranchise) {
+        setCommissionSummary(null);
+        return;
+      }
+
       const url = "/api/partners/commission-summary";
       const params = new URLSearchParams();
       params.append("brand", effectiveBrand);
+      if (selectedFranchise) {
+        params.append("franchise", selectedFranchise);
+      }
       params.append("_t", Date.now().toString());
 
       const response = await fetch(`${url}?${params.toString()}`, {
@@ -499,7 +603,7 @@ export default function PartnersHomePage() {
       console.error("Error fetching commission summary:", error);
       toast.error("Erro ao carregar resumo de comissão");
     }
-  }, [effectiveBrand]);
+  }, [effectiveBrand, selectedFranchise]);
 
   const fetchCommissionPayments = useCallback(async () => {
     try {
@@ -509,9 +613,18 @@ export default function PartnersHomePage() {
         return;
       }
 
+      // For Zenith brand, don't fetch if no franchise is selected
+      if (isZenithProduct(effectiveBrand) && !selectedFranchise) {
+        setCommissionPayments([]);
+        return;
+      }
+
       const url = "/api/partners/commission-payments";
       const params = new URLSearchParams();
       params.append("brand", effectiveBrand);
+      if (selectedFranchise) {
+        params.append("franchise", selectedFranchise);
+      }
       params.append("_t", Date.now().toString());
 
       const response = await fetch(`${url}?${params.toString()}`, {
@@ -528,7 +641,7 @@ export default function PartnersHomePage() {
       console.error("Error fetching commission payments:", error);
       toast.error("Erro ao carregar pagamentos de comissão");
     }
-  }, [effectiveBrand]);
+  }, [effectiveBrand, selectedFranchise]);
 
   // Single effect to handle both initial load and brand changes
   useEffect(() => {
@@ -566,6 +679,7 @@ export default function PartnersHomePage() {
     shouldShowData,
     selectedBrand, // Track selected brand changes
     assignedBrand, // Track assigned brand changes
+    selectedFranchise, // Track selected franchise changes
     fetchAffiliateLink,
     fetchGeneratedCoupons,
     fetchContract,
@@ -590,11 +704,34 @@ export default function PartnersHomePage() {
     return () => clearInterval(interval);
   }, [canViewPage, shouldShowData, checkForCouponUpdates]);
 
+  // Reload commission data when franchise changes
+  useEffect(() => {
+    if (!canViewPage || !isHydrated || !effectiveBrand) return;
+
+    // Only reload if Zenith brand is selected
+    if (isZenithProduct(effectiveBrand)) {
+      console.log(
+        "[Franchise Change] Reloading commission data for franchise:",
+        selectedFranchise
+      );
+      fetchCommissionSummary();
+      fetchCommissionPayments();
+    }
+  }, [
+    selectedFranchise,
+    canViewPage,
+    isHydrated,
+    effectiveBrand,
+    fetchCommissionSummary,
+    fetchCommissionPayments,
+  ]);
+
   // Debug: Log all brand-related values on every render (disabled for production)
   // console.log("=== RENDER DEBUG ===");
   // console.log("selectedBrand:", selectedBrand);
   // console.log("assignedBrand:", assignedBrand);
   // console.log("effectiveBrand:", effectiveBrand);
+  // console.log("selectedFranchise:", selectedFranchise);
   // console.log("shouldShowData:", shouldShowData);
 
   // Reset form states when brand changes
@@ -696,6 +833,7 @@ export default function PartnersHomePage() {
 
       const requestBody = {
         brand: effectiveBrand,
+        franchise: selectedFranchise || null,
         amount,
         payment_date: newPayment.payment_date,
         description: newPayment.description || null,
@@ -888,6 +1026,13 @@ export default function PartnersHomePage() {
       return;
     }
 
+    // For Zenith, franchise is required
+    const isZenith = brandToUse && isZenithProduct(brandToUse);
+    if (isZenith && !selectedFranchise && !contract) {
+      toast.error("Selecione uma franquia Zenith para criar o contrato");
+      return;
+    }
+
     try {
       // Validate URL format
       new URL(newContractUrl);
@@ -902,9 +1047,14 @@ export default function PartnersHomePage() {
         ? `/api/partners/contracts/${contract.id}`
         : "/api/partners/contracts";
 
-      const requestBody = contract
+      const requestBody: any = contract
         ? { contract_url: newContractUrl.trim() }
         : { contract_url: newContractUrl.trim(), brand: brandToUse };
+
+      // Add franchise for Zenith when creating
+      if (!contract && isZenith && selectedFranchise) {
+        requestBody.franchise = selectedFranchise;
+      }
 
       const response = await fetch(url, {
         method,
@@ -945,19 +1095,31 @@ export default function PartnersHomePage() {
       return;
     }
 
+    // For Zenith, franchise is required
+    const isZenith = brandToUse && isZenithProduct(brandToUse);
+    if (isZenith && !selectedFranchise && !pixKey) {
+      toast.error("Selecione uma franquia Zenith para criar a chave pix");
+      return;
+    }
+
     try {
       const method = pixKey ? "PUT" : "POST";
       const url = pixKey
         ? `/api/partners/pix-keys/${pixKey.id}`
         : "/api/partners/pix-keys";
 
-      const requestBody = pixKey
+      const requestBody: any = pixKey
         ? { pix_key: newPixKey.trim(), pix_type: newPixType }
         : {
             pix_key: newPixKey.trim(),
             brand: brandToUse,
             pix_type: newPixType,
           };
+
+      // Add franchise for Zenith when creating
+      if (!pixKey && isZenith && selectedFranchise) {
+        requestBody.franchise = selectedFranchise;
+      }
 
       const response = await fetch(url, {
         method,
@@ -1447,7 +1609,7 @@ export default function PartnersHomePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <FranchiseSelector
               className="w-full sm:max-w-xs"
-              selectedBrand={selectedBrand || assignedBrand}
+              selectedBrand={effectiveBrand}
             />
           </div>
         )}
@@ -1501,6 +1663,14 @@ export default function PartnersHomePage() {
                     <Tag className="h-3 w-3" />
                     {effectiveBrand}
                   </Badge>
+                  {selectedFranchise && isZenithProduct(effectiveBrand) && (
+                    <Badge
+                      variant="outline"
+                      className="flex items-center gap-1"
+                    >
+                      🏪 {selectedFranchise}
+                    </Badge>
+                  )}
                 </div>
               )}
             </CardHeader>
@@ -1515,6 +1685,22 @@ export default function PartnersHomePage() {
                     <p className="text-sm text-muted-foreground max-w-md">
                       Escolha uma marca específica para visualizar o resumo de
                       comissões, histórico de pagamentos e saldo disponível.
+                    </p>
+                  </div>
+                </div>
+              ) : effectiveBrand &&
+                isZenithProduct(effectiveBrand) &&
+                !selectedFranchise ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center space-y-4">
+                    <div className="text-6xl">🏪</div>
+                    <h3 className="text-xl font-semibold text-muted-foreground">
+                      Selecione uma franquia para ver as informações de
+                      comissões
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                      Escolha uma franquia específica para visualizar o resumo
+                      de comissões, histórico de pagamentos e saldo disponível.
                     </p>
                   </div>
                 </div>
@@ -1795,7 +1981,7 @@ export default function PartnersHomePage() {
                                       ).toLocaleDateString("pt-BR")}
                                     </p>
                                   </div>
-                                  <div>
+                                  <div className="flex flex-col gap-2">
                                     <Badge
                                       variant={
                                         payment.status === "confirmed"
@@ -1811,6 +1997,14 @@ export default function PartnersHomePage() {
                                         ? "Confirmado"
                                         : "Cancelado"}
                                     </Badge>
+                                    {payment.franchise && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        🏪 {payment.franchise}
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex gap-2 self-start sm:self-center">
@@ -1997,6 +2191,10 @@ export default function PartnersHomePage() {
                           {canEditLinks
                             ? selectedBrand === null && canUseBrandFilter
                               ? "Selecione uma marca para ver ou criar link de afiliados."
+                              : effectiveBrand &&
+                                isZenithProduct(effectiveBrand) &&
+                                !selectedFranchise
+                              ? "Selecione uma franquia Zenith para ver o link de afiliado."
                               : effectiveBrand
                               ? `Nenhum link de afiliado criado para a marca "${effectiveBrand}".`
                               : "Selecione uma marca para ver ou criar link de afiliados."
@@ -2006,6 +2204,20 @@ export default function PartnersHomePage() {
                     ) : (
                       <div className="border rounded-lg p-3">
                         <div className="space-y-3">
+                          {/* Badge para mostrar a franquia (apenas para Zenith) */}
+                          {effectiveBrand &&
+                            isZenithProduct(effectiveBrand) &&
+                            selectedFranchise && (
+                              <div className="flex items-center gap-2 pb-2 border-b">
+                                <Badge
+                                  variant="secondary"
+                                  className="flex items-center gap-1"
+                                >
+                                  🏪 Franquia: {selectedFranchise}
+                                </Badge>
+                              </div>
+                            )}
+
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <p className="text-sm break-all font-mono bg-muted p-2 rounded">
@@ -2109,10 +2321,22 @@ export default function PartnersHomePage() {
                             onClick={() => {
                               setEditingLink(true);
                               // Generate default affiliate URL for the brand
-                              const defaultUrl = `https://hudlab.com.br/?utm_source=LandingPage&utm_medium=${effectiveBrand.replace(
+                              let defaultUrl = `https://hudlab.com.br/?utm_source=LandingPage&utm_medium=${effectiveBrand.replace(
                                 /\s+/g,
                                 "-"
                               )}`;
+
+                              // For Zenith brand, include franchise name if selected
+                              if (
+                                isZenithProduct(effectiveBrand) &&
+                                selectedFranchise
+                              ) {
+                                defaultUrl = `https://hudlab.com.br/?utm_source=LandingPage&utm_medium=${effectiveBrand.replace(
+                                  /\s+/g,
+                                  "-"
+                                )}-${selectedFranchise.replace(/\s+/g, "-")}`;
+                              }
+
                               setNewLinkUrl(defaultUrl);
                             }}
                             className="w-full"
@@ -2121,6 +2345,9 @@ export default function PartnersHomePage() {
                             <Plus className="h-4 w-4 mr-2 flex-shrink-0" />
                             <span className="truncate">
                               Adicionar Link para {effectiveBrand}
+                              {isZenithProduct(effectiveBrand) &&
+                                selectedFranchise &&
+                                ` - ${selectedFranchise}`}
                             </span>
                           </Button>
                         </div>

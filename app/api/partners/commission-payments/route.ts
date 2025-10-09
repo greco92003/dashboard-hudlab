@@ -38,12 +38,15 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
+    const selectedFranchise = searchParams.get("franchise"); // Franchise filter for Zenith brand
 
     let query = supabase
       .from("commission_payments")
-      .select(`
+      .select(
+        `
         id,
         brand,
+        franchise,
         partner_user_id,
         amount,
         payment_date,
@@ -55,7 +58,8 @@ export async function GET(request: NextRequest) {
         updated_at,
         created_by,
         updated_by
-      `)
+      `
+      )
       .order("payment_date", { ascending: false });
 
     // Apply brand filter based on user role
@@ -64,15 +68,17 @@ export async function GET(request: NextRequest) {
       query = query.eq("brand", profile.assigned_brand);
     } else if (profile.role === "partners-media" && !profile.assigned_brand) {
       // Partners-media without assigned brand: no access
-      return NextResponse.json(
-        { error: "No brand assigned" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "No brand assigned" }, { status: 403 });
     } else if (selectedBrand && selectedBrand !== "all") {
       // Owners/admins with brand filter
       query = query.eq("brand", selectedBrand);
     }
     // Owners/admins without filter: see all payments
+
+    // Apply franchise filter if provided
+    if (selectedFranchise) {
+      query = query.eq("franchise", selectedFranchise);
+    }
 
     const { data: payments, error } = await query;
 
@@ -131,6 +137,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       brand,
+      franchise,
       partner_user_id,
       amount,
       payment_date,
@@ -177,6 +184,7 @@ export async function POST(request: NextRequest) {
       .from("commission_payments")
       .insert({
         brand,
+        franchise: franchise || null,
         partner_user_id,
         amount,
         payment_date,

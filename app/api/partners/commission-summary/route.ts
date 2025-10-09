@@ -249,12 +249,19 @@ export async function GET(request: NextRequest) {
       `[Commission Summary] Commission percentage: ${commissionPercentage}%`
     );
 
-    // Get total payments made for the brand
-    const { data: payments, error: paymentsError } = await supabase
+    // Get total payments made for the brand (and franchise if applicable)
+    let paymentsQuery = supabase
       .from("commission_payments")
       .select("amount")
       .eq("brand", targetBrand)
       .in("status", ["sent", "confirmed"]);
+
+    // Filter by franchise for Zenith brand
+    if (selectedFranchise && targetBrand && isZenithProduct(targetBrand)) {
+      paymentsQuery = paymentsQuery.eq("franchise", selectedFranchise);
+    }
+
+    const { data: payments, error: paymentsError } = await paymentsQuery;
 
     if (paymentsError) {
       console.error("Error fetching commission payments:", paymentsError);

@@ -29,7 +29,7 @@ export function AIChatSidebar({ isOpen, onClose }: AIChatSidebarProps) {
     if (isOpen && !context) {
       loadContext();
     }
-  }, [isOpen]);
+  }, [isOpen, context]);
 
   // Auto-scroll para última mensagem
   useEffect(() => {

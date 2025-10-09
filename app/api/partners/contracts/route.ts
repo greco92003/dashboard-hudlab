@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const brand = searchParams.get("brand");
+    const franchise = searchParams.get("franchise");
 
     // Get current user
     const {
@@ -61,6 +62,11 @@ export async function GET(request: NextRequest) {
     }
     // If no brand filter and user is owner/admin, return all contracts
 
+    // Apply franchise filter for Zenith
+    if (franchise) {
+      query = query.eq("franchise", franchise);
+    }
+
     const { data: contracts, error } = await query;
 
     if (error) {
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-    const { contract_url, brand } = body;
+    const { contract_url, brand, franchise } = body;
 
     if (!contract_url || !brand) {
       return NextResponse.json(
@@ -136,29 +142,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if contract already exists for this brand
-    const { data: existingContract } = await supabase
-      .from("partnership_contracts")
-      .select("id")
-      .eq("brand", brand)
-      .single();
+    // Check if contract already exists for this brand + franchise combination
+    const isZenith = brand.toLowerCase().trim() === "zenith";
 
-    if (existingContract) {
+    let existingContractQuery = supabase
+      .from("partnership_contracts")
+      .select("id, franchise")
+      .eq("brand", brand);
+
+    // For Zenith with franchise, check brand + franchise combination
+    if (isZenith && franchise) {
+      existingContractQuery = existingContractQuery.eq("franchise", franchise);
+    }
+
+    const { data: existingContracts } = await existingContractQuery;
+
+    // For Zenith: allow multiple contracts (one per franchise)
+    // For other brands: only one contract allowed
+    if (!isZenith && existingContracts && existingContracts.length > 0) {
       return NextResponse.json(
         { error: "Contract already exists for this brand" },
         { status: 409 }
       );
     }
 
+    // For Zenith: check if contract exists for this specific franchise
+    if (
+      isZenith &&
+      franchise &&
+      existingContracts &&
+      existingContracts.length > 0
+    ) {
+      return NextResponse.json(
+        { error: `Contract already exists for Zenith - ${franchise}` },
+        { status: 409 }
+      );
+    }
+
     // Create new contract
+    const contractData: any = {
+      contract_url,
+      brand,
+      created_by: user.id,
+      updated_by: user.id,
+    };
+
+    // Add franchise for Zenith
+    if (isZenith && franchise) {
+      contractData.franchise = franchise;
+    }
+
     const { data: contract, error } = await supabase
       .from("partnership_contracts")
-      .insert({
-        contract_url,
-        brand,
-        created_by: user.id,
-        updated_by: user.id,
-      })
+      .insert(contractData)
       .select()
       .single();
 

@@ -43,12 +43,26 @@ function filterDatabaseOrdersByFranchise(
       const filteredProducts = (order.products || []).filter((product: any) => {
         const productFranchise = getFranchiseFromOrderProduct(product);
 
-        // If no franchise info, it's not a Zenith product, so include it
-        if (!productFranchise) return true;
+        console.log(
+          `[filterDatabaseOrdersByFranchise] Product: ${
+            product.name
+          }, Franchise: "${productFranchise}", Looking for: "${franchise}", Match: ${
+            productFranchise === franchise
+          }`
+        );
+
+        // If no franchise info, it's not a Zenith product with franchise, so exclude it
+        if (!productFranchise) return false;
 
         // If it has franchise info, only include if it matches
         return productFranchise === franchise;
       });
+
+      if (filteredProducts.length > 0) {
+        console.log(
+          `[filterDatabaseOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`
+        );
+      }
 
       return {
         ...order,
@@ -114,6 +128,11 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date");
     const selectedBrand = searchParams.get("brand"); // Brand filter for owners/admins
     const selectedFranchise = searchParams.get("franchise"); // Franchise filter for Zenith brand
+
+    console.log("[Orders API] Query params:", {
+      selectedBrand,
+      selectedFranchise,
+    });
 
     let query = supabase
       .from("nuvemshop_orders")
@@ -261,9 +280,15 @@ export async function GET(request: NextRequest) {
 
     // Apply franchise filtering for Zenith brand
     if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
+      console.log(
+        `[Orders API] Filtering ${filteredOrders.length} orders by franchise: ${selectedFranchise}`
+      );
       filteredOrders = filterDatabaseOrdersByFranchise(
         filteredOrders,
         selectedFranchise
+      );
+      console.log(
+        `[Orders API] After franchise filter: ${filteredOrders.length} orders`
       );
     }
 
