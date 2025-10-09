@@ -246,6 +246,7 @@ export async function POST() {
     }
 
     // Trigger sync using parallel endpoint (for automated/emergency syncs)
+    // This endpoint now logs to deals_sync_log for monitoring
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"

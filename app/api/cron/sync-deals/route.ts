@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Use same logic as manual sync button - sync all deals from ActiveCampaign
+    // Using parallel endpoint which now logs sync progress to deals_sync_log
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 
@@ -106,6 +107,7 @@ export async function POST() {
     );
 
     // Use same logic as manual sync button and GET endpoint - sync all deals
+    // Using parallel endpoint which now logs sync progress to deals_sync_log
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout (Hobby plan limit)
 

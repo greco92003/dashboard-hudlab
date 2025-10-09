@@ -192,6 +192,7 @@ function convertDateFormat(dateString: string): string | null {
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
+  let syncLogId: string | null = null;
 
   try {
     console.log("=== ROBUST DEALS SYNC PARALLEL ===");
@@ -224,6 +225,31 @@ export async function GET(request: NextRequest) {
     );
 
     const supabase = await createSupabaseServer();
+
+    // Create sync log entry (only for live updates, not dry runs)
+    if (!dryRun) {
+      console.log("📝 Creating sync log entry...");
+      const { data: syncLog, error: syncLogError } = await supabase
+        .from("deals_sync_log")
+        .insert({
+          sync_started_at: new Date().toISOString(),
+          sync_status: "running",
+          deals_processed: 0,
+          deals_added: 0,
+          deals_updated: 0,
+          deals_deleted: 0,
+        })
+        .select("id")
+        .single();
+
+      if (syncLogError) {
+        console.error("❌ Error creating sync log:", syncLogError);
+        throw new Error(`Failed to create sync log: ${syncLogError.message}`);
+      }
+
+      syncLogId = syncLog.id;
+      console.log(`✅ Sync log created with ID: ${syncLogId}`);
+    }
 
     // Step 0: Clear deals_cache if requested
     if (clearFirst && !dryRun) {
@@ -290,8 +316,23 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // Deduplicate deals from API (in case API returns duplicates across pages)
+    const dealsBeforeDedup = allDeals.length;
+    const dealsMapStep1 = new Map<string, any>();
+    allDeals.forEach((deal) => {
+      dealsMapStep1.set(deal.id.toString(), deal);
+    });
+    allDeals = Array.from(dealsMapStep1.values());
+
+    const apiDuplicatesRemoved = dealsBeforeDedup - allDeals.length;
+    if (apiDuplicatesRemoved > 0) {
+      console.log(
+        `⚠️ API returned ${apiDuplicatesRemoved} duplicate deals - removed (${dealsBeforeDedup} -> ${allDeals.length})`
+      );
+    }
+
     console.log(
-      `📊 STEP 1 COMPLETE: Fetched ${allDeals.length} deals (${dealErrors.length} errors)`
+      `📊 STEP 1 COMPLETE: Fetched ${allDeals.length} unique deals (${dealErrors.length} errors)`
     );
 
     // Step 2: Get custom field data with parallel pagination
@@ -424,6 +465,25 @@ export async function GET(request: NextRequest) {
       `📊 Processed ${processedDeals.length} deals with combined data`
     );
 
+    // Step 5.5: Deduplicate deals by deal_id (keep the last occurrence)
+    console.log("🎯 STEP 5.5: Deduplicating deals by deal_id...");
+    const dealsMap = new Map<string, any>();
+    processedDeals.forEach((deal) => {
+      dealsMap.set(deal.deal_id.toString(), deal);
+    });
+    const deduplicatedDeals = Array.from(dealsMap.values());
+
+    const duplicatesRemoved = processedDeals.length - deduplicatedDeals.length;
+    if (duplicatesRemoved > 0) {
+      console.log(
+        `⚠️ Removed ${duplicatesRemoved} duplicate deals (${processedDeals.length} -> ${deduplicatedDeals.length})`
+      );
+    } else {
+      console.log(
+        `✅ No duplicates found - all ${deduplicatedDeals.length} deals are unique`
+      );
+    }
+
     if (dryRun) {
       const syncDuration = (Date.now() - startTime) / 1000;
       console.log(`🎉 DRY RUN COMPLETED in ${syncDuration}s`);
@@ -437,7 +497,8 @@ export async function GET(request: NextRequest) {
           totalCustomFieldEntries: allCustomFieldData.length,
           targetCustomFieldEntries: targetCustomFieldData.length,
           dealsWithCustomFields: dealCustomFieldsMap.size,
-          processedDeals: processedDeals.length,
+          processedDeals: deduplicatedDeals.length,
+          duplicatesRemoved: duplicatesRemoved,
           dealErrors: dealErrors.length,
           customFieldErrors: customFieldErrors.length,
           syncDurationSeconds: syncDuration,
@@ -446,7 +507,7 @@ export async function GET(request: NextRequest) {
             dealsPerSecond: allDeals.length / syncDuration,
             customFieldsPerSecond: allCustomFieldData.length / syncDuration,
           },
-          sampleProcessedDeals: processedDeals.slice(0, 3),
+          sampleProcessedDeals: deduplicatedDeals.slice(0, 3),
         },
       });
     }
@@ -460,11 +521,68 @@ export async function GET(request: NextRequest) {
     const parallelBatches = 3; // Number of parallel upsert operations
 
     const dealBatches: any[][] = [];
-    for (let i = 0; i < processedDeals.length; i += upsertBatchSize) {
-      dealBatches.push(processedDeals.slice(i, i + upsertBatchSize));
+    for (let i = 0; i < deduplicatedDeals.length; i += upsertBatchSize) {
+      dealBatches.push(deduplicatedDeals.slice(i, i + upsertBatchSize));
     }
 
     console.log(`📊 Created ${dealBatches.length} batches for parallel upsert`);
+
+    // Retry function with deadlock handling
+    const retryUpsertWithDeadlockHandling = async (
+      batch: any[],
+      batchNumber: number,
+      maxRetries = 3
+    ) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const { error } = await supabase
+            .from("deals_cache")
+            .upsert(batch, { onConflict: "deal_id" });
+
+          if (error) {
+            // Check if it's a deadlock error (code 40P01)
+            if (error.code === "40P01" && attempt < maxRetries) {
+              const backoffDelay = Math.min(
+                1000 * Math.pow(2, attempt - 1),
+                5000
+              );
+              console.warn(
+                `⚠️ Batch ${batchNumber} deadlock detected, retrying in ${backoffDelay}ms (attempt ${attempt}/${maxRetries})...`
+              );
+              await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+              continue;
+            }
+
+            console.error(
+              `❌ Batch ${batchNumber} failed after ${attempt} attempts:`,
+              error
+            );
+            return { success: false, error, count: 0 };
+          }
+
+          console.log(
+            `✅ Upserted batch ${batchNumber}: ${batch.length} deals`
+          );
+          return { success: true, count: batch.length };
+        } catch (error) {
+          console.error(
+            `❌ Batch ${batchNumber} exception (attempt ${attempt}/${maxRetries}):`,
+            error
+          );
+          if (attempt === maxRetries) {
+            return { success: false, error, count: 0 };
+          }
+          // Retry with backoff
+          const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+        }
+      }
+      return {
+        success: false,
+        error: new Error("Max retries exceeded"),
+        count: 0,
+      };
+    };
 
     // Process batches in parallel groups
     for (let i = 0; i < dealBatches.length; i += parallelBatches) {
@@ -472,34 +590,14 @@ export async function GET(request: NextRequest) {
       console.log(
         `💾 Processing upsert batch group ${
           Math.floor(i / parallelBatches) + 1
-        }/${Math.ceil(dealBatches.length / parallelBatches)}`
+        }/${Math.ceil(
+          dealBatches.length / parallelBatches
+        )} (parallelism: ${parallelBatches})`
       );
 
       const upsertPromises = batchGroup.map(async (batch, batchIndex) => {
-        try {
-          const { error } = await supabase
-            .from("deals_cache")
-            .upsert(batch, { onConflict: "deal_id" });
-
-          if (error) {
-            console.error(
-              `❌ Upsert error in batch ${i + batchIndex + 1}:`,
-              error
-            );
-            return { success: false, error, count: 0 };
-          }
-
-          console.log(
-            `✅ Upserted batch ${i + batchIndex + 1}: ${batch.length} deals`
-          );
-          return { success: true, count: batch.length };
-        } catch (error) {
-          console.error(
-            `❌ Upsert exception in batch ${i + batchIndex + 1}:`,
-            error
-          );
-          return { success: false, error, count: 0 };
-        }
+        const actualBatchNumber = i + batchIndex + 1;
+        return await retryUpsertWithDeadlockHandling(batch, actualBatchNumber);
       });
 
       const batchResults = await Promise.allSettled(upsertPromises);
@@ -519,6 +617,29 @@ export async function GET(request: NextRequest) {
     const syncDuration = (Date.now() - startTime) / 1000;
     console.log(`🎉 PARALLEL SYNC COMPLETED in ${syncDuration}s`);
 
+    // Update sync log with success (only for live updates)
+    if (!dryRun && syncLogId) {
+      console.log("📝 Updating sync log with success...");
+      const { error: updateError } = await supabase
+        .from("deals_sync_log")
+        .update({
+          sync_completed_at: new Date().toISOString(),
+          sync_status: "completed",
+          deals_processed: allDeals.length,
+          deals_added: dealsUpserted,
+          deals_updated: 0,
+          deals_deleted: 0,
+          sync_duration_seconds: Math.round(syncDuration),
+        })
+        .eq("id", syncLogId);
+
+      if (updateError) {
+        console.error("❌ Error updating sync log:", updateError);
+      } else {
+        console.log("✅ Sync log updated successfully");
+      }
+    }
+
     return NextResponse.json({
       success: true,
       dryRun: false,
@@ -529,7 +650,8 @@ export async function GET(request: NextRequest) {
         totalCustomFieldEntries: allCustomFieldData.length,
         targetCustomFieldEntries: targetCustomFieldData.length,
         dealsWithCustomFields: dealCustomFieldsMap.size,
-        processedDeals: processedDeals.length,
+        processedDeals: deduplicatedDeals.length,
+        duplicatesRemoved: duplicatesRemoved,
         dealsUpserted: dealsUpserted,
         dealErrors: dealErrors.length,
         customFieldErrors: customFieldErrors.length,
@@ -546,6 +668,28 @@ export async function GET(request: NextRequest) {
     console.error("❌ Sync error:", error);
     const syncDuration = (Date.now() - startTime) / 1000;
 
+    // Update sync log with error (only for live updates)
+    if (syncLogId) {
+      console.log("📝 Updating sync log with error...");
+      const supabase = await createSupabaseServer();
+      const { error: updateError } = await supabase
+        .from("deals_sync_log")
+        .update({
+          sync_completed_at: new Date().toISOString(),
+          sync_status: "failed",
+          error_message:
+            error instanceof Error ? error.message : "Unknown error",
+          sync_duration_seconds: Math.round(syncDuration),
+        })
+        .eq("id", syncLogId);
+
+      if (updateError) {
+        console.error("❌ Error updating sync log with error:", updateError);
+      } else {
+        console.log("✅ Sync log updated with error status");
+      }
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unknown error",
@@ -555,3 +699,8 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Set timeout for this API route
+export const config = {
+  maxDuration: 300, // 5 minutes
+};

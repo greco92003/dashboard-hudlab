@@ -124,7 +124,8 @@ export function useManualSync() {
       const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
       // Use robust-deals-sync-parallel endpoint for manual sync button
-      // This endpoint syncs all deals from ActiveCampaign
+      // This endpoint syncs all deals from ActiveCampaign AND logs to deals_sync_log
+      // This allows SyncChecker to monitor the sync progress and show success/error alerts
       const syncEndpoint = "/api/test/robust-deals-sync-parallel?allDeals=true";
 
       const isLocalhost =
