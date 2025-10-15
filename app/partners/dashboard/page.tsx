@@ -27,7 +27,11 @@ import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { useBrandFilter } from "@/hooks/useBrandFilter";
 import { useFranchiseFilter } from "@/hooks/useFranchiseFilter";
-import { isZenithProduct } from "@/types/franchise";
+import {
+  isZenithProduct,
+  calculateFranchiseRevenue,
+  NuvemshopOrder as FranchiseNuvemshopOrder,
+} from "@/types/franchise";
 import { RefreshCw, Settings, Package, Tag, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
@@ -39,20 +43,12 @@ import { toast } from "sonner";
 import { ChartPieEstadosNuvemshop } from "@/components/ui/chart-pie-estados-nuvemshop";
 import { TopProductCard } from "@/components/ui/top-product-card";
 
-interface NuvemshopOrder {
+interface NuvemshopOrder extends FranchiseNuvemshopOrder {
   id: string;
-  order_id: string;
   order_number: string | null;
-  completed_at: string | null;
-  created_at_nuvemshop: string | null;
   total: number | null;
-  subtotal: number | null;
-  promotional_discount: number | null;
-  discount_coupon: number | null;
-  discount_gateway: number | null;
   shipping_cost_customer: number | null;
   province: string | null;
-  products: any[] | null;
 }
 
 interface ChartDataPoint {
@@ -220,33 +216,47 @@ function PartnersDashboardPage() {
   }, [isOwnerOrAdmin, effectiveBrand]); // Remove clearDataForBrandChange to prevent infinite loop
 
   // Function to calculate real revenue (subtotal - discounts, without shipping)
-  const calculateRealRevenue = useCallback((order: NuvemshopOrder): number => {
-    const subtotal =
-      typeof order.subtotal === "string"
-        ? parseFloat(order.subtotal)
-        : order.subtotal || 0;
+  // For Zenith with franchise filter, calculates only revenue from franchise products
+  const calculateRealRevenue = useCallback(
+    (order: NuvemshopOrder): number => {
+      // For Zenith brand with franchise filter, use franchise-specific revenue calculation
+      if (
+        selectedFranchise &&
+        effectiveBrand &&
+        isZenithProduct(effectiveBrand)
+      ) {
+        return calculateFranchiseRevenue(order, selectedFranchise);
+      }
 
-    const promotionalDiscount =
-      typeof order.promotional_discount === "string"
-        ? parseFloat(order.promotional_discount)
-        : order.promotional_discount || 0;
+      // Standard revenue calculation for other brands
+      const subtotal =
+        typeof order.subtotal === "string"
+          ? parseFloat(order.subtotal)
+          : order.subtotal || 0;
 
-    const discountCoupon =
-      typeof order.discount_coupon === "string"
-        ? parseFloat(order.discount_coupon)
-        : order.discount_coupon || 0;
+      const promotionalDiscount =
+        typeof order.promotional_discount === "string"
+          ? parseFloat(order.promotional_discount)
+          : order.promotional_discount || 0;
 
-    const discountGateway =
-      typeof order.discount_gateway === "string"
-        ? parseFloat(order.discount_gateway)
-        : order.discount_gateway || 0;
+      const discountCoupon =
+        typeof order.discount_coupon === "string"
+          ? parseFloat(order.discount_coupon)
+          : order.discount_coupon || 0;
 
-    // Calculate: subtotal - all discounts (without shipping)
-    const realRevenue =
-      subtotal - promotionalDiscount - discountCoupon - discountGateway;
+      const discountGateway =
+        typeof order.discount_gateway === "string"
+          ? parseFloat(order.discount_gateway)
+          : order.discount_gateway || 0;
 
-    return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue); // Ensure non-negative
-  }, []);
+      // Calculate: subtotal - all discounts (without shipping)
+      const realRevenue =
+        subtotal - promotionalDiscount - discountCoupon - discountGateway;
+
+      return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue); // Ensure non-negative
+    },
+    [selectedFranchise, effectiveBrand]
+  );
 
   // Format date to local timezone for API calls
   const formatDateToLocal = useCallback((date: Date) => {
@@ -404,14 +414,9 @@ function PartnersDashboardPage() {
           if (data.orders) {
             setOrders(data.orders);
 
-            // Calculate total sales using real revenue (subtotal - discounts, without shipping)
-            const total = data.orders.reduce(
-              (sum: number, order: NuvemshopOrder) => {
-                const realRevenue = calculateRealRevenue(order);
-                return sum + realRevenue;
-              },
-              0
-            );
+            // Use totalRevenue from API summary (already calculated with franchise-aware logic)
+            // This ensures consistency between API and frontend calculations
+            const total = data.summary?.totalRevenue || 0;
 
             setTotalSales(total);
             setTotalCommission((total * commissionPercentage) / 100);
@@ -496,14 +501,9 @@ function PartnersDashboardPage() {
         if (data.orders) {
           setOrders(data.orders);
 
-          // Calculate total sales using real revenue (subtotal - discounts, without shipping)
-          const total = data.orders.reduce(
-            (sum: number, order: NuvemshopOrder) => {
-              const realRevenue = calculateRealRevenue(order);
-              return sum + realRevenue;
-            },
-            0
-          );
+          // Use totalRevenue from API summary (already calculated with franchise-aware logic)
+          // This ensures consistency between API and frontend calculations
+          const total = data.summary?.totalRevenue || 0;
 
           setTotalSales(total);
           setTotalCommission((total * commissionPercentage) / 100);

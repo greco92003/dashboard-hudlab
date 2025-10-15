@@ -98,6 +98,7 @@ export async function GET(request: NextRequest) {
       `
       )
       .eq("payment_status", "paid")
+      .neq("status", "cancelled") // Exclude cancelled orders from commission calculations
       .not("subtotal", "is", null)
       .or(
         `and(completed_at.gte.${commissionStartDate}T00:00:00.000Z),and(completed_at.is.null,created_at_nuvemshop.gte.${commissionStartDate}T00:00:00.000Z)`

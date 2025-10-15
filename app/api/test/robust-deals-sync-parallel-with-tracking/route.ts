@@ -14,10 +14,11 @@ const headers = {
 };
 
 // Rate limiting configuration for ActiveCampaign API
+// Optimized for faster sync while respecting API limits
 const RATE_LIMIT = {
   REQUESTS_PER_SECOND: 5,
-  BATCH_SIZE: 5,
-  MIN_BATCH_INTERVAL: 1000, // Minimum 1 second between batch starts
+  BATCH_SIZE: 10, // Increased from 5 to process more requests in parallel
+  MIN_BATCH_INTERVAL: 700, // Reduced from 1000ms for faster processing
   SAFETY_BUFFER: 50, // 50ms safety buffer
 };
 
@@ -777,7 +778,7 @@ export async function GET(request: NextRequest) {
     );
     let dealsUpserted = 0;
     const upsertBatchSize = 100;
-    const parallelBatches = 3; // Number of parallel upsert operations
+    const parallelBatches = 5; // Increased from 3 for faster database writes
 
     const dealBatches: any[][] = [];
     for (let i = 0; i < processedDeals.length; i += upsertBatchSize) {

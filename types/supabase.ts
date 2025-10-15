@@ -781,6 +781,7 @@ export interface Database {
         Row: {
           id: string;
           percentage: number;
+          brand: string;
           updated_by: string | null;
           updated_at: string;
           created_at: string;
@@ -788,6 +789,7 @@ export interface Database {
         Insert: {
           id?: string;
           percentage?: number;
+          brand: string;
           updated_by?: string | null;
           updated_at?: string;
           created_at?: string;
@@ -795,6 +797,7 @@ export interface Database {
         Update: {
           id?: string;
           percentage?: number;
+          brand?: string;
           updated_by?: string | null;
           updated_at?: string;
           created_at?: string;

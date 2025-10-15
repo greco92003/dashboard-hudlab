@@ -156,6 +156,7 @@ export async function GET(request: NextRequest) {
       `
       )
       .eq("payment_status", "paid") // Only show orders with payment status "paid"
+      .neq("status", "cancelled") // Exclude cancelled orders from commission calculations
       .not("total", "is", null) // Only orders with valid total
       .order("created_at_nuvemshop", { ascending: false })
       .limit(2000); // Increase limit to get more orders before filtering

@@ -473,7 +473,8 @@ export async function GET(request: NextRequest) {
       .from("nuvemshop_orders")
       .select("*")
       .eq("sync_status", "synced")
-      .eq("payment_status", "paid"); // Only show orders with payment status "paid"
+      .eq("payment_status", "paid") // Only show orders with payment status "paid"
+      .neq("status", "cancelled"); // Exclude cancelled orders from commission calculations
 
     // Simple approach: get all orders, filter by brand if needed, then paginate
     let allQuery = supabase
@@ -481,6 +482,7 @@ export async function GET(request: NextRequest) {
       .select("*")
       .eq("sync_status", "synced")
       .eq("payment_status", "paid")
+      .neq("status", "cancelled") // Exclude cancelled orders from commission calculations
       .order("created_at_nuvemshop", { ascending: false });
 
     // Add date filters if provided

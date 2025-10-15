@@ -193,7 +193,13 @@ export function calculateFranchiseRevenue(
   }
 
   // Calculate revenue only for products from the selected franchise
-  let franchiseRevenue = 0;
+  // First, calculate the total subtotal and franchise subtotal
+  const orderSubtotal =
+    typeof order.subtotal === "string"
+      ? parseFloat(order.subtotal)
+      : order.subtotal || 0;
+
+  let franchiseSubtotal = 0;
 
   order.products.forEach((product) => {
     const productFranchise = getFranchiseFromOrderProduct(product);
@@ -201,9 +207,46 @@ export function calculateFranchiseRevenue(
     // If product has no franchise info or matches selected franchise
     if (!productFranchise || productFranchise === franchise) {
       const productTotal = product.price * product.quantity;
-      franchiseRevenue += productTotal;
+      franchiseSubtotal += productTotal;
     }
   });
 
-  return franchiseRevenue;
+  // If no franchise products, return 0
+  if (franchiseSubtotal === 0 || orderSubtotal === 0) {
+    return 0;
+  }
+
+  // Calculate the proportion of the order that belongs to this franchise
+  const franchiseProportion = franchiseSubtotal / orderSubtotal;
+
+  // Apply discounts proportionally
+  const promotionalDiscount =
+    typeof order.promotional_discount === "string"
+      ? parseFloat(order.promotional_discount)
+      : order.promotional_discount || 0;
+
+  const discountCoupon =
+    typeof order.discount_coupon === "string"
+      ? parseFloat(order.discount_coupon)
+      : order.discount_coupon || 0;
+
+  const discountGateway =
+    typeof order.discount_gateway === "string"
+      ? parseFloat(order.discount_gateway)
+      : order.discount_gateway || 0;
+
+  // Apply each discount proportionally to the franchise revenue
+  const franchisePromotionalDiscount =
+    promotionalDiscount * franchiseProportion;
+  const franchiseDiscountCoupon = discountCoupon * franchiseProportion;
+  const franchiseDiscountGateway = discountGateway * franchiseProportion;
+
+  // Calculate final franchise revenue: subtotal - proportional discounts
+  const franchiseRevenue =
+    franchiseSubtotal -
+    franchisePromotionalDiscount -
+    franchiseDiscountCoupon -
+    franchiseDiscountGateway;
+
+  return Math.max(0, franchiseRevenue); // Ensure non-negative
 }

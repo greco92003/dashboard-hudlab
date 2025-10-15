@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
       )
       .not("products", "is", null)
       .not("total", "is", null)
-      .eq("payment_status", "paid"); // Only show orders with payment status "paid"
+      .eq("payment_status", "paid") // Only show orders with payment status "paid"
+      .neq("status", "cancelled"); // Exclude cancelled orders from commission calculations
 
     // Apply date filtering - use created_at_nuvemshop as fallback for completed_at
     if (startDate && endDate) {
