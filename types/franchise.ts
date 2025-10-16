@@ -22,6 +22,11 @@ export const ZENITH_FRANCHISES: Franchise[] = [
     name: "Taquara - RS",
     displayName: "Taquara - RS",
   },
+  {
+    id: "moema-sp",
+    name: "Moema - SP",
+    displayName: "Moema - SP",
+  },
 ];
 
 export interface FranchiseFilter {
@@ -204,8 +209,8 @@ export function calculateFranchiseRevenue(
   order.products.forEach((product) => {
     const productFranchise = getFranchiseFromOrderProduct(product);
 
-    // If product has no franchise info or matches selected franchise
-    if (!productFranchise || productFranchise === franchise) {
+    // Only include products that match the selected franchise
+    if (productFranchise === franchise) {
       const productTotal = product.price * product.quantity;
       franchiseSubtotal += productTotal;
     }

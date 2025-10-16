@@ -140,7 +140,7 @@ DECLARE
   is_new_brand BOOLEAN := FALSE;
   is_zenith BOOLEAN := FALSE;
   affiliate_result RECORD;
-  franchise_names TEXT[] := ARRAY['Santos-SP', 'Garopaba-SC', 'Taquara-RS'];
+  franchise_names TEXT[] := ARRAY['Santos-SP', 'Garopaba-SC', 'Taquara-RS', 'Moema-SP'];
   franchise_name TEXT;
 BEGIN
   -- Verificar se é uma nova marca (não existia antes com produtos publicados)

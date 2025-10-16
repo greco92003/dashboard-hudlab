@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { ZENITH_FRANCHISES } from "@/types/franchise";
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,41 +95,55 @@ export async function POST(request: NextRequest) {
           (l) => l.brand.toLowerCase().trim() === "zenith"
         ) || [];
 
-      // Check if Zenith has all 3 franchise-specific links
-      const hasSantos = zenithLinks.some((l) => l.url.includes("Santos-SP"));
-      const hasGaropaba = zenithLinks.some((l) =>
-        l.url.includes("Garopaba-SC")
-      );
-      const hasTaquara = zenithLinks.some((l) => l.url.includes("Taquara-RS"));
+      // Check if Zenith has all franchise-specific links (dynamically from ZENITH_FRANCHISES)
+      const franchiseChecks = ZENITH_FRANCHISES.map((franchise) => ({
+        name: franchise.name,
+        exists: zenithLinks.some((l) => l.url.includes(franchise.name)),
+      }));
 
-      const hasAllFranchiseLinks = hasSantos && hasGaropaba && hasTaquara;
+      const hasAllFranchiseLinks = franchiseChecks.every(
+        (check) => check.exists
+      );
 
       if (!hasAllFranchiseLinks) {
+        const franchiseStatus = franchiseChecks
+          .map((check) => `${check.name}=${check.exists}`)
+          .join(", ");
         console.log(
-          `⚠️ Zenith brand needs franchise-specific links. Current: Santos=${hasSantos}, Garopaba=${hasGaropaba}, Taquara=${hasTaquara}`
+          `⚠️ Zenith brand needs franchise-specific links. Current: ${franchiseStatus}`
         );
         zenithNeedsProcessing = true;
 
         // Deactivate old Zenith links that don't have franchise info
-        const oldZenithLinks = zenithLinks.filter(
-          (l) =>
-            !l.url.includes("Santos-SP") &&
-            !l.url.includes("Garopaba-SC") &&
-            !l.url.includes("Taquara-RS")
-        );
+        const oldZenithLinks = zenithLinks.filter((l) => {
+          // Check if the link includes any of the franchise names
+          return !ZENITH_FRANCHISES.some((franchise) =>
+            l.url.includes(franchise.name)
+          );
+        });
 
         if (oldZenithLinks.length > 0) {
           console.log(
             `🗑️ Deactivating ${oldZenithLinks.length} old Zenith links without franchise info...`
           );
-          const { error: deactivateError } = await supabase
+
+          // Build dynamic query to exclude all franchise links
+          let deactivateQuery = supabase
             .from("affiliate_links")
             .update({ is_active: false })
             .eq("brand", zenithBrand)
-            .eq("is_active", true)
-            .not("url", "like", "%Santos-SP%")
-            .not("url", "like", "%Garopaba-SC%")
-            .not("url", "like", "%Taquara-RS%");
+            .eq("is_active", true);
+
+          // Add .not() conditions for each franchise dynamically
+          ZENITH_FRANCHISES.forEach((franchise) => {
+            deactivateQuery = deactivateQuery.not(
+              "url",
+              "like",
+              `%${franchise.name}%`
+            );
+          });
+
+          const { error: deactivateError } = await deactivateQuery;
 
           if (deactivateError) {
             console.error(
@@ -190,12 +205,8 @@ export async function POST(request: NextRequest) {
         const isZenith = brand.toLowerCase().trim() === "zenith";
 
         if (isZenith) {
-          // Create affiliate links for each Zenith franchise
-          const franchises = [
-            { name: "Santos-SP", displayName: "Santos - SP" },
-            { name: "Garopaba-SC", displayName: "Garopaba - SC" },
-            { name: "Taquara-RS", displayName: "Taquara - RS" },
-          ];
+          // Create affiliate links for each Zenith franchise (dynamically from ZENITH_FRANCHISES)
+          const franchises = ZENITH_FRANCHISES;
 
           // Get existing Zenith links to avoid duplicates
           const { data: existingZenithLinks } = await supabase

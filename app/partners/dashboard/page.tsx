@@ -395,6 +395,11 @@ function PartnersDashboardPage() {
             params.append("brand", effectiveBrand);
           }
 
+          // Add franchise filter for Zenith brand
+          if (selectedFranchise) {
+            params.append("franchise", selectedFranchise);
+          }
+
           // Add cache buster to prevent caching
           params.append("_t", Date.now().toString());
 
@@ -448,8 +453,8 @@ function PartnersDashboardPage() {
     [
       formatDateToLocal,
       effectiveBrand,
+      selectedFranchise,
       calculateRealRevenue,
-      commissionPercentage,
       prepareChartDataCustom,
       prepareChartData,
     ]
@@ -506,7 +511,7 @@ function PartnersDashboardPage() {
           const total = data.summary?.totalRevenue || 0;
 
           setTotalSales(total);
-          setTotalCommission((total * commissionPercentage) / 100);
+          // Commission will be calculated by useEffect when commissionPercentage is loaded
 
           // Prepare chart data
           if (customDateRange?.from && customDateRange?.to) {
@@ -535,7 +540,6 @@ function PartnersDashboardPage() {
       prepareChartData,
       prepareChartDataCustom,
       formatDateToLocal,
-      commissionPercentage,
       effectiveBrand,
       selectedFranchise,
       calculateRealRevenue,
@@ -643,6 +647,10 @@ function PartnersDashboardPage() {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
+        console.log("[Commission Settings Loaded]", {
+          brand,
+          percentage: data.percentage || 5,
+        });
         setCommissionPercentage(data.percentage || 5);
         setNewCommissionPercentage(data.percentage || 5);
       }
@@ -713,6 +721,7 @@ function PartnersDashboardPage() {
     effectiveBrand, // Re-fetch when effective brand changes
     selectedBrand, // Track selected brand changes
     assignedBrand, // Track assigned brand changes
+    selectedFranchise, // Re-fetch when franchise changes for Zenith brand
     isOwnerOrAdmin,
     shouldShowData,
     isHydrated,
@@ -772,8 +781,16 @@ function PartnersDashboardPage() {
 
   // Update commission when percentage changes
   useEffect(() => {
-    setTotalCommission((totalSales * commissionPercentage) / 100);
-  }, [totalSales, commissionPercentage]);
+    const calculatedCommission = (totalSales * commissionPercentage) / 100;
+    console.log("[Commission Calculation]", {
+      totalSales,
+      commissionPercentage,
+      calculatedCommission,
+      franchise: selectedFranchise,
+      brand: effectiveBrand,
+    });
+    setTotalCommission(calculatedCommission);
+  }, [totalSales, commissionPercentage, selectedFranchise, effectiveBrand]);
 
   // Handle sync button click
   const handleSync = async () => {
