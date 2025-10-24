@@ -307,10 +307,35 @@ export async function GET(request: NextRequest) {
           );
         }, 0) || 0;
     } else {
-      // Standard revenue calculation
+      // Standard revenue calculation (subtotal - discounts, without shipping)
+      // This matches the frontend calculation and ensures consistency
       totalRevenue =
-        filteredOrders?.reduce((sum, order) => sum + (order.total || 0), 0) ||
-        0;
+        filteredOrders?.reduce((sum, order) => {
+          const subtotal =
+            typeof order.subtotal === "string"
+              ? parseFloat(order.subtotal)
+              : order.subtotal || 0;
+
+          const promotionalDiscount =
+            typeof order.promotional_discount === "string"
+              ? parseFloat(order.promotional_discount)
+              : order.promotional_discount || 0;
+
+          const discountCoupon =
+            typeof order.discount_coupon === "string"
+              ? parseFloat(order.discount_coupon)
+              : order.discount_coupon || 0;
+
+          const discountGateway =
+            typeof order.discount_gateway === "string"
+              ? parseFloat(order.discount_gateway)
+              : order.discount_gateway || 0;
+
+          const realRevenue =
+            subtotal - promotionalDiscount - discountCoupon - discountGateway;
+
+          return sum + Math.max(0, realRevenue);
+        }, 0) || 0;
     }
 
     console.log(
@@ -341,7 +366,31 @@ export async function GET(request: NextRequest) {
             selectedFranchise
           );
         } else {
-          acc[province].revenue += order.total || 0;
+          // Standard revenue calculation (subtotal - discounts, without shipping)
+          const subtotal =
+            typeof order.subtotal === "string"
+              ? parseFloat(order.subtotal)
+              : order.subtotal || 0;
+
+          const promotionalDiscount =
+            typeof order.promotional_discount === "string"
+              ? parseFloat(order.promotional_discount)
+              : order.promotional_discount || 0;
+
+          const discountCoupon =
+            typeof order.discount_coupon === "string"
+              ? parseFloat(order.discount_coupon)
+              : order.discount_coupon || 0;
+
+          const discountGateway =
+            typeof order.discount_gateway === "string"
+              ? parseFloat(order.discount_gateway)
+              : order.discount_gateway || 0;
+
+          const realRevenue =
+            subtotal - promotionalDiscount - discountCoupon - discountGateway;
+
+          acc[province].revenue += Math.max(0, realRevenue);
         }
 
         return acc;
