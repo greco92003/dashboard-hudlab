@@ -54,6 +54,14 @@ export function useDesignerMockupsCache() {
     [normalizeDesignerNameLocal]
   );
 
+  // Helper function to format date as local YYYY-MM-DD without timezone conversion
+  const formatDateToLocal = useCallback((date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
   // Fetch cached data (fast)
   const fetchCachedData = useCallback(
     async (designers: string[], startDate?: Date, endDate?: Date) => {
@@ -65,6 +73,8 @@ export function useDesignerMockupsCache() {
           designers,
           startDate: startDate?.toISOString(),
           endDate: endDate?.toISOString(),
+          startDateLocal: startDate ? formatDateToLocal(startDate) : null,
+          endDateLocal: endDate ? formatDateToLocal(endDate) : null,
         });
 
         const params = new URLSearchParams();
@@ -72,10 +82,12 @@ export function useDesignerMockupsCache() {
           params.append("designers", designers.join(","));
         }
         if (startDate) {
-          params.append("startDate", startDate.toISOString().split("T")[0]);
+          // Use local date formatting to avoid timezone conversion issues
+          params.append("startDate", formatDateToLocal(startDate));
         }
         if (endDate) {
-          params.append("endDate", endDate.toISOString().split("T")[0]);
+          // Use local date formatting to avoid timezone conversion issues
+          params.append("endDate", formatDateToLocal(endDate));
         }
 
         const response = await fetch(
@@ -93,24 +105,44 @@ export function useDesignerMockupsCache() {
           success: result.success,
           cached: result.cached,
           dataKeys: Object.keys(result.data || {}),
+          fullData: result.data,
           lastSync: result.lastSync,
+          requestParams: {
+            designers,
+            startDate: startDate?.toISOString().split("T")[0],
+            endDate: endDate?.toISOString().split("T")[0],
+          },
         });
 
         // Normalize designer names in the result
         const normalizedData: Record<string, DesignerMockupStats> = {};
 
+        console.log("🔍 CACHE - Processing result data:", {
+          resultDataKeys: Object.keys(result.data || {}),
+          requestedDesigners: designers,
+        });
+
         if (result.data) {
           Object.entries(result.data).forEach(([designer, stats]) => {
+            console.log(`🔍 CACHE - Processing designer "${designer}":`, stats);
             const matchingDesigner = findMatchingDesigner(designer, designers);
+            console.log(
+              `🔍 CACHE - Matching designer found: "${matchingDesigner}"`
+            );
             if (matchingDesigner) {
               normalizedData[matchingDesigner] = stats as DesignerMockupStats;
             }
           });
         }
 
+        console.log("🔍 CACHE - Normalized data:", normalizedData);
+
         // Fill missing designers with zeros
         designers.forEach((designer) => {
           if (!normalizedData[designer]) {
+            console.log(
+              `⚠️ CACHE - Designer "${designer}" not found in result, filling with zeros`
+            );
             normalizedData[designer] = {
               quantidadeNegocios: 0,
               mockupsFeitos: 0,
@@ -118,6 +150,8 @@ export function useDesignerMockupsCache() {
             };
           }
         });
+
+        console.log("✅ CACHE - Final normalized data:", normalizedData);
 
         setState((prev) => ({
           ...prev,
@@ -146,7 +180,7 @@ export function useDesignerMockupsCache() {
         throw error;
       }
     },
-    [findMatchingDesigner]
+    [findMatchingDesigner, formatDateToLocal]
   );
 
   // Sync data from Google Sheets to cache (slower, but fresh data)
@@ -175,8 +209,8 @@ export function useDesignerMockupsCache() {
           },
           body: JSON.stringify({
             designers,
-            startDate: startDate?.toISOString().split("T")[0],
-            endDate: endDate?.toISOString().split("T")[0],
+            startDate: startDate ? formatDateToLocal(startDate) : undefined,
+            endDate: endDate ? formatDateToLocal(endDate) : undefined,
             forceSync,
           }),
         });
@@ -184,6 +218,12 @@ export function useDesignerMockupsCache() {
         const result = await response.json();
 
         if (!response.ok) {
+          // Handle "Sync already in progress" error gracefully
+          if (response.status === 429) {
+            console.log("⚠️ Sync already in progress, trying cache instead...");
+            // Try to fetch from cache instead
+            return await fetchCachedData(designers, startDate, endDate);
+          }
           throw new Error(
             result.error || result.details || "Erro ao sincronizar dados"
           );
@@ -249,7 +289,7 @@ export function useDesignerMockupsCache() {
         throw error;
       }
     },
-    [findMatchingDesigner]
+    [findMatchingDesigner, formatDateToLocal, fetchCachedData]
   );
 
   // Smart fetch: try cache first, fallback to sync if needed

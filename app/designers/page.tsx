@@ -77,6 +77,7 @@ export default function DesignersPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
   } = useGlobalDateRange();
@@ -391,6 +392,18 @@ export default function DesignersPage() {
 
   useEffect(() => {
     const initializeData = async () => {
+      // Only fetch data after hydration is complete
+      if (!isHydrated) {
+        console.log("⏳ Designers: Waiting for hydration...");
+        return;
+      }
+
+      console.log("✅ Designers: Hydrated, fetching data...", {
+        useCustomPeriod,
+        period,
+        dateRange,
+      });
+
       if (!useCustomPeriod) {
         await fetchDeals(period);
       } else {
@@ -399,7 +412,7 @@ export default function DesignersPage() {
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals]);
+  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
 
   // Function to refresh designers data
   const refreshDesignersData = useCallback(() => {
@@ -484,7 +497,10 @@ export default function DesignersPage() {
           <Label className="text-sm sm:text-base whitespace-nowrap">
             Selecione o período desejado:
           </Label>
-          <div className="w-full sm:min-w-[250px] sm:w-auto">
+          <div
+            className="w-full sm:min-w-[250px] sm:w-auto"
+            suppressHydrationWarning
+          >
             <Calendar23
               value={dateRange}
               onChange={handleDateRangeChangeLocal}
@@ -560,6 +576,7 @@ export default function DesignersPage() {
         dateRange={dateRange}
         period={period}
         useCustomPeriod={useCustomPeriod}
+        isHydrated={isHydrated}
       />
 
       {loading ? (

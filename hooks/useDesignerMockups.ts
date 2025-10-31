@@ -337,7 +337,7 @@ export function useDesignerMockups() {
             spreadsheetId:
               process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
               "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
-            range: "Mockups Feitos!A1:Z1000",
+            range: "Mockups Feitos!A1:Z5000",
             includeHeaders: true,
           }),
         });

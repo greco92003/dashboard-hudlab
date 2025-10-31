@@ -94,19 +94,19 @@ RETURNS TABLE (
   quantidade_negocios BIGINT,
   mockups_feitos BIGINT,
   alteracoes_feitas BIGINT
-) 
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
-  SELECT 
+  SELECT
     dmc.designer,
     COUNT(DISTINCT dmc.nome_negocio) as quantidade_negocios,
-    COUNT(*) FILTER (WHERE dmc.is_mockup_feito = true) as mockups_feitos,
-    COUNT(*) FILTER (WHERE dmc.is_alteracao = true) as alteracoes_feitas
+    COUNT(DISTINCT dmc.nome_negocio) FILTER (WHERE dmc.is_mockup_feito = true) as mockups_feitos,
+    COUNT(DISTINCT dmc.nome_negocio) FILTER (WHERE dmc.is_alteracao = true) as alteracoes_feitas
   FROM designer_mockups_cache dmc
-  WHERE 
+  WHERE
     (p_designers IS NULL OR dmc.designer = ANY(p_designers))
     AND (p_start_date IS NULL OR dmc.atualizado_em >= p_start_date)
     AND (p_end_date IS NULL OR dmc.atualizado_em <= p_end_date)

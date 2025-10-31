@@ -4,6 +4,8 @@ import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 
 // In-memory lock to prevent concurrent syncs
 let syncInProgress = false;
+let syncStartTime = 0;
+const SYNC_TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
 
 // Create Supabase client for cache operations (uses service key)
 function createSupabaseServerForCache() {
@@ -43,7 +45,47 @@ export async function GET(request: NextRequest) {
 
     const supabase = createSupabaseServerForCache();
 
+    // Debug: Check what's in the cache for the requested date range
+    if (startDate && endDate) {
+      const { data: debugData, error: debugError } = await supabase
+        .from("designer_mockups_cache")
+        .select(
+          "designer, atualizado_em, nome_negocio, etapa_funil, is_mockup_feito, is_alteracao"
+        )
+        .gte("atualizado_em", startDate)
+        .lte("atualizado_em", endDate)
+        .limit(10);
+
+      console.log("🔍 DEBUG - Cache records for date range:", {
+        startDate,
+        endDate,
+        recordCount: debugData?.length || 0,
+        sampleRecords: debugData?.slice(0, 3),
+        error: debugError?.message,
+      });
+
+      // Also check what dates are actually in the cache
+      const { data: allDatesData } = await supabase
+        .from("designer_mockups_cache")
+        .select("atualizado_em")
+        .order("atualizado_em", { ascending: false })
+        .limit(20);
+
+      console.log("🔍 DEBUG - Recent dates in cache:", {
+        dates: allDatesData?.map((d) => d.atualizado_em),
+      });
+    }
+
     // Use the database function for optimized queries
+    console.log(
+      "🔍 Calling RPC function get_designer_mockups_stats with params:",
+      {
+        p_designers: designers.length > 0 ? designers : null,
+        p_start_date: startDate || null,
+        p_end_date: endDate || null,
+      }
+    );
+
     const { data, error } = await supabase.rpc("get_designer_mockups_stats", {
       p_designers: designers.length > 0 ? designers : null,
       p_start_date: startDate || null,
@@ -51,9 +93,18 @@ export async function GET(request: NextRequest) {
     });
 
     if (error) {
-      console.error("❌ Error fetching cached mockups data:", error);
+      console.error("❌ Error fetching cached mockups data:", {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
       return NextResponse.json(
-        { error: "Failed to fetch cached data", details: error.message },
+        {
+          error: "Failed to fetch cached data",
+          details: error.message,
+          code: error.code,
+        },
         { status: 500 }
       );
     }
@@ -61,7 +112,7 @@ export async function GET(request: NextRequest) {
     // Transform data to match expected format
     const result: Record<string, any> = {};
 
-    if (data) {
+    if (data && data.length > 0) {
       data.forEach((row: any) => {
         result[row.designer] = {
           quantidadeNegocios: parseInt(row.quantidade_negocios) || 0,
@@ -69,16 +120,28 @@ export async function GET(request: NextRequest) {
           alteracoesFeitas: parseInt(row.alteracoes_feitas) || 0,
         };
       });
+    } else {
+      console.log("⚠️ No data found in cache, returning empty result");
     }
 
     // Get last sync info
-    const { data: syncData } = await supabase.rpc(
-      "get_last_designer_mockups_sync"
-    );
-    const lastSync = syncData?.[0] || null;
+    let lastSync = null;
+    try {
+      const { data: syncData, error: syncError } = await supabase.rpc(
+        "get_last_designer_mockups_sync"
+      );
+      if (!syncError && syncData && syncData.length > 0) {
+        lastSync = syncData[0];
+      }
+    } catch (syncErr) {
+      console.warn("⚠️ Could not fetch last sync info:", syncErr);
+    }
 
     console.log("✅ Cached mockups data retrieved:", {
       designers: Object.keys(result),
+      dataCount: data?.length || 0,
+      rawData: data,
+      result: result,
       lastSync: lastSync?.last_sync_at,
       syncStatus: lastSync?.status,
     });
@@ -112,8 +175,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   console.log("🚀 POST /api/designer-mockups-cache called");
 
-  // Check if sync is already in progress
-  if (syncInProgress) {
+  // Check if sync is already in progress (with timeout)
+  const now = Date.now();
+  if (syncInProgress && now - syncStartTime < SYNC_TIMEOUT) {
     console.log("⚠️ Sync already in progress, skipping...");
     return NextResponse.json(
       { error: "Sync already in progress" },
@@ -121,8 +185,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Reset lock if timeout exceeded
+  if (syncInProgress && now - syncStartTime >= SYNC_TIMEOUT) {
+    console.log("⚠️ Previous sync timed out, resetting lock...");
+    syncInProgress = false;
+  }
+
   syncInProgress = true;
-  const syncStartTime = Date.now();
+  syncStartTime = Date.now();
   let syncLogId: string | null = null;
 
   try {
@@ -155,7 +225,7 @@ export async function POST(request: NextRequest) {
         google_sheets_id:
           process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
           "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
-        google_sheets_range: "Mockups Feitos!A1:Z1000",
+        google_sheets_range: "Mockups Feitos!A1:Z5000",
         started_at: new Date().toISOString(),
       })
       .select()
@@ -182,7 +252,7 @@ export async function POST(request: NextRequest) {
           spreadsheetId:
             process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
             "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
-          range: "Mockups Feitos!A1:Z1000",
+          range: "Mockups Feitos!A1:Z5000",
           includeHeaders: true,
         }),
       }
@@ -426,29 +496,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Remove duplicates within the processed data
-    const uniqueData = [];
-    const seenKeys = new Set();
-
-    for (const row of processedData) {
-      const key = `${row.nome_negocio}|${row.designer}|${row.etapa_funil}|${row.atualizado_em_raw}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        uniqueData.push(row);
-      }
-    }
-
+    // DO NOT remove duplicates - each row in the sheet represents a separate action
+    // Even if the same business has multiple mockups/alterations on the same day,
+    // each one should be counted separately
     console.log("🔄 Processing complete:", {
       processedRecords,
       newRecords,
       errorRecords,
-      filteredData: processedData.length,
-      uniqueData: uniqueData.length,
-      duplicatesRemoved: processedData.length - uniqueData.length,
+      totalRows: processedData.length,
     });
 
-    // Use the deduplicated data
-    const finalData = uniqueData;
+    // Use all processed data without deduplication
+    const finalData = processedData;
 
     // Clear existing cache data if force sync or if we have new data
     if (forceSync || finalData.length > 0) {

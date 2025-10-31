@@ -424,7 +424,7 @@ function PartnersDashboardPage() {
             const total = data.summary?.totalRevenue || 0;
 
             setTotalSales(total);
-            setTotalCommission((total * commissionPercentage) / 100);
+            // Commission will be calculated by useEffect when commissionPercentage is loaded
 
             // Prepare chart data
             if (customDateRange?.from && customDateRange?.to) {
@@ -454,7 +454,6 @@ function PartnersDashboardPage() {
       formatDateToLocal,
       effectiveBrand,
       selectedFranchise,
-      calculateRealRevenue,
       prepareChartDataCustom,
       prepareChartData,
     ]
@@ -542,7 +541,6 @@ function PartnersDashboardPage() {
       formatDateToLocal,
       effectiveBrand,
       selectedFranchise,
-      calculateRealRevenue,
     ]
   );
 
@@ -619,7 +617,7 @@ function PartnersDashboardPage() {
 
       if (response.ok) {
         setCommissionPercentage(newCommissionPercentage);
-        setTotalCommission((totalSales * newCommissionPercentage) / 100);
+        // Commission will be recalculated by useEffect when commissionPercentage changes
         setShowCommissionSettings(false);
         toast.success(
           `Comissão atualizada para ${effectiveBrand}: ${newCommissionPercentage}%`

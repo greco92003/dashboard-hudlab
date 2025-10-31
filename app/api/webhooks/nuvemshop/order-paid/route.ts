@@ -92,6 +92,9 @@ export async function POST(request: NextRequest) {
             : [];
           const brands = new Set<string>();
 
+          // Map para armazenar product_id -> brand
+          const productBrandMap = new Map<string, string>();
+
           // Buscar marcas dos produtos na tabela nuvemshop_products
           for (const product of products) {
             if (product.product_id) {
@@ -103,12 +106,32 @@ export async function POST(request: NextRequest) {
 
               if (productData && productData.brand) {
                 brands.add(productData.brand);
+                productBrandMap.set(
+                  product.product_id.toString(),
+                  productData.brand
+                );
                 console.log(
                   `🏷️ Found brand for product ${product.product_id}: ${productData.brand}`
+                );
+              } else {
+                console.warn(
+                  `⚠️ No brand found for product ${product.product_id}`
                 );
               }
             }
           }
+
+          // Enriquecer produtos com informação da marca
+          const enrichedProducts = products.map((p: any) => ({
+            ...p,
+            brand: p.product_id
+              ? productBrandMap.get(p.product_id.toString())
+              : null,
+          }));
+
+          console.log(
+            `📦 Found ${brands.size} unique brands in order ${orderId}`
+          );
 
           // Enviar notificação para cada marca
           for (const brand of brands) {
@@ -135,6 +158,15 @@ export async function POST(request: NextRequest) {
             const totalDiscounts =
               promotionalDiscount + discountCoupon + discountGateway;
 
+            // Filtrar produtos desta marca específica
+            const brandProducts = enrichedProducts.filter(
+              (p: any) => p.brand === brand
+            );
+
+            console.log(
+              `📱 Sending notification for brand ${brand} with ${brandProducts.length} products`
+            );
+
             const saleNotificationResponse = await fetch(
               `${request.nextUrl.origin}/api/notifications/sale-notification`,
               {
@@ -147,7 +179,7 @@ export async function POST(request: NextRequest) {
                   totalValue: subtotal,
                   discounts: totalDiscounts,
                   customerName: orderData.contact_name,
-                  products: products.filter((p: any) => p.brand === brand),
+                  products: brandProducts,
                 }),
               }
             );
@@ -158,8 +190,9 @@ export async function POST(request: NextRequest) {
                 `✅ Sale notification sent for brand ${brand}: ${notificationResult.partnersCount} partners notified`
               );
             } else {
+              const errorText = await saleNotificationResponse.text();
               console.warn(
-                `⚠️ Failed to send sale notification for brand ${brand}`
+                `⚠️ Failed to send sale notification for brand ${brand}: ${errorText}`
               );
             }
           }

@@ -25,6 +25,11 @@ export default function Calendar23({
   hideLabel = false,
 }: Calendar23Props) {
   const [range, setRange] = React.useState<DateRange | undefined>(value);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   React.useEffect(() => {
     setRange(value);
@@ -35,6 +40,17 @@ export default function Calendar23({
     if (onChange) {
       onChange(newRange);
     }
+  };
+
+  // Format date display text
+  const getDisplayText = () => {
+    if (!mounted) {
+      return "Selecionar período";
+    }
+    if (range?.from && range?.to) {
+      return `${range.from.toLocaleDateString()} - ${range.to.toLocaleDateString()}`;
+    }
+    return "Selecionar período";
   };
 
   return (
@@ -50,10 +66,9 @@ export default function Calendar23({
             variant="outline"
             id="dates"
             className="w-56 justify-between font-normal"
+            suppressHydrationWarning
           >
-            {range?.from && range?.to
-              ? `${range.from.toLocaleDateString()} - ${range.to.toLocaleDateString()}`
-              : "Selecionar período"}
+            <span suppressHydrationWarning>{getDisplayText()}</span>
             <ChevronDownIcon />
           </Button>
         </PopoverTrigger>

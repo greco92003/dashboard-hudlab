@@ -16,9 +16,10 @@ const formatDateToLocal = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const parseLocalDateFromISO = (isoString: string): Date => {
-  const date = new Date(isoString);
-  return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+const parseLocalDate = (dateString: string): Date => {
+  // Parse YYYY-MM-DD format without timezone conversion
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed
 };
 
 interface UseGlobalDateRangeReturn {
@@ -59,14 +60,15 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
     if (savedDateRange) {
       try {
         const parsedRange = JSON.parse(savedDateRange);
+        console.log("📅 Loading date range from localStorage:", parsedRange);
         const dateRange = {
-          from: parsedRange.from
-            ? parseLocalDateFromISO(parsedRange.from)
-            : undefined,
-          to: parsedRange.to
-            ? parseLocalDateFromISO(parsedRange.to)
-            : undefined,
+          from: parsedRange.from ? parseLocalDate(parsedRange.from) : undefined,
+          to: parsedRange.to ? parseLocalDate(parsedRange.to) : undefined,
         };
+        console.log("📅 Parsed date range:", {
+          from: dateRange.from?.toISOString(),
+          to: dateRange.to?.toISOString(),
+        });
         setDateRangeState(dateRange);
       } catch (error) {
         console.error("Error parsing saved date range:", error);
@@ -91,11 +93,9 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
           const parsedRange = JSON.parse(e.newValue);
           const dateRange = {
             from: parsedRange.from
-              ? parseLocalDateFromISO(parsedRange.from)
+              ? parseLocalDate(parsedRange.from)
               : undefined,
-            to: parsedRange.to
-              ? parseLocalDateFromISO(parsedRange.to)
-              : undefined,
+            to: parsedRange.to ? parseLocalDate(parsedRange.to) : undefined,
           };
           setDateRangeState(dateRange);
         } catch (error) {
@@ -120,7 +120,16 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
   const setDateRange = useCallback((range: DateRange | undefined) => {
     setDateRangeState(range);
     if (range) {
-      localStorage.setItem(GLOBAL_DATE_RANGE_KEY, JSON.stringify(range));
+      // Save dates as YYYY-MM-DD strings to avoid timezone issues
+      const serializedRange = {
+        from: range.from ? formatDateToLocal(range.from) : undefined,
+        to: range.to ? formatDateToLocal(range.to) : undefined,
+      };
+      console.log("💾 Saving date range to localStorage:", serializedRange);
+      localStorage.setItem(
+        GLOBAL_DATE_RANGE_KEY,
+        JSON.stringify(serializedRange)
+      );
     } else {
       localStorage.removeItem(GLOBAL_DATE_RANGE_KEY);
     }

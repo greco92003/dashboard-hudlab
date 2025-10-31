@@ -14,6 +14,7 @@ interface MockupsSectionProps {
   dateRange?: DateRange;
   period?: number;
   useCustomPeriod?: boolean;
+  isHydrated?: boolean;
 }
 
 export function MockupsSection({
@@ -21,6 +22,7 @@ export function MockupsSection({
   dateRange,
   period = 30,
   useCustomPeriod = false,
+  isHydrated = true,
 }: MockupsSectionProps) {
   const {
     data,
@@ -86,30 +88,38 @@ export function MockupsSection({
     fetchMockupsData,
   ]);
 
-  // Load data only once when component mounts or when key parameters change
+  // Load data only once when component mounts AND when hydrated
   useEffect(() => {
-    if (!autoLoaded) {
+    if (!autoLoaded && isHydrated) {
+      console.log("📊 Initial load - hydrated and ready");
       loadData();
       setAutoLoaded(true);
     }
-  }, [loadData, autoLoaded]);
+  }, [loadData, autoLoaded, isHydrated]);
 
-  // Reload data when parameters change (but only after initial load)
+  // Reload data when parameters change (but only after initial load and when hydrated)
   useEffect(() => {
-    if (autoLoaded) {
+    if (autoLoaded && isHydrated) {
       console.log("🔄 Parameters changed, reloading data...");
       loadData();
     }
-  }, [loadData, autoLoaded]);
+  }, [loadData, autoLoaded, isHydrated]);
 
   const handleUnifiedSync = useCallback(async () => {
     console.log("🔄 COMPONENT - Unified sync button clicked");
+    console.log("🔄 COMPONENT - Date range params:", {
+      startDate: dateRangeParams.startDate.toISOString(),
+      endDate: dateRangeParams.endDate.toISOString(),
+      useCustomPeriod,
+    });
 
     // Ativar loading imediatamente
     setSyncLoading(true);
 
     try {
       // Call the cache API directly for manual sync
+      // Note: We don't pass date filters to sync because we want to sync ALL data
+      // The filtering happens when fetching from cache
       const response = await fetch("/api/designer-mockups-cache", {
         method: "POST",
         headers: {
@@ -138,7 +148,7 @@ export function MockupsSection({
         } registros processados`,
       });
 
-      // Reload data in the component
+      // Reload data in the component with current date filters
       loadData();
     } catch (error) {
       console.error("❌ UNIFIED SYNC - Error:", error);
@@ -152,7 +162,7 @@ export function MockupsSection({
       // Desativar loading sempre
       setSyncLoading(false);
     }
-  }, [loadData]);
+  }, [loadData, dateRangeParams, useCustomPeriod]);
 
   const formatLastSync = (date: Date | null) => {
     if (!date) return "Nunca";
