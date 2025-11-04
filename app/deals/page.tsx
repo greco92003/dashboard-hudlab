@@ -43,6 +43,7 @@ export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Use global date range hook
   const {
@@ -72,6 +73,30 @@ export default function DealsPage() {
   // Define columns for the data table
   const columns: ColumnDef<Deal>[] = [
     {
+      accessorKey: "deal_id",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            ID do Negócio
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        return <div className="font-mono text-xs">{row.original.deal_id}</div>;
+      },
+    },
+    {
       accessorKey: "title",
       header: ({ column }) => {
         return (
@@ -89,6 +114,51 @@ export default function DealsPage() {
               <ArrowUpDown className="ml-2 h-4 w-4" />
             )}
           </Button>
+        );
+      },
+    },
+    {
+      accessorKey: "status",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            Status
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const status = row.original.status?.toLowerCase();
+        let badgeColor = "bg-gray-100 text-gray-800";
+        let statusText = "Desconhecido";
+
+        if (status === "won" || status === "1") {
+          badgeColor = "bg-green-100 text-green-800";
+          statusText = "Ganho";
+        } else if (status === "open" || status === "0") {
+          badgeColor = "bg-blue-100 text-blue-800";
+          statusText = "Em Andamento";
+        } else if (status === "lost" || status === "2") {
+          badgeColor = "bg-red-100 text-red-800";
+          statusText = "Perdido";
+        }
+
+        return (
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-medium ${badgeColor}`}
+          >
+            {statusText}
+          </span>
         );
       },
     },
@@ -116,6 +186,34 @@ export default function DealsPage() {
         // Divide by 100 to get real values and always use R$
         const value = (row.original.value || 0) / 100;
         return formatCurrency(value, "BRL");
+      },
+    },
+    {
+      accessorKey: "contact_id",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            ID do Contato
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        return (
+          <div className="font-mono text-xs">
+            {row.original.contact_id || "-"}
+          </div>
+        );
       },
     },
     {
@@ -424,6 +522,27 @@ export default function DealsPage() {
   // Register this page for automatic refresh after sync
   useDataRefresh("deals", refreshDealsData);
 
+  // Filter deals based on status
+  const filteredDeals = deals.filter((deal) => {
+    if (statusFilter === "all") return true;
+    const status = deal.status?.toLowerCase();
+
+    if (statusFilter === "won") {
+      return status === "won" || status === "1";
+    } else if (statusFilter === "open") {
+      return status === "open" || status === "0";
+    } else if (statusFilter === "lost") {
+      return status === "lost" || status === "2";
+    }
+
+    return true;
+  });
+
+  // Calculate filtered total value
+  const filteredTotalValue = filteredDeals.reduce((sum, deal) => {
+    return sum + (deal.value || 0) / 100;
+  }, 0);
+
   return (
     <div className="flex flex-1 flex-col gap-4">
       <h1 className="text-xl sm:text-2xl font-bold">Negócios</h1>
@@ -467,19 +586,104 @@ export default function DealsPage() {
             />
           </div>
         </div>
+
+        {/* Status Filter Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+          <Label className="text-sm sm:text-base whitespace-nowrap self-start sm:self-center">
+            Filtrar por Status:
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={statusFilter === "all" ? "default" : "outline"}
+              onClick={() => setStatusFilter("all")}
+              size="sm"
+            >
+              Todos ({deals.length})
+            </Button>
+            <Button
+              variant={statusFilter === "won" ? "default" : "outline"}
+              onClick={() => setStatusFilter("won")}
+              size="sm"
+              className={
+                statusFilter === "won"
+                  ? ""
+                  : "border-green-500 text-green-700 hover:bg-green-50"
+              }
+            >
+              Ganhos (
+              {
+                deals.filter(
+                  (d) => d.status?.toLowerCase() === "won" || d.status === "1"
+                ).length
+              }
+              )
+            </Button>
+            <Button
+              variant={statusFilter === "open" ? "default" : "outline"}
+              onClick={() => setStatusFilter("open")}
+              size="sm"
+              className={
+                statusFilter === "open"
+                  ? ""
+                  : "border-blue-500 text-blue-700 hover:bg-blue-50"
+              }
+            >
+              Em Andamento (
+              {
+                deals.filter(
+                  (d) => d.status?.toLowerCase() === "open" || d.status === "0"
+                ).length
+              }
+              )
+            </Button>
+            <Button
+              variant={statusFilter === "lost" ? "default" : "outline"}
+              onClick={() => setStatusFilter("lost")}
+              size="sm"
+              className={
+                statusFilter === "lost"
+                  ? ""
+                  : "border-red-500 text-red-700 hover:bg-red-50"
+              }
+            >
+              Perdidos (
+              {
+                deals.filter(
+                  (d) => d.status?.toLowerCase() === "lost" || d.status === "2"
+                ).length
+              }
+              )
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Faturamento Total</CardTitle>
+          <CardTitle>
+            {statusFilter === "all"
+              ? "Faturamento Total"
+              : statusFilter === "won"
+              ? "Faturamento Total (Ganhos)"
+              : statusFilter === "open"
+              ? "Valor Total (Em Andamento)"
+              : "Valor Total (Perdidos)"}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <Skeleton className="h-8 w-[200px]" />
           ) : (
-            <p className="text-3xl font-bold">
-              {formatCurrency(totalValue, "BRL")}
-            </p>
+            <div className="space-y-2">
+              <p className="text-3xl font-bold">
+                {formatCurrency(filteredTotalValue, "BRL")}
+              </p>
+              {statusFilter !== "all" && (
+                <p className="text-sm text-muted-foreground">
+                  {filteredDeals.length} de {deals.length} negócios
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -494,7 +698,7 @@ export default function DealsPage() {
           <Skeleton className="h-24 w-full" />
         </div>
       ) : (
-        <DataTable columns={columns} data={deals} />
+        <DataTable columns={columns} data={filteredDeals} />
       )}
 
       {/* Sync Checker - monitora sincronizações */}
