@@ -24,6 +24,7 @@ import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { GoalsList } from "@/components/goals/goals-list";
 import { ExpiredGoalsNotification } from "@/components/goals/expired-goals-notification";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
+import { BusinessDaysCalculator } from "@/components/business-days-calculator";
 
 interface Deal {
   deal_id: string;
@@ -410,6 +411,9 @@ export default function SellersPage() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
       <h1 className="text-xl sm:text-2xl font-bold">Vendedores</h1>
+
+      {/* Card da Calculadora de Dias Úteis */}
+      <BusinessDaysCalculator />
 
       {/* Notificação de Metas Expiradas */}
       <ExpiredGoalsNotification />

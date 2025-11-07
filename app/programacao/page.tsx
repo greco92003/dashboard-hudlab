@@ -75,9 +75,7 @@ export default function ProgramacaoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState<"value" | "title" | "embarque">(
-    "embarque"
-  );
+  const [sortBy, setSortBy] = useState<"value" | "title">("value");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
@@ -87,8 +85,65 @@ export default function ProgramacaoPage() {
   // Get sidebar state to hide header when collapsed
   const { state } = useSidebar();
 
+  // Reorganize groups to create "Finalizados" group
+  const getReorganizedGroups = (): Group[] => {
+    if (!data) return [];
+
+    const finishedStages = [
+      "Recebido Pedido",
+      "Recebido Amostra",
+      "Em trânsito (Link Rastreio)",
+    ];
+
+    // Collect all finished deals from all groups
+    const finishedDeals: Deal[] = [];
+    const remainingGroups: Group[] = [];
+
+    data.groups.forEach((group) => {
+      const nonFinishedDeals = group.deals.filter(
+        (deal) => !deal.stageTitle || !finishedStages.includes(deal.stageTitle)
+      );
+
+      const groupFinishedDeals = group.deals.filter(
+        (deal) => deal.stageTitle && finishedStages.includes(deal.stageTitle)
+      );
+
+      finishedDeals.push(...groupFinishedDeals);
+
+      // Only keep groups that have non-finished deals
+      if (nonFinishedDeals.length > 0) {
+        remainingGroups.push({
+          ...group,
+          deals: nonFinishedDeals,
+          dealsCount: nonFinishedDeals.length,
+        });
+      }
+    });
+
+    // Create the "Finalizados" group
+    const finalizadosGroup: Group = {
+      id: "finalizados",
+      title: "Finalizados",
+      dealsCount: finishedDeals.length,
+      deals: finishedDeals,
+    };
+
+    // Return groups with remaining groups first, then "Finalizados" at the end
+    // "Sem data de embarque" should be before "Finalizados"
+    const sortedRemainingGroups = remainingGroups.sort((a, b) => {
+      if (a.title === "Sem data de embarque") return 1;
+      if (b.title === "Sem data de embarque") return -1;
+      return 0;
+    });
+
+    return finishedDeals.length > 0
+      ? [...sortedRemainingGroups, finalizadosGroup]
+      : sortedRemainingGroups;
+  };
+
   useEffect(() => {
     fetchProgramacaoData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load from localStorage after hydration
@@ -98,7 +153,7 @@ export default function ProgramacaoPage() {
     // Load sortBy
     const savedSortBy = localStorage.getItem("programacao-sortBy");
     if (savedSortBy) {
-      setSortBy(savedSortBy as "value" | "title" | "embarque");
+      setSortBy(savedSortBy as "value" | "title");
     }
 
     // Load sortDirection
@@ -151,13 +206,15 @@ export default function ProgramacaoPage() {
   useEffect(() => {
     if (data && visibleGroups.size === 0) {
       const allGroupIds = new Set<string>();
-      data.groups.forEach((group) => {
+      const reorganizedGroups = getReorganizedGroups();
+      reorganizedGroups.forEach((group) => {
         if (group.deals.length > 0) {
           allGroupIds.add(group.id);
         }
       });
       setVisibleGroups(allGroupIds);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, visibleGroups.size]);
 
   const fetchProgramacaoData = async (showToast = false) => {
@@ -387,25 +444,6 @@ export default function ProgramacaoPage() {
         case "value":
           comparison = b.value - a.value;
           break;
-        case "embarque":
-          // Sort by customField54 (Data de Embarque)
-          // Deals without embarque date
-          if (!a.customField54 && !b.customField54) {
-            comparison = 0;
-          } else if (!a.customField54) {
-            // Deals without date go to the end (positive value pushes 'a' down)
-            comparison = sortDirection === "asc" ? 1 : -1;
-            return comparison;
-          } else if (!b.customField54) {
-            // Deals without date go to the end (negative value pushes 'b' down)
-            comparison = sortDirection === "asc" ? -1 : 1;
-            return comparison;
-          } else {
-            const dateA = parseDate(a.customField54);
-            const dateB = parseDate(b.customField54);
-            comparison = (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
-          }
-          break;
         case "title":
           comparison = a.title.localeCompare(b.title);
           break;
@@ -437,7 +475,8 @@ export default function ProgramacaoPage() {
 
   const handleSelectAllGroups = () => {
     const allGroupIds = new Set<string>();
-    data?.groups.forEach((group) => {
+    const reorganizedGroups = getReorganizedGroups();
+    reorganizedGroups.forEach((group) => {
       if (group.deals.length > 0) {
         allGroupIds.add(group.id);
       }
@@ -549,7 +588,7 @@ export default function ProgramacaoPage() {
                 className="flex gap-4 min-w-max h-full p-4 justify-center"
                 style={{ transform: "rotateX(180deg)" }}
               >
-                {data.groups
+                {getReorganizedGroups()
                   .filter(
                     (group) =>
                       group.deals.length > 0 && visibleGroups.has(group.id)
@@ -565,7 +604,9 @@ export default function ProgramacaoPage() {
                         <CardHeader className="pb-3 flex-shrink-0">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-base font-semibold">
-                              {formatDate(group.title)}
+                              {group.id === "finalizados"
+                                ? group.title
+                                : formatDate(group.title)}
                             </CardTitle>
                             <Badge variant="secondary" className="ml-2">
                               {group.dealsCount}
