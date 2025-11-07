@@ -20,11 +20,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { formatCurrency } from "@/lib/utils";
 import {
-  Kanban,
   AlertCircle,
   TrendingUp,
   Package,
@@ -35,10 +33,8 @@ import {
   MapPin,
   DollarSign,
   Clock,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,7 +43,6 @@ interface Deal {
   title: string;
   value: number;
   currency: string;
-  closingDate: string;
   createdDate: string;
   estado: string | null;
   quantidadePares: string | null;
@@ -56,35 +51,22 @@ interface Deal {
   customField54: string | null;
 }
 
-interface Stage {
+interface Group {
   id: string;
   title: string;
-  order: number;
-  color: string;
-  pipelineId: string;
-  pipelineName: string;
   dealsCount: number;
   deals: Deal[];
-}
-
-interface Pipeline {
-  pipelineId: string;
-  pipelineName: string;
-  stages: Stage[];
-  totalDeals: number;
 }
 
 interface ProgramacaoData {
   success: boolean;
   message: string;
   summary: {
-    totalStages: number;
-    totalPipelines: number;
-    totalWonDeals: number;
+    totalDeals: number;
     totalValue: number;
-    stagesWithDeals: number;
+    totalGroups: number;
   };
-  pipelines: Pipeline[];
+  groups: Group[];
 }
 
 export default function ProgramacaoPage() {
@@ -92,14 +74,13 @@ export default function ProgramacaoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState<"value" | "date" | "title" | "embarque">(
+  const [sortBy, setSortBy] = useState<"value" | "title" | "embarque">(
     "embarque"
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [visibleStages, setVisibleStages] = useState<Set<string>>(new Set());
+  const [visibleGroups, setVisibleGroups] = useState<Set<string>>(new Set());
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Get sidebar state to hide header when collapsed
@@ -116,7 +97,7 @@ export default function ProgramacaoPage() {
     // Load sortBy
     const savedSortBy = localStorage.getItem("programacao-sortBy");
     if (savedSortBy) {
-      setSortBy(savedSortBy as "value" | "date" | "title" | "embarque");
+      setSortBy(savedSortBy as "value" | "title" | "embarque");
     }
 
     // Load sortDirection
@@ -127,14 +108,14 @@ export default function ProgramacaoPage() {
       setSortDirection(savedSortDirection as "asc" | "desc");
     }
 
-    // Load visibleStages
-    const savedVisibleStages = localStorage.getItem(
-      "programacao-visibleStages"
+    // Load visibleGroups
+    const savedVisibleGroups = localStorage.getItem(
+      "programacao-visibleGroups"
     );
-    if (savedVisibleStages) {
+    if (savedVisibleGroups) {
       try {
-        const parsed = JSON.parse(savedVisibleStages);
-        setVisibleStages(new Set(parsed));
+        const parsed = JSON.parse(savedVisibleGroups);
+        setVisibleGroups(new Set(parsed));
       } catch {
         // Ignore parse errors
       }
@@ -155,30 +136,28 @@ export default function ProgramacaoPage() {
     }
   }, [sortDirection, isHydrated]);
 
-  // Save visibleStages to localStorage
+  // Save visibleGroups to localStorage
   useEffect(() => {
-    if (isHydrated && visibleStages.size > 0) {
+    if (isHydrated && visibleGroups.size > 0) {
       localStorage.setItem(
-        "programacao-visibleStages",
-        JSON.stringify(Array.from(visibleStages))
+        "programacao-visibleGroups",
+        JSON.stringify(Array.from(visibleGroups))
       );
     }
-  }, [visibleStages, isHydrated]);
+  }, [visibleGroups, isHydrated]);
 
-  // Initialize visible stages when data is loaded
+  // Initialize visible groups when data is loaded
   useEffect(() => {
-    if (data && visibleStages.size === 0) {
-      const allStageIds = new Set<string>();
-      data.pipelines.forEach((pipeline) => {
-        pipeline.stages.forEach((stage) => {
-          if (stage.deals.length > 0) {
-            allStageIds.add(stage.id);
-          }
-        });
+    if (data && visibleGroups.size === 0) {
+      const allGroupIds = new Set<string>();
+      data.groups.forEach((group) => {
+        if (group.deals.length > 0) {
+          allGroupIds.add(group.id);
+        }
       });
-      setVisibleStages(allStageIds);
+      setVisibleGroups(allGroupIds);
     }
-  }, [data]);
+  }, [data, visibleGroups.size]);
 
   const fetchProgramacaoData = async (showToast = false) => {
     try {
@@ -214,16 +193,40 @@ export default function ProgramacaoPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchProgramacaoData(true);
+    // Call the sync endpoint to fetch fresh data from ActiveCampaign
+    try {
+      const syncResponse = await fetch("/api/programacao/sync", {
+        method: "POST",
+      });
+
+      if (!syncResponse.ok) {
+        throw new Error("Failed to sync data");
+      }
+
+      // After sync, fetch the updated data
+      await fetchProgramacaoData(true);
+    } catch (err) {
+      console.error("Error syncing data:", err);
+      toast.error("Erro ao sincronizar dados");
+      setRefreshing(false);
+    }
   };
 
-  // Filter to show only "Atendimento" pipeline
-  const filteredPipelines =
-    data?.pipelines.filter((pipeline) =>
-      pipeline.pipelineName.toLowerCase().includes("atendimento")
-    ) || [];
+  // Format date from YYYY-MM-DD to DD/MM/YYYY
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return "";
 
-  // Sort deals within each stage
+    // Check if date is in YYYY-MM-DD format
+    if (dateStr.includes("-")) {
+      const [year, month, day] = dateStr.split("-");
+      return `${day}/${month}/${year}`;
+    }
+
+    // If already in DD/MM/YYYY format, return as is
+    return dateStr;
+  };
+
+  // Sort deals within each group
   const sortDeals = (deals: Deal[]) => {
     return [...deals].sort((a, b) => {
       let comparison = 0;
@@ -232,17 +235,19 @@ export default function ProgramacaoPage() {
         case "value":
           comparison = b.value - a.value;
           break;
-        case "date":
-          comparison =
-            new Date(b.closingDate).getTime() -
-            new Date(a.closingDate).getTime();
-          break;
         case "embarque":
           // Sort by customField54 (Data de Embarque)
-          // Parse dates in DD/MM/YYYY format
+          // Parse dates in YYYY-MM-DD or DD/MM/YYYY format
           const parseDate = (dateStr: string) => {
-            const [day, month, year] = dateStr.split("/").map(Number);
-            return new Date(year, month - 1, day).getTime();
+            // Check if date is in YYYY-MM-DD format
+            if (dateStr.includes("-")) {
+              const [year, month, day] = dateStr.split("-").map(Number);
+              return new Date(year, month - 1, day).getTime();
+            } else {
+              // DD/MM/YYYY format
+              const [day, month, year] = dateStr.split("/").map(Number);
+              return new Date(year, month - 1, day).getTime();
+            }
           };
 
           // Deals without embarque date
@@ -278,32 +283,30 @@ export default function ProgramacaoPage() {
     setIsDealDialogOpen(true);
   };
 
-  const handleStageToggle = (stageId: string) => {
-    setVisibleStages((prev) => {
+  const handleGroupToggle = (groupId: string) => {
+    setVisibleGroups((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(stageId)) {
-        newSet.delete(stageId);
+      if (newSet.has(groupId)) {
+        newSet.delete(groupId);
       } else {
-        newSet.add(stageId);
+        newSet.add(groupId);
       }
       return newSet;
     });
   };
 
-  const handleSelectAllStages = () => {
-    const allStageIds = new Set<string>();
-    filteredPipelines.forEach((pipeline) => {
-      pipeline.stages.forEach((stage) => {
-        if (stage.deals.length > 0) {
-          allStageIds.add(stage.id);
-        }
-      });
+  const handleSelectAllGroups = () => {
+    const allGroupIds = new Set<string>();
+    data?.groups.forEach((group) => {
+      if (group.deals.length > 0) {
+        allGroupIds.add(group.id);
+      }
     });
-    setVisibleStages(allStageIds);
+    setVisibleGroups(allGroupIds);
   };
 
-  const handleDeselectAllStages = () => {
-    setVisibleStages(new Set());
+  const handleDeselectAllGroups = () => {
+    setVisibleGroups(new Set());
   };
 
   return (
@@ -347,8 +350,6 @@ export default function ProgramacaoPage() {
                 <SelectValue placeholder="Ordenar por" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="embarque">Data de Embarque</SelectItem>
-                <SelectItem value="date">Data de Fechamento</SelectItem>
                 <SelectItem value="value">Valor</SelectItem>
                 <SelectItem value="title">Título</SelectItem>
               </SelectContent>
@@ -356,18 +357,8 @@ export default function ProgramacaoPage() {
           </div>
         </div>
 
-        {/* Settings and Refresh Buttons */}
+        {/* Refresh Button */}
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            onClick={() => setIsSettingsDialogOpen(true)}
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-            title="Configurações de visualização"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Configurar
-          </Button>
           <Button
             onClick={handleRefresh}
             disabled={refreshing || loading}
@@ -396,218 +387,128 @@ export default function ProgramacaoPage() {
         <div className="flex-1 overflow-hidden min-h-0 min-w-0">
           <Skeleton className="h-full w-full" />
         </div>
-      ) : data && filteredPipelines.length > 0 ? (
-        filteredPipelines.map((pipeline) => (
-          <div
-            key={pipeline.pipelineId}
-            className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0 min-w-0"
-          >
-            {/* Pipeline Header */}
-            <div className="flex items-center justify-between flex-shrink-0">
-              <h2 className="text-xl font-bold">{pipeline.pipelineName}</h2>
-              <Badge variant="outline">
-                {pipeline.totalDeals}{" "}
-                {pipeline.totalDeals === 1 ? "deal" : "deals"}
-              </Badge>
-            </div>
+      ) : data && data.groups.length > 0 ? (
+        <div className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0 min-w-0">
+          {/* Summary Header */}
+          <div className="flex items-center justify-between flex-shrink-0">
+            <h2 className="text-xl font-bold">Data de Embarque</h2>
+            <Badge variant="outline">
+              {data.summary.totalDeals}{" "}
+              {data.summary.totalDeals === 1 ? "deal" : "deals"}
+            </Badge>
+          </div>
 
-            {/* Kanban Cards Container with white border */}
-            <div className="flex-1 min-h-0 min-w-0 border border-white rounded-lg bg-transparent overflow-hidden">
-              {/* Stages - Horizontal Scroll with scrollbar on top */}
+          {/* Kanban Cards Container with white border */}
+          <div className="flex-1 min-h-0 min-w-0 border border-white rounded-lg bg-transparent overflow-hidden">
+            {/* Groups - Horizontal Scroll with scrollbar on top */}
+            <div
+              className="overflow-x-auto h-full"
+              style={{ transform: "rotateX(180deg)" }}
+            >
               <div
-                className="overflow-x-auto h-full"
+                className="flex gap-4 min-w-max h-full p-4 justify-center"
                 style={{ transform: "rotateX(180deg)" }}
               >
-                <div
-                  className="flex gap-4 min-w-max h-full p-4 justify-center"
-                  style={{ transform: "rotateX(180deg)" }}
-                >
-                  {pipeline.stages
-                    .filter(
-                      (stage) =>
-                        stage.deals.length > 0 && visibleStages.has(stage.id)
-                    )
-                    .map((stage) => (
-                      <div
-                        key={stage.id}
-                        className="flex-shrink-0 w-80 h-full"
-                        style={{ minWidth: "320px" }}
-                      >
-                        {/* Stage Card */}
-                        <Card className="h-full flex flex-col">
-                          <CardHeader
-                            className="pb-3 flex-shrink-0"
-                            style={{
-                              borderLeft: `4px solid #${stage.color}`,
-                            }}
-                          >
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base font-semibold">
-                                {stage.title}
-                              </CardTitle>
-                              <Badge variant="secondary" className="ml-2">
-                                {stage.dealsCount}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="space-y-3 flex-1 overflow-y-auto">
-                            {stage.deals.length > 0 ? (
-                              sortDeals(stage.deals).map((deal) => (
-                                <Card
-                                  key={deal.id}
-                                  className="p-3 hover:shadow-md transition-shadow cursor-pointer"
-                                  onClick={() => handleDealClick(deal)}
-                                >
-                                  <div className="space-y-2">
-                                    {/* Deal Title */}
-                                    <h4 className="font-semibold text-sm line-clamp-2">
-                                      {deal.title}
-                                    </h4>
+                {data.groups
+                  .filter(
+                    (group) =>
+                      group.deals.length > 0 && visibleGroups.has(group.id)
+                  )
+                  .map((group) => (
+                    <div
+                      key={group.id}
+                      className="flex-shrink-0 w-80 h-full"
+                      style={{ minWidth: "320px" }}
+                    >
+                      {/* Group Card */}
+                      <Card className="h-full flex flex-col">
+                        <CardHeader className="pb-3 flex-shrink-0">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base font-semibold">
+                              {formatDate(group.title)}
+                            </CardTitle>
+                            <Badge variant="secondary" className="ml-2">
+                              {group.dealsCount}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 flex-1 overflow-y-auto">
+                          {group.deals.length > 0 ? (
+                            sortDeals(group.deals).map((deal) => (
+                              <Card
+                                key={deal.id}
+                                className="p-3 hover:shadow-md transition-shadow cursor-pointer"
+                                onClick={() => handleDealClick(deal)}
+                              >
+                                <div className="space-y-2">
+                                  {/* Deal Title */}
+                                  <h4 className="font-semibold text-sm line-clamp-2">
+                                    {deal.title}
+                                  </h4>
 
-                                    {/* Custom Field 54 - Data de Embarque */}
-                                    {deal.customField54 && (
-                                      <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
-                                        <Clock className="h-4 w-4" />
-                                        {deal.customField54}
+                                  {/* Custom Field 54 - Data de Embarque */}
+                                  {deal.customField54 && (
+                                    <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
+                                      <Clock className="h-4 w-4" />
+                                      {formatDate(deal.customField54)}
+                                    </div>
+                                  )}
+
+                                  {/* Deal Value */}
+                                  <div className="flex items-center gap-1 text-sm font-medium text-green-600">
+                                    <TrendingUp className="h-3 w-3" />
+                                    {formatCurrency(
+                                      deal.value / 100,
+                                      deal.currency
+                                    )}
+                                  </div>
+
+                                  {/* Deal Details */}
+                                  <div className="space-y-1 text-xs text-muted-foreground">
+                                    {deal.quantidadePares && (
+                                      <div className="flex items-center gap-1">
+                                        <Package className="h-3 w-3" />
+                                        {deal.quantidadePares} pares
                                       </div>
                                     )}
-
-                                    {/* Deal Value */}
-                                    <div className="flex items-center gap-1 text-sm font-medium text-green-600">
-                                      <TrendingUp className="h-3 w-3" />
-                                      {formatCurrency(
-                                        deal.value / 100,
-                                        deal.currency
-                                      )}
-                                    </div>
-
-                                    {/* Deal Details */}
-                                    <div className="space-y-1 text-xs text-muted-foreground">
-                                      {deal.quantidadePares && (
-                                        <div className="flex items-center gap-1">
-                                          <Package className="h-3 w-3" />
-                                          {deal.quantidadePares} pares
-                                        </div>
-                                      )}
-                                      {deal.vendedor && (
-                                        <div className="flex items-center gap-1">
-                                          <User className="h-3 w-3" />
-                                          {deal.vendedor}
-                                        </div>
-                                      )}
-                                      {deal.designer && (
-                                        <div className="flex items-center gap-1">
-                                          <Palette className="h-3 w-3" />
-                                          {deal.designer}
-                                        </div>
-                                      )}
-                                      {deal.closingDate && (
-                                        <div className="flex items-center gap-1">
-                                          <Calendar className="h-3 w-3" />
-                                          {new Date(
-                                            deal.closingDate
-                                          ).toLocaleDateString("pt-BR")}
-                                        </div>
-                                      )}
-                                    </div>
+                                    {deal.vendedor && (
+                                      <div className="flex items-center gap-1">
+                                        <User className="h-3 w-3" />
+                                        {deal.vendedor}
+                                      </div>
+                                    )}
+                                    {deal.designer && (
+                                      <div className="flex items-center gap-1">
+                                        <Palette className="h-3 w-3" />
+                                        {deal.designer}
+                                      </div>
+                                    )}
                                   </div>
-                                </Card>
-                              ))
-                            ) : (
-                              <div className="text-center py-8 text-sm text-muted-foreground">
-                                Nenhum deal neste stage
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </div>
-                    ))}
-                </div>
+                                </div>
+                              </Card>
+                            ))
+                          ) : (
+                            <div className="text-center py-8 text-sm text-muted-foreground">
+                              Nenhum deal neste grupo
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
-        ))
+        </div>
       ) : (
         <Alert className="flex-shrink-0">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Nenhum dado disponível. Verifique se há deals ganhos no sistema.
+            Nenhum dado disponível. Clique em &quot;Atualizar&quot; para
+            sincronizar os dados.
           </AlertDescription>
         </Alert>
       )}
-
-      {/* Settings Dialog */}
-      <Dialog
-        open={isSettingsDialogOpen}
-        onOpenChange={setIsSettingsDialogOpen}
-      >
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Configurações de Visualização</DialogTitle>
-            <DialogDescription>
-              Selecione quais stages deseja visualizar no quadro de programação
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Select/Deselect All Buttons */}
-            <div className="flex gap-2">
-              <Button
-                onClick={handleSelectAllStages}
-                variant="outline"
-                size="sm"
-              >
-                Selecionar Todos
-              </Button>
-              <Button
-                onClick={handleDeselectAllStages}
-                variant="outline"
-                size="sm"
-              >
-                Desmarcar Todos
-              </Button>
-            </div>
-
-            {/* Stages List */}
-            {filteredPipelines.map((pipeline) => (
-              <div key={pipeline.pipelineId} className="space-y-3">
-                <h3 className="font-semibold text-lg border-b pb-2">
-                  {pipeline.pipelineName}
-                </h3>
-                <div className="space-y-2">
-                  {pipeline.stages
-                    .filter((stage) => stage.deals.length > 0)
-                    .map((stage) => (
-                      <div
-                        key={stage.id}
-                        className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent transition-colors"
-                      >
-                        <Checkbox
-                          id={`stage-${stage.id}`}
-                          checked={visibleStages.has(stage.id)}
-                          onCheckedChange={() => handleStageToggle(stage.id)}
-                        />
-                        <label
-                          htmlFor={`stage-${stage.id}`}
-                          className="flex-1 flex items-center justify-between cursor-pointer"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: `#${stage.color}` }}
-                            />
-                            <span className="font-medium">{stage.title}</span>
-                          </div>
-                          <Badge variant="secondary">{stage.dealsCount}</Badge>
-                        </label>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Deal Details Dialog */}
       <Dialog open={isDealDialogOpen} onOpenChange={setIsDealDialogOpen}>
@@ -628,7 +529,7 @@ export default function ProgramacaoPage() {
                       Data de Embarque
                     </p>
                     <p className="text-2xl font-bold text-primary">
-                      {selectedDeal.customField54}
+                      {formatDate(selectedDeal.customField54)}
                     </p>
                   </div>
                 </div>
@@ -693,25 +594,6 @@ export default function ProgramacaoPage() {
                       <p className="text-sm font-medium">Estado</p>
                       <p className="text-sm text-muted-foreground">
                         {selectedDeal.estado}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedDeal.closingDate && (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg">
-                    <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Data de Fechamento</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(selectedDeal.closingDate).toLocaleDateString(
-                          "pt-BR",
-                          {
-                            day: "2-digit",
-                            month: "long",
-                            year: "numeric",
-                          }
-                        )}
                       </p>
                     </div>
                   </div>
