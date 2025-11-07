@@ -20,6 +20,9 @@ export function ConditionalSidebar({
   const pathname = usePathname();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
 
+  // Check if current page needs full height layout (no padding)
+  const isFullHeightPage = pathname === "/programacao";
+
   // Routes that should not have the sidebar
   const routesWithoutSidebar = [
     "/home",
@@ -40,6 +43,7 @@ export function ConditionalSidebar({
     "/dashboard",
     "/deals",
     "/pairs-sold",
+    "/programacao",
     "/sellers",
     "/designers",
     "/direct-costs",
@@ -124,9 +128,20 @@ export function ConditionalSidebar({
           <div suppressHydrationWarning>
             <AppSidebar />
           </div>
-          <SidebarInset>
+          <SidebarInset
+            className={isFullHeightPage ? "flex flex-col min-w-0" : "min-w-0"}
+            suppressHydrationWarning
+          >
             <SiteHeader />
-            <div className="p-4 pt-6 md:p-6 md:pt-8">{children}</div>
+            <div
+              className={
+                isFullHeightPage
+                  ? "flex flex-col flex-1 p-4 md:p-6 overflow-hidden"
+                  : "p-4 pt-6 md:p-6 md:pt-8"
+              }
+            >
+              {children}
+            </div>
           </SidebarInset>
         </SidebarProvider>
       </div>
@@ -148,9 +163,20 @@ export function ConditionalSidebar({
       }
     >
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset
+        className={isFullHeightPage ? "flex flex-col min-w-0" : "min-w-0"}
+        suppressHydrationWarning
+      >
         <SiteHeader />
-        <div className="p-4 pt-6 md:p-6 md:pt-8">{children}</div>
+        <div
+          className={
+            isFullHeightPage
+              ? "flex flex-col flex-1 p-4 md:p-6 overflow-hidden"
+              : "p-4 pt-6 md:p-6 md:pt-8"
+          }
+        >
+          {children}
+        </div>
       </SidebarInset>
       {/* AI Analyst - Botão flutuante e sidebar de chat */}
       <AIAnalystWrapper />

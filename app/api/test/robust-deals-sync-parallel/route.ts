@@ -7,7 +7,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
 const API_TOKEN = process.env.AC_API_TOKEN;
 
 // The custom field IDs we want to extract
-const TARGET_CUSTOM_FIELD_IDS = [5, 25, 39, 45, 47, 49, 50];
+const TARGET_CUSTOM_FIELD_IDS = [5, 25, 39, 45, 47, 49, 50, 54];
 
 const headers = {
   "Api-Token": API_TOKEN || "",
@@ -431,6 +431,7 @@ export async function GET(request: NextRequest) {
       const designer = dealCustomFields.get(47) || null;
       const utmSource = dealCustomFields.get(49) || null; // UTM Source
       const utmMedium = dealCustomFields.get(50) || null; // UTM Medium
+      const customField54 = dealCustomFields.get(54) || null; // Custom Field 54
 
       const convertedClosingDate = closingDate
         ? convertDateFormat(closingDate)
@@ -454,6 +455,7 @@ export async function GET(request: NextRequest) {
         designer: designer,
         "utm-source": utmSource,
         "utm-medium": utmMedium,
+        custom_field_54: customField54,
         contact_id: deal.contact || null,
         organization_id: deal.organization || null,
         api_updated_at: deal.mdate || deal.cdate || null,

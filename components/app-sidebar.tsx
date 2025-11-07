@@ -18,6 +18,7 @@ import {
   Home,
   Target,
   TrendingUp,
+  Clock,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -70,6 +71,11 @@ const menuGroups = [
         title: "Pares Vendidos",
         url: "/pairs-sold",
         icon: ShoppingBag,
+      },
+      {
+        title: "Programação",
+        url: "/programacao",
+        icon: Clock,
       },
     ],
   },

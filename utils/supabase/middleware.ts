@@ -76,6 +76,7 @@ export async function updateSession(request: NextRequest) {
       "/designers",
       "/partners",
       "/goals",
+      "/programacao",
     ];
 
     // Define routes that require admin or owner role
