@@ -43,6 +43,7 @@ interface Deal {
   title: string;
   value: number;
   currency: string;
+  stageTitle: string | null;
   createdDate: string;
   estado: string | null;
   quantidadePares: string | null;
@@ -226,6 +227,157 @@ export default function ProgramacaoPage() {
     return dateStr;
   };
 
+  // Parse date string to Date object (handles both YYYY-MM-DD and DD/MM/YYYY formats)
+  const parseDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+
+    try {
+      if (dateStr.includes("-")) {
+        // YYYY-MM-DD format
+        const [year, month, day] = dateStr.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      } else {
+        // DD/MM/YYYY format
+        const [day, month, year] = dateStr.split("/").map(Number);
+        return new Date(year, month - 1, day);
+      }
+    } catch {
+      return null;
+    }
+  };
+
+  // Get current date in Brasília timezone (UTC-3)
+  const getCurrentDateBrasilia = (): Date => {
+    const now = new Date();
+    // Convert to Brasília time (UTC-3)
+    const brasiliaOffset = -3 * 60; // -3 hours in minutes
+    const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+    const brasiliaTime = new Date(utcTime + brasiliaOffset * 60000);
+    // Reset time to start of day for date comparison
+    brasiliaTime.setHours(0, 0, 0, 0);
+    return brasiliaTime;
+  };
+
+  // Calculate days difference between two dates
+  const getDaysDifference = (targetDate: Date, currentDate: Date): number => {
+    const diffTime = targetDate.getTime() - currentDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  // Get card background color class based on stage title and shipping date
+  const getCardBackgroundClass = (deal: Deal): string => {
+    // Stage titles that should always be green
+    const greenStages = [
+      "Em trânsito (Link Rastreio)",
+      "Recebido Amostra",
+      "Recebido Pedido",
+    ];
+
+    // Check if deal is in a green stage
+    if (deal.stageTitle && greenStages.includes(deal.stageTitle)) {
+      return "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800";
+    }
+
+    // If no shipping date, return default
+    if (!deal.customField54) {
+      return "";
+    }
+
+    // Parse shipping date
+    const shippingDate = parseDate(deal.customField54);
+    if (!shippingDate) {
+      return "";
+    }
+
+    // Get current date in Brasília timezone
+    const currentDate = getCurrentDateBrasilia();
+    const daysUntilShipping = getDaysDifference(shippingDate, currentDate);
+
+    // Determine color based on days until shipping
+    if (daysUntilShipping < 0) {
+      // Past due - red
+      return "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800";
+    } else if (daysUntilShipping <= 3) {
+      // 3 days or less - yellow
+      return "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800";
+    } else if (daysUntilShipping <= 7) {
+      // 7 days or less - orange
+      return "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800";
+    }
+
+    // More than 7 days - default
+    return "";
+  };
+
+  // Get days until shipping message with appropriate color
+  const getDaysUntilShippingInfo = (
+    deal: Deal
+  ): { message: string; colorClass: string } | null => {
+    // Stage titles that should always be green
+    const greenStages = [
+      "Em trânsito (Link Rastreio)",
+      "Recebido Amostra",
+      "Recebido Pedido",
+    ];
+
+    // Check if deal is in a green stage
+    if (deal.stageTitle && greenStages.includes(deal.stageTitle)) {
+      return {
+        message: "✓ Concluído",
+        colorClass: "text-green-700 dark:text-green-400 font-semibold",
+      };
+    }
+
+    // If no shipping date, return null
+    if (!deal.customField54) {
+      return null;
+    }
+
+    // Parse shipping date
+    const shippingDate = parseDate(deal.customField54);
+    if (!shippingDate) {
+      return null;
+    }
+
+    // Get current date in Brasília timezone
+    const currentDate = getCurrentDateBrasilia();
+    const daysUntilShipping = getDaysDifference(shippingDate, currentDate);
+
+    // Determine message and color based on days until shipping
+    if (daysUntilShipping < 0) {
+      const daysOverdue = Math.abs(daysUntilShipping);
+      return {
+        message: `⚠ Atrasado ${daysOverdue} ${
+          daysOverdue === 1 ? "dia" : "dias"
+        }`,
+        colorClass: "text-red-700 dark:text-red-400 font-semibold",
+      };
+    } else if (daysUntilShipping === 0) {
+      return {
+        message: "🚨 Embarque HOJE",
+        colorClass: "text-yellow-700 dark:text-yellow-400 font-bold",
+      };
+    } else if (daysUntilShipping <= 3) {
+      return {
+        message: `⏰ Faltam ${daysUntilShipping} ${
+          daysUntilShipping === 1 ? "dia" : "dias"
+        }`,
+        colorClass: "text-yellow-700 dark:text-yellow-400 font-semibold",
+      };
+    } else if (daysUntilShipping <= 7) {
+      return {
+        message: `📅 Faltam ${daysUntilShipping} dias`,
+        colorClass: "text-orange-700 dark:text-orange-400 font-medium",
+      };
+    } else {
+      return {
+        message: `📅 Faltam ${daysUntilShipping} dias`,
+        colorClass: "text-muted-foreground",
+      };
+    }
+  };
+
   // Sort deals within each group
   const sortDeals = (deals: Deal[]) => {
     return [...deals].sort((a, b) => {
@@ -237,19 +389,6 @@ export default function ProgramacaoPage() {
           break;
         case "embarque":
           // Sort by customField54 (Data de Embarque)
-          // Parse dates in YYYY-MM-DD or DD/MM/YYYY format
-          const parseDate = (dateStr: string) => {
-            // Check if date is in YYYY-MM-DD format
-            if (dateStr.includes("-")) {
-              const [year, month, day] = dateStr.split("-").map(Number);
-              return new Date(year, month - 1, day).getTime();
-            } else {
-              // DD/MM/YYYY format
-              const [day, month, year] = dateStr.split("/").map(Number);
-              return new Date(year, month - 1, day).getTime();
-            }
-          };
-
           // Deals without embarque date
           if (!a.customField54 && !b.customField54) {
             comparison = 0;
@@ -262,8 +401,9 @@ export default function ProgramacaoPage() {
             comparison = sortDirection === "asc" ? -1 : 1;
             return comparison;
           } else {
-            comparison =
-              parseDate(a.customField54) - parseDate(b.customField54);
+            const dateA = parseDate(a.customField54);
+            const dateB = parseDate(b.customField54);
+            comparison = (dateA?.getTime() || 0) - (dateB?.getTime() || 0);
           }
           break;
         case "title":
@@ -437,7 +577,9 @@ export default function ProgramacaoPage() {
                             sortDeals(group.deals).map((deal) => (
                               <Card
                                 key={deal.id}
-                                className="p-3 hover:shadow-md transition-shadow cursor-pointer"
+                                className={`p-3 hover:shadow-md transition-shadow cursor-pointer border ${getCardBackgroundClass(
+                                  deal
+                                )}`}
                                 onClick={() => handleDealClick(deal)}
                               >
                                 <div className="space-y-2">
@@ -448,9 +590,23 @@ export default function ProgramacaoPage() {
 
                                   {/* Custom Field 54 - Data de Embarque */}
                                   {deal.customField54 && (
-                                    <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
-                                      <Clock className="h-4 w-4" />
-                                      {formatDate(deal.customField54)}
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
+                                        <Clock className="h-4 w-4" />
+                                        {formatDate(deal.customField54)}
+                                      </div>
+                                      {/* Days until shipping indicator */}
+                                      {(() => {
+                                        const info =
+                                          getDaysUntilShippingInfo(deal);
+                                        return info ? (
+                                          <div
+                                            className={`text-xs px-2 py-0.5 ${info.colorClass}`}
+                                          >
+                                            {info.message}
+                                          </div>
+                                        ) : null;
+                                      })()}
                                     </div>
                                   )}
 
@@ -462,6 +618,14 @@ export default function ProgramacaoPage() {
                                       deal.currency
                                     )}
                                   </div>
+
+                                  {/* Stage Title */}
+                                  {deal.stageTitle && (
+                                    <div className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded">
+                                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                      {deal.stageTitle}
+                                    </div>
+                                  )}
 
                                   {/* Deal Details */}
                                   <div className="space-y-1 text-xs text-muted-foreground">
@@ -546,6 +710,13 @@ export default function ProgramacaoPage() {
                       selectedDeal.currency
                     )}
                   </p>
+                  {/* Stage Title below value */}
+                  {selectedDeal.stageTitle && (
+                    <p className="text-sm text-blue-600 font-medium mt-1 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                      {selectedDeal.stageTitle}
+                    </p>
+                  )}
                 </div>
               </div>
 

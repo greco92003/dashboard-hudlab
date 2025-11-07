@@ -171,7 +171,21 @@ export async function POST(request: NextRequest) {
 
     console.log("🔄 Starting programacao sync from ActiveCampaign...");
 
-    // 1. Fetch all won deals from ActiveCampaign
+    // 1. Fetch all deal stages from ActiveCampaign to map stage_id to stage_title
+    console.log("🎯 Fetching deal stages from ActiveCampaign...");
+    const stagesUrl = `${BASE_URL}/api/3/dealStages`;
+    const stagesResponse = await fetchJSON(stagesUrl);
+    const dealStages = stagesResponse.dealStages || [];
+
+    // Create a map of stage_id to stage_title
+    const stageMap = new Map<string, string>();
+    dealStages.forEach((stage: any) => {
+      stageMap.set(stage.id.toString(), stage.title);
+    });
+
+    console.log(`✅ Fetched ${dealStages.length} deal stages`);
+
+    // 2. Fetch all won deals from ActiveCampaign
     console.log("📦 Fetching won deals from ActiveCampaign...");
     let allDeals: any[] = [];
     let offset = 0;
@@ -198,7 +212,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Fetched ${allDeals.length} won deals from ActiveCampaign`);
 
-    // 2. Fetch custom field data ONLY for won deals using filters[dealId]
+    // 3. Fetch custom field data ONLY for won deals using filters[dealId]
     console.log(
       "🔍 Fetching custom field data for won deals only (optimized)..."
     );
@@ -259,17 +273,22 @@ export async function POST(request: NextRequest) {
       `📊 Created lookup map for ${dealCustomFieldsMap.size} deals with custom fields`
     );
 
-    // 3. Transform deals for programacao_cache (without closingDate and stageTitle)
+    // 4. Transform deals for programacao_cache (now including stage_title)
     const transformedDeals = allDeals.map((deal) => {
       const dealCustomFields =
         dealCustomFieldsMap.get(deal.id.toString()) || new Map();
+
+      // Get stage_title from stageMap using stage_id
+      const stageId = deal.stage?.toString();
+      const stageTitle = stageId ? stageMap.get(stageId) || null : null;
 
       return {
         deal_id: deal.id,
         title: deal.title,
         value: parseInt(deal.value) || 0,
         currency: deal.currency || "BRL",
-        stage_id: deal.stage,
+        stage_id: stageId || null,
+        stage_title: stageTitle,
         data_embarque: dealCustomFields.get(54) || null, // Custom field 54 - Data de Embarque
         created_date: deal.cdate ? new Date(deal.cdate).toISOString() : null,
         estado: dealCustomFields.get(6) || null,
@@ -284,7 +303,7 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // 3.5. Remove duplicates by deal_id (keep the last occurrence)
+    // 5. Remove duplicates by deal_id (keep the last occurrence)
     const dealsMap = new Map();
     transformedDeals.forEach((deal) => {
       dealsMap.set(deal.deal_id, deal);
@@ -297,7 +316,7 @@ export async function POST(request: NextRequest) {
       }, Duplicates removed: ${transformedDeals.length - uniqueDeals.length}`
     );
 
-    // 4. Upsert to Supabase programacao_cache
+    // 6. Upsert to Supabase programacao_cache
     console.log("💾 Upserting deals to programacao_cache...");
     const supabase = createSupabaseServiceClient();
 
@@ -329,19 +348,22 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Programacao sync completed successfully (optimized)",
+      message:
+        "Programacao sync completed successfully (optimized with stage titles)",
       summary: {
+        totalStages: dealStages.length,
         totalWonDeals: allDeals.length,
         totalCustomFieldEntries: allCustomFieldData.length,
         targetCustomFieldEntries: targetCustomFieldData.length,
         dealsWithCustomFields: dealCustomFieldsMap.size,
+        dealsWithStageTitle: uniqueDeals.filter((d) => d.stage_title).length,
         uniqueDeals: uniqueDeals.length,
         duplicatesRemoved: transformedDeals.length - uniqueDeals.length,
         dealsUpserted: totalUpserted,
         customFieldErrors: customFieldErrors.length,
         syncDurationSeconds: syncDuration,
         optimization: {
-          note: "Fetching custom fields only for won deals using filters[dealId]",
+          note: "Fetching custom fields only for won deals using filters[dealId] and mapping stage titles",
           dealsQueried: allDeals.length,
           avgCustomFieldsPerDeal:
             allDeals.length > 0
