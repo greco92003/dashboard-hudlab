@@ -37,6 +37,7 @@ import {
   ChevronDown,
   ZoomIn,
   ZoomOut,
+  Power,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,6 +84,7 @@ export default function ProgramacaoPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100); // 100 is default, can go down to show more cards
+  const [activeCards, setActiveCards] = useState<Set<string>>(new Set()); // Track which cards are active (on/off)
 
   // Get sidebar state to hide header when collapsed
   const { state } = useSidebar();
@@ -249,6 +251,17 @@ export default function ProgramacaoPage() {
     if (savedZoomLevel) {
       setZoomLevel(Number(savedZoomLevel));
     }
+
+    // Load activeCards
+    const savedActiveCards = localStorage.getItem("programacao-activeCards");
+    if (savedActiveCards) {
+      try {
+        const parsed = JSON.parse(savedActiveCards);
+        setActiveCards(new Set(parsed));
+      } catch {
+        // Ignore parse errors
+      }
+    }
   }, []);
 
   // Save sortBy to localStorage
@@ -292,7 +305,17 @@ export default function ProgramacaoPage() {
     }
   }, [zoomLevel, isHydrated]);
 
-  // Initialize visible groups when data is loaded
+  // Save activeCards to localStorage
+  useEffect(() => {
+    if (isHydrated && activeCards.size > 0) {
+      localStorage.setItem(
+        "programacao-activeCards",
+        JSON.stringify(Array.from(activeCards))
+      );
+    }
+  }, [activeCards, isHydrated]);
+
+  // Initialize visible groups and active cards when data is loaded
   useEffect(() => {
     if (data && visibleGroups.size === 0) {
       const allGroupIds = new Set<string>();
@@ -304,8 +327,19 @@ export default function ProgramacaoPage() {
       });
       setVisibleGroups(allGroupIds);
     }
+
+    // Initialize all cards as active if not already set
+    if (data && activeCards.size === 0) {
+      const allCardIds = new Set<string>();
+      data.groups.forEach((group) => {
+        group.deals.forEach((deal) => {
+          allCardIds.add(deal.id);
+        });
+      });
+      setActiveCards(allCardIds);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, visibleGroups.size]);
+  }, [data, visibleGroups.size, activeCards.size]);
 
   const fetchProgramacaoData = async (showToast = false) => {
     try {
@@ -613,6 +647,20 @@ export default function ProgramacaoPage() {
     return (baseWidth * zoomLevel) / 100;
   };
 
+  // Toggle card active state
+  const handleCardToggle = (dealId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click event
+    setActiveCards((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(dealId)) {
+        newSet.delete(dealId);
+      } else {
+        newSet.add(dealId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-4 min-w-0">
       {/* Collapsible Header Section */}
@@ -796,77 +844,101 @@ export default function ProgramacaoPage() {
                         </CardHeader>
                         <CardContent className="space-y-3 flex-1 overflow-y-auto">
                           {group.deals.length > 0 ? (
-                            sortDeals(group.deals, group.id).map((deal) => (
-                              <Card
-                                key={deal.id}
-                                className={`p-3 hover:shadow-md transition-shadow cursor-pointer border ${getCardBackgroundClass(
-                                  deal
-                                )}`}
-                                onClick={() => handleDealClick(deal)}
-                              >
-                                <div className="space-y-2">
-                                  {/* Deal Title */}
-                                  <h4 className="font-semibold text-sm line-clamp-2">
-                                    {deal.title}
-                                  </h4>
+                            sortDeals(group.deals, group.id).map((deal) => {
+                              const isActive = activeCards.has(deal.id);
+                              return (
+                                <Card
+                                  key={deal.id}
+                                  className={`p-3 hover:shadow-md transition-all cursor-pointer border relative ${
+                                    isActive
+                                      ? getCardBackgroundClass(deal)
+                                      : "opacity-40 grayscale bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700"
+                                  }`}
+                                  onClick={() => handleDealClick(deal)}
+                                >
+                                  {/* Toggle Button */}
+                                  <button
+                                    onClick={(e) =>
+                                      handleCardToggle(deal.id, e)
+                                    }
+                                    className={`absolute top-2 right-2 p-1 rounded-full transition-all hover:scale-110 ${
+                                      isActive
+                                        ? "bg-green-500 text-white hover:bg-green-600"
+                                        : "bg-gray-400 text-white hover:bg-gray-500"
+                                    }`}
+                                    title={
+                                      isActive
+                                        ? "Desativar card"
+                                        : "Ativar card"
+                                    }
+                                  >
+                                    <Power className="h-3 w-3" />
+                                  </button>
 
-                                  {/* Custom Field 54 - Data de Embarque */}
-                                  {deal.customField54 && (
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
-                                        <Clock className="h-4 w-4" />
-                                        {formatDate(deal.customField54)}
+                                  <div className="space-y-2 pr-8">
+                                    {/* Deal Title */}
+                                    <h4 className="font-semibold text-sm line-clamp-2">
+                                      {deal.title}
+                                    </h4>
+
+                                    {/* Custom Field 54 - Data de Embarque */}
+                                    {deal.customField54 && (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1 text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded">
+                                          <Clock className="h-4 w-4" />
+                                          {formatDate(deal.customField54)}
+                                        </div>
+                                        {/* Days until shipping indicator */}
+                                        {(() => {
+                                          const info =
+                                            getDaysUntilShippingInfo(deal);
+                                          return info ? (
+                                            <div
+                                              className={`text-xs px-2 py-0.5 ${info.colorClass}`}
+                                            >
+                                              {info.message}
+                                            </div>
+                                          ) : null;
+                                        })()}
                                       </div>
-                                      {/* Days until shipping indicator */}
-                                      {(() => {
-                                        const info =
-                                          getDaysUntilShippingInfo(deal);
-                                        return info ? (
-                                          <div
-                                            className={`text-xs px-2 py-0.5 ${info.colorClass}`}
-                                          >
-                                            {info.message}
-                                          </div>
-                                        ) : null;
-                                      })()}
+                                    )}
+
+                                    {/* Deal Value */}
+                                    <div className="flex items-center gap-1 text-sm font-medium text-green-600">
+                                      <TrendingUp className="h-3 w-3" />
+                                      {formatCurrency(
+                                        deal.value / 100,
+                                        deal.currency
+                                      )}
                                     </div>
-                                  )}
 
-                                  {/* Deal Value */}
-                                  <div className="flex items-center gap-1 text-sm font-medium text-green-600">
-                                    <TrendingUp className="h-3 w-3" />
-                                    {formatCurrency(
-                                      deal.value / 100,
-                                      deal.currency
+                                    {/* Stage Title */}
+                                    {deal.stageTitle && (
+                                      <div className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded">
+                                        <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        {deal.stageTitle}
+                                      </div>
                                     )}
-                                  </div>
 
-                                  {/* Stage Title */}
-                                  {deal.stageTitle && (
-                                    <div className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded">
-                                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                                      {deal.stageTitle}
+                                    {/* Deal Details - Only Quantidade de Pares and Vendedor */}
+                                    <div className="space-y-1 text-xs text-muted-foreground">
+                                      {deal.quantidadePares && (
+                                        <div className="flex items-center gap-1">
+                                          <Package className="h-3 w-3" />
+                                          {deal.quantidadePares} pares
+                                        </div>
+                                      )}
+                                      {deal.vendedor && (
+                                        <div className="flex items-center gap-1">
+                                          <User className="h-3 w-3" />
+                                          {deal.vendedor}
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-
-                                  {/* Deal Details - Only Quantidade de Pares and Vendedor */}
-                                  <div className="space-y-1 text-xs text-muted-foreground">
-                                    {deal.quantidadePares && (
-                                      <div className="flex items-center gap-1">
-                                        <Package className="h-3 w-3" />
-                                        {deal.quantidadePares} pares
-                                      </div>
-                                    )}
-                                    {deal.vendedor && (
-                                      <div className="flex items-center gap-1">
-                                        <User className="h-3 w-3" />
-                                        {deal.vendedor}
-                                      </div>
-                                    )}
                                   </div>
-                                </div>
-                              </Card>
-                            ))
+                                </Card>
+                              );
+                            })
                           ) : (
                             <div className="text-center py-8 text-sm text-muted-foreground">
                               Nenhum deal neste grupo
