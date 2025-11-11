@@ -154,7 +154,13 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
 }
 
 // The custom field IDs we want to extract for programacao
-const TARGET_CUSTOM_FIELD_IDS = [6, 7, 8, 9, 54]; // estado, quantidade_pares, vendedor, designer, data_embarque
+// Based on robust-deals-sync-parallel API:
+// Field 25 = Estado
+// Field 39 = Quantidade de Pares
+// Field 45 = Vendedor
+// Field 47 = Designer
+// Field 54 = Data de Embarque
+const TARGET_CUSTOM_FIELD_IDS = [25, 39, 45, 47, 54];
 
 // POST endpoint to sync deals from ActiveCampaign to programacao_cache
 export async function POST(request: NextRequest) {
@@ -291,10 +297,10 @@ export async function POST(request: NextRequest) {
         stage_title: stageTitle,
         data_embarque: dealCustomFields.get(54) || null, // Custom field 54 - Data de Embarque
         created_date: deal.cdate ? new Date(deal.cdate).toISOString() : null,
-        estado: dealCustomFields.get(6) || null,
-        quantidade_pares: dealCustomFields.get(7) || null,
-        vendedor: dealCustomFields.get(8) || null,
-        designer: dealCustomFields.get(9) || null,
+        estado: dealCustomFields.get(25) || null, // Custom field 25 - Estado
+        quantidade_pares: dealCustomFields.get(39) || null, // Custom field 39 - Quantidade de Pares
+        vendedor: dealCustomFields.get(45) || null, // Custom field 45 - Vendedor
+        designer: dealCustomFields.get(47) || null, // Custom field 47 - Designer
         contact_id: deal.contact,
         organization_id: deal.organization,
         api_updated_at: deal.mdate ? new Date(deal.mdate).toISOString() : null,

@@ -26,11 +26,9 @@ import {
   AlertCircle,
   TrendingUp,
   Package,
-  Calendar,
   User,
   Palette,
   RefreshCw,
-  MapPin,
   DollarSign,
   Clock,
   ArrowUp,
@@ -44,8 +42,6 @@ interface Deal {
   value: number;
   currency: string;
   stageTitle: string | null;
-  createdDate: string;
-  estado: string | null;
   quantidadePares: string | null;
   vendedor: string | null;
   designer: string | null;
@@ -75,7 +71,7 @@ export default function ProgramacaoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState<"value" | "title">("value");
+  const [sortBy, setSortBy] = useState<"value" | "title" | "date">("value");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
@@ -85,7 +81,39 @@ export default function ProgramacaoPage() {
   // Get sidebar state to hide header when collapsed
   const { state } = useSidebar();
 
-  // Reorganize groups to create "Finalizados" group
+  // Check if a deal is overdue
+  const isDealOverdue = (deal: Deal): boolean => {
+    // Finished stages are never overdue
+    const finishedStages = [
+      "Recebido Pedido",
+      "Recebido Amostra",
+      "Em trânsito (Link Rastreio)",
+    ];
+
+    if (deal.stageTitle && finishedStages.includes(deal.stageTitle)) {
+      return false;
+    }
+
+    // If no shipping date, not overdue
+    if (!deal.customField54) {
+      return false;
+    }
+
+    // Parse shipping date
+    const shippingDate = parseDate(deal.customField54);
+    if (!shippingDate) {
+      return false;
+    }
+
+    // Get current date in Brasília timezone
+    const currentDate = getCurrentDateBrasilia();
+    const daysUntilShipping = getDaysDifference(shippingDate, currentDate);
+
+    // Overdue if days until shipping is negative
+    return daysUntilShipping < 0;
+  };
+
+  // Reorganize groups to create "Em atraso" and "Finalizados" groups
   const getReorganizedGroups = (): Group[] => {
     if (!data) return [];
 
@@ -95,30 +123,46 @@ export default function ProgramacaoPage() {
       "Em trânsito (Link Rastreio)",
     ];
 
-    // Collect all finished deals from all groups
+    // Collect all finished deals, overdue deals, and remaining deals from all groups
     const finishedDeals: Deal[] = [];
+    const overdueDeals: Deal[] = [];
     const remainingGroups: Group[] = [];
 
     data.groups.forEach((group) => {
-      const nonFinishedDeals = group.deals.filter(
-        (deal) => !deal.stageTitle || !finishedStages.includes(deal.stageTitle)
-      );
+      const groupFinishedDeals: Deal[] = [];
+      const groupOverdueDeals: Deal[] = [];
+      const groupRemainingDeals: Deal[] = [];
 
-      const groupFinishedDeals = group.deals.filter(
-        (deal) => deal.stageTitle && finishedStages.includes(deal.stageTitle)
-      );
+      group.deals.forEach((deal) => {
+        if (deal.stageTitle && finishedStages.includes(deal.stageTitle)) {
+          groupFinishedDeals.push(deal);
+        } else if (isDealOverdue(deal)) {
+          groupOverdueDeals.push(deal);
+        } else {
+          groupRemainingDeals.push(deal);
+        }
+      });
 
       finishedDeals.push(...groupFinishedDeals);
+      overdueDeals.push(...groupOverdueDeals);
 
-      // Only keep groups that have non-finished deals
-      if (nonFinishedDeals.length > 0) {
+      // Only keep groups that have remaining deals
+      if (groupRemainingDeals.length > 0) {
         remainingGroups.push({
           ...group,
-          deals: nonFinishedDeals,
-          dealsCount: nonFinishedDeals.length,
+          deals: groupRemainingDeals,
+          dealsCount: groupRemainingDeals.length,
         });
       }
     });
+
+    // Create the "Em atraso" group
+    const emAtrasoGroup: Group = {
+      id: "em-atraso",
+      title: "Em atraso",
+      dealsCount: overdueDeals.length,
+      deals: overdueDeals,
+    };
 
     // Create the "Finalizados" group
     const finalizadosGroup: Group = {
@@ -128,22 +172,31 @@ export default function ProgramacaoPage() {
       deals: finishedDeals,
     };
 
-    // Return groups with remaining groups first, then "Finalizados" at the end
-    // "Sem data de embarque" should be before "Finalizados"
+    // Sort remaining groups - "Sem data de embarque" should be before "Finalizados"
     const sortedRemainingGroups = remainingGroups.sort((a, b) => {
       if (a.title === "Sem data de embarque") return 1;
       if (b.title === "Sem data de embarque") return -1;
       return 0;
     });
 
-    return finishedDeals.length > 0
-      ? [...sortedRemainingGroups, finalizadosGroup]
-      : sortedRemainingGroups;
+    // Build final groups array: "Em atraso" first, then remaining groups, then "Finalizados"
+    const finalGroups: Group[] = [];
+
+    if (overdueDeals.length > 0) {
+      finalGroups.push(emAtrasoGroup);
+    }
+
+    finalGroups.push(...sortedRemainingGroups);
+
+    if (finishedDeals.length > 0) {
+      finalGroups.push(finalizadosGroup);
+    }
+
+    return finalGroups;
   };
 
   useEffect(() => {
     fetchProgramacaoData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load from localStorage after hydration
@@ -153,7 +206,7 @@ export default function ProgramacaoPage() {
     // Load sortBy
     const savedSortBy = localStorage.getItem("programacao-sortBy");
     if (savedSortBy) {
-      setSortBy(savedSortBy as "value" | "title");
+      setSortBy(savedSortBy as "value" | "title" | "date");
     }
 
     // Load sortDirection
@@ -436,10 +489,29 @@ export default function ProgramacaoPage() {
   };
 
   // Sort deals within each group
-  const sortDeals = (deals: Deal[]) => {
+  const sortDeals = (deals: Deal[], groupId?: string) => {
     return [...deals].sort((a, b) => {
       let comparison = 0;
 
+      // For "Em atraso" group, always sort by shipping date (most overdue first)
+      // but still respect the sort direction from the select
+      if (groupId === "em-atraso") {
+        const dateA = parseDate(a.customField54 || "");
+        const dateB = parseDate(b.customField54 || "");
+
+        if (!dateA && !dateB) return 0;
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+
+        // Sort by date ascending (oldest/most overdue first) when sortDirection is "asc"
+        // Sort by date descending (least overdue first) when sortDirection is "desc"
+        comparison = dateA.getTime() - dateB.getTime();
+
+        // Apply sort direction
+        return sortDirection === "asc" ? comparison : -comparison;
+      }
+
+      // For other groups, use the selected sort option
       switch (sortBy) {
         case "value":
           comparison = b.value - a.value;
@@ -604,7 +676,8 @@ export default function ProgramacaoPage() {
                         <CardHeader className="pb-3 flex-shrink-0">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-base font-semibold">
-                              {group.id === "finalizados"
+                              {group.id === "finalizados" ||
+                              group.id === "em-atraso"
                                 ? group.title
                                 : formatDate(group.title)}
                             </CardTitle>
@@ -615,7 +688,7 @@ export default function ProgramacaoPage() {
                         </CardHeader>
                         <CardContent className="space-y-3 flex-1 overflow-y-auto">
                           {group.deals.length > 0 ? (
-                            sortDeals(group.deals).map((deal) => (
+                            sortDeals(group.deals, group.id).map((deal) => (
                               <Card
                                 key={deal.id}
                                 className={`p-3 hover:shadow-md transition-shadow cursor-pointer border ${getCardBackgroundClass(
@@ -668,7 +741,7 @@ export default function ProgramacaoPage() {
                                     </div>
                                   )}
 
-                                  {/* Deal Details */}
+                                  {/* Deal Details - Only Quantidade de Pares and Vendedor */}
                                   <div className="space-y-1 text-xs text-muted-foreground">
                                     {deal.quantidadePares && (
                                       <div className="flex items-center gap-1">
@@ -680,12 +753,6 @@ export default function ProgramacaoPage() {
                                       <div className="flex items-center gap-1">
                                         <User className="h-3 w-3" />
                                         {deal.vendedor}
-                                      </div>
-                                    )}
-                                    {deal.designer && (
-                                      <div className="flex items-center gap-1">
-                                        <Palette className="h-3 w-3" />
-                                        {deal.designer}
                                       </div>
                                     )}
                                   </div>
@@ -761,7 +828,7 @@ export default function ProgramacaoPage() {
                 </div>
               </div>
 
-              {/* Details Grid */}
+              {/* Details Grid - Only Quantidade de Pares, Vendedor and Designer */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {selectedDeal.quantidadePares && (
                   <div className="flex items-start gap-3 p-3 border rounded-lg">
@@ -794,37 +861,6 @@ export default function ProgramacaoPage() {
                       <p className="text-sm font-medium">Designer</p>
                       <p className="text-sm text-muted-foreground">
                         {selectedDeal.designer}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedDeal.estado && (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg">
-                    <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Estado</p>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedDeal.estado}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedDeal.createdDate && (
-                  <div className="flex items-start gap-3 p-3 border rounded-lg">
-                    <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Data de Criação</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(selectedDeal.createdDate).toLocaleDateString(
-                          "pt-BR",
-                          {
-                            day: "2-digit",
-                            month: "long",
-                            year: "numeric",
-                          }
-                        )}
                       </p>
                     </div>
                   </div>

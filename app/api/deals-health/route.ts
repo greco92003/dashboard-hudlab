@@ -29,8 +29,60 @@ export async function GET(request: Request) {
   try {
     const supabase = await createSupabaseServer();
     const startTime = Date.now();
+    const now = new Date();
 
-    // Get last sync status
+    // AUTO-RECOVERY: Check for stuck syncs (running for more than 1 hour)
+    // and automatically mark them as failed to allow new syncs
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const { data: stuckSyncs } = await supabase
+      .from("deals_sync_log")
+      .select("id, sync_started_at")
+      .eq("sync_status", "running")
+      .lt("sync_started_at", oneHourAgo.toISOString());
+
+    if (stuckSyncs && stuckSyncs.length > 0) {
+      console.log(
+        `🔧 AUTO-RECOVERY: Found ${stuckSyncs.length} stuck sync(s) running for more than 1 hour`
+      );
+
+      for (const stuckSync of stuckSyncs) {
+        const syncDuration = Math.round(
+          (now.getTime() - new Date(stuckSync.sync_started_at).getTime()) / 1000
+        );
+
+        console.log(
+          `🔧 Marking sync ${
+            stuckSync.id
+          } as failed (was running for ${Math.round(
+            syncDuration / 60
+          )} minutes)`
+        );
+
+        const { error: updateError } = await supabase
+          .from("deals_sync_log")
+          .update({
+            sync_completed_at: now.toISOString(),
+            sync_status: "failed",
+            error_message: `Auto-recovery: Sync was stuck in 'running' state for more than 1 hour (${Math.round(
+              syncDuration / 60
+            )} minutes). Automatically marked as failed to allow new syncs.`,
+            sync_duration_seconds: syncDuration,
+          })
+          .eq("id", stuckSync.id);
+
+        if (updateError) {
+          console.error(
+            `❌ Error updating stuck sync ${stuckSync.id}:`,
+            updateError
+          );
+        } else {
+          console.log(`✅ Successfully recovered stuck sync ${stuckSync.id}`);
+        }
+      }
+    }
+
+    // Get last sync status (after auto-recovery)
     const { data: lastSync, error: syncError } = await supabase
       .from("deals_sync_log")
       .select("*")
@@ -69,7 +121,6 @@ export async function GET(request: Request) {
     }
 
     // Calculate cache health metrics
-    const now = new Date();
     const responseTime = Date.now() - startTime;
 
     let cacheHealth = "healthy";

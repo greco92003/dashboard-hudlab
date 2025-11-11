@@ -75,8 +75,6 @@ export async function GET(request: NextRequest) {
         value: deal.value,
         currency: deal.currency,
         stageTitle: deal.stage_title,
-        createdDate: deal.created_date,
-        estado: deal.estado,
         quantidadePares: deal.quantidade_pares,
         vendedor: deal.vendedor,
         designer: deal.designer,

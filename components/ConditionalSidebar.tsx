@@ -20,8 +20,27 @@ export function ConditionalSidebar({
   const pathname = usePathname();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
 
+  // State to control sidebar open/close - only for non-programacao pages
+  const [forcedOpen, setForcedOpen] = useState(true);
+  const [isClientReady, setIsClientReady] = useState(false);
+
+  // Only /programacao page can have collapsible sidebar
+  const isProgramacaoPage = pathname === "/programacao";
+
   // Check if current page needs full height layout (no padding)
   const isFullHeightPage = pathname === "/programacao";
+
+  // Mark client as ready after hydration
+  useEffect(() => {
+    setIsClientReady(true);
+  }, []);
+
+  // Force sidebar to open when navigating away from programacao page
+  useEffect(() => {
+    if (isClientReady && !isProgramacaoPage) {
+      setForcedOpen(true);
+    }
+  }, [isProgramacaoPage, isClientReady]);
 
   // Routes that should not have the sidebar
   const routesWithoutSidebar = [
@@ -119,6 +138,11 @@ export function ConditionalSidebar({
       <div suppressHydrationWarning>
         <SidebarProvider
           defaultOpen={defaultSidebarOpen}
+          // Force sidebar open for all pages except /programacao (only after client is ready)
+          open={isClientReady && !isProgramacaoPage ? forcedOpen : undefined}
+          onOpenChange={
+            isClientReady && !isProgramacaoPage ? setForcedOpen : undefined
+          }
           style={
             {
               "--header-height": "4rem", // 64px = h-16
@@ -156,6 +180,11 @@ export function ConditionalSidebar({
   return (
     <SidebarProvider
       defaultOpen={shouldStartClosed ? false : defaultSidebarOpen}
+      // Force sidebar open for all pages except /programacao (only after client is ready)
+      open={isClientReady && !isProgramacaoPage ? forcedOpen : undefined}
+      onOpenChange={
+        isClientReady && !isProgramacaoPage ? setForcedOpen : undefined
+      }
       style={
         {
           "--header-height": "4rem", // 64px = h-16
