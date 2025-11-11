@@ -33,6 +33,10 @@ import {
   Clock,
   ArrowUp,
   ArrowDown,
+  ChevronUp,
+  ChevronDown,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,6 +81,8 @@ export default function ProgramacaoPage() {
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
   const [visibleGroups, setVisibleGroups] = useState<Set<string>>(new Set());
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(100); // 100 is default, can go down to show more cards
 
   // Get sidebar state to hide header when collapsed
   const { state } = useSidebar();
@@ -229,6 +235,20 @@ export default function ProgramacaoPage() {
         // Ignore parse errors
       }
     }
+
+    // Load isHeaderCollapsed
+    const savedHeaderCollapsed = localStorage.getItem(
+      "programacao-headerCollapsed"
+    );
+    if (savedHeaderCollapsed !== null) {
+      setIsHeaderCollapsed(savedHeaderCollapsed === "true");
+    }
+
+    // Load zoomLevel
+    const savedZoomLevel = localStorage.getItem("programacao-zoomLevel");
+    if (savedZoomLevel) {
+      setZoomLevel(Number(savedZoomLevel));
+    }
   }, []);
 
   // Save sortBy to localStorage
@@ -254,6 +274,23 @@ export default function ProgramacaoPage() {
       );
     }
   }, [visibleGroups, isHydrated]);
+
+  // Save isHeaderCollapsed to localStorage
+  useEffect(() => {
+    if (isHydrated) {
+      localStorage.setItem(
+        "programacao-headerCollapsed",
+        isHeaderCollapsed.toString()
+      );
+    }
+  }, [isHeaderCollapsed, isHydrated]);
+
+  // Save zoomLevel to localStorage
+  useEffect(() => {
+    if (isHydrated) {
+      localStorage.setItem("programacao-zoomLevel", zoomLevel.toString());
+    }
+  }, [zoomLevel, isHydrated]);
 
   // Initialize visible groups when data is loaded
   useEffect(() => {
@@ -560,77 +597,97 @@ export default function ProgramacaoPage() {
     setVisibleGroups(new Set());
   };
 
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 10, 100)); // Max 100%
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 10, 50)); // Min 50%
+  };
+
+  // Calculate card width based on zoom level
+  const getCardWidth = () => {
+    // At 100% zoom: 320px (w-80)
+    // At 50% zoom: 160px
+    const baseWidth = 320;
+    return (baseWidth * zoomLevel) / 100;
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-4 min-w-0">
-      {/* Page Title */}
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <SidebarTrigger />
-        <Clock className="h-6 w-6" />
-        <h1 className="text-xl sm:text-2xl font-bold">Programação</h1>
-      </div>
-
-      {/* Filters and Actions Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between flex-shrink-0">
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          {/* Sort By */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() =>
-                setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-              }
-              className="h-8 w-8"
-              title={
-                sortDirection === "asc"
-                  ? "Ordem crescente"
-                  : "Ordem decrescente"
-              }
-            >
-              {sortDirection === "asc" ? (
-                <ArrowUp className="h-4 w-4" />
-              ) : (
-                <ArrowDown className="h-4 w-4" />
-              )}
-            </Button>
-            <Select
-              value={sortBy}
-              onValueChange={(value: any) => setSortBy(value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="value">Valor</SelectItem>
-                <SelectItem value="title">Título</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Collapsible Header Section */}
+      {!isHeaderCollapsed && (
+        <>
+          {/* Page Title */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Clock className="h-6 w-6" />
+            <h1 className="text-xl sm:text-2xl font-bold">Programação</h1>
           </div>
-        </div>
 
-        {/* Refresh Button */}
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
-            />
-            {refreshing ? "Atualizando..." : "Atualizar"}
-          </Button>
-        </div>
-      </div>
+          {/* Filters and Actions Bar */}
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between flex-shrink-0">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              {/* Sort By */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+                  }
+                  className="h-8 w-8"
+                  title={
+                    sortDirection === "asc"
+                      ? "Ordem crescente"
+                      : "Ordem decrescente"
+                  }
+                >
+                  {sortDirection === "asc" ? (
+                    <ArrowUp className="h-4 w-4" />
+                  ) : (
+                    <ArrowDown className="h-4 w-4" />
+                  )}
+                </Button>
+                <Select
+                  value={sortBy}
+                  onValueChange={(value: any) => setSortBy(value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Ordenar por" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="value">Valor</SelectItem>
+                    <SelectItem value="title">Título</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-      {/* Error Alert */}
-      {error && (
-        <Alert variant="destructive" className="flex-shrink-0">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+            {/* Refresh Button */}
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
+                />
+                {refreshing ? "Atualizando..." : "Atualizar"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="flex-shrink-0">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </>
       )}
 
       {/* Kanban Board */}
@@ -640,13 +697,61 @@ export default function ProgramacaoPage() {
         </div>
       ) : data && data.groups.length > 0 ? (
         <div className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0 min-w-0">
-          {/* Summary Header */}
+          {/* Summary Header with Collapse Toggle and Zoom Controls */}
           <div className="flex items-center justify-between flex-shrink-0">
-            <h2 className="text-xl font-bold">Data de Embarque</h2>
-            <Badge variant="outline">
-              {data.summary.totalDeals}{" "}
-              {data.summary.totalDeals === 1 ? "deal" : "deals"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <SidebarTrigger />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+                className="h-8 w-8"
+                title={
+                  isHeaderCollapsed
+                    ? "Expandir cabeçalho"
+                    : "Recolher cabeçalho"
+                }
+              >
+                {isHeaderCollapsed ? (
+                  <ChevronDown className="h-5 w-5" />
+                ) : (
+                  <ChevronUp className="h-5 w-5" />
+                )}
+              </Button>
+              <h2 className="text-xl font-bold">Data de Embarque</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-1 border rounded-md p-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 50}
+                  className="h-7 w-7"
+                  title="Diminuir zoom (mostrar mais cards)"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-xs font-medium px-2 min-w-[3rem] text-center">
+                  {zoomLevel}%
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 100}
+                  className="h-7 w-7"
+                  title="Aumentar zoom"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </div>
+              <Badge variant="outline">
+                {data.summary.totalDeals}{" "}
+                {data.summary.totalDeals === 1 ? "deal" : "deals"}
+              </Badge>
+            </div>
           </div>
 
           {/* Kanban Cards Container with white border */}
@@ -668,8 +773,11 @@ export default function ProgramacaoPage() {
                   .map((group) => (
                     <div
                       key={group.id}
-                      className="flex-shrink-0 w-80 h-full"
-                      style={{ minWidth: "320px" }}
+                      className="flex-shrink-0 h-full transition-all duration-200"
+                      style={{
+                        width: `${getCardWidth()}px`,
+                        minWidth: `${getCardWidth()}px`,
+                      }}
                     >
                       {/* Group Card */}
                       <Card className="h-full flex flex-col">
