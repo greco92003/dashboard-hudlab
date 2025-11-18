@@ -25,6 +25,7 @@ import { GoalsList } from "@/components/goals/goals-list";
 import { ExpiredGoalsNotification } from "@/components/goals/expired-goals-notification";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 import { MockupsSection } from "@/components/designers/mockups-section";
+import { getAllDesigners } from "@/lib/constants/designers";
 
 interface Deal {
   deal_id: string;
@@ -348,7 +349,7 @@ export default function DesignersPage() {
           // Convert to array and sort by total value (descending)
           const sortedDesigners = Object.values(designerStats)
             .sort((a: any, b: any) => b.totalValue - a.totalValue)
-            .slice(0, 2); // Get top 2 designers
+            .slice(0, 3); // Get top 3 designers
 
           setTopDesigners(sortedDesigners as DesignerStats[]);
         } else {
@@ -439,7 +440,7 @@ export default function DesignersPage() {
         <CardHeader className="pb-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
+              <Target className="h-6 w-6 sm:h-5 sm:w-5" />
               <CardTitle className="text-lg sm:text-xl">
                 Metas de Designers
               </CardTitle>
@@ -519,12 +520,13 @@ export default function DesignersPage() {
 
       {/* Top Designers Cards */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <Skeleton className="h-32 w-full" />
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-32 w-full" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {topDesigners.map((designer, index) => (
             <Card key={designer.name} className="relative overflow-hidden">
               <CardHeader className="pb-2">
@@ -572,7 +574,7 @@ export default function DesignersPage() {
 
       {/* Seção de Mockups & Alterações */}
       <MockupsSection
-        designers={["Vitor", "Felipe"]} // Lista fixa de designers
+        designers={getAllDesigners()} // Lista centralizada de designers
         dateRange={dateRange}
         period={period}
         useCustomPeriod={useCustomPeriod}

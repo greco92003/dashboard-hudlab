@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
+import { getAllDesigners } from "@/lib/constants/designers";
 
 // In-memory lock to prevent concurrent syncs
 let syncInProgress = false;
@@ -198,7 +199,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      designers = ["Vítor", "Felipe"],
+      designers = getAllDesigners(), // Use centralized designer list
       startDate,
       endDate,
       forceSync = false,
@@ -410,32 +411,44 @@ export async function POST(request: NextRequest) {
         // Parse date
         let atualizadoEm: Date | null = null;
         if (atualizadoEmRaw) {
-          // Google Sheets returns dates in MM/DD/YYYY format (American format)
+          // Google Sheets now returns dates in DD/MM/YYYY format (Brazilian format)
           const dateMatch = atualizadoEmRaw.match(
             /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
           );
 
           if (dateMatch) {
-            const month = parseInt(dateMatch[1]); // First part is month
-            const day = parseInt(dateMatch[2]); // Second part is day
+            const day = parseInt(dateMatch[1]); // First part is day (DD/MM/YYYY)
+            const month = parseInt(dateMatch[2]); // Second part is month
             const year = parseInt(dateMatch[3]); // Third part is year
 
-            // Create date with correct MM/DD/YYYY interpretation
-            atualizadoEm = new Date(year, month - 1, day);
+            // Validate if it's DD/MM/YYYY format
+            // If day > 12, it's definitely DD/MM/YYYY
+            // If day <= 12 and month <= 12, assume DD/MM/YYYY (Brazilian standard)
+            if (day > 12 || (day <= 12 && month <= 12)) {
+              atualizadoEm = new Date(year, month - 1, day);
+            }
+            // If month > 12, then it's MM/DD/YYYY (swap them)
+            else if (month > 12) {
+              atualizadoEm = new Date(year, day - 1, month);
+            }
 
             // Debug log for first few rows to verify parsing
             if (processedRecords <= 5) {
               console.log(`📅 Date parsing for row ${processedRecords}:`, {
                 original: atualizadoEmRaw,
-                parsed: `${month}/${day}/${year}`,
-                result: atualizadoEm.toISOString().split("T")[0],
-                brazilianFormat: `${day.toString().padStart(2, "0")}/${month
-                  .toString()
-                  .padStart(2, "0")}/${year}`,
+                parsedAs:
+                  day > 12 || (day <= 12 && month <= 12)
+                    ? "DD/MM/YYYY"
+                    : "MM/DD/YYYY",
+                day,
+                month,
+                year,
+                result: atualizadoEm?.toISOString().split("T")[0],
+                brazilianFormat: atualizadoEm?.toLocaleDateString("pt-BR"),
               });
             }
           } else {
-            // Try other formats if MM/DD/YYYY doesn't match
+            // Try other formats if DD/MM/YYYY doesn't match
             const isoMatch = atualizadoEmRaw.match(
               /^(\d{4})-(\d{1,2})-(\d{1,2})$/
             );

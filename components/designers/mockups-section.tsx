@@ -8,6 +8,7 @@ import { RefreshCw, FileText, Clock } from "lucide-react";
 import { useDesignerMockupsCache } from "@/hooks/useDesignerMockupsCache";
 import { DateRange } from "react-day-picker";
 import { toast } from "sonner";
+import { getAllDesigners } from "@/lib/constants/designers";
 
 interface MockupsSectionProps {
   designers: string[];
@@ -126,7 +127,7 @@ export function MockupsSection({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          designers: ["Vitor", "Felipe"],
+          designers: getAllDesigners(), // Use centralized designer list
           forceSync: true,
         }),
       });
@@ -180,7 +181,7 @@ export function MockupsSection({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <FileText className="h-6 w-6 sm:h-5 sm:w-5" />
             <CardTitle className="text-lg sm:text-xl">
               Mockups & Alterações por Designer
             </CardTitle>
@@ -225,13 +226,13 @@ export function MockupsSection({
         )}
 
         {loading || syncLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {designers.map((designer, index) => (
               <Skeleton key={index} className="h-32 w-full" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {designers.map((designer) => {
               const stats = data[designer] || {
                 quantidadeNegocios: 0,

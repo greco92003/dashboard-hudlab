@@ -50,6 +50,11 @@ export function normalizeDesignerName(name: string): string {
     return "Felipe";
   }
 
+  // Normalizar variações do Pedro
+  if (normalized === "pedro" || normalized === "ped") {
+    return "Pedro";
+  }
+
   // Para outros nomes, manter primeira letra maiúscula e remover espaços extras
   return (
     name.trim().charAt(0).toUpperCase() + name.trim().slice(1).toLowerCase()

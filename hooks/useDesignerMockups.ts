@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
+import { normalizeDesignerName as normalizeDesignerNameUtil } from "@/lib/utils/normalize-names";
 
 interface MockupData {
   nomeNegocio: string;
@@ -29,23 +30,9 @@ export function useDesignerMockups() {
     lastSync: null,
   });
 
+  // Use the centralized normalization function
   const normalizeDesignerName = useCallback((name: string): string => {
-    if (!name) return "";
-
-    const normalized = name.toLowerCase().trim();
-
-    // Mapeamento específico para variações do Vítor
-    const vitorVariations = ["vitor", "vítor", "vito"];
-    if (vitorVariations.includes(normalized)) {
-      return "vítor";
-    }
-
-    // Remover acentos para comparação geral
-    return normalized
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
+    return normalizeDesignerNameUtil(name);
   }, []);
 
   const findMatchingDesigner = useCallback(
@@ -153,42 +140,35 @@ export function useDesignerMockups() {
             // Google Sheets pode retornar datas em vários formatos
             // Vamos tentar os mais comuns:
 
-            // 1. MM/DD/YYYY (formato americano padrão do Google Sheets)
+            // 1. DD/MM/YYYY (formato brasileiro - PRIORIDADE)
             if (dateStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
-              const [month, day, year] = dateStr.split("/");
-              dataAtualizada = new Date(
-                parseInt(year),
-                parseInt(month) - 1,
-                parseInt(day)
-              );
-              console.log(
-                `📅 Formato MM/DD/YYYY detectado: ${dateStr} -> ${dataAtualizada.toLocaleDateString(
-                  "pt-BR"
-                )}`
-              );
-            }
-            // 2. DD/MM/YYYY (formato brasileiro)
-            else if (
-              dateStr.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) &&
-              dateStr.includes("/")
-            ) {
-              // Tentar como brasileiro se o americano não fez sentido
-              const [day, month, year] = dateStr.split("/");
-              const testDate = new Date(
-                parseInt(year),
-                parseInt(month) - 1,
-                parseInt(day)
-              );
-              if (!isNaN(testDate.getTime())) {
-                dataAtualizada = testDate;
+              const parts = dateStr.split("/");
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]);
+              const year = parseInt(parts[2]);
+
+              // Validar se é DD/MM/YYYY (dia > 12 ou mês <= 12)
+              // Se dia > 12, com certeza é DD/MM/YYYY
+              // Se dia <= 12 e mês <= 12, assumir DD/MM/YYYY (formato brasileiro)
+              if (day > 12 || (day <= 12 && month <= 12)) {
+                dataAtualizada = new Date(year, month - 1, day);
                 console.log(
                   `📅 Formato DD/MM/YYYY detectado: ${dateStr} -> ${dataAtualizada.toLocaleDateString(
                     "pt-BR"
                   )}`
                 );
               }
+              // Se mês > 12, então é MM/DD/YYYY
+              else if (month > 12) {
+                dataAtualizada = new Date(year, day - 1, month);
+                console.log(
+                  `📅 Formato MM/DD/YYYY detectado: ${dateStr} -> ${dataAtualizada.toLocaleDateString(
+                    "pt-BR"
+                  )}`
+                );
+              }
             }
-            // 3. YYYY-MM-DD (formato ISO)
+            // 2. YYYY-MM-DD (formato ISO)
             else if (dateStr.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
               dataAtualizada = new Date(dateStr);
               console.log(
@@ -197,7 +177,7 @@ export function useDesignerMockups() {
                 )}`
               );
             }
-            // 4. Outros formatos - tentar parsing direto
+            // 3. Outros formatos - tentar parsing direto
             else {
               dataAtualizada = new Date(dateStr);
               console.log(

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAllDesigners } from "@/lib/constants/designers";
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        designers: ["Vítor", "Felipe"], // Lista padrão de designers
+        designers: getAllDesigners(), // Use centralized designer list
         forceSync: true, // Sempre forçar sync no cron
       }),
     });
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     console.log("🔄 MANUAL - Starting designer mockups sync...");
 
     const body = await request.json();
-    const { designers = ["Vítor", "Felipe"], startDate, endDate } = body;
+    const { designers = getAllDesigners(), startDate, endDate } = body;
 
     // Chamar a API de sincronização
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
