@@ -77,6 +77,7 @@ export default function SellersPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
   } = useGlobalDateRange();
@@ -385,6 +386,18 @@ export default function SellersPage() {
 
   useEffect(() => {
     const initializeData = async () => {
+      // Only fetch data after hydration is complete
+      if (!isHydrated) {
+        console.log("⏳ Sellers: Waiting for hydration...");
+        return;
+      }
+
+      console.log("✅ Sellers: Hydrated, fetching data...", {
+        useCustomPeriod,
+        period,
+        dateRange,
+      });
+
       if (!useCustomPeriod) {
         await fetchDeals(period);
       } else {
@@ -393,7 +406,7 @@ export default function SellersPage() {
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals]);
+  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
 
   // Function to refresh sellers data
   const refreshSellersData = useCallback(() => {

@@ -59,6 +59,7 @@ export default function DashboardPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
   } = useGlobalDateRange();
@@ -330,6 +331,18 @@ export default function DashboardPage() {
   // Initial data fetch using global date state
   useEffect(() => {
     const initializeData = async () => {
+      // Only fetch data after hydration is complete
+      if (!isHydrated) {
+        console.log("⏳ Dashboard: Waiting for hydration...");
+        return;
+      }
+
+      console.log("✅ Dashboard: Hydrated, fetching data...", {
+        useCustomPeriod,
+        period,
+        dateRange,
+      });
+
       if (!useCustomPeriod) {
         await fetchDeals(period);
         await fetchTotalPairsSold(period);
@@ -340,7 +353,14 @@ export default function DashboardPage() {
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals, fetchTotalPairsSold]);
+  }, [
+    period,
+    useCustomPeriod,
+    dateRange,
+    fetchDeals,
+    fetchTotalPairsSold,
+    isHydrated,
+  ]);
 
   // Function to refresh all dashboard data
   const refreshDashboardData = useCallback(() => {

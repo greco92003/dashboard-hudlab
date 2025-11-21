@@ -91,6 +91,7 @@ export default function MetaMarketingPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
   } = useGlobalDateRange();
@@ -173,6 +174,18 @@ export default function MetaMarketingPage() {
 
   // Initialize data based on current global state
   useEffect(() => {
+    // Only fetch data after hydration is complete
+    if (!isHydrated) {
+      console.log("⏳ Meta Marketing: Waiting for hydration...");
+      return;
+    }
+
+    console.log("✅ Meta Marketing: Hydrated, fetching data...", {
+      useCustomPeriod,
+      period,
+      dateRange,
+    });
+
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
       fetchData(undefined, dateRange);
     } else {
@@ -180,7 +193,7 @@ export default function MetaMarketingPage() {
     }
     // Also fetch ads on initial load
     fetchAds();
-  }, [period, useCustomPeriod, dateRange, fetchData, fetchAds]);
+  }, [period, useCustomPeriod, dateRange, fetchData, fetchAds, isHydrated]);
 
   const formatCurrency = (value: string | null | undefined) => {
     // Handle null, undefined, empty string, or string representations of null/undefined

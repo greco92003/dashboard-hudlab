@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
 import {
   Select,
   SelectContent,
@@ -203,8 +204,56 @@ export default function ProgramacaoPage() {
     return finalGroups;
   };
 
+  // Load active cards from Supabase
+  const loadActiveCardsFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("programacao_card_states")
+        .select("deal_id, is_active");
+
+      if (error) {
+        console.error("Error loading active cards from Supabase:", error);
+        return;
+      }
+
+      if (data) {
+        const activeCardIds = new Set<string>(
+          data.filter((item) => item.is_active).map((item) => item.deal_id)
+        );
+        setActiveCards(activeCardIds);
+      }
+    } catch (error) {
+      console.error("Error loading active cards:", error);
+    }
+  };
+
+  // Save active card state to Supabase
+  const saveActiveCardToSupabase = async (
+    dealId: string,
+    isActive: boolean
+  ) => {
+    try {
+      const { error } = await supabase.from("programacao_card_states").upsert(
+        {
+          deal_id: dealId,
+          is_active: isActive,
+        },
+        {
+          onConflict: "deal_id",
+        }
+      );
+
+      if (error) {
+        console.error("Error saving active card to Supabase:", error);
+      }
+    } catch (error) {
+      console.error("Error saving active card:", error);
+    }
+  };
+
   useEffect(() => {
     fetchProgramacaoData();
+    loadActiveCardsFromSupabase();
   }, []);
 
   // Load from localStorage after hydration
@@ -251,17 +300,6 @@ export default function ProgramacaoPage() {
     if (savedZoomLevel) {
       setZoomLevel(Number(savedZoomLevel));
     }
-
-    // Load activeCards
-    const savedActiveCards = localStorage.getItem("programacao-activeCards");
-    if (savedActiveCards) {
-      try {
-        const parsed = JSON.parse(savedActiveCards);
-        setActiveCards(new Set(parsed));
-      } catch {
-        // Ignore parse errors
-      }
-    }
   }, []);
 
   // Save sortBy to localStorage
@@ -305,16 +343,6 @@ export default function ProgramacaoPage() {
     }
   }, [zoomLevel, isHydrated]);
 
-  // Save activeCards to localStorage
-  useEffect(() => {
-    if (isHydrated && activeCards.size > 0) {
-      localStorage.setItem(
-        "programacao-activeCards",
-        JSON.stringify(Array.from(activeCards))
-      );
-    }
-  }, [activeCards, isHydrated]);
-
   // Initialize visible groups and active cards when data is loaded
   useEffect(() => {
     if (data && visibleGroups.size === 0) {
@@ -328,18 +356,64 @@ export default function ProgramacaoPage() {
       setVisibleGroups(allGroupIds);
     }
 
-    // Initialize all cards as active if not already set
-    if (data && activeCards.size === 0) {
-      const allCardIds = new Set<string>();
-      data.groups.forEach((group) => {
-        group.deals.forEach((deal) => {
-          allCardIds.add(deal.id);
-        });
-      });
-      setActiveCards(allCardIds);
+    // Initialize new cards as active in Supabase if they don't exist
+    if (data) {
+      const initializeNewCards = async () => {
+        try {
+          // Get all deal IDs from current data
+          const allDealIds = new Set<string>();
+          data.groups.forEach((group) => {
+            group.deals.forEach((deal) => {
+              allDealIds.add(deal.id);
+            });
+          });
+
+          // Get existing card states from Supabase
+          const { data: existingStates, error } = await supabase
+            .from("programacao_card_states")
+            .select("deal_id");
+
+          if (error) {
+            console.error("Error fetching existing card states:", error);
+            return;
+          }
+
+          const existingDealIds = new Set(
+            existingStates?.map((state) => state.deal_id) || []
+          );
+
+          // Find new deals that don't have a state in Supabase
+          const newDealIds = Array.from(allDealIds).filter(
+            (dealId) => !existingDealIds.has(dealId)
+          );
+
+          // Insert new deals as active
+          if (newDealIds.length > 0) {
+            const newStates = newDealIds.map((dealId) => ({
+              deal_id: dealId,
+              is_active: true,
+            }));
+
+            const { error: insertError } = await supabase
+              .from("programacao_card_states")
+              .insert(newStates);
+
+            if (insertError) {
+              console.error("Error inserting new card states:", insertError);
+            } else {
+              // Reload active cards after inserting new ones
+              loadActiveCardsFromSupabase();
+            }
+          }
+        } catch (error) {
+          console.error("Error initializing new cards:", error);
+        }
+      };
+
+      initializeNewCards();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, visibleGroups.size, activeCards.size]);
+  }, [data, visibleGroups.size]);
 
   const fetchProgramacaoData = async (showToast = false) => {
     try {
@@ -652,11 +726,17 @@ export default function ProgramacaoPage() {
     e.stopPropagation(); // Prevent card click event
     setActiveCards((prev) => {
       const newSet = new Set(prev);
+      const isActive = !newSet.has(dealId);
+
       if (newSet.has(dealId)) {
         newSet.delete(dealId);
       } else {
         newSet.add(dealId);
       }
+
+      // Save to Supabase
+      saveActiveCardToSupabase(dealId, isActive);
+
       return newSet;
     });
   };

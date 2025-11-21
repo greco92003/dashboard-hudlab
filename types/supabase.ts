@@ -1057,6 +1057,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      programacao_card_states: {
+        Row: {
+          id: string;
+          deal_id: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          deal_id: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          deal_id?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       Insert: {
         id?: string;
         sync_type: "orders" | "products" | "full";

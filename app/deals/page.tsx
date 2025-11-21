@@ -50,6 +50,7 @@ export default function DealsPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     handlePeriodChange,
     getApiUrl,
@@ -499,6 +500,18 @@ export default function DealsPage() {
   // Initial data fetch using global date state
   useEffect(() => {
     const initializeData = async () => {
+      // Only fetch data after hydration is complete
+      if (!isHydrated) {
+        console.log("⏳ Deals: Waiting for hydration...");
+        return;
+      }
+
+      console.log("✅ Deals: Hydrated, fetching data...", {
+        useCustomPeriod,
+        period,
+        dateRange,
+      });
+
       if (!useCustomPeriod) {
         await fetchDeals(period);
       } else {
@@ -507,7 +520,7 @@ export default function DealsPage() {
     };
 
     initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals]);
+  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
 
   // Function to refresh deals data
   const refreshDealsData = useCallback(() => {

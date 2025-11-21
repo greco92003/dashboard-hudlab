@@ -120,6 +120,7 @@ export default function FixedCostsPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     getApiUrl,
   } = useGlobalDateRange();
@@ -181,8 +182,20 @@ export default function FixedCostsPage() {
   }, [useCustomPeriod, dateRange, getApiUrl]);
 
   useEffect(() => {
+    // Only fetch data after hydration is complete
+    if (!isHydrated) {
+      console.log("⏳ Fixed Costs: Waiting for hydration...");
+      return;
+    }
+
+    console.log("✅ Fixed Costs: Hydrated, fetching data...", {
+      useCustomPeriod,
+      period,
+      dateRange,
+    });
+
     fetchFixedCosts();
-  }, [useCustomPeriod, dateRange, period, fetchFixedCosts]);
+  }, [useCustomPeriod, dateRange, period, fetchFixedCosts, isHydrated]);
 
   // Define columns for the data table
   const columns: ColumnDef<FixedCost>[] = [

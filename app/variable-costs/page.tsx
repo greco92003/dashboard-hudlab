@@ -120,6 +120,7 @@ export default function VariableCostsPage() {
     dateRange,
     period,
     useCustomPeriod,
+    isHydrated,
     handleDateRangeChange,
     getApiUrl,
   } = useGlobalDateRange();
@@ -181,8 +182,20 @@ export default function VariableCostsPage() {
   }, [useCustomPeriod, dateRange, getApiUrl]);
 
   useEffect(() => {
+    // Only fetch data after hydration is complete
+    if (!isHydrated) {
+      console.log("⏳ Variable Costs: Waiting for hydration...");
+      return;
+    }
+
+    console.log("✅ Variable Costs: Hydrated, fetching data...", {
+      useCustomPeriod,
+      period,
+      dateRange,
+    });
+
     fetchVariableCosts();
-  }, [useCustomPeriod, dateRange, period, fetchVariableCosts]);
+  }, [useCustomPeriod, dateRange, period, fetchVariableCosts, isHydrated]);
 
   // Define columns for the data table
   const columns: ColumnDef<VariableCost>[] = [
