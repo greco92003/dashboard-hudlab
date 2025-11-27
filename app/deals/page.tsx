@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, FileDown } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,8 @@ import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // Define the deal type based on the new API response structure
 interface Deal {
@@ -34,6 +36,7 @@ interface Deal {
   designer: string | null; // Field ID 47
   "utm-source": string | null; // Field ID 49 (UTM Source)
   "utm-medium": string | null; // Field ID 50 (UTM Medium)
+  custom_field_54: string | null; // Field ID 54 (Data de Embarque)
   contact_id: string | null;
   organization_id: string | null;
   api_updated_at: string | null;
@@ -282,6 +285,39 @@ export default function DealsPage() {
       },
     },
     {
+      accessorKey: "custom_field_54",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            Data de Embarque
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const dataEmbarque = row.original.custom_field_54;
+        if (!dataEmbarque) return "-";
+
+        // Format date from YYYY-MM-DD to DD/MM/YYYY if needed
+        if (dataEmbarque.includes("-")) {
+          const [year, month, day] = dataEmbarque.split("-");
+          return `${day}/${month}/${year}`;
+        }
+
+        return dataEmbarque;
+      },
+    },
+    {
       accessorKey: "estado",
       header: ({ column }) => {
         return (
@@ -497,6 +533,165 @@ export default function DealsPage() {
     handleDateRangeChange(newDateRange);
   };
 
+  // Export to PDF function
+  const exportToPDF = () => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Add title
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Relatório de Negócios", 14, 15);
+
+    // Add date range info
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    let dateRangeText = "";
+    if (useCustomPeriod && dateRange?.from && dateRange?.to) {
+      dateRangeText = `Período: ${dateRange.from.toLocaleDateString(
+        "pt-BR"
+      )} - ${dateRange.to.toLocaleDateString("pt-BR")}`;
+    } else {
+      dateRangeText = `Período: Últimos ${period} dias`;
+    }
+    doc.text(dateRangeText, 14, 22);
+
+    // Add status filter info
+    const statusText =
+      statusFilter === "all"
+        ? "Status: Todos"
+        : statusFilter === "won"
+        ? "Status: Ganhos"
+        : statusFilter === "open"
+        ? "Status: Em Andamento"
+        : "Status: Perdidos";
+    doc.text(statusText, 14, 27);
+
+    // Add total value
+    doc.setFont("helvetica", "bold");
+    doc.text(
+      `Valor Total: ${formatCurrency(filteredTotalValue, "BRL")}`,
+      14,
+      32
+    );
+
+    // Prepare table data
+    const tableData = filteredDeals.map((deal) => {
+      const status = deal.status?.toLowerCase();
+      let statusText = "Desconhecido";
+      if (status === "won" || status === "1") statusText = "Ganho";
+      else if (status === "open" || status === "0") statusText = "Em Andamento";
+      else if (status === "lost" || status === "2") statusText = "Perdido";
+
+      // Format dates
+      const createdDate = deal.created_date
+        ? parseISODate(deal.created_date).toLocaleDateString("pt-BR")
+        : "-";
+      const closingDate = deal.closing_date
+        ? parseISODate(deal.closing_date).toLocaleDateString("pt-BR")
+        : "-";
+
+      // Format data de embarque
+      let dataEmbarque = "-";
+      if (deal.custom_field_54) {
+        if (deal.custom_field_54.includes("-")) {
+          const [year, month, day] = deal.custom_field_54.split("-");
+          dataEmbarque = `${day}/${month}/${year}`;
+        } else {
+          dataEmbarque = deal.custom_field_54;
+        }
+      }
+
+      return [
+        deal.deal_id,
+        deal.title,
+        statusText,
+        formatCurrency((deal.value || 0) / 100, "BRL"),
+        createdDate,
+        closingDate,
+        dataEmbarque,
+        deal.estado || "-",
+        deal["quantidade-de-pares"] || "-",
+        deal.vendedor ? normalizeSellerName(deal.vendedor) : "-",
+        deal.designer || "-",
+      ];
+    });
+
+    // Add table
+    autoTable(doc, {
+      head: [
+        [
+          "ID",
+          "Título",
+          "Status",
+          "Valor",
+          "Data Criação",
+          "Data Fechamento",
+          "Data Embarque",
+          "Estado",
+          "Qtd Pares",
+          "Vendedor",
+          "Designer",
+        ],
+      ],
+      body: tableData,
+      startY: 37,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      columnStyles: {
+        0: { cellWidth: 20 }, // ID
+        1: { cellWidth: 40 }, // Título
+        2: { cellWidth: 25 }, // Status
+        3: { cellWidth: 25 }, // Valor
+        4: { cellWidth: 22 }, // Data Criação
+        5: { cellWidth: 22 }, // Data Fechamento
+        6: { cellWidth: 22 }, // Data Embarque
+        7: { cellWidth: 20 }, // Estado
+        8: { cellWidth: 18 }, // Qtd Pares
+        9: { cellWidth: 25 }, // Vendedor
+        10: { cellWidth: 25 }, // Designer
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245],
+      },
+      margin: { top: 37, left: 14, right: 14 },
+    });
+
+    // Add footer with page numbers
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Página ${i} de ${pageCount}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: "center" }
+      );
+      doc.text(
+        `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+        14,
+        doc.internal.pageSize.getHeight() - 10
+      );
+    }
+
+    // Save the PDF
+    const fileName = `negocios_${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(fileName);
+  };
+
   // Initial data fetch using global date state
   useEffect(() => {
     const initializeData = async () => {
@@ -558,7 +753,18 @@ export default function DealsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <h1 className="text-xl sm:text-2xl font-bold">Negócios</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl sm:text-2xl font-bold">Negócios</h1>
+        <Button
+          onClick={exportToPDF}
+          variant="outline"
+          size="sm"
+          className="gap-2"
+        >
+          <FileDown className="h-4 w-4" />
+          Exportar PDF
+        </Button>
+      </div>
 
       <div className="flex flex-col gap-4 mb-4 mt-2">
         {/* Period Buttons - Stack on mobile, horizontal on larger screens */}

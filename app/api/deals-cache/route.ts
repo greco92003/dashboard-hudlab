@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
         id, deal_id, title, value, currency, status, stage_id,
         closing_date, created_date, custom_field_value, custom_field_id,
         estado, "quantidade-de-pares", vendedor, designer,
-        "utm-source", "utm-medium",
+        "utm-source", "utm-medium", custom_field_54,
         contact_id, organization_id, api_updated_at, last_synced_at
       `
       )

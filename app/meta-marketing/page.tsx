@@ -45,6 +45,10 @@ import {
   Info,
   Link,
   Play,
+  TrendingDown,
+  Users,
+  ShoppingBag,
+  BarChart3,
 } from "lucide-react";
 
 interface AccountData {
@@ -77,12 +81,51 @@ interface AdData {
   cost_per_result: string;
 }
 
+interface AdPerformance {
+  adId: string;
+  adName: string;
+  status: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  revenue: number;
+  pairsSold: number;
+  customersConverted: number;
+  roi: number;
+  profit: number;
+}
+
+interface NonMetaPerformance {
+  utmSource: string;
+  utmMedium: string;
+  revenue: number;
+  pairsSold: number;
+  customersConverted: number;
+  dealsCount: number;
+}
+
+interface PerformanceData {
+  adsPerformance: AdPerformance[];
+  nonMetaPerformance: NonMetaPerformance[];
+  summary: {
+    totalAdsSpend: number;
+    totalRevenue: number;
+    totalPairsSold: number;
+    totalCustomers: number;
+    nonMetaRevenue: number;
+    nonMetaPairsSold: number;
+  };
+}
+
 export default function MetaMarketingPage() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [insights, setInsights] = useState<BasicInsights | null>(null);
   const [adsData, setAdsData] = useState<AdData[]>([]);
+  const [performanceData, setPerformanceData] =
+    useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [adsLoading, setAdsLoading] = useState(false);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
 
@@ -172,6 +215,40 @@ export default function MetaMarketingPage() {
     }
   }, []);
 
+  // Function to fetch ads performance
+  const fetchPerformance = useCallback(
+    async (customDateRange?: DateRange) => {
+      try {
+        setPerformanceLoading(true);
+
+        let performanceUrl = "/api/meta-marketing/ads-performance";
+
+        if (customDateRange?.from && customDateRange?.to) {
+          const startDate = customDateRange.from.toISOString().split("T")[0];
+          const endDate = customDateRange.to.toISOString().split("T")[0];
+          performanceUrl = `/api/meta-marketing/ads-performance?startDate=${startDate}&endDate=${endDate}`;
+        } else if (dateRange?.from && dateRange?.to) {
+          const startDate = dateRange.from.toISOString().split("T")[0];
+          const endDate = dateRange.to.toISOString().split("T")[0];
+          performanceUrl = `/api/meta-marketing/ads-performance?startDate=${startDate}&endDate=${endDate}`;
+        }
+
+        const response = await fetch(performanceUrl);
+        if (!response.ok) {
+          throw new Error("Erro ao buscar performance dos anúncios");
+        }
+        const data = await response.json();
+        setPerformanceData(data);
+      } catch (err) {
+        console.error("Erro ao buscar performance:", err);
+        setPerformanceData(null);
+      } finally {
+        setPerformanceLoading(false);
+      }
+    },
+    [dateRange]
+  );
+
   // Initialize data based on current global state
   useEffect(() => {
     // Only fetch data after hydration is complete
@@ -188,12 +265,22 @@ export default function MetaMarketingPage() {
 
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
       fetchData(undefined, dateRange);
+      fetchPerformance(dateRange);
     } else {
       fetchData(period);
+      fetchPerformance();
     }
     // Also fetch ads on initial load
     fetchAds();
-  }, [period, useCustomPeriod, dateRange, fetchData, fetchAds, isHydrated]);
+  }, [
+    period,
+    useCustomPeriod,
+    dateRange,
+    fetchData,
+    fetchAds,
+    fetchPerformance,
+    isHydrated,
+  ]);
 
   const formatCurrency = (value: string | null | undefined) => {
     // Handle null, undefined, empty string, or string representations of null/undefined
@@ -310,16 +397,20 @@ export default function MetaMarketingPage() {
             onClick={() => {
               if (useCustomPeriod && dateRange?.from && dateRange?.to) {
                 fetchData(undefined, dateRange);
+                fetchPerformance(dateRange);
               } else {
                 fetchData(period);
+                fetchPerformance();
               }
               fetchAds();
             }}
-            disabled={loading || adsLoading}
+            disabled={loading || adsLoading || performanceLoading}
           >
             <RefreshCw
               className={`h-4 w-4 mr-2 ${
-                loading || adsLoading ? "animate-spin" : ""
+                loading || adsLoading || performanceLoading
+                  ? "animate-spin"
+                  : ""
               }`}
             />
             Atualizar
@@ -689,6 +780,256 @@ export default function MetaMarketingPage() {
             <div className="text-center py-8">
               <p className="text-muted-foreground">
                 Nenhum anúncio ativo encontrado
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Ads Performance Analysis */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Análise de Performance: Anúncios vs Vendas
+          </CardTitle>
+          <CardDescription>
+            Comparação entre gastos com anúncios e faturamento gerado
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {performanceLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+            </div>
+          ) : performanceData ? (
+            <div className="space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Gasto Total (Meta)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-red-600">
+                      {formatCurrency(
+                        performanceData.summary.totalAdsSpend.toString()
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Faturamento (Meta)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(
+                        performanceData.summary.totalRevenue.toString()
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      ROI Médio
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      className={`text-2xl font-bold ${
+                        performanceData.summary.totalRevenue >
+                        performanceData.summary.totalAdsSpend
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {performanceData.summary.totalAdsSpend > 0
+                        ? (
+                            ((performanceData.summary.totalRevenue -
+                              performanceData.summary.totalAdsSpend) /
+                              performanceData.summary.totalAdsSpend) *
+                            100
+                          ).toFixed(1)
+                        : "0"}
+                      %
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Clientes Convertidos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {performanceData.summary.totalCustomers}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Ads Performance Table */}
+              {performanceData.adsPerformance.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">
+                    Performance por Anúncio
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Anúncio</TableHead>
+                          <TableHead className="text-right">Gasto</TableHead>
+                          <TableHead className="text-right">
+                            Faturamento
+                          </TableHead>
+                          <TableHead className="text-right">Lucro</TableHead>
+                          <TableHead className="text-right">ROI</TableHead>
+                          <TableHead className="text-right">
+                            Pares Vendidos
+                          </TableHead>
+                          <TableHead className="text-right">Clientes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {performanceData.adsPerformance.map((ad) => (
+                          <TableRow key={ad.adId}>
+                            <TableCell className="font-medium max-w-[200px] truncate">
+                              {ad.adName}
+                            </TableCell>
+                            <TableCell className="text-right text-red-600">
+                              {formatCurrency(ad.spend.toString())}
+                            </TableCell>
+                            <TableCell className="text-right text-green-600">
+                              {formatCurrency(ad.revenue.toString())}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-medium ${
+                                ad.profit >= 0
+                                  ? "text-green-600"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {formatCurrency(ad.profit.toString())}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-medium ${
+                                ad.roi >= 0 ? "text-green-600" : "text-red-600"
+                              }`}
+                            >
+                              {ad.roi.toFixed(1)}%
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {ad.pairsSold}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {ad.customersConverted}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {/* Non-Meta UTM Performance */}
+              {performanceData.nonMetaPerformance.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">
+                    Faturamento de Outras Fontes (Não-Meta)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          Faturamento Total (Não-Meta)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatCurrency(
+                            performanceData.summary.nonMetaRevenue.toString()
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          Pares Vendidos (Não-Meta)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {performanceData.summary.nonMetaPairsSold}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>UTM Source</TableHead>
+                          <TableHead>UTM Medium</TableHead>
+                          <TableHead className="text-right">
+                            Faturamento
+                          </TableHead>
+                          <TableHead className="text-right">
+                            Pares Vendidos
+                          </TableHead>
+                          <TableHead className="text-right">Clientes</TableHead>
+                          <TableHead className="text-right">Vendas</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {performanceData.nonMetaPerformance.map(
+                          (group, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">
+                                {group.utmSource}
+                              </TableCell>
+                              <TableCell>{group.utmMedium}</TableCell>
+                              <TableCell className="text-right text-blue-600 font-medium">
+                                {formatCurrency(group.revenue.toString())}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {group.pairsSold}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {group.customersConverted}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {group.dealsCount}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">
+                Selecione um período para ver a análise de performance
               </p>
             </div>
           )}

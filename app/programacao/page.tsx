@@ -41,6 +41,7 @@ import {
   Power,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
 
 interface Deal {
   id: string;
@@ -633,6 +634,14 @@ export default function ProgramacaoPage() {
     }
   };
 
+  // Calculate total pairs for a group
+  const calculateTotalPairs = (deals: Deal[]): number => {
+    return deals.reduce((sum, deal) => {
+      const pairs = parseInt(deal.quantidadePares || "0");
+      return sum + pairs;
+    }, 0);
+  };
+
   // Sort deals within each group
   const sortDeals = (deals: Deal[], groupId?: string) => {
     return [...deals].sort((a, b) => {
@@ -789,6 +798,12 @@ export default function ProgramacaoPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Average Pairs Calculator */}
+              <AveragePairsCalculator
+                deals={data?.groups.flatMap((group) => group.deals) || []}
+                activeCards={activeCards}
+              />
             </div>
 
             {/* Refresh Button */}
@@ -920,6 +935,10 @@ export default function ProgramacaoPage() {
                             <Badge variant="secondary" className="ml-2">
                               {group.dealsCount}
                             </Badge>
+                          </div>
+                          {/* Total de pares do grupo */}
+                          <div className="text-sm text-muted-foreground mt-2">
+                            Total: {calculateTotalPairs(group.deals)} pares
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3 flex-1 overflow-y-auto">
