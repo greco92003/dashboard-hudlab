@@ -295,8 +295,20 @@ export default function SellersPage() {
           url = `/api/deals-cache?period=${selectedPeriod}`;
         }
 
-        // Use cached API call with retry logic
-        const response = await fetch(url);
+        // Force fresh data - bypass all caches (Service Worker, HTTP cache, etc.)
+        const cacheBuster = `_t=${Date.now()}`;
+        const urlWithCacheBuster = url.includes("?")
+          ? `${url}&${cacheBuster}`
+          : `${url}?${cacheBuster}`;
+
+        const response = await fetch(urlWithCacheBuster, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);

@@ -487,8 +487,21 @@ export default function DealsPage() {
           url = `/api/deals-cache?period=${selectedPeriod}`;
         }
 
-        // Use cached API call with retry logic
-        const response = await fetch(url);
+        // Force fresh data - bypass all caches (Service Worker, HTTP cache, etc.)
+        // Add timestamp to URL to prevent cache hits
+        const cacheBuster = `_t=${Date.now()}`;
+        const urlWithCacheBuster = url.includes("?")
+          ? `${url}&${cacheBuster}`
+          : `${url}?${cacheBuster}`;
+
+        const response = await fetch(urlWithCacheBuster, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);

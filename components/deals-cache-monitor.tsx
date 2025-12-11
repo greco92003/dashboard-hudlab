@@ -117,6 +117,23 @@ export function DealsCacheMonitor() {
       });
 
       if (response.ok) {
+        // Clear all caches to force fresh data
+        try {
+          // Clear sessionStorage
+          sessionStorage.clear();
+
+          // Clear Service Worker cache
+          if ("caches" in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(
+              cacheNames.map((cacheName) => caches.delete(cacheName))
+            );
+            console.log("✅ Service Worker cache cleared");
+          }
+        } catch (cacheError) {
+          console.error("Error clearing cache:", cacheError);
+        }
+
         // Show success toast
         toast.success("Sincronização concluída com sucesso!", {
           duration: 4000,
