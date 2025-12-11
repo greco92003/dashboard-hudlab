@@ -121,6 +121,4 @@ export async function POST() {
 }
 
 // Set timeout for health check
-export const config = {
-  maxDuration: 10, // 10 seconds
-};
+export const maxDuration = 10; // 10 seconds

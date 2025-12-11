@@ -704,6 +704,4 @@ export async function GET(request: NextRequest) {
 }
 
 // Set timeout for this API route
-export const config = {
-  maxDuration: 300, // 5 minutes
-};
+export const maxDuration = 300; // 5 minutes

@@ -329,6 +329,4 @@ export async function POST() {
 }
 
 // Set timeout for this API route
-export const config = {
-  maxDuration: 30, // 30 seconds
-};
+export const maxDuration = 30; // 30 seconds

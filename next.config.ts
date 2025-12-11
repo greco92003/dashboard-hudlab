@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 const withPWA = require("@ducanh2912/next-pwa").default;
 
 const nextConfig: NextConfig = {
+  // Add empty turbopack config to silence the warning
+  turbopack: {},
   images: {
     remotePatterns: [
       {

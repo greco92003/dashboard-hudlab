@@ -156,6 +156,4 @@ export async function POST() {
 }
 
 // Set timeout for this API route - 5 minutes (Hobby plan limit)
-export const config = {
-  maxDuration: 300, // 5 minutes
-};
+export const maxDuration = 300; // 5 minutes
