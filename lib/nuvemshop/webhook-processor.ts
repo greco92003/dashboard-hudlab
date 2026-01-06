@@ -624,6 +624,24 @@ export class NuvemshopWebhookProcessor {
     };
   }
 
+  // Helper function to process tags - convert string to array if needed
+  private processTags(tags: any): string[] {
+    if (!tags) return [];
+
+    // If tags is already an array, return it
+    if (Array.isArray(tags)) return tags;
+
+    // If tags is a string, split by comma and trim each item
+    if (typeof tags === "string") {
+      return tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+    }
+
+    return [];
+  }
+
   // Processar dados do produto (usando a mesma lógica da sincronização manual)
   private processProductData(product: any): any {
     console.log(`🔍 Processing product data for ID ${product.id}:`, {
@@ -655,7 +673,7 @@ export class NuvemshopWebhookProcessor {
       free_shipping: product.free_shipping || false,
       seo_title: product.seo_title || null,
       seo_description: product.seo_description || null,
-      tags: product.tags || [],
+      tags: this.processTags(product.tags),
       last_synced_at: new Date().toISOString(),
       api_updated_at: product.updated_at
         ? new Date(product.updated_at).toISOString()

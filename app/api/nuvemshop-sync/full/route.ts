@@ -278,6 +278,24 @@ async function processOrders(orders: any[], supabase: any) {
   };
 }
 
+// Function to process tags - convert string to array if needed
+function processTags(tags: any): string[] {
+  if (!tags) return [];
+
+  // If tags is already an array, return it
+  if (Array.isArray(tags)) return tags;
+
+  // If tags is a string, split by comma and trim each item
+  if (typeof tags === "string") {
+    return tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+  }
+
+  return [];
+}
+
 // Process products and save to database
 async function processProducts(products: any[], supabase: any) {
   const processedProducts = [];
@@ -319,7 +337,7 @@ async function processProducts(products: any[], supabase: any) {
         // SEO and metadata
         seo_title: product.seo_title || null,
         seo_description: product.seo_description || null,
-        tags: product.tags || [],
+        tags: processTags(product.tags),
 
         // Sync metadata
         last_synced_at: new Date().toISOString(),

@@ -115,6 +115,117 @@ function getFeaturedImageInfo(images: any[]) {
   };
 }
 
+// Function to process tags - convert string to array if needed
+function processTags(tags: any): string[] {
+  if (!tags) return [];
+
+  // If tags is already an array, return it
+  if (Array.isArray(tags)) return tags;
+
+  // If tags is a string, split by comma and trim each item
+  if (typeof tags === "string") {
+    return tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+  }
+
+  return [];
+}
+
+// Function to auto-detect and generate coupons for new brands
+async function detectAndGenerateNewBrandCoupons(supabase: any) {
+  try {
+    // Get all brands from published products
+    const { data: allBrands, error: brandsError } = await supabase
+      .from("nuvemshop_products")
+      .select("brand")
+      .eq("published", true)
+      .eq("sync_status", "synced")
+      .not("brand", "is", null)
+      .neq("brand", "");
+
+    if (brandsError) {
+      console.error("Error fetching brands for auto-detection:", brandsError);
+      return;
+    }
+
+    // Get unique brands
+    const uniqueBrands = [
+      ...new Set(allBrands?.map((p: any) => p.brand) || []),
+    ];
+
+    // Get existing auto-generated coupons (those ending with -15)
+    const { data: existingCoupons, error: couponsError } = await supabase
+      .from("generated_coupons")
+      .select("brand")
+      .eq("is_active", true)
+      .like("code", "%-15");
+
+    if (couponsError) {
+      console.error(
+        "Error fetching existing coupons for auto-detection:",
+        couponsError
+      );
+      return;
+    }
+
+    // Find brands without auto-coupons
+    const existingCouponBrands = new Set(
+      existingCoupons?.map((c: any) => c.brand) || []
+    );
+    const newBrands = uniqueBrands.filter(
+      (brand) => !existingCouponBrands.has(brand)
+    );
+
+    if (newBrands.length === 0) {
+      console.log("✅ No new brands detected");
+      return;
+    }
+
+    console.log(
+      `🆕 Found ${newBrands.length} new brands: ${newBrands.join(", ")}`
+    );
+
+    // Generate auto-coupons for new brands
+    for (const brand of newBrands) {
+      try {
+        const { data: result, error: generateError } = await supabase.rpc(
+          "generate_auto_coupon_for_brand",
+          {
+            brand_name: brand,
+          }
+        );
+
+        if (generateError) {
+          console.error(
+            `❌ Error generating auto-coupon for brand ${brand}:`,
+            generateError
+          );
+          continue;
+        }
+
+        const couponResult = result?.[0];
+
+        if (couponResult?.success) {
+          console.log(
+            `✅ Auto-generated coupon ${couponResult.coupon_code} for brand ${brand}`
+          );
+        } else {
+          console.error(
+            `❌ Failed to generate coupon for brand ${brand}:`,
+            couponResult?.error_message
+          );
+        }
+      } catch (error) {
+        console.error(`❌ Error processing brand ${brand}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error in detectAndGenerateNewBrandCoupons:", error);
+  }
+}
+
 // Function to process and save products to Supabase
 async function processProducts(products: any[], supabase: any) {
   const processedProducts = [];
@@ -158,7 +269,7 @@ async function processProducts(products: any[], supabase: any) {
         // SEO and metadata
         seo_title: product.seo_title || null,
         seo_description: product.seo_description || null,
-        tags: product.tags || [],
+        tags: processTags(product.tags),
 
         // Sync metadata
         last_synced_at: new Date().toISOString(),
@@ -267,6 +378,14 @@ export async function POST(request: NextRequest) {
         error_records: stats.errorRecords,
       })
       .eq("id", syncLog.id);
+
+    // Auto-detect and generate coupons for new brands (async, non-blocking)
+    if (stats.newRecords > 0) {
+      console.log("🔍 Checking for new brands to auto-generate coupons...");
+      detectAndGenerateNewBrandCoupons(supabase).catch((error) => {
+        console.error("Error in auto-brand detection:", error);
+      });
+    }
 
     return NextResponse.json({
       success: true,
