@@ -19,6 +19,7 @@ import {
   Target,
   TrendingUp,
   Clock,
+  Users,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -52,8 +53,20 @@ const MetaIcon = ({ className }: { className?: string }) => (
   <FontAwesomeIcon icon={faMeta} className={className} />
 );
 
+// Type for menu items
+type MenuItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+type MenuGroup = {
+  label: string;
+  items: MenuItem[];
+};
+
 // Menu items organized by groups
-const menuGroups = [
+const menuGroups: MenuGroup[] = [
   {
     label: "Dados de Negócios",
     items: [
@@ -101,6 +114,11 @@ const menuGroups = [
         title: "Designers",
         url: "/designers",
         icon: Palette,
+      },
+      {
+        title: "Representantes",
+        url: "/representantes",
+        icon: Users,
       },
     ],
   },
@@ -179,13 +197,13 @@ export function AppSidebar() {
   };
 
   // Filter menu groups based on user role
-  const getFilteredMenuGroups = () => {
+  const getFilteredMenuGroups = (): MenuGroup[] => {
     if (isPartnersMedia) {
       // Partners-media users can only see the "Parceiros" group
       return menuGroups.filter((group) => group.label === "Parceiros");
     }
 
-    let filteredGroups = menuGroups;
+    let filteredGroups: MenuGroup[] = menuGroups;
 
     // Users with role "user" cannot see the "Parceiros" group
     if (isUser) {
@@ -199,6 +217,19 @@ export function AppSidebar() {
       filteredGroups = filteredGroups.filter(
         (group) => group.label !== "Custos"
       );
+    }
+
+    // Filter "Representantes" from "Follow-Up" group for non-admin/owner users
+    if (!isOwner && !isAdmin) {
+      filteredGroups = filteredGroups.map((group) => {
+        if (group.label === "Follow-Up") {
+          return {
+            ...group,
+            items: group.items.filter((item) => item.url !== "/representantes"),
+          };
+        }
+        return group;
+      });
     }
 
     return filteredGroups;

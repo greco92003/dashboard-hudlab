@@ -221,17 +221,26 @@ export default function MetaMarketingPage() {
       try {
         setPerformanceLoading(true);
 
-        let performanceUrl = "/api/meta-marketing/ads-performance";
+        // Calculate date range
+        let startDate: string;
+        let endDate: string;
 
         if (customDateRange?.from && customDateRange?.to) {
-          const startDate = customDateRange.from.toISOString().split("T")[0];
-          const endDate = customDateRange.to.toISOString().split("T")[0];
-          performanceUrl = `/api/meta-marketing/ads-performance?startDate=${startDate}&endDate=${endDate}`;
+          startDate = customDateRange.from.toISOString().split("T")[0];
+          endDate = customDateRange.to.toISOString().split("T")[0];
         } else if (dateRange?.from && dateRange?.to) {
-          const startDate = dateRange.from.toISOString().split("T")[0];
-          const endDate = dateRange.to.toISOString().split("T")[0];
-          performanceUrl = `/api/meta-marketing/ads-performance?startDate=${startDate}&endDate=${endDate}`;
+          startDate = dateRange.from.toISOString().split("T")[0];
+          endDate = dateRange.to.toISOString().split("T")[0];
+        } else {
+          // Fallback: use period-based date range
+          const today = new Date();
+          const daysAgo = new Date();
+          daysAgo.setDate(today.getDate() - period);
+          startDate = daysAgo.toISOString().split("T")[0];
+          endDate = today.toISOString().split("T")[0];
         }
+
+        const performanceUrl = `/api/meta-marketing/ads-performance?startDate=${startDate}&endDate=${endDate}`;
 
         const response = await fetch(performanceUrl);
         if (!response.ok) {
@@ -246,7 +255,7 @@ export default function MetaMarketingPage() {
         setPerformanceLoading(false);
       }
     },
-    [dateRange]
+    [dateRange, period]
   );
 
   // Initialize data based on current global state
@@ -382,40 +391,28 @@ export default function MetaMarketingPage() {
             Dados de anúncios do Facebook e Instagram
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open("/META_MARKETING_README.md", "_blank")}
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            README
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-                fetchData(undefined, dateRange);
-                fetchPerformance(dateRange);
-              } else {
-                fetchData(period);
-                fetchPerformance();
-              }
-              fetchAds();
-            }}
-            disabled={loading || adsLoading || performanceLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${
-                loading || adsLoading || performanceLoading
-                  ? "animate-spin"
-                  : ""
-              }`}
-            />
-            Atualizar
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (useCustomPeriod && dateRange?.from && dateRange?.to) {
+              fetchData(undefined, dateRange);
+              fetchPerformance(dateRange);
+            } else {
+              fetchData(period);
+              fetchPerformance();
+            }
+            fetchAds();
+          }}
+          disabled={loading || adsLoading || performanceLoading}
+        >
+          <RefreshCw
+            className={`h-4 w-4 mr-2 ${
+              loading || adsLoading || performanceLoading ? "animate-spin" : ""
+            }`}
+          />
+          Atualizar
+        </Button>
       </div>
 
       {/* Seletor de Período */}
@@ -462,22 +459,6 @@ export default function MetaMarketingPage() {
           </div>
         </div>
       </div>
-
-      {/* Referência ao README */}
-      <Alert>
-        <FileText className="h-4 w-4" />
-        <AlertDescription>
-          📖 Consulte o{" "}
-          <Button
-            variant="link"
-            className="p-0 h-auto font-medium"
-            onClick={() => window.open("/META_MARKETING_README.md", "_blank")}
-          >
-            META_MARKETING_README.md
-          </Button>{" "}
-          para documentação completa e atualizações do desenvolvimento.
-        </AlertDescription>
-      </Alert>
 
       {/* Error State */}
       {error && (
@@ -1033,38 +1014,6 @@ export default function MetaMarketingPage() {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Development Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            Status do Desenvolvimento
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="default">✅ Fase 1</Badge>
-              <span>Estrutura básica e README</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">🔄 Fase 2</Badge>
-              <span>
-                Dados básicos da conta e insights (em desenvolvimento)
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">📋 Fase 3</Badge>
-              <span>Métricas avançadas (planejado)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">🚀 Fase 4</Badge>
-              <span>Análises avançadas (futuro)</span>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

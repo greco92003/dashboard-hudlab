@@ -74,6 +74,7 @@ export async function updateSession(request: NextRequest) {
       "/deals",
       "/sellers",
       "/designers",
+      "/representantes",
       "/partners",
       "/goals",
       "/programacao",
@@ -85,6 +86,7 @@ export async function updateSession(request: NextRequest) {
       "/taxes",
       "/fixed-costs",
       "/variable-costs",
+      "/representantes",
     ];
 
     const authRoutes = [

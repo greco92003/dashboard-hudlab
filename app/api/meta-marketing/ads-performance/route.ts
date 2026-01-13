@@ -6,6 +6,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Type for Meta Ad from Facebook API
+interface MetaAd {
+  id: string;
+  name: string;
+  status: string;
+}
+
 // Helper function to normalize ad names for matching
 function normalizeAdName(name: string): string {
   return name
@@ -87,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     const adAccountId = businessData.data[0].id;
 
-    // Get ads with insights for the period
+    // Get ALL ads (active and inactive) for matching purposes
     const adsUrl = `https://graph.facebook.com/v23.0/${adAccountId}/ads`;
     const adsParams = new URLSearchParams({
       access_token: accessToken,
@@ -98,9 +105,20 @@ export async function GET(request: NextRequest) {
     const adsResponse = await fetch(`${adsUrl}?${adsParams}`);
     const adsData = await adsResponse.json();
 
+    console.log(
+      `📊 Found ${adsData.data?.length || 0} total ads (active and inactive)`
+    );
+
+    // Store all ads for matching (including inactive ones)
+    const allAds = (adsData.data || []).map((ad: MetaAd) => ({
+      id: ad.id,
+      name: ad.name,
+      status: ad.status,
+    }));
+
     // Fetch insights for each ad in parallel
     const adsWithInsights = await Promise.all(
-      (adsData.data || []).map(async (ad: any) => {
+      (adsData.data || []).map(async (ad: MetaAd) => {
         const insightsUrl = `https://graph.facebook.com/v23.0/${ad.id}/insights`;
         const insightsParams = new URLSearchParams({
           access_token: accessToken,
@@ -170,8 +188,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const activeAdsCount = allAds.filter(
+      (ad: MetaAd) => ad.status === "ACTIVE"
+    ).length;
+    const inactiveAdsCount = allAds.length - activeAdsCount;
+
     console.log(
-      `📈 Found ${adsWithInsights.length} ads and ${deals?.length || 0} deals`
+      `📈 Found ${
+        adsWithInsights.length
+      } ads with insights, ${activeAdsCount} active ads, ${inactiveAdsCount} inactive ads, and ${
+        deals?.length || 0
+      } deals`
     );
 
     // 3. Match ads with sales
@@ -220,6 +247,8 @@ export async function GET(request: NextRequest) {
     activeAdsPerformance.sort((a, b) => b.spend - a.spend);
 
     // 4. Get non-Meta UTM sources
+    // Use ALL ads (including inactive) to properly identify Meta deals
+    let dealsMatchedToInactiveAds = 0;
     const nonMetaDeals = (deals || []).filter((deal) => {
       const utmSource = deal["utm-source"];
       const utmMedium = deal["utm-medium"];
@@ -227,13 +256,29 @@ export async function GET(request: NextRequest) {
       // Skip if no UTM data
       if (!utmSource || !utmMedium) return false;
 
-      // Check if this deal was already matched to a Meta ad
-      const matchedToAd = adsWithInsights.some((ad) =>
+      // Check if this deal matches ANY Meta ad (active or inactive)
+      const matchedAd = allAds.find((ad: MetaAd) =>
         matchesAdName(utmMedium, ad.name)
       );
 
-      return !matchedToAd;
+      if (matchedAd) {
+        // Check if it's an inactive ad
+        const isInactive = matchedAd.status !== "ACTIVE";
+        if (isInactive) {
+          dealsMatchedToInactiveAds++;
+          console.log(
+            `🔄 Deal matched to INACTIVE Meta ad: utm-medium="${utmMedium}" → ad="${matchedAd.name}" (status: ${matchedAd.status})`
+          );
+        }
+      }
+
+      return !matchedAd;
     });
+
+    console.log(
+      `📊 Deals matched to inactive Meta ads: ${dealsMatchedToInactiveAds}`
+    );
+    console.log(`📊 True non-Meta deals: ${nonMetaDeals.length}`);
 
     // Group non-Meta deals by utm_source and utm_medium
     const nonMetaGroups: Record<
