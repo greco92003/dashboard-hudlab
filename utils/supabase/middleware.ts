@@ -78,6 +78,7 @@ export async function updateSession(request: NextRequest) {
       "/partners",
       "/goals",
       "/programacao",
+      "/ote",
     ];
 
     // Define routes that require admin or owner role
@@ -87,6 +88,7 @@ export async function updateSession(request: NextRequest) {
       "/fixed-costs",
       "/variable-costs",
       "/representantes",
+      "/ote/admin",
     ];
 
     const authRoutes = [

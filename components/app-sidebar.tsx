@@ -123,6 +123,21 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: "Comissionamento",
+    items: [
+      {
+        title: "Meu Dashboard OTE",
+        url: "/ote",
+        icon: TrendingUp,
+      },
+      {
+        title: "Admin OTE",
+        url: "/ote/admin",
+        icon: Settings,
+      },
+    ],
+  },
+  {
     label: "Custos",
     items: [
       {
@@ -226,6 +241,19 @@ export function AppSidebar() {
           return {
             ...group,
             items: group.items.filter((item) => item.url !== "/representantes"),
+          };
+        }
+        return group;
+      });
+    }
+
+    // Filter "Admin OTE" from "Comissionamento" group for non-admin/owner users
+    if (!isOwner && !isAdmin) {
+      filteredGroups = filteredGroups.map((group) => {
+        if (group.label === "Comissionamento") {
+          return {
+            ...group,
+            items: group.items.filter((item) => item.url !== "/ote/admin"),
           };
         }
         return group;
