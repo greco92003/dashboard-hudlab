@@ -251,16 +251,6 @@ export function MockupsSection({
                     </CardHeader>
                     <CardContent className="pt-0">
                       <div className="space-y-2">
-                        {/* Quantidade de Negócios */}
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs sm:text-sm text-muted-foreground">
-                            Negócios:
-                          </span>
-                          <span className="font-semibold text-purple-600 text-xs sm:text-sm">
-                            {stats.quantidadeNegocios}
-                          </span>
-                        </div>
-
                         {/* Mockups Feitos */}
                         <div className="flex justify-between items-center">
                           <span className="text-xs sm:text-sm text-muted-foreground">
