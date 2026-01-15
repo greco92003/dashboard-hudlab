@@ -232,69 +232,85 @@ export function MockupsSection({
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {designers.map((designer) => {
-              const stats = data[designer] || {
-                quantidadeNegocios: 0,
-                mockupsFeitos: 0,
-                alteracoesFeitas: 0,
-                arquivosSerigrafia: 0,
-              };
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {designers.map((designer) => {
+                const stats = data[designer] || {
+                  quantidadeNegocios: 0,
+                  mockupsFeitos: 0,
+                  alteracoesFeitas: 0,
+                  arquivosSerigrafia: 0,
+                };
 
-              return (
-                <Card key={designer} className="relative overflow-hidden">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold truncate">
-                      {designer}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-2">
-                      {/* Quantidade de Negócios */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          Negócios:
-                        </span>
-                        <span className="font-semibold text-purple-600 text-xs sm:text-sm">
-                          {stats.quantidadeNegocios}
-                        </span>
-                      </div>
+                return (
+                  <Card key={designer} className="relative overflow-hidden">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-semibold truncate">
+                        {designer}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        {/* Quantidade de Negócios */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs sm:text-sm text-muted-foreground">
+                            Negócios:
+                          </span>
+                          <span className="font-semibold text-purple-600 text-xs sm:text-sm">
+                            {stats.quantidadeNegocios}
+                          </span>
+                        </div>
 
-                      {/* Mockups Feitos */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          Mockups Feitos:
-                        </span>
-                        <span className="font-semibold text-green-600 text-xs sm:text-sm">
-                          {stats.mockupsFeitos}
-                        </span>
-                      </div>
+                        {/* Mockups Feitos */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs sm:text-sm text-muted-foreground">
+                            Mockups Feitos:
+                          </span>
+                          <span className="font-semibold text-green-600 text-xs sm:text-sm">
+                            {stats.mockupsFeitos}
+                          </span>
+                        </div>
 
-                      {/* Alterações Feitas */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          Alterações:
-                        </span>
-                        <span className="font-semibold text-orange-600 text-xs sm:text-sm">
-                          {stats.alteracoesFeitas}
-                        </span>
-                      </div>
+                        {/* Alterações Feitas */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs sm:text-sm text-muted-foreground">
+                            Alterações:
+                          </span>
+                          <span className="font-semibold text-orange-600 text-xs sm:text-sm">
+                            {stats.alteracoesFeitas}
+                          </span>
+                        </div>
 
-                      {/* Arquivos de Serigrafia */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          Arquivos de Serigrafia:
-                        </span>
-                        <span className="font-semibold text-blue-600 text-xs sm:text-sm">
-                          {stats.arquivosSerigrafia}
-                        </span>
+                        {/* Arquivos de Serigrafia */}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs sm:text-sm text-muted-foreground">
+                            Arquivos de Serigrafia:
+                          </span>
+                          <span className="font-semibold text-blue-600 text-xs sm:text-sm">
+                            {stats.arquivosSerigrafia}
+                          </span>
+                        </div>
+
+                        {/* Linha divisória */}
+                        <div className="border-t pt-2 mt-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs sm:text-sm font-semibold text-foreground">
+                              Total:
+                            </span>
+                            <span className="font-bold text-primary text-xs sm:text-sm">
+                              {stats.mockupsFeitos +
+                                stats.alteracoesFeitas +
+                                stats.arquivosSerigrafia}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {!loading && !syncLoading && designers.length === 0 && (
