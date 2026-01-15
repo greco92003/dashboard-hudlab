@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CommissionCard } from "./commission-card";
+import { UnifiedPerformanceCard } from "./unified-performance-card";
 import { MultiplierTable } from "./multiplier-table";
 import { CommissionHistoryComponent } from "./commission-history";
 import { OTESeller, OTESellerDashboard, OTEConfig } from "@/types/ote";
@@ -92,10 +92,10 @@ export function SellerDashboardView({
   return (
     <div className="space-y-6">
       {/* Seletor de Vendedor */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
+      <Card className="relative z-0">
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <User className="h-4 w-4 sm:h-5 sm:w-5" />
             Selecionar Vendedor
           </CardTitle>
         </CardHeader>
@@ -134,15 +134,20 @@ export function SellerDashboardView({
 
       {/* Dashboard do Vendedor */}
       {!loading && !error && dashboard && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <DollarSign className="h-6 w-6" />
-                Dashboard de {dashboard.seller.seller_name}
+              <h2 className="text-base sm:text-lg md:text-xl font-bold flex items-center gap-2">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
+                <span className="hidden sm:inline">
+                  Dashboard de {dashboard.seller.seller_name}
+                </span>
+                <span className="sm:hidden">
+                  {dashboard.seller.seller_name}
+                </span>
               </h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 {MONTH_NAMES[currentMonth]} de {currentYear}
               </p>
             </div>
@@ -152,19 +157,21 @@ export function SellerDashboardView({
           {!dashboard.monthly_target && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Meta não definida</AlertTitle>
-              <AlertDescription>
+              <AlertTitle className="text-sm sm:text-base">
+                Meta não definida
+              </AlertTitle>
+              <AlertDescription className="text-xs sm:text-sm">
                 Não há meta definida para este mês.
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Cards de Comissão do Mês Atual */}
-          {dashboard.current_month && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Desempenho do Mês Atual</h3>
-              <CommissionCard data={dashboard.current_month} />
-            </div>
+          {/* Card Unificado de Desempenho */}
+          {dashboard.current_month && config && (
+            <UnifiedPerformanceCard
+              data={dashboard.current_month}
+              config={config}
+            />
           )}
 
           {/* Tabela de Multiplicadores */}
@@ -180,38 +187,33 @@ export function SellerDashboardView({
           {/* Histórico */}
           {dashboard.previous_months &&
             dashboard.previous_months.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">
-                  Histórico de Comissões
-                </h3>
-                <CommissionHistoryComponent
-                  history={dashboard.previous_months}
-                />
-              </div>
+              <CommissionHistoryComponent history={dashboard.previous_months} />
             )}
 
           {/* Informações do Vendedor */}
           <Card>
-            <CardHeader>
-              <CardTitle>Informações do Vendedor</CardTitle>
+            <CardHeader className="pb-3 sm:pb-4">
+              <CardTitle className="text-base sm:text-lg">
+                Informações do Vendedor
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between">
+            <CardContent className="space-y-2 text-xs sm:text-sm">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Nome:</span>
-                <span className="font-semibold">
+                <span className="font-semibold text-right">
                   {dashboard.seller.seller_name}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Salário Fixo:</span>
-                <span className="font-semibold">
+                <span className="font-semibold whitespace-nowrap">
                   R${" "}
                   {dashboard.seller.salary_fixed.toLocaleString("pt-BR", {
                     minimumFractionDigits: 2,
                   })}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">
                   % de Comissão Base:
                 </span>
@@ -219,7 +221,7 @@ export function SellerDashboardView({
                   {dashboard.seller.commission_percentage}%
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Status:</span>
                 <span className="font-semibold">
                   {dashboard.seller.active ? "Ativo" : "Inativo"}
@@ -227,13 +229,13 @@ export function SellerDashboardView({
               </div>
               {config && (
                 <>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Tráfego Pago:</span>
                     <span className="font-semibold">
                       {config.paid_traffic_percentage}%
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Orgânico:</span>
                     <span className="font-semibold">
                       {config.organic_percentage}%
@@ -249,9 +251,11 @@ export function SellerDashboardView({
       {/* Mensagem quando nenhum vendedor está selecionado */}
       {!loading && !error && !dashboard && selectedSellerId === "" && (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Selecione um vendedor para visualizar seu dashboard</p>
+          <CardContent className="py-8 sm:py-12 text-center text-muted-foreground">
+            <User className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 sm:mb-4 opacity-50" />
+            <p className="text-xs sm:text-sm">
+              Selecione um vendedor para visualizar seu dashboard
+            </p>
           </CardContent>
         </Card>
       )}

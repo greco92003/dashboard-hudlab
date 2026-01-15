@@ -101,20 +101,24 @@ export default function OTEPage() {
   if (isNotRegistered && isOwnerOrAdmin) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-              <Settings className="h-6 w-6" />
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
+              <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
               Dashboard OTE - Administração
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Visualize os resultados de todos os vendedores
             </p>
           </div>
           <Link href="/ote/admin">
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="flex items-center gap-2 w-full sm:w-auto text-sm"
+            >
               <Settings className="h-4 w-4" />
-              Painel Admin
+              <span className="hidden sm:inline">Painel Admin</span>
+              <span className="sm:hidden">Admin</span>
               <ArrowRight className="h-4 w-4" />
             </Button>
           </Link>
@@ -189,15 +193,16 @@ export default function OTEPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-1 flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <DollarSign className="h-6 w-6" />
-            Meu Dashboard OTE
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
+            <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span className="hidden sm:inline">Meu Dashboard OTE</span>
+            <span className="sm:hidden">Dashboard OTE</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             {MONTH_NAMES[currentMonth]} de {currentYear}
           </p>
         </div>
@@ -207,8 +212,10 @@ export default function OTEPage() {
       {!dashboard.monthly_target && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Meta não definida</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className="text-sm sm:text-base">
+            Meta não definida
+          </AlertTitle>
+          <AlertDescription className="text-xs sm:text-sm">
             Você ainda não possui uma meta definida para este mês. Entre em
             contato com o administrador.
           </AlertDescription>
@@ -217,8 +224,10 @@ export default function OTEPage() {
 
       {/* Cards de Comissão do Mês Atual */}
       {dashboard.current_month && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Desempenho do Mês Atual</h2>
+        <div className="space-y-3 sm:space-y-4">
+          <h2 className="text-base sm:text-lg font-semibold">
+            Desempenho do Mês Atual
+          </h2>
           <CommissionCard data={dashboard.current_month} />
         </div>
       )}
@@ -233,28 +242,32 @@ export default function OTEPage() {
 
       {/* Histórico */}
       {dashboard.previous_months && dashboard.previous_months.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Histórico de Comissões</h2>
+        <div className="space-y-3 sm:space-y-4">
+          <h2 className="text-base sm:text-lg font-semibold">
+            Histórico de Comissões
+          </h2>
           <CommissionHistoryComponent history={dashboard.previous_months} />
         </div>
       )}
 
       {/* Informações Adicionais */}
       <Card>
-        <CardHeader>
-          <CardTitle>Informações do Sistema</CardTitle>
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="text-base sm:text-lg">
+            Informações do Sistema
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
+        <CardContent className="space-y-2 text-xs sm:text-sm">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Salário Fixo:</span>
-            <span className="font-semibold">
+            <span className="font-semibold whitespace-nowrap">
               R${" "}
               {dashboard.seller.salary_fixed.toLocaleString("pt-BR", {
                 minimumFractionDigits: 2,
               })}
             </span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">% de Comissão Base:</span>
             <span className="font-semibold">
               {dashboard.seller.commission_percentage}%
@@ -262,13 +275,13 @@ export default function OTEPage() {
           </div>
           {config && (
             <>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Tráfego Pago:</span>
                 <span className="font-semibold">
                   {config.paid_traffic_percentage}%
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Orgânico:</span>
                 <span className="font-semibold">
                   {config.organic_percentage}%

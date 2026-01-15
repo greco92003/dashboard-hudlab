@@ -53,6 +53,9 @@ export function SellerFormDialog({
     seller_name: seller?.seller_name || "",
     salary_fixed: seller?.salary_fixed || 0,
     commission_percentage: seller?.commission_percentage || 2,
+    commission_paid_traffic: seller?.commission_paid_traffic || 2,
+    commission_organic: seller?.commission_organic || 4,
+    target_percentage: seller?.target_percentage || 0,
     active: seller?.active ?? true,
   });
 
@@ -64,6 +67,9 @@ export function SellerFormDialog({
         seller_name: seller.seller_name,
         salary_fixed: seller.salary_fixed,
         commission_percentage: seller.commission_percentage,
+        commission_paid_traffic: seller.commission_paid_traffic || 2,
+        commission_organic: seller.commission_organic || 4,
+        target_percentage: seller.target_percentage,
         active: seller.active,
       });
     } else {
@@ -73,6 +79,9 @@ export function SellerFormDialog({
         seller_name: "",
         salary_fixed: 0,
         commission_percentage: 2,
+        commission_paid_traffic: 2,
+        commission_organic: 4,
+        target_percentage: 0,
         active: true,
       });
     }
@@ -270,29 +279,85 @@ export function SellerFormDialog({
               />
             </div>
 
-            {/* Commission Percentage */}
+            {/* Commission Paid Traffic */}
             <div className="grid gap-2">
-              <Label htmlFor="commission_percentage">
-                % de Comissão Base <span className="text-red-500">*</span>
+              <Label htmlFor="commission_paid_traffic">
+                % de Comissão - Tráfego Pago{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <Input
-                id="commission_percentage"
+                id="commission_paid_traffic"
                 type="number"
                 step="0.01"
                 min="0"
                 max="100"
-                value={formData.commission_percentage}
+                value={formData.commission_paid_traffic}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    commission_percentage: parseFloat(e.target.value) || 0,
+                    commission_paid_traffic: parseFloat(e.target.value) || 0,
                   })
                 }
                 placeholder="2.00"
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Percentual da meta que vira comissão base
+                Percentual de comissão para vendas de tráfego pago
+              </p>
+            </div>
+
+            {/* Commission Organic */}
+            <div className="grid gap-2">
+              <Label htmlFor="commission_organic">
+                % de Comissão - Tráfego Orgânico{" "}
+                <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="commission_organic"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={formData.commission_organic}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    commission_organic: parseFloat(e.target.value) || 0,
+                  })
+                }
+                placeholder="4.00"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Percentual de comissão para vendas de tráfego orgânico
+              </p>
+            </div>
+
+            {/* Target Percentage */}
+            <div className="grid gap-2">
+              <Label htmlFor="target_percentage">
+                % da Meta da Empresa <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="target_percentage"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={formData.target_percentage}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    target_percentage: parseFloat(e.target.value) || 0,
+                  })
+                }
+                placeholder="70.00"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Porcentagem da meta mensal da empresa que é meta deste vendedor.
+                Ex: Se a meta da empresa é R$ 150.000 e este vendedor tem 70%,
+                sua meta individual será R$ 105.000
               </p>
             </div>
 

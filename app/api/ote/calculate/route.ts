@@ -81,46 +81,125 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Buscar deals do vendedor no período
+    // Usar a mesma lógica do /dashboard para garantir consistência
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0); // Último dia do mês
 
     const startDateStr = startDate.toISOString().split("T")[0];
     const endDateStr = endDate.toISOString().split("T")[0];
 
-    const { data: deals, error: dealsError } = await supabase
+    console.log("🔍 OTE Calculate - Buscando deals:", {
+      seller_name: seller.seller_name,
+      month,
+      year,
+      startDateStr,
+      endDateStr,
+    });
+
+    // Buscar TODOS os deals do período (mesma query do /dashboard)
+    // Filtrar por closing_date e sync_status = "synced"
+    const { data: allDeals, error: dealsError } = await supabase
       .from("deals_cache")
       .select("*")
+      .eq("sync_status", "synced")
+      .not("closing_date", "is", null)
       .gte("closing_date", startDateStr)
-      .lte("closing_date", endDateStr)
-      .eq("status", "won");
+      .lte("closing_date", endDateStr);
 
     if (dealsError) {
-      console.error("Erro ao buscar deals:", dealsError);
+      console.error("❌ Erro ao buscar deals:", dealsError);
       return NextResponse.json(
         { error: "Erro ao buscar deals" },
         { status: 500 }
       );
     }
 
-    // 5. Filtrar deals do vendedor (normalizar nomes)
+    console.log(
+      `📊 Total de deals encontrados no período: ${allDeals?.length || 0}`
+    );
+
+    // Calcular faturamento total de TODOS os vendedores (para a meta da empresa)
+    const totalCompanySales = (allDeals || []).reduce(
+      (sum: number, deal: any) => {
+        // Apenas deals ganhos (won ou status = 1)
+        // ActiveCampaign usa status = "1" para deals ganhos
+        if (deal.status === "won" || deal.status === "1" || deal.status === 1) {
+          return sum + (deal.value || 0) / 100;
+        }
+        return sum;
+      },
+      0
+    );
+
+    console.log(
+      `💰 Faturamento total da empresa: R$ ${totalCompanySales.toFixed(2)}`
+    );
+
+    // 5. Filtrar deals do vendedor específico (normalizar nomes)
     const normalizedSellerName = normalizeSellerName(seller.seller_name);
-    const sellerDeals = (deals || []).filter((deal: any) => {
+    const sellerDeals = (allDeals || []).filter((deal: any) => {
+      // Apenas deals ganhos do vendedor (won ou status = 1)
+      if (deal.status !== "won" && deal.status !== "1" && deal.status !== 1) {
+        return false;
+      }
       const dealSellerName = normalizeSellerName(deal.vendedor || "");
       return dealSellerName === normalizedSellerName;
     });
 
-    // 6. Calcular vendas totais
-    const totalSales = sellerDeals.reduce((sum: number, deal: any) => {
-      return sum + (deal.value || 0) / 100; // Dividir por 100 (valores estão multiplicados)
-    }, 0);
+    console.log(`👤 Deals do vendedor "${seller.seller_name}":`, {
+      normalizedSellerName,
+      totalDeals: sellerDeals.length,
+      sampleDeals: sellerDeals.slice(0, 3).map((d: any) => ({
+        deal_id: d.deal_id,
+        title: d.title,
+        value: d.value,
+        vendedor: d.vendedor,
+        closing_date: d.closing_date,
+      })),
+    });
 
-    // 7. Separar vendas por canal (80% tráfego pago, 20% orgânico)
-    const paidTrafficSales =
-      totalSales * (config.paid_traffic_percentage / 100);
-    const organicSales = totalSales * (config.organic_percentage / 100);
+    // 6. Calcular vendas totais do vendedor e separar por tipo de tráfego
+    // Classificar cada deal baseado no utm-source:
+    // - Se utm-source contém "prospecção" (case-insensitive) → tráfego orgânico
+    // - Caso contrário → tráfego pago
+    let paidTrafficSales = 0;
+    let organicSales = 0;
+    let totalSales = 0;
+
+    sellerDeals.forEach((deal: any) => {
+      const dealValue = (deal.value || 0) / 100; // Dividir por 100 (valores estão multiplicados)
+      totalSales += dealValue;
+
+      // Verificar utm-source para classificar o tipo de tráfego
+      const utmSource = (deal["utm-source"] || "").toLowerCase();
+      const isOrganic = utmSource.includes("prospec");
+
+      if (isOrganic) {
+        organicSales += dealValue;
+      } else {
+        paidTrafficSales += dealValue;
+      }
+    });
+
+    console.log(`💰 Vendas do vendedor por tipo de tráfego:`, {
+      totalSales: totalSales.toFixed(2),
+      paidTrafficSales: paidTrafficSales.toFixed(2),
+      organicSales: organicSales.toFixed(2),
+      paidPercentage: ((paidTrafficSales / totalSales) * 100).toFixed(2) + "%",
+      organicPercentage: ((organicSales / totalSales) * 100).toFixed(2) + "%",
+    });
 
     // 8. Calcular % de atingimento da meta
-    const achievementPercentage = (totalSales / target.target_amount) * 100;
+    // IMPORTANTE: Usar faturamento total da EMPRESA para calcular o atingimento
+    // Todos os vendedores trabalham juntos para atingir a meta da empresa
+    const achievementPercentage =
+      (totalCompanySales / target.target_amount) * 100;
+
+    console.log(`📊 Atingimento da meta:`, {
+      metaEmpresa: target.target_amount,
+      faturamentoEmpresa: totalCompanySales,
+      percentual: achievementPercentage.toFixed(2) + "%",
+    });
 
     // 9. Determinar multiplicador
     const multipliers = config.multipliers as any[];
@@ -130,43 +209,88 @@ export async function POST(request: NextRequest) {
           achievementPercentage >= m.min && achievementPercentage <= m.max
       )?.multiplier || 0;
 
-    // 10. Calcular comissões
-    const baseCommission =
-      target.target_amount * (seller.commission_percentage / 100);
+    console.log(`🎯 Multiplicador aplicado: ${multiplier}x`);
+
+    // 10. Calcular comissões com percentuais diferenciados por tipo de tráfego
+    // Comissão base para tráfego pago: meta * % comissão tráfego pago
+    const baseCommissionPaidTraffic =
+      target.target_amount * (seller.commission_paid_traffic / 100);
+    // Comissão base para tráfego orgânico: meta * % comissão orgânico
+    const baseCommissionOrganic =
+      target.target_amount * (seller.commission_organic / 100);
+
+    // Aplicar multiplicador e distribuição de tráfego
     const commissionPaidTraffic =
-      baseCommission * multiplier * (config.paid_traffic_percentage / 100);
+      baseCommissionPaidTraffic *
+      multiplier *
+      (config.paid_traffic_percentage / 100);
     const commissionOrganic =
-      baseCommission * multiplier * (config.organic_percentage / 100);
+      baseCommissionOrganic * multiplier * (config.organic_percentage / 100);
     const totalCommission = commissionPaidTraffic + commissionOrganic;
+
+    console.log(`💵 Comissão calculada:`, {
+      baseCommissionPaidTraffic: baseCommissionPaidTraffic.toFixed(2),
+      baseCommissionOrganic: baseCommissionOrganic.toFixed(2),
+      commissionPaidTraffic: commissionPaidTraffic.toFixed(2),
+      commissionOrganic: commissionOrganic.toFixed(2),
+      totalCommission: totalCommission.toFixed(2),
+    });
 
     // 11. Calcular total de ganhos
     const totalEarnings = seller.salary_fixed + totalCommission;
 
-    // 12. Contar pares vendidos
-    const pairsSold = sellerDeals.reduce((sum: number, deal: any) => {
-      return sum + parseInt(deal["quantidade-de-pares"] || "0");
+    // 12. Contar negócios e pares vendidos da EMPRESA (todos os vendedores)
+    // Filtrar apenas deals ganhos
+    const wonDeals = (allDeals || []).filter(
+      (deal: any) =>
+        deal.status === "won" || deal.status === "1" || deal.status === 1
+    );
+
+    const totalDealsCount = wonDeals.length;
+    const totalPairsSold = wonDeals.reduce((sum: number, deal: any) => {
+      const pairs = parseInt(deal["quantidade-de-pares"] || "0");
+      return sum + pairs;
     }, 0);
 
-    // 13. Preparar resultado
+    console.log(`📦 Totais da empresa:`, {
+      negócios: totalDealsCount,
+      pares: totalPairsSold,
+    });
+
+    // 13. Calcular meta individual do vendedor
+    const individualTargetAmount =
+      target.target_amount * (seller.target_percentage / 100);
+    const remainingToTarget = Math.max(0, individualTargetAmount - totalSales);
+
+    console.log(`🎯 Meta individual:`, {
+      porcentagem: seller.target_percentage + "%",
+      metaIndividual: individualTargetAmount.toFixed(2),
+      vendidoPeloVendedor: totalSales.toFixed(2),
+      faltaParaMeta: remainingToTarget.toFixed(2),
+    });
+
+    // 14. Preparar resultado
     const result = {
       seller_id: seller.id,
       seller_name: seller.seller_name,
       month,
       year,
-      target_amount: target.target_amount,
-      achieved_amount: totalSales,
+      target_amount: target.target_amount, // Meta total da empresa
+      individual_target_amount: individualTargetAmount, // Meta individual do vendedor
+      achieved_amount: totalCompanySales, // Faturamento total da empresa
       achievement_percentage: achievementPercentage,
+      remaining_to_target: remainingToTarget, // Quanto falta para o vendedor atingir sua meta individual
       paid_traffic_sales: paidTrafficSales,
       organic_sales: organicSales,
-      base_commission: baseCommission,
+      base_commission: baseCommissionPaidTraffic + baseCommissionOrganic, // Soma das comissões base
       multiplier,
       commission_paid_traffic: commissionPaidTraffic,
       commission_organic: commissionOrganic,
       total_commission: totalCommission,
       salary_fixed: seller.salary_fixed,
       total_earnings: totalEarnings,
-      deals_count: sellerDeals.length,
-      pairs_sold: pairsSold,
+      deals_count: totalDealsCount, // Total de negócios da empresa
+      pairs_sold: totalPairsSold, // Total de pares da empresa
     };
 
     return NextResponse.json(result);

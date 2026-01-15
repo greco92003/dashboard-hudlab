@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,16 +62,19 @@ export function TrafficConfigForm({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3 sm:pb-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          <CardTitle>Distribuição de Tráfego</CardTitle>
+          <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
+          <CardTitle className="text-base sm:text-lg">
+            Distribuição de Tráfego
+          </CardTitle>
         </div>
-        <CardDescription>
-          Defina a porcentagem de vendas provenientes de tráfego pago vs. orgânico
+        <CardDescription className="text-xs sm:text-sm">
+          Defina a porcentagem de vendas provenientes de tráfego pago vs.
+          orgânico
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -75,13 +84,17 @@ export function TrafficConfigForm({
 
         {success && (
           <Alert className="bg-green-50 text-green-900 border-green-200">
-            <AlertDescription>Configurações salvas com sucesso!</AlertDescription>
+            <AlertDescription>
+              Configurações salvas com sucesso!
+            </AlertDescription>
           </Alert>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="paid-traffic">Tráfego Pago (%)</Label>
+            <Label htmlFor="paid-traffic" className="text-xs sm:text-sm">
+              Tráfego Pago (%)
+            </Label>
             <Input
               id="paid-traffic"
               type="number"
@@ -94,11 +107,14 @@ export function TrafficConfigForm({
               min={0}
               max={100}
               step={1}
+              className="text-sm"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="organic">Tráfego Orgânico (%)</Label>
+            <Label htmlFor="organic" className="text-xs sm:text-sm">
+              Tráfego Orgânico (%)
+            </Label>
             <Input
               id="organic"
               type="number"
@@ -111,15 +127,20 @@ export function TrafficConfigForm({
               min={0}
               max={100}
               step={1}
+              className="text-sm"
             />
           </div>
         </div>
 
         {/* Indicador Visual */}
         <div className="space-y-2">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-xs sm:text-sm">
             <span className="text-muted-foreground">Total:</span>
-            <span className={`font-semibold ${isValid ? "text-green-600" : "text-red-600"}`}>
+            <span
+              className={`font-semibold ${
+                isValid ? "text-green-600" : "text-red-600"
+              }`}
+            >
               {total.toFixed(0)}%
             </span>
           </div>
@@ -139,12 +160,16 @@ export function TrafficConfigForm({
           </div>
         </div>
 
-        <Button onClick={handleSave} disabled={loading || !isValid} className="w-full">
+        <Button
+          onClick={handleSave}
+          disabled={loading || !isValid}
+          className="w-full text-xs sm:text-sm"
+        >
           {loading ? (
             <>Salvando...</>
           ) : (
             <>
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
               Salvar Configurações
             </>
           )}
@@ -153,4 +178,3 @@ export function TrafficConfigForm({
     </Card>
   );
 }
-

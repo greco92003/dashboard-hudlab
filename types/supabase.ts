@@ -248,6 +248,7 @@ export interface Database {
           atualizado_em: string | null;
           is_mockup_feito: boolean;
           is_alteracao: boolean;
+          is_arquivo_serigrafia: boolean;
           last_synced_at: string;
           sync_status: "synced" | "pending" | "error" | "deleted";
           sync_error_message: string | null;
@@ -263,6 +264,7 @@ export interface Database {
           atualizado_em?: string | null;
           is_mockup_feito?: boolean;
           is_alteracao?: boolean;
+          is_arquivo_serigrafia?: boolean;
           last_synced_at?: string;
           sync_status?: "synced" | "pending" | "error" | "deleted";
           sync_error_message?: string | null;
@@ -278,6 +280,7 @@ export interface Database {
           atualizado_em?: string | null;
           is_mockup_feito?: boolean;
           is_alteracao?: boolean;
+          is_arquivo_serigrafia?: boolean;
           last_synced_at?: string;
           sync_status?: "synced" | "pending" | "error" | "deleted";
           sync_error_message?: string | null;

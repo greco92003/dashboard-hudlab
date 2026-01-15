@@ -7,22 +7,13 @@ import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import {
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronDown,
-  ChevronUp,
-  Target,
-} from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
-import { GoalsList } from "@/components/goals/goals-list";
-import { ExpiredGoalsNotification } from "@/components/goals/expired-goals-notification";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
 import { BusinessDaysCalculator } from "@/components/business-days-calculator";
 
@@ -58,19 +49,6 @@ export default function SellersPage() {
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
   const [topSellers, setTopSellers] = useState<SellerStats[]>([]);
-
-  // Estado para controlar a visibilidade das metas
-  const [showGoals, setShowGoals] = useState(true); // Sempre inicia como true para evitar hidration mismatch
-  const [isClient, setIsClient] = useState(false);
-
-  // Sincroniza com localStorage após hidratação
-  useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem("sellers-goals-expanded");
-    if (saved !== null) {
-      setShowGoals(JSON.parse(saved));
-    }
-  }, []);
 
   // Use global date range hook
   const {
@@ -384,18 +362,6 @@ export default function SellersPage() {
     handleDateRangeChange(range);
   };
 
-  // Função para alternar visibilidade das metas
-  const toggleGoalsVisibility = () => {
-    const newShowGoals = !showGoals;
-    setShowGoals(newShowGoals);
-    if (isClient) {
-      localStorage.setItem(
-        "sellers-goals-expanded",
-        JSON.stringify(newShowGoals)
-      );
-    }
-  };
-
   useEffect(() => {
     const initializeData = async () => {
       // Only fetch data after hydration is complete
@@ -439,41 +405,6 @@ export default function SellersPage() {
 
       {/* Card da Calculadora de Dias Úteis */}
       <BusinessDaysCalculator />
-
-      {/* Notificação de Metas Expiradas */}
-      <ExpiredGoalsNotification />
-
-      {/* Seção de Metas - Posição de destaque */}
-      <Card className="mb-6 gap-0">
-        <CardHeader className="pb-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              <CardTitle className="text-lg sm:text-xl">
-                Metas de Vendedores
-              </CardTitle>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleGoalsVisibility}
-              className="h-8 px-2"
-            >
-              {showGoals ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-
-        {showGoals && (
-          <CardContent className="pt-4">
-            <GoalsList targetType="sellers" hideHeader={true} />
-          </CardContent>
-        )}
-      </Card>
 
       <div className="flex flex-col gap-4 mb-4 mt-2">
         {/* Period Buttons - Stack on mobile, horizontal on larger screens */}

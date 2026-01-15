@@ -8,18 +8,39 @@
  * @returns The normalized seller name
  */
 export function normalizeSellerName(name: string): string {
-  if (!name) return name;
+  if (!name) return "";
+
+  // Remover espaços extras e converter para lowercase para comparação
+  const normalized = name.trim().toLowerCase();
 
   // Normalizar "Lawrence" e "Laurence" para "Lawrence"
-  const normalized = name.trim();
-  if (
-    normalized.toLowerCase() === "lawrence" ||
-    normalized.toLowerCase() === "laurence"
-  ) {
+  if (normalized === "lawrence" || normalized === "laurence") {
     return "Lawrence";
   }
 
-  return normalized;
+  // Normalizar variações de "Willian"
+  if (
+    normalized === "willian" ||
+    normalized === "wilian" ||
+    normalized === "william"
+  ) {
+    return "Willian";
+  }
+
+  // Normalizar variações de "Schay"
+  if (normalized === "schay" || normalized === "schaiany") {
+    return "Schay";
+  }
+
+  // Normalizar variações de "Raisa"
+  if (normalized === "raisa" || normalized === "raísa") {
+    return "Raisa";
+  }
+
+  // Para outros nomes, manter primeira letra maiúscula e remover espaços extras
+  return (
+    name.trim().charAt(0).toUpperCase() + name.trim().slice(1).toLowerCase()
+  );
 }
 
 /**

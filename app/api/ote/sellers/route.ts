@@ -8,14 +8,14 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
+
     // Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     // Buscar vendedores
@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ sellers });
-
   } catch (error) {
     console.error("Erro ao buscar vendedores:", error);
     return NextResponse.json(
@@ -46,26 +45,27 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/ote/sellers
  * Cria um novo vendedor OTE
- * 
+ *
  * Body: {
  *   user_id: string,
  *   seller_name: string,
  *   salary_fixed: number,
  *   commission_percentage: number,
+ *   target_percentage: number,
  *   active: boolean
  * }
  */
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
+
     // Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     // Verificar se é admin ou owner
@@ -76,19 +76,65 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!profile || !["admin", "owner"].includes(profile.role)) {
-      return NextResponse.json(
-        { error: "Sem permissão" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
     // Parse do body
     const body = await request.json();
-    const { user_id, seller_name, salary_fixed, commission_percentage, active } = body;
+    const {
+      user_id,
+      seller_name,
+      salary_fixed,
+      commission_percentage,
+      commission_paid_traffic,
+      commission_organic,
+      target_percentage,
+      active,
+    } = body;
 
-    if (!user_id || !seller_name || salary_fixed === undefined || commission_percentage === undefined) {
+    if (
+      !user_id ||
+      !seller_name ||
+      salary_fixed === undefined ||
+      commission_paid_traffic === undefined ||
+      commission_organic === undefined
+    ) {
       return NextResponse.json(
         { error: "Campos obrigatórios faltando" },
+        { status: 400 }
+      );
+    }
+
+    // Validar target_percentage
+    const targetPercentage =
+      target_percentage !== undefined ? target_percentage : 0;
+    if (targetPercentage < 0 || targetPercentage > 100) {
+      return NextResponse.json(
+        { error: "A porcentagem da meta deve estar entre 0 e 100" },
+        { status: 400 }
+      );
+    }
+
+    // Verificar se a soma das porcentagens dos vendedores ativos não excede 100%
+    const { data: activeSellers } = await supabase
+      .from("ote_sellers")
+      .select("target_percentage")
+      .eq("active", true);
+
+    const currentTotal =
+      activeSellers?.reduce((sum, s) => sum + (s.target_percentage || 0), 0) ||
+      0;
+    const newTotal = currentTotal + targetPercentage;
+
+    if (newTotal > 100) {
+      return NextResponse.json(
+        {
+          error: `A soma das porcentagens dos vendedores ativos (${currentTotal.toFixed(
+            2
+          )}% + ${targetPercentage.toFixed(2)}% = ${newTotal.toFixed(
+            2
+          )}%) excede 100%`,
+        },
         { status: 400 }
       );
     }
@@ -100,7 +146,10 @@ export async function POST(request: NextRequest) {
         user_id,
         seller_name,
         salary_fixed,
-        commission_percentage,
+        commission_percentage: commission_percentage || commission_paid_traffic, // Manter para compatibilidade
+        commission_paid_traffic,
+        commission_organic,
+        target_percentage: targetPercentage,
         active: active !== undefined ? active : true,
         created_by: user.id,
       })
@@ -116,7 +165,6 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ seller }, { status: 201 });
-
   } catch (error) {
     console.error("Erro ao criar vendedor:", error);
     return NextResponse.json(
@@ -129,26 +177,27 @@ export async function POST(request: NextRequest) {
 /**
  * PATCH /api/ote/sellers
  * Atualiza um vendedor OTE
- * 
+ *
  * Body: {
  *   id: string,
  *   seller_name?: string,
  *   salary_fixed?: number,
  *   commission_percentage?: number,
+ *   target_percentage?: number,
  *   active?: boolean
  * }
  */
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
+
     // Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { error: "Não autenticado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
     // Verificar se é admin ou owner
@@ -159,10 +208,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (!profile || !["admin", "owner"].includes(profile.role)) {
-      return NextResponse.json(
-        { error: "Sem permissão" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
     }
 
     // Parse do body
@@ -170,10 +216,64 @@ export async function PATCH(request: NextRequest) {
     const { id, ...updates } = body;
 
     if (!id) {
+      return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
+    }
+
+    // Buscar vendedor atual
+    const { data: currentSeller } = await supabase
+      .from("ote_sellers")
+      .select("target_percentage, active")
+      .eq("id", id)
+      .single();
+
+    if (!currentSeller) {
       return NextResponse.json(
-        { error: "ID é obrigatório" },
-        { status: 400 }
+        { error: "Vendedor não encontrado" },
+        { status: 404 }
       );
+    }
+
+    // Validar target_percentage se estiver sendo atualizado
+    if (updates.target_percentage !== undefined) {
+      if (updates.target_percentage < 0 || updates.target_percentage > 100) {
+        return NextResponse.json(
+          { error: "A porcentagem da meta deve estar entre 0 e 100" },
+          { status: 400 }
+        );
+      }
+
+      // Verificar se a soma das porcentagens não excede 100%
+      // Considerar se o vendedor está sendo ativado/desativado
+      const willBeActive =
+        updates.active !== undefined ? updates.active : currentSeller.active;
+
+      if (willBeActive) {
+        const { data: activeSellers } = await supabase
+          .from("ote_sellers")
+          .select("target_percentage")
+          .eq("active", true)
+          .neq("id", id); // Excluir o vendedor atual
+
+        const othersTotal =
+          activeSellers?.reduce(
+            (sum, s) => sum + (s.target_percentage || 0),
+            0
+          ) || 0;
+        const newTotal = othersTotal + updates.target_percentage;
+
+        if (newTotal > 100) {
+          return NextResponse.json(
+            {
+              error: `A soma das porcentagens dos vendedores ativos (${othersTotal.toFixed(
+                2
+              )}% + ${updates.target_percentage.toFixed(
+                2
+              )}% = ${newTotal.toFixed(2)}%) excede 100%`,
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Atualizar vendedor
@@ -193,7 +293,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json({ seller });
-
   } catch (error) {
     console.error("Erro ao atualizar vendedor:", error);
     return NextResponse.json(
@@ -202,4 +301,3 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
-

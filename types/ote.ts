@@ -33,7 +33,10 @@ export interface OTESeller {
   user_id: string;
   seller_name: string; // Nome que aparece no campo "vendedor" dos deals
   salary_fixed: number; // Salário fixo mensal
-  commission_percentage: number; // % da meta que vira comissão (ex: 2%)
+  commission_percentage: number; // DEPRECATED: Use commission_paid_traffic e commission_organic
+  commission_paid_traffic: number; // % de comissão para vendas de tráfego pago (ex: 2%)
+  commission_organic: number; // % de comissão para vendas de tráfego orgânico (ex: 4%)
+  target_percentage: number; // % da meta da empresa que é meta deste vendedor (ex: 70%)
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -115,9 +118,11 @@ export interface OTECalculationResult {
   year: number;
 
   // Meta e atingimento
-  target_amount: number;
+  target_amount: number; // Meta total da empresa
+  individual_target_amount: number; // Meta individual do vendedor (% da meta da empresa)
   achieved_amount: number;
   achievement_percentage: number;
+  remaining_to_target: number; // Quanto falta para atingir a meta individual
 
   // Detalhamento por canal
   paid_traffic_sales: number;
@@ -157,7 +162,10 @@ export interface OTESellerFormData {
   user_id: string;
   seller_name: string;
   salary_fixed: number;
-  commission_percentage: number;
+  commission_percentage: number; // DEPRECATED: mantido para compatibilidade
+  commission_paid_traffic: number; // % de comissão para tráfego pago
+  commission_organic: number; // % de comissão para tráfego orgânico
+  target_percentage: number;
   active: boolean;
 }
 

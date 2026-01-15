@@ -13,6 +13,7 @@ interface DesignerMockupStats {
   quantidadeNegocios: number;
   mockupsFeitos: number;
   alteracoesFeitas: number;
+  arquivosSerigrafia: number;
 }
 
 interface MockupsState {
@@ -59,6 +60,7 @@ export function useDesignerMockups() {
           quantidadeNegocios: 0,
           mockupsFeitos: 0,
           alteracoesFeitas: 0,
+          arquivosSerigrafia: 0,
         };
       });
 

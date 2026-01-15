@@ -109,14 +109,16 @@ export function MultiplierConfigForm({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Configuração de Multiplicadores</CardTitle>
-        <CardDescription>
+      <CardHeader className="pb-3 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">
+          Configuração de Multiplicadores
+        </CardTitle>
+        <CardDescription className="text-xs sm:text-sm">
           Defina as faixas de percentual de cumprimento da meta e seus
           respectivos multiplicadores
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -132,15 +134,15 @@ export function MultiplierConfigForm({
           </Alert>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {multipliers
             .sort((a, b) => a.min - b.min)
             .map((m, index) => (
               <div
                 key={index}
-                className="flex items-end gap-3 p-4 border rounded-lg bg-muted/50"
+                className="flex items-end gap-2 sm:gap-3 p-3 sm:p-4 border rounded-lg bg-muted/50"
               >
-                <div className="flex-1 grid grid-cols-3 gap-3">
+                <div className="flex-1 grid grid-cols-3 gap-2 sm:gap-3">
                   <div>
                     <Label htmlFor={`min-${index}`} className="text-xs">
                       Mín (%)
@@ -158,6 +160,7 @@ export function MultiplierConfigForm({
                       }
                       min={0}
                       step={1}
+                      className="text-sm"
                     />
                   </div>
                   <div>
@@ -177,6 +180,7 @@ export function MultiplierConfigForm({
                       }
                       min={m.min}
                       step={1}
+                      className="text-sm"
                     />
                   </div>
 
@@ -197,6 +201,7 @@ export function MultiplierConfigForm({
                       }
                       min={0}
                       step={0.1}
+                      className="text-sm"
                     />
                   </div>
                 </div>
@@ -205,29 +210,33 @@ export function MultiplierConfigForm({
                   size="icon"
                   onClick={() => handleRemoveMultiplier(index)}
                   disabled={multipliers.length <= 1}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 sm:h-10 sm:w-10"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
                 </Button>
               </div>
             ))}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
             onClick={handleAddMultiplier}
-            className="flex-1"
+            className="flex-1 text-xs sm:text-sm"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
             Adicionar Faixa
           </Button>
-          <Button onClick={handleSave} disabled={loading} className="flex-1">
+          <Button
+            onClick={handleSave}
+            disabled={loading}
+            className="flex-1 text-xs sm:text-sm"
+          >
             {loading ? (
               <>Salvando...</>
             ) : (
               <>
-                <Save className="h-4 w-4 mr-2" />
+                <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
                 Salvar Configurações
               </>
             )}
@@ -235,9 +244,11 @@ export function MultiplierConfigForm({
         </div>
 
         {/* Preview Visual */}
-        <div className="mt-6 p-4 border rounded-lg bg-background">
-          <h4 className="font-semibold mb-3 text-sm">Preview das Faixas</h4>
-          <div className="space-y-2">
+        <div className="mt-4 sm:mt-6 p-3 sm:p-4 border rounded-lg bg-background">
+          <h4 className="font-semibold mb-2 sm:mb-3 text-xs sm:text-sm">
+            Preview das Faixas
+          </h4>
+          <div className="space-y-1 sm:space-y-2">
             {multipliers
               .sort((a, b) => a.min - b.min)
               .map((m, index) => {
@@ -252,14 +263,16 @@ export function MultiplierConfigForm({
                 return (
                   <div
                     key={index}
-                    className="flex items-center justify-between text-sm"
+                    className="flex items-center justify-between text-xs sm:text-sm"
                   >
                     <span className="font-medium">
                       {m.min}% - {m.max === 999 ? "+∞" : `${m.max}%`}
                     </span>
                     <span className="text-muted-foreground">→</span>
                     <span
-                      className={`font-bold text-lg ${getColor(m.multiplier)}`}
+                      className={`font-bold text-base sm:text-lg ${getColor(
+                        m.multiplier
+                      )}`}
                     >
                       {m.multiplier.toFixed(1)}x
                     </span>

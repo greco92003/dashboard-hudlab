@@ -183,7 +183,7 @@ export function MockupsSection({
           <div className="flex items-center gap-2">
             <FileText className="h-6 w-6 sm:h-5 sm:w-5" />
             <CardTitle className="text-lg sm:text-xl">
-              Mockups & Alterações por Designer
+              Mockups / Alterações / Arquivos de Serigrafia
             </CardTitle>
           </div>
           <div className="flex items-center gap-2">
@@ -238,6 +238,7 @@ export function MockupsSection({
                 quantidadeNegocios: 0,
                 mockupsFeitos: 0,
                 alteracoesFeitas: 0,
+                arquivosSerigrafia: 0,
               };
 
               return (
@@ -276,6 +277,16 @@ export function MockupsSection({
                         </span>
                         <span className="font-semibold text-orange-600 text-xs sm:text-sm">
                           {stats.alteracoesFeitas}
+                        </span>
+                      </div>
+
+                      {/* Arquivos de Serigrafia */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs sm:text-sm text-muted-foreground">
+                          Arquivos de Serigrafia:
+                        </span>
+                        <span className="font-semibold text-blue-600 text-xs sm:text-sm">
+                          {stats.arquivosSerigrafia}
                         </span>
                       </div>
                     </div>

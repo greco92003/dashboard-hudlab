@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
           quantidadeNegocios: parseInt(row.quantidade_negocios) || 0,
           mockupsFeitos: parseInt(row.mockups_feitos) || 0,
           alteracoesFeitas: parseInt(row.alteracoes_feitas) || 0,
+          arquivosSerigrafia: parseInt(row.arquivos_serigrafia) || 0,
         };
       });
     } else {
@@ -240,9 +241,9 @@ export async function POST(request: NextRequest) {
     syncLogId = syncLogData.id;
     console.log("📝 Created sync log entry:", syncLogId);
 
-    // Fetch data from Google Sheets
-    console.log("📊 Fetching data from Google Sheets...");
-    const sheetsResponse = await fetch(
+    // Fetch data from Google Sheets - Mockups Feitos
+    console.log("📊 Fetching Mockups Feitos data from Google Sheets...");
+    const mockupsResponse = await fetch(
       `${request.nextUrl.origin}/api/google-sheets/read`,
       {
         method: "POST",
@@ -259,19 +260,60 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    if (!sheetsResponse.ok) {
-      const errorText = await sheetsResponse.text();
-      throw new Error(`Google Sheets API error: ${errorText}`);
+    if (!mockupsResponse.ok) {
+      const errorText = await mockupsResponse.text();
+      throw new Error(`Google Sheets API error (Mockups): ${errorText}`);
     }
 
-    const sheetsData = await sheetsResponse.json();
-    console.log("📊 Full response from Google Sheets API:", sheetsData);
+    const mockupsData = await mockupsResponse.json();
+    console.log("📊 Mockups Feitos response:", mockupsData);
 
-    // The API returns data in sheetsData.data.data (nested structure)
-    const rawData = sheetsData.data?.data || [];
+    // Fetch data from Google Sheets - Arquivo Serigrafia Feito
+    console.log(
+      "📊 Fetching Arquivo Serigrafia Feito data from Google Sheets..."
+    );
+    const serigrafiaResponse = await fetch(
+      `${request.nextUrl.origin}/api/google-sheets/read`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          spreadsheetId:
+            process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
+            "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
+          range: "Arquivo Serigrafia Feito!A1:Z5000",
+          includeHeaders: true,
+        }),
+      }
+    );
+
+    if (!serigrafiaResponse.ok) {
+      const errorText = await serigrafiaResponse.text();
+      throw new Error(`Google Sheets API error (Serigrafia): ${errorText}`);
+    }
+
+    const serigrafiaData = await serigrafiaResponse.json();
+    console.log("📊 Arquivo Serigrafia Feito response:", serigrafiaData);
+
+    // Combine data from both sheets with source tracking
+    const mockupsRawData = (mockupsData.data?.data || []).map((row: any) => ({
+      ...row,
+      _source: "mockups",
+    }));
+    const serigrafiaRawData = (serigrafiaData.data?.data || []).map(
+      (row: any) => ({
+        ...row,
+        _source: "serigrafia",
+      })
+    );
+    const rawData = [...mockupsRawData, ...serigrafiaRawData];
 
     console.log("📊 Raw data from Google Sheets:", {
       totalRows: rawData.length,
+      mockupsRows: mockupsRawData.length,
+      serigrafiaRows: serigrafiaRawData.length,
       headers: rawData.length > 0 ? Object.keys(rawData[0]) : [],
       sampleRow: rawData[0],
     });
@@ -470,19 +512,26 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Determine if this is a mockup or alteration
+        // Determine the type based on source and etapa_funil
+        const source = row._source || "mockups";
+        const isArquivoSerigrafia = source === "serigrafia";
         const isMockupFeito =
+          !isArquivoSerigrafia &&
           etapaFunil.toLowerCase().includes("mockup") &&
           !etapaFunil.toLowerCase().includes("alteração");
-        const isAlteracao = etapaFunil.toLowerCase().includes("alteração");
+        const isAlteracao =
+          !isArquivoSerigrafia &&
+          etapaFunil.toLowerCase().includes("alteração");
 
         // Log categorization for Vítor
         if (isVitor(designer)) {
           console.log(`🏷️ Vítor categorization:`, {
             designer,
             etapaFunil,
+            source,
             isMockupFeito,
             isAlteracao,
+            isArquivoSerigrafia,
             nomeNegocio,
           });
         }
@@ -497,6 +546,7 @@ export async function POST(request: NextRequest) {
             : null,
           is_mockup_feito: isMockupFeito,
           is_alteracao: isAlteracao,
+          is_arquivo_serigrafia: isArquivoSerigrafia,
           last_synced_at: new Date().toISOString(),
           sync_status: "synced",
         };
