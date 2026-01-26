@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 // Type for Meta Ad from Facebook API
@@ -33,7 +33,7 @@ function matchesAdName(utmMedium: string | null, adName: string): boolean {
 
   // Log for debugging
   console.log(
-    `🔍 Matching: UTM="${utmMedium}" (normalized: "${normalizedUtm}") vs Ad="${adName}" (normalized: "${normalizedAd}")`
+    `🔍 Matching: UTM="${utmMedium}" (normalized: "${normalizedUtm}") vs Ad="${adName}" (normalized: "${normalizedAd}")`,
   );
 
   // Check if they match or if one contains the other
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     if (!startDate || !endDate) {
       return NextResponse.json(
         { error: "startDate and endDate are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     if (!accessToken || !businessId) {
       return NextResponse.json(
         { error: "Meta credentials not configured" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     if (!businessData.data || businessData.data.length === 0) {
       return NextResponse.json(
         { error: "No ad accounts found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     const adsData = await adsResponse.json();
 
     console.log(
-      `📊 Found ${adsData.data?.length || 0} total ads (active and inactive)`
+      `📊 Found ${adsData.data?.length || 0} total ads (active and inactive)`,
     );
 
     // Store all ads for matching (including inactive ones)
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
 
         try {
           const insightsResponse = await fetch(
-            `${insightsUrl}?${insightsParams}`
+            `${insightsUrl}?${insightsParams}`,
           );
           const insightsData = await insightsResponse.json();
 
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
             clicks: 0,
           };
         }
-      })
+      }),
     );
 
     // 2. Fetch sales data from deals_cache
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
         "utm-medium",
         contact_id,
         closing_date
-      `
+      `,
       )
       .eq("sync_status", "synced")
       .not("closing_date", "is", null)
@@ -184,12 +184,12 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching deals:", dealsError);
       return NextResponse.json(
         { error: "Failed to fetch sales data" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     const activeAdsCount = allAds.filter(
-      (ad: MetaAd) => ad.status === "ACTIVE"
+      (ad: MetaAd) => ad.status === "ACTIVE",
     ).length;
     const inactiveAdsCount = allAds.length - activeAdsCount;
 
@@ -198,20 +198,36 @@ export async function GET(request: NextRequest) {
         adsWithInsights.length
       } ads with insights, ${activeAdsCount} active ads, ${inactiveAdsCount} inactive ads, and ${
         deals?.length || 0
-      } deals`
+      } deals`,
     );
+
+    // Helper function to check if a deal is from Meta based on utm-source
+    // Only "MetaAds" (case-insensitive) should be considered as Meta
+    const isMetaDeal = (deal: any): boolean => {
+      const utmSource = deal["utm-source"];
+      if (!utmSource) return false;
+
+      const normalizedUtmSource = utmSource.toLowerCase().trim();
+      // Only match "metaads" or "meta-ads" or "meta ads"
+      return (
+        normalizedUtmSource === "metaads" ||
+        normalizedUtmSource === "meta-ads" ||
+        normalizedUtmSource === "meta ads" ||
+        normalizedUtmSource.includes("metaads")
+      );
+    };
 
     // 3. Match ads with sales
     const adsPerformance = adsWithInsights.map((ad) => {
-      // Find deals that match this ad
+      // Find deals that match this ad by utm-medium
       const matchingDeals = (deals || []).filter((deal) =>
-        matchesAdName(deal["utm-medium"], ad.name)
+        matchesAdName(deal["utm-medium"], ad.name),
       );
 
       // Divide by 100 to convert from cents to real currency value
       const revenue = matchingDeals.reduce(
         (sum, deal) => sum + (deal.value || 0) / 100,
-        0
+        0,
       );
       const pairsSold = matchingDeals.reduce((sum, deal) => {
         const pairs = deal["quantidade-de-pares"];
@@ -220,7 +236,7 @@ export async function GET(request: NextRequest) {
 
       // Count unique customers (by contact_id)
       const uniqueCustomers = new Set(
-        matchingDeals.filter((d) => d.contact_id).map((d) => d.contact_id)
+        matchingDeals.filter((d) => d.contact_id).map((d) => d.contact_id),
       ).size;
 
       const roi = ad.spend > 0 ? ((revenue - ad.spend) / ad.spend) * 100 : 0;
@@ -246,9 +262,11 @@ export async function GET(request: NextRequest) {
     // Sort by spend (descending)
     activeAdsPerformance.sort((a, b) => b.spend - a.spend);
 
-    // 4. Get non-Meta UTM sources
+    // 4. Get non-Meta UTM sources and unmatched Meta deals
     // Use ALL ads (including inactive) to properly identify Meta deals
     let dealsMatchedToInactiveAds = 0;
+    let dealsMatchedByUtmSource = 0;
+    const unmatchedMetaDeals: any[] = [];
     const nonMetaDeals = (deals || []).filter((deal) => {
       const utmSource = deal["utm-source"];
       const utmMedium = deal["utm-medium"];
@@ -256,9 +274,28 @@ export async function GET(request: NextRequest) {
       // Skip if no UTM data
       if (!utmSource || !utmMedium) return false;
 
-      // Check if this deal matches ANY Meta ad (active or inactive)
+      // First, check if utm-source indicates this is a Meta deal
+      if (isMetaDeal(deal)) {
+        // Check if this Meta deal matches any specific ad
+        const matchedAd = allAds.find((ad: MetaAd) =>
+          matchesAdName(utmMedium, ad.name),
+        );
+
+        if (!matchedAd) {
+          // This is a Meta deal but doesn't match any specific ad
+          dealsMatchedByUtmSource++;
+          unmatchedMetaDeals.push(deal);
+          console.log(
+            `⚠️ Meta deal without matching ad: utm-source="${utmSource}", utm-medium="${utmMedium}"`,
+          );
+        }
+
+        return false; // This is a Meta deal, exclude from non-Meta
+      }
+
+      // Second, check if this deal matches ANY Meta ad (active or inactive) by utm-medium
       const matchedAd = allAds.find((ad: MetaAd) =>
-        matchesAdName(utmMedium, ad.name)
+        matchesAdName(utmMedium, ad.name),
       );
 
       if (matchedAd) {
@@ -267,16 +304,21 @@ export async function GET(request: NextRequest) {
         if (isInactive) {
           dealsMatchedToInactiveAds++;
           console.log(
-            `🔄 Deal matched to INACTIVE Meta ad: utm-medium="${utmMedium}" → ad="${matchedAd.name}" (status: ${matchedAd.status})`
+            `🔄 Deal matched to INACTIVE Meta ad: utm-medium="${utmMedium}" → ad="${matchedAd.name}" (status: ${matchedAd.status})`,
           );
         }
+        return false; // This is a Meta deal, exclude from non-Meta
       }
 
-      return !matchedAd;
+      // If neither utm-source nor utm-medium indicate Meta, this is a non-Meta deal
+      return true;
     });
 
     console.log(
-      `📊 Deals matched to inactive Meta ads: ${dealsMatchedToInactiveAds}`
+      `📊 Deals matched by utm-source (MetaAds only): ${dealsMatchedByUtmSource}`,
+    );
+    console.log(
+      `📊 Deals matched to inactive Meta ads: ${dealsMatchedToInactiveAds}`,
     );
     console.log(`📊 True non-Meta deals: ${nonMetaDeals.length}`);
 
@@ -319,17 +361,35 @@ export async function GET(request: NextRequest) {
     Object.keys(nonMetaGroups).forEach((key) => {
       const [utmSource, utmMedium] = key.split("|");
       const groupDeals = nonMetaDeals.filter(
-        (d) => d["utm-source"] === utmSource && d["utm-medium"] === utmMedium
+        (d) => d["utm-source"] === utmSource && d["utm-medium"] === utmMedium,
       );
 
       nonMetaGroups[key].customersConverted = new Set(
-        groupDeals.filter((d) => d.contact_id).map((d) => d.contact_id)
+        groupDeals.filter((d) => d.contact_id).map((d) => d.contact_id),
       ).size;
     });
 
     const nonMetaPerformance = Object.values(nonMetaGroups).sort(
-      (a, b) => b.revenue - a.revenue
+      (a, b) => b.revenue - a.revenue,
     );
+
+    // Calculate unmatched Meta deals revenue and pairs
+    const unmatchedMetaRevenue = unmatchedMetaDeals.reduce(
+      (sum, deal) => sum + (deal.value || 0) / 100,
+      0,
+    );
+    const unmatchedMetaPairs = unmatchedMetaDeals.reduce((sum, deal) => {
+      const pairs = deal["quantidade-de-pares"];
+      return sum + (pairs ? parseInt(pairs) : 0);
+    }, 0);
+    const unmatchedMetaCustomers = new Set(
+      unmatchedMetaDeals.filter((d) => d.contact_id).map((d) => d.contact_id),
+    ).size;
+
+    console.log(
+      `💰 Unmatched Meta deals revenue: R$ ${unmatchedMetaRevenue.toFixed(2)}`,
+    );
+    console.log(`👟 Unmatched Meta deals pairs: ${unmatchedMetaPairs}`);
 
     return NextResponse.json({
       adsPerformance: activeAdsPerformance,
@@ -337,35 +397,42 @@ export async function GET(request: NextRequest) {
       summary: {
         totalAdsSpend: activeAdsPerformance.reduce(
           (sum, ad) => sum + ad.spend,
-          0
+          0,
         ),
-        totalRevenue: activeAdsPerformance.reduce(
-          (sum, ad) => sum + ad.revenue,
-          0
-        ),
-        totalPairsSold: activeAdsPerformance.reduce(
-          (sum, ad) => sum + ad.pairsSold,
-          0
-        ),
-        totalCustomers: activeAdsPerformance.reduce(
-          (sum, ad) => sum + ad.customersConverted,
-          0
-        ),
+        // Include unmatched Meta deals in total revenue
+        totalRevenue:
+          activeAdsPerformance.reduce((sum, ad) => sum + ad.revenue, 0) +
+          unmatchedMetaRevenue,
+        // Include unmatched Meta deals in total pairs sold
+        totalPairsSold:
+          activeAdsPerformance.reduce((sum, ad) => sum + ad.pairsSold, 0) +
+          unmatchedMetaPairs,
+        // Include unmatched Meta deals in total customers
+        totalCustomers:
+          activeAdsPerformance.reduce(
+            (sum, ad) => sum + ad.customersConverted,
+            0,
+          ) + unmatchedMetaCustomers,
         nonMetaRevenue: nonMetaPerformance.reduce(
           (sum, group) => sum + group.revenue,
-          0
+          0,
         ),
         nonMetaPairsSold: nonMetaPerformance.reduce(
           (sum, group) => sum + group.pairsSold,
-          0
+          0,
         ),
+        // Add info about unmatched Meta deals
+        unmatchedMetaRevenue,
+        unmatchedMetaPairs,
+        unmatchedMetaCustomers,
+        unmatchedMetaDealsCount: unmatchedMetaDeals.length,
       },
     });
   } catch (error) {
     console.error("Error in ads performance API:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

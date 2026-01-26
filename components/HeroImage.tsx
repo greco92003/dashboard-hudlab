@@ -11,7 +11,13 @@ const HeroImage = memo(function HeroImage({ className }: HeroImageProps) {
   const [imageError, setImageError] = useState(false);
 
   // Array com as imagens do carrossel
-  const images = ["/images/1.webp", "/images/2.webp", "/images/3.webp"];
+  const images = [
+    "/images/1.webp",
+    "/images/2.webp",
+    "/images/3.webp",
+    "/images/4.webp",
+    "/images/5.webp",
+  ];
 
   // Efeito para trocar as imagens a cada 3 segundos
   useEffect(() => {

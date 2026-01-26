@@ -1,27 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Helper function to format date as local YYYY-MM-DD without timezone conversion
+const formatDateToLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
+
     const accessToken = process.env.META_ACCESS_TOKEN;
     const businessId = process.env.META_BUSINESS_ID;
 
     if (!accessToken) {
       return NextResponse.json(
         { error: "META_ACCESS_TOKEN não configurado" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     if (!businessId) {
       return NextResponse.json(
         { error: "META_BUSINESS_ID não configurado" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    console.log(
-      "🔍 Buscando anúncios ativos com insights (versão otimizada)..."
-    );
+    // Calculate date range - use provided dates or default to last 30 days
+    let startDate: string;
+    let endDate: string;
+
+    if (startDateParam && endDateParam) {
+      startDate = startDateParam;
+      endDate = endDateParam;
+      console.log(
+        `🔍 Buscando anúncios ativos com insights para período: ${startDate} a ${endDate}...`,
+      );
+    } else {
+      // Default to last 30 days using local timezone
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      startDate = formatDateToLocal(thirtyDaysAgo);
+      endDate = formatDateToLocal(today);
+      console.log(
+        `🔍 Buscando anúncios ativos com insights (últimos 30 dias): ${startDate} a ${endDate}...`,
+      );
+    }
 
     // Primeiro, buscar as contas de anúncios
     const businessUrl = `https://graph.facebook.com/v23.0/${businessId}/owned_ad_accounts`;
@@ -39,7 +69,7 @@ export async function GET(request: NextRequest) {
         {
           error: `Erro ao buscar contas do business: ${businessResponse.status}`,
         },
-        { status: businessResponse.status }
+        { status: businessResponse.status },
       );
     }
 
@@ -48,7 +78,7 @@ export async function GET(request: NextRequest) {
     if (!businessData.data || businessData.data.length === 0) {
       return NextResponse.json(
         { error: "Nenhuma conta de anúncios encontrada" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -79,7 +109,7 @@ export async function GET(request: NextRequest) {
       console.error("Erro ao buscar campanhas:", errorText);
       return NextResponse.json(
         { error: `Erro ao buscar campanhas: ${campaignsResponse.status}` },
-        { status: campaignsResponse.status }
+        { status: campaignsResponse.status },
       );
     }
 
@@ -92,7 +122,7 @@ export async function GET(request: NextRequest) {
 
     // OTIMIZAÇÃO: Buscar anúncios de todas as campanhas em paralelo
     console.log(
-      `🚀 Buscando anúncios de ${campaignsData.data.length} campanhas em paralelo...`
+      `🚀 Buscando anúncios de ${campaignsData.data.length} campanhas em paralelo...`,
     );
 
     // Função para buscar anúncios de uma campanha
@@ -126,7 +156,7 @@ export async function GET(request: NextRequest) {
 
           if (adsData.data && adsData.data.length > 0) {
             console.log(
-              `📱 Encontrados ${adsData.data.length} anúncios ativos na campanha ${campaign.name}`
+              `📱 Encontrados ${adsData.data.length} anúncios ativos na campanha ${campaign.name}`,
             );
 
             // OTIMIZAÇÃO: Buscar insights em paralelo para todos os anúncios desta campanha
@@ -136,23 +166,21 @@ export async function GET(request: NextRequest) {
                   let spend = "0";
                   let costPerResult = "0";
 
-                  // Buscar insights do anúncio (últimos 30 dias)
+                  // Buscar insights do anúncio para o período selecionado
                   const insightsUrl = `https://graph.facebook.com/v23.0/${ad.id}/insights`;
                   const insightsParams = new URLSearchParams({
                     access_token: accessToken,
                     fields:
                       "spend,cost_per_result,cost_per_action_type,actions",
                     time_range: JSON.stringify({
-                      since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-                        .toISOString()
-                        .split("T")[0],
-                      until: new Date().toISOString().split("T")[0],
+                      since: startDate,
+                      until: endDate,
                     }),
                     level: "ad",
                   });
 
                   const insightsResponse = await fetch(
-                    `${insightsUrl}?${insightsParams}`
+                    `${insightsUrl}?${insightsParams}`,
                   );
 
                   if (insightsResponse.ok) {
@@ -192,7 +220,7 @@ export async function GET(request: NextRequest) {
                           {
                             raw: insights.cost_per_result,
                             extracted: costPerResult,
-                          }
+                          },
                         );
                       } else if (
                         insights.cost_per_action_type &&
@@ -232,7 +260,7 @@ export async function GET(request: NextRequest) {
                           foundCostPerAction =
                             insights.cost_per_action_type.find(
                               (action: any) =>
-                                action.action_type === targetActionType
+                                action.action_type === targetActionType,
                             );
                         }
 
@@ -252,7 +280,7 @@ export async function GET(request: NextRequest) {
                             foundCostPerAction =
                               insights.cost_per_action_type.find(
                                 (action: any) =>
-                                  action.action_type === actionType
+                                  action.action_type === actionType,
                               );
                             if (foundCostPerAction) break;
                           }
@@ -274,7 +302,7 @@ export async function GET(request: NextRequest) {
                               campaign_objective: campaign.objective,
                               action_type: foundCostPerAction.action_type,
                               cost_per_result: costPerResult,
-                            }
+                            },
                           );
                         } else {
                           console.log(
@@ -283,9 +311,9 @@ export async function GET(request: NextRequest) {
                               campaign_objective: campaign.objective,
                               available_action_types:
                                 insights.cost_per_action_type?.map(
-                                  (a: any) => a.action_type
+                                  (a: any) => a.action_type,
                                 ) || [],
-                            }
+                            },
                           );
                         }
                       }
@@ -324,7 +352,7 @@ export async function GET(request: NextRequest) {
                     cost_per_result: "0",
                   };
                 }
-              })
+              }),
             );
 
             return adsWithInsights;
@@ -332,7 +360,7 @@ export async function GET(request: NextRequest) {
         } else {
           console.error(
             `Erro ao buscar anúncios da campanha ${campaign.id}:`,
-            adsResponse.status
+            adsResponse.status,
           );
         }
       } catch (error) {
@@ -344,7 +372,7 @@ export async function GET(request: NextRequest) {
 
     // OTIMIZAÇÃO: Executar busca de anúncios para todas as campanhas em paralelo
     const campaignAdsResults = await Promise.all(
-      campaignsData.data.map((campaign: any) => fetchCampaignAds(campaign))
+      campaignsData.data.map((campaign: any) => fetchCampaignAds(campaign)),
     );
 
     // Flatten dos resultados
@@ -354,14 +382,14 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(
-      `✅ Total de anúncios ativos com insights encontrados: ${allAds.length} (versão otimizada)`
+      `✅ Total de anúncios ativos com insights encontrados: ${allAds.length} (versão otimizada)`,
     );
     return NextResponse.json(allAds);
   } catch (error) {
     console.error("Erro ao buscar anúncios da Meta:", error);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
