@@ -3,7 +3,9 @@
 import React, { createContext, useContext, useCallback } from "react";
 import { User } from "@supabase/supabase-js";
 import { usePersistentAuth } from "@/hooks/usePersistentAuth";
+// Using lib/supabase for backward compatibility - it now uses the official SSR pattern
 import { supabase } from "@/lib/supabase";
+import { storage } from "@/lib/storage";
 
 interface UserProfile {
   id: string;
@@ -98,7 +100,7 @@ export function OptimizedAuthProvider({
       // Clear all localStorage/sessionStorage data
       if (typeof window !== "undefined") {
         // Clear all hudlab-related data
-        const keys = Object.keys(localStorage);
+        const keys = storage.keys();
         keys.forEach((key) => {
           if (
             key.includes("hudlab") ||
@@ -107,7 +109,7 @@ export function OptimizedAuthProvider({
             key.includes("persistent_auth_data") ||
             key.includes("user_profile_")
           ) {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
           }
         });
 
@@ -136,11 +138,11 @@ export function OptimizedAuthProvider({
   const refreshApprovalStatus = useCallback(async () => {
     if (user?.id) {
       try {
-        const { data: profileData } = await supabase
+        const { data: profileData } = (await supabase
           .from("user_profiles")
           .select("approved")
           .eq("id", user.id)
-          .single();
+          .single()) as { data: { approved: boolean } | null };
 
         if (profileData && profile) {
           updateProfile({ approved: profileData.approved ?? false });
@@ -182,7 +184,7 @@ export function useOptimizedAuth() {
   const context = useContext(OptimizedAuthContext);
   if (context === undefined) {
     throw new Error(
-      "useOptimizedAuth must be used within an OptimizedAuthProvider"
+      "useOptimizedAuth must be used within an OptimizedAuthProvider",
     );
   }
   return context;

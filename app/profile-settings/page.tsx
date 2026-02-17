@@ -32,6 +32,7 @@ import {
 import { Loader2, Upload, Trash2, CheckCircle } from "lucide-react";
 import { UserManagement } from "@/components/UserManagement";
 import { PasswordRequirements } from "@/components/ui/password-requirements";
+import { storage } from "@/lib/storage";
 
 export default function ProfileSettingsPage() {
   const { user, signOut } = useAuth();
@@ -65,7 +66,7 @@ export default function ProfileSettingsPage() {
 
   // Load active tab from localStorage on component mount
   useEffect(() => {
-    const savedTab = localStorage.getItem("profile-settings-active-tab");
+    const savedTab = storage.getItem("profile-settings-active-tab");
     if (savedTab) {
       setActiveTab(savedTab);
     }
@@ -73,7 +74,7 @@ export default function ProfileSettingsPage() {
 
   // Save active tab to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("profile-settings-active-tab", activeTab);
+    storage.setItem("profile-settings-active-tab", activeTab);
   }, [activeTab]);
 
   // Update form fields when profile loads

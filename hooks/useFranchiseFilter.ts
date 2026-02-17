@@ -5,6 +5,7 @@ import {
   isZenithProduct,
   type Franchise,
 } from "@/types/franchise";
+import { storage } from "@/lib/storage";
 
 const FRANCHISE_STORAGE_KEY = "zenith-franchise-filter";
 
@@ -22,7 +23,7 @@ export interface UseFranchiseFilterReturn {
 }
 
 export function useFranchiseFilter(
-  selectedBrand?: string | null
+  selectedBrand?: string | null,
 ): UseFranchiseFilterReturn {
   const { assignedBrand } = useBrandFilter();
   const [selectedFranchise, setSelectedFranchiseState] = useState<
@@ -40,23 +41,27 @@ export function useFranchiseFilter(
   // Only show franchise filter for Zenith brand
   const shouldShowFranchiseFilter = isZenithBrand;
 
-  // Load franchise from localStorage on mount, or set default to first franchise
+  // Load franchise from sessionStorage on mount, or set default to first franchise
   useEffect(() => {
     if (typeof window !== "undefined" && shouldShowFranchiseFilter) {
       try {
-        const stored = localStorage.getItem(FRANCHISE_STORAGE_KEY);
-        if (stored) {
-          const parsedData = JSON.parse(stored);
+        const parsedData = storage.getJSON<{
+          franchise: string;
+          brand: string;
+          timestamp: number;
+        }>(FRANCHISE_STORAGE_KEY);
+
+        if (parsedData) {
           // Validate that the stored franchise is still valid
           const isValidFranchise = ZENITH_FRANCHISES.some(
-            (f) => f.name === parsedData.franchise
+            (f) => f.name === parsedData.franchise,
           );
           if (isValidFranchise && parsedData.brand === effectiveBrand) {
             setSelectedFranchiseState(parsedData.franchise);
             return; // Exit early if we found a valid stored franchise
           } else {
             // Clear invalid data
-            localStorage.removeItem(FRANCHISE_STORAGE_KEY);
+            storage.removeItem(FRANCHISE_STORAGE_KEY);
           }
         }
 
@@ -65,23 +70,20 @@ export function useFranchiseFilter(
           const defaultFranchise = ZENITH_FRANCHISES[0].name;
           setSelectedFranchiseState(defaultFranchise);
 
-          // Save default to localStorage
+          // Save default to sessionStorage
           const dataToStore = {
             franchise: defaultFranchise,
             brand: effectiveBrand,
             timestamp: Date.now(),
           };
-          localStorage.setItem(
-            FRANCHISE_STORAGE_KEY,
-            JSON.stringify(dataToStore)
-          );
+          storage.setJSON(FRANCHISE_STORAGE_KEY, dataToStore);
         }
       } catch (error) {
         console.error(
-          "Error loading franchise filter from localStorage:",
-          error
+          "Error loading franchise filter from sessionStorage:",
+          error,
         );
-        localStorage.removeItem(FRANCHISE_STORAGE_KEY);
+        storage.removeItem(FRANCHISE_STORAGE_KEY);
 
         // Still set default even if there was an error
         if (!selectedFranchise && ZENITH_FRANCHISES.length > 0) {
@@ -106,13 +108,13 @@ export function useFranchiseFilter(
 
     window.addEventListener(
       FRANCHISE_CHANGE_EVENT,
-      handleFranchiseChange as EventListener
+      handleFranchiseChange as EventListener,
     );
 
     return () => {
       window.removeEventListener(
         FRANCHISE_CHANGE_EVENT,
-        handleFranchiseChange as EventListener
+        handleFranchiseChange as EventListener,
       );
     };
   }, [effectiveBrand]);
@@ -122,12 +124,12 @@ export function useFranchiseFilter(
     if (!shouldShowFranchiseFilter && selectedFranchise) {
       setSelectedFranchiseState(null);
       if (typeof window !== "undefined") {
-        localStorage.removeItem(FRANCHISE_STORAGE_KEY);
+        storage.removeItem(FRANCHISE_STORAGE_KEY);
       }
     }
   }, [shouldShowFranchiseFilter, selectedFranchise]);
 
-  // Set franchise and save to localStorage
+  // Set franchise and save to sessionStorage
   const setSelectedFranchise = useCallback(
     (franchise: string | null) => {
       setSelectedFranchiseState(franchise);
@@ -140,18 +142,15 @@ export function useFranchiseFilter(
               brand: effectiveBrand,
               timestamp: Date.now(),
             };
-            localStorage.setItem(
-              FRANCHISE_STORAGE_KEY,
-              JSON.stringify(dataToStore)
-            );
+            storage.setJSON(FRANCHISE_STORAGE_KEY, dataToStore);
           } catch (error) {
             console.error(
-              "Error saving franchise filter to localStorage:",
-              error
+              "Error saving franchise filter to sessionStorage:",
+              error,
             );
           }
         } else {
-          localStorage.removeItem(FRANCHISE_STORAGE_KEY);
+          storage.removeItem(FRANCHISE_STORAGE_KEY);
         }
 
         // Dispatch custom event to notify other components
@@ -161,7 +160,7 @@ export function useFranchiseFilter(
         window.dispatchEvent(event);
       }
     },
-    [shouldShowFranchiseFilter, effectiveBrand]
+    [shouldShowFranchiseFilter, effectiveBrand],
   );
 
   // Clear franchise filter
@@ -175,7 +174,7 @@ export function useFranchiseFilter(
       const franchise = ZENITH_FRANCHISES.find((f) => f.name === franchiseName);
       return franchise?.displayName || franchiseName;
     },
-    []
+    [],
   );
 
   return {

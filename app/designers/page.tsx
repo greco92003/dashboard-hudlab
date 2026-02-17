@@ -26,6 +26,7 @@ import { ExpiredGoalsNotification } from "@/components/goals/expired-goals-notif
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 import { MockupsSection } from "@/components/designers/mockups-section";
 import { getAllDesigners } from "@/lib/constants/designers";
+import { storage } from "@/lib/storage";
 
 interface Deal {
   deal_id: string;
@@ -67,7 +68,7 @@ export default function DesignersPage() {
   // Sincroniza com localStorage após hidratação
   useEffect(() => {
     setIsClient(true);
-    const saved = localStorage.getItem("designers-goals-expanded");
+    const saved = storage.getItem("designers-goals-expanded");
     if (saved !== null) {
       setShowGoals(JSON.parse(saved));
     }
@@ -396,7 +397,7 @@ export default function DesignersPage() {
     const newShowGoals = !showGoals;
     setShowGoals(newShowGoals);
     if (isClient) {
-      localStorage.setItem(
+      storage.setItem(
         "designers-goals-expanded",
         JSON.stringify(newShowGoals)
       );

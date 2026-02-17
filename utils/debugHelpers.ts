@@ -1,5 +1,7 @@
 "use client";
 
+import { storage } from "@/lib/storage";
+
 /**
  * Debug utilities to help diagnose and fix loading issues
  */
@@ -14,21 +16,22 @@ export const debugHelpers = {
     try {
       // Clear localStorage items
       const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (
-          key.includes('supabase') || 
-          key.includes('auth') || 
-          key.includes('profile') ||
-          key.includes('avatar') ||
-          key.includes('hudlab')
-        )) {
+      for (let i = 0; i < storage.keys().length; i++) {
+        const key = storage.keys()[i];
+        if (
+          key &&
+          (key.includes("supabase") ||
+            key.includes("auth") ||
+            key.includes("profile") ||
+            key.includes("avatar") ||
+            key.includes("hudlab"))
+        ) {
           keysToRemove.push(key);
         }
       }
-      
-      keysToRemove.forEach(key => {
-        localStorage.removeItem(key);
+
+      keysToRemove.forEach((key) => {
+        storage.removeItem(key);
         console.log(`Removed localStorage key: ${key}`);
       });
 
@@ -36,18 +39,19 @@ export const debugHelpers = {
       const sessionKeysToRemove = [];
       for (let i = 0; i < sessionStorage.length; i++) {
         const key = sessionStorage.key(i);
-        if (key && (
-          key.includes('supabase') || 
-          key.includes('auth') || 
-          key.includes('profile') ||
-          key.includes('avatar') ||
-          key.includes('hudlab')
-        )) {
+        if (
+          key &&
+          (key.includes("supabase") ||
+            key.includes("auth") ||
+            key.includes("profile") ||
+            key.includes("avatar") ||
+            key.includes("hudlab"))
+        ) {
           sessionKeysToRemove.push(key);
         }
       }
-      
-      sessionKeysToRemove.forEach(key => {
+
+      sessionKeysToRemove.forEach((key) => {
         sessionStorage.removeItem(key);
         console.log(`Removed sessionStorage key: ${key}`);
       });
@@ -65,13 +69,16 @@ export const debugHelpers = {
     if (typeof window === "undefined") return;
 
     console.group("Storage State");
-    
+
     console.log("localStorage:");
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < storage.keys().length; i++) {
+      const key = storage.keys()[i];
       if (key) {
-        const value = localStorage.getItem(key);
-        console.log(`  ${key}:`, value?.substring(0, 100) + (value && value.length > 100 ? "..." : ""));
+        const value = storage.getItem(key);
+        console.log(
+          `  ${key}:`,
+          value?.substring(0, 100) + (value && value.length > 100 ? "..." : ""),
+        );
       }
     }
 
@@ -80,7 +87,10 @@ export const debugHelpers = {
       const key = sessionStorage.key(i);
       if (key) {
         const value = sessionStorage.getItem(key);
-        console.log(`  ${key}:`, value?.substring(0, 100) + (value && value.length > 100 ? "..." : ""));
+        console.log(
+          `  ${key}:`,
+          value?.substring(0, 100) + (value && value.length > 100 ? "..." : ""),
+        );
       }
     }
 
@@ -112,8 +122,8 @@ export const debugHelpers = {
 
     // Check localStorage availability
     try {
-      localStorage.setItem("test", "test");
-      localStorage.removeItem("test");
+      storage.setItem("test", "test");
+      storage.removeItem("test");
       console.log("✅ localStorage is working");
     } catch (error) {
       console.log("❌ localStorage is not working:", error);
@@ -131,15 +141,15 @@ export const debugHelpers = {
     // Check Supabase environment variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    
+
     console.log("Supabase URL:", supabaseUrl ? "✅ Present" : "❌ Missing");
     console.log("Supabase Key:", supabaseKey ? "✅ Present" : "❌ Missing");
 
     // Check for stuck loading states
     const authTokens = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.includes('supabase')) {
+    for (let i = 0; i < storage.keys().length; i++) {
+      const key = storage.keys()[i];
+      if (key && key.includes("supabase")) {
         authTokens.push(key);
       }
     }
@@ -151,7 +161,7 @@ export const debugHelpers = {
     }
 
     console.groupEnd();
-  }
+  },
 };
 
 // Make available globally for debugging

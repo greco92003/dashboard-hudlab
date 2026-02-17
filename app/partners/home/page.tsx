@@ -44,6 +44,7 @@ import {
 import { toast } from "sonner";
 import { CouponCreationForm } from "@/components/coupon-creation-form";
 import { QRCodeModal } from "@/components/QRCodeModal";
+import { storage } from "@/lib/storage";
 
 interface AffiliateLink {
   id: string;
@@ -223,9 +224,9 @@ export default function PartnersHomePage() {
 
       try {
         if (brand) {
-          localStorage.setItem("hudlab_partners_brand_filter", brand);
+          storage.setItem("hudlab_partners_brand_filter", brand);
         } else {
-          localStorage.removeItem("hudlab_partners_brand_filter");
+          storage.removeItem("hudlab_partners_brand_filter");
         }
       } catch (error) {
         console.warn("Error saving brand selection to localStorage:", error);
@@ -268,7 +269,7 @@ export default function PartnersHomePage() {
     }
 
     try {
-      const saved = localStorage.getItem("hudlab_partners_brand_filter");
+      const saved = storage.getItem("hudlab_partners_brand_filter");
       if (saved) {
         setSelectedBrandState(saved);
       }

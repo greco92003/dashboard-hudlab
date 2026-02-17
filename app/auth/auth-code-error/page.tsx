@@ -13,6 +13,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, RefreshCw, Home, Bug } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { storage } from "@/lib/storage";
 
 export default function AuthCodeError() {
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -38,7 +39,7 @@ export default function AuthCodeError() {
   const handleRetry = () => {
     // Clear any cached auth data
     if (typeof window !== "undefined") {
-      localStorage.clear();
+      storage.clear();
       sessionStorage.clear();
     }
     window.location.href = "/login";

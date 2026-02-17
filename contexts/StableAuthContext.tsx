@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import type { User } from '@supabase/supabase-js';
+import { storage } from "@/lib/storage";
 
 interface UserProfile {
   id: string;
@@ -44,7 +45,7 @@ export function StableAuthProvider({ children }: { children: React.ReactNode }) 
   // Cache para perfil do usuário
   const getCachedProfile = useCallback((userId: string): UserProfile | null => {
     try {
-      const cached = localStorage.getItem(`user_profile_${userId}`);
+      const cached = storage.getItem(`user_profile_${userId}`);
       if (cached) {
         const { profile, timestamp } = JSON.parse(cached);
         // Cache válido por 10 minutos
@@ -60,7 +61,7 @@ export function StableAuthProvider({ children }: { children: React.ReactNode }) 
 
   const setCachedProfile = useCallback((userId: string, profile: UserProfile) => {
     try {
-      localStorage.setItem(`user_profile_${userId}`, JSON.stringify({
+      storage.setItem(`user_profile_${userId}`, JSON.stringify({
         profile,
         timestamp: Date.now()
       }));
@@ -124,10 +125,10 @@ export function StableAuthProvider({ children }: { children: React.ReactNode }) 
         });
       } else {
         // Limpar cache ao fazer logout
-        const keys = Object.keys(localStorage);
+        const keys = storage.keys();
         keys.forEach(key => {
           if (key.startsWith('user_profile_') || key.startsWith('stable_cache_')) {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
           }
         });
 

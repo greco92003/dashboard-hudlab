@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { storage } from "@/lib/storage";
 
 export default function GlobalError({
   error,
@@ -17,7 +18,7 @@ export default function GlobalError({
     if (typeof window !== "undefined") {
       try {
         // Clear localStorage
-        localStorage.clear();
+        storage.clear();
         // Clear sessionStorage
         sessionStorage.clear();
         // Clear cookies (optional, but helps with auth issues)
@@ -49,7 +50,7 @@ export default function GlobalError({
                   // Clear cache before reset
                   if (typeof window !== "undefined") {
                     try {
-                      localStorage.clear();
+                      storage.clear();
                       sessionStorage.clear();
                     } catch (err) {
                       console.warn("Failed to clear cache on reset:", err);

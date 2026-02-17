@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
+import { storage } from "@/lib/storage";
 
 interface OrderProduct {
   name: string;
@@ -140,9 +141,9 @@ export default function PartnersOrdersPage() {
 
       try {
         if (brand) {
-          localStorage.setItem("hudlab_partners_brand_filter", brand);
+          storage.setItem("hudlab_partners_brand_filter", brand);
         } else {
-          localStorage.removeItem("hudlab_partners_brand_filter");
+          storage.removeItem("hudlab_partners_brand_filter");
         }
       } catch (error) {
         console.warn("Error saving brand selection to localStorage:", error);
@@ -192,7 +193,7 @@ export default function PartnersOrdersPage() {
     }
 
     try {
-      const saved = localStorage.getItem("hudlab_partners_brand_filter");
+      const saved = storage.getItem("hudlab_partners_brand_filter");
       if (saved) {
         setSelectedBrandState(saved);
       }

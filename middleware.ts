@@ -1,5 +1,12 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/utils/supabase/middleware";
+
+// Versão do build - será diferente a cada deploy
+const BUILD_VERSION =
+  process.env.NEXT_PUBLIC_BUILD_ID ||
+  process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  Date.now().toString();
 
 export async function middleware(request: NextRequest) {
   // Skip middleware for static assets and API routes
@@ -39,11 +46,16 @@ export async function middleware(request: NextRequest) {
     skipPaths.some((path) => request.nextUrl.pathname.startsWith(path)) ||
     skipExtensions.some((ext) => request.nextUrl.pathname.endsWith(ext))
   ) {
-    const { NextResponse } = await import("next/server");
     return NextResponse.next();
   }
 
-  return await updateSession(request);
+  // Adiciona header com a versão do build em todas as respostas
+  const response = await updateSession(request);
+
+  // Adiciona header customizado com a versão do servidor
+  response.headers.set("X-App-Version", BUILD_VERSION);
+
+  return response;
 }
 
 export const config = {

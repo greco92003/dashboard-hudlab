@@ -8,6 +8,7 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
+import { storage } from "@/lib/storage";
 
 // Create a global sync manager that works outside React
 class SyncManager {
@@ -37,7 +38,7 @@ class SyncManager {
     if (typeof window === "undefined") return;
 
     try {
-      const stored = localStorage.getItem(this.storageKey);
+      const stored = storage.getItem(this.storageKey);
       this._isSyncing = stored === "true";
     } catch (error) {
       console.warn("Could not load sync state from storage:", error);
@@ -49,9 +50,9 @@ class SyncManager {
 
     try {
       if (this._isSyncing) {
-        localStorage.setItem(this.storageKey, "true");
+        storage.setItem(this.storageKey, "true");
       } else {
-        localStorage.removeItem(this.storageKey);
+        storage.removeItem(this.storageKey);
       }
     } catch (error) {
       console.warn("Could not save sync state to storage:", error);
@@ -96,7 +97,7 @@ class SyncManager {
     this.notifyListeners();
     console.log(
       "🔄 SyncManager: Force updated from storage, isSyncing:",
-      this._isSyncing
+      this._isSyncing,
     );
   }
 
@@ -127,7 +128,7 @@ class DataRefreshManager {
   registerRefreshCallback(key: string, callback: () => void) {
     this.refreshCallbacks.set(key, callback);
     console.log(
-      `📝 DataRefreshManager: Registered refresh callback for ${key}`
+      `📝 DataRefreshManager: Registered refresh callback for ${key}`,
     );
   }
 
@@ -135,7 +136,7 @@ class DataRefreshManager {
   unregisterRefreshCallback(key: string) {
     this.refreshCallbacks.delete(key);
     console.log(
-      `🗑️ DataRefreshManager: Unregistered refresh callback for ${key}`
+      `🗑️ DataRefreshManager: Unregistered refresh callback for ${key}`,
     );
   }
 
@@ -166,7 +167,7 @@ class DataRefreshManager {
   // Trigger refresh for all registered pages
   refreshAllPages() {
     console.log(
-      `🔄 DataRefreshManager: Refreshing all ${this.refreshCallbacks.size} registered pages`
+      `🔄 DataRefreshManager: Refreshing all ${this.refreshCallbacks.size} registered pages`,
     );
     this.refreshCallbacks.forEach((callback, key) => {
       console.log(`🔄 DataRefreshManager: Refreshing ${key}`);
@@ -220,7 +221,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     (pageKey: string, refreshCallback: () => void) => {
       dataRefreshManager.registerRefreshCallback(pageKey, refreshCallback);
     },
-    []
+    [],
   );
 
   const unregisterPageRefresh = useCallback((pageKey: string) => {

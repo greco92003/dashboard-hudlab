@@ -1,32 +1,25 @@
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@/utils/supabase/client";
 import type { Database } from "@/types/supabase";
+import { storage } from "@/lib/storage";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+/**
+ * DEPRECATED: Use createClient() from @/utils/supabase/client instead
+ *
+ * This file is kept for backward compatibility but now uses the official
+ * Supabase SSR pattern internally. All new code should import from
+ * @/utils/supabase/client directly.
+ *
+ * Migration guide:
+ * - Replace: import { supabase } from "@/lib/supabase"
+ * - With: import { createClient } from "@/utils/supabase/client"
+ * - Then use: const supabase = createClient()
+ */
 
-// Create optimized Supabase client with persistent session configuration
-export const supabase = createBrowserClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      // Enable automatic token refresh
-      autoRefreshToken: true,
-      // Persist session in localStorage (default)
-      persistSession: true,
-      // Detect session in URL (for email confirmations, etc.)
-      detectSessionInUrl: true,
-      // Use default storage key to ensure compatibility with SSR
-      // storageKey: "hudlab-auth-token", // Removed custom storage key
-    },
-    // Global configuration
-    global: {
-      headers: {
-        "X-Client-Info": "hudlab-dashboard",
-      },
-    },
-  }
-);
+// Create a function that returns the official Supabase client
+// This maintains backward compatibility while using the correct SSR pattern
+export const supabase: SupabaseClient<Database> =
+  createClient() as SupabaseClient<Database>;
 
 // Types for our database tables
 export interface PairValue {
@@ -107,7 +100,7 @@ export const sessionUtils = {
       // Clear all storage data
       if (typeof window !== "undefined") {
         // Clear localStorage
-        const keys = Object.keys(localStorage);
+        const keys = storage.keys();
         keys.forEach((key) => {
           if (
             key.includes("hudlab") ||
@@ -118,7 +111,7 @@ export const sessionUtils = {
             key.includes("long_term_user_") ||
             key.startsWith("sb-")
           ) {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
           }
         });
 
@@ -155,7 +148,7 @@ export const sessionUtils = {
       // Even if there's an error, try to clear storage
       if (typeof window !== "undefined") {
         try {
-          localStorage.clear();
+          storage.clear();
           sessionStorage.clear();
         } catch (storageError) {
           console.error("Error clearing storage:", storageError);

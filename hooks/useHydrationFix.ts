@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { storage } from "@/lib/storage";
 
 /**
  * Hook to detect and fix hydration issues
@@ -77,9 +78,9 @@ export function useHydrationFix() {
 
       problematicKeys.forEach(key => {
         try {
-          const value = localStorage.getItem(key);
+          const value = storage.getItem(key);
           if (value && (value.includes('undefined') || value === 'null' || value === '')) {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
             console.log(`✅ Removed corrupted key: ${key}`);
           }
         } catch (error) {
@@ -117,7 +118,7 @@ export function useHydrationFix() {
     if (confirmed) {
       try {
         // Clear all storage
-        localStorage.clear();
+        storage.clear();
         sessionStorage.clear();
         
         // Clear cookies (optional)
@@ -159,7 +160,7 @@ export function useSafeLocalStorage<T>(
 
   useEffect(() => {
     try {
-      const item = localStorage.getItem(key);
+      const item = storage.getItem(key);
       if (item) {
         const parsed = JSON.parse(item);
         setStoredValue(parsed);
@@ -168,7 +169,7 @@ export function useSafeLocalStorage<T>(
       console.warn(`Failed to load ${key} from localStorage:`, error);
       // Remove corrupted data
       try {
-        localStorage.removeItem(key);
+        storage.removeItem(key);
       } catch (removeError) {
         console.warn(`Failed to remove corrupted ${key}:`, removeError);
       }
@@ -180,7 +181,7 @@ export function useSafeLocalStorage<T>(
   const setValue = (value: T) => {
     try {
       setStoredValue(value);
-      localStorage.setItem(key, JSON.stringify(value));
+      storage.setItem(key, JSON.stringify(value));
     } catch (error) {
       console.warn(`Failed to save ${key} to localStorage:`, error);
     }
@@ -242,8 +243,8 @@ export function useIncognitoDetection() {
       try {
         // Test localStorage availability
         const testKey = '__incognito_test__';
-        localStorage.setItem(testKey, 'test');
-        localStorage.removeItem(testKey);
+        storage.setItem(testKey, 'test');
+        storage.removeItem(testKey);
         setIsIncognito(false);
       } catch {
         setIsIncognito(true);

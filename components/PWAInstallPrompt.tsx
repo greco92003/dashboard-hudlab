@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Download, Smartphone } from "lucide-react";
+import { storage } from "@/lib/storage";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -36,7 +37,7 @@ export function PWAInstallPrompt() {
 
       // Show install prompt if not already installed and not permanently dismissed
       if (!standalone) {
-        const neverShowAgain = localStorage.getItem("pwa-install-never-show");
+        const neverShowAgain = storage.getItem("pwa-install-never-show");
         if (!neverShowAgain) {
           setShowInstallPrompt(true);
         }
@@ -46,8 +47,8 @@ export function PWAInstallPrompt() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     // Check if user has permanently dismissed the prompt
-    const neverShowAgain = localStorage.getItem("pwa-install-never-show");
-    const dismissed = localStorage.getItem("pwa-install-dismissed");
+    const neverShowAgain = storage.getItem("pwa-install-never-show");
+    const dismissed = storage.getItem("pwa-install-dismissed");
 
     // If user chose "never show again", don't show the prompt
     if (neverShowAgain) {
@@ -86,7 +87,7 @@ export function PWAInstallPrompt() {
     if (outcome === "accepted") {
       console.log("User accepted the install prompt");
       // Mark as never show again since user installed
-      localStorage.setItem("pwa-install-never-show", "true");
+      storage.setItem("pwa-install-never-show", "true");
     } else {
       console.log("User dismissed the install prompt");
     }
@@ -97,13 +98,13 @@ export function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowInstallPrompt(false);
-    localStorage.setItem("pwa-install-dismissed", new Date().toISOString());
+    storage.setItem("pwa-install-dismissed", new Date().toISOString());
   };
 
   const handleNeverShowAgain = () => {
     setShowInstallPrompt(false);
-    localStorage.setItem("pwa-install-never-show", "true");
-    localStorage.removeItem("pwa-install-dismissed"); // Clean up old dismissal
+    storage.setItem("pwa-install-never-show", "true");
+    storage.removeItem("pwa-install-dismissed"); // Clean up old dismissal
   };
 
   // Don't show if already installed or user is on iOS without prompt support

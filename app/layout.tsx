@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { PWAWrapper } from "@/components/PWAWrapper";
 import { CacheRecoveryProvider } from "@/components/CacheRecoveryProvider";
 import { SyncChecker } from "@/components/ui/sync-checker";
+import { VersionChecker } from "@/components/VersionChecker";
 
 export const metadata: Metadata = {
   title: "Dashboard Hud Lab",
@@ -228,6 +229,7 @@ export default async function Layout({
                   </ConditionalSidebar>
                   <Toaster />
                   <SyncChecker />
+                  <VersionChecker />
                 </ThemeProvider>
               </SyncProvider>
             </OptimizedAuthProvider>

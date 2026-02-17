@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+// Using lib/supabase for backward compatibility - it now uses the official SSR pattern
 import { supabase } from "@/lib/supabase";
 import {
   Select,
@@ -42,6 +43,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
+import { storage } from "@/lib/storage";
 
 interface Deal {
   id: string;
@@ -210,7 +212,8 @@ export default function ProgramacaoPage() {
     try {
       const { data, error } = await supabase
         .from("programacao_card_states")
-        .select("deal_id, is_active");
+        .select("deal_id, is_active")
+        .returns<{ deal_id: string; is_active: boolean }[]>();
 
       if (error) {
         console.error("Error loading active cards from Supabase:", error);
@@ -219,7 +222,7 @@ export default function ProgramacaoPage() {
 
       if (data) {
         const activeCardIds = new Set<string>(
-          data.filter((item) => item.is_active).map((item) => item.deal_id)
+          data.filter((item) => item.is_active).map((item) => item.deal_id),
         );
         setActiveCards(activeCardIds);
       }
@@ -231,17 +234,17 @@ export default function ProgramacaoPage() {
   // Save active card state to Supabase
   const saveActiveCardToSupabase = async (
     dealId: string,
-    isActive: boolean
+    isActive: boolean,
   ) => {
     try {
       const { error } = await supabase.from("programacao_card_states").upsert(
         {
           deal_id: dealId,
           is_active: isActive,
-        },
+        } as any,
         {
           onConflict: "deal_id",
-        }
+        },
       );
 
       if (error) {
@@ -262,23 +265,19 @@ export default function ProgramacaoPage() {
     setIsHydrated(true);
 
     // Load sortBy
-    const savedSortBy = localStorage.getItem("programacao-sortBy");
+    const savedSortBy = storage.getItem("programacao-sortBy");
     if (savedSortBy) {
       setSortBy(savedSortBy as "value" | "title" | "date");
     }
 
     // Load sortDirection
-    const savedSortDirection = localStorage.getItem(
-      "programacao-sortDirection"
-    );
+    const savedSortDirection = storage.getItem("programacao-sortDirection");
     if (savedSortDirection) {
       setSortDirection(savedSortDirection as "asc" | "desc");
     }
 
     // Load visibleGroups
-    const savedVisibleGroups = localStorage.getItem(
-      "programacao-visibleGroups"
-    );
+    const savedVisibleGroups = storage.getItem("programacao-visibleGroups");
     if (savedVisibleGroups) {
       try {
         const parsed = JSON.parse(savedVisibleGroups);
@@ -289,15 +288,13 @@ export default function ProgramacaoPage() {
     }
 
     // Load isHeaderCollapsed
-    const savedHeaderCollapsed = localStorage.getItem(
-      "programacao-headerCollapsed"
-    );
+    const savedHeaderCollapsed = storage.getItem("programacao-headerCollapsed");
     if (savedHeaderCollapsed !== null) {
       setIsHeaderCollapsed(savedHeaderCollapsed === "true");
     }
 
     // Load zoomLevel
-    const savedZoomLevel = localStorage.getItem("programacao-zoomLevel");
+    const savedZoomLevel = storage.getItem("programacao-zoomLevel");
     if (savedZoomLevel) {
       setZoomLevel(Number(savedZoomLevel));
     }
@@ -306,23 +303,23 @@ export default function ProgramacaoPage() {
   // Save sortBy to localStorage
   useEffect(() => {
     if (isHydrated) {
-      localStorage.setItem("programacao-sortBy", sortBy);
+      storage.setItem("programacao-sortBy", sortBy);
     }
   }, [sortBy, isHydrated]);
 
   // Save sortDirection to localStorage
   useEffect(() => {
     if (isHydrated) {
-      localStorage.setItem("programacao-sortDirection", sortDirection);
+      storage.setItem("programacao-sortDirection", sortDirection);
     }
   }, [sortDirection, isHydrated]);
 
   // Save visibleGroups to localStorage
   useEffect(() => {
     if (isHydrated && visibleGroups.size > 0) {
-      localStorage.setItem(
+      storage.setItem(
         "programacao-visibleGroups",
-        JSON.stringify(Array.from(visibleGroups))
+        JSON.stringify(Array.from(visibleGroups)),
       );
     }
   }, [visibleGroups, isHydrated]);
@@ -330,9 +327,9 @@ export default function ProgramacaoPage() {
   // Save isHeaderCollapsed to localStorage
   useEffect(() => {
     if (isHydrated) {
-      localStorage.setItem(
+      storage.setItem(
         "programacao-headerCollapsed",
-        isHeaderCollapsed.toString()
+        isHeaderCollapsed.toString(),
       );
     }
   }, [isHeaderCollapsed, isHydrated]);
@@ -340,7 +337,7 @@ export default function ProgramacaoPage() {
   // Save zoomLevel to localStorage
   useEffect(() => {
     if (isHydrated) {
-      localStorage.setItem("programacao-zoomLevel", zoomLevel.toString());
+      storage.setItem("programacao-zoomLevel", zoomLevel.toString());
     }
   }, [zoomLevel, isHydrated]);
 
@@ -372,7 +369,8 @@ export default function ProgramacaoPage() {
           // Get existing card states from Supabase
           const { data: existingStates, error } = await supabase
             .from("programacao_card_states")
-            .select("deal_id");
+            .select("deal_id")
+            .returns<{ deal_id: string }[]>();
 
           if (error) {
             console.error("Error fetching existing card states:", error);
@@ -380,12 +378,12 @@ export default function ProgramacaoPage() {
           }
 
           const existingDealIds = new Set(
-            existingStates?.map((state) => state.deal_id) || []
+            existingStates?.map((state) => state.deal_id) || [],
           );
 
           // Find new deals that don't have a state in Supabase
           const newDealIds = Array.from(allDealIds).filter(
-            (dealId) => !existingDealIds.has(dealId)
+            (dealId) => !existingDealIds.has(dealId),
           );
 
           // Insert new deals as active
@@ -397,7 +395,7 @@ export default function ProgramacaoPage() {
 
             const { error: insertError } = await supabase
               .from("programacao_card_states")
-              .insert(newStates);
+              .insert(newStates as any);
 
             if (insertError) {
               console.error("Error inserting new card states:", insertError);
@@ -568,7 +566,7 @@ export default function ProgramacaoPage() {
 
   // Get days until shipping message with appropriate color
   const getDaysUntilShippingInfo = (
-    deal: Deal
+    deal: Deal,
   ): { message: string; colorClass: string } | null => {
     // Stage titles that should always be green
     const greenStages = [
@@ -911,7 +909,7 @@ export default function ProgramacaoPage() {
                 {getReorganizedGroups()
                   .filter(
                     (group) =>
-                      group.deals.length > 0 && visibleGroups.has(group.id)
+                      group.deals.length > 0 && visibleGroups.has(group.id),
                   )
                   .map((group) => (
                     <div
@@ -1007,7 +1005,7 @@ export default function ProgramacaoPage() {
                                       <TrendingUp className="h-3 w-3" />
                                       {formatCurrency(
                                         deal.value / 100,
-                                        deal.currency
+                                        deal.currency,
                                       )}
                                     </div>
 
@@ -1094,7 +1092,7 @@ export default function ProgramacaoPage() {
                   <p className="text-2xl font-bold text-green-600">
                     {formatCurrency(
                       selectedDeal.value / 100,
-                      selectedDeal.currency
+                      selectedDeal.currency,
                     )}
                   </p>
                   {/* Stage Title below value */}

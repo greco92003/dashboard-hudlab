@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DateRange } from "react-day-picker";
+import { storage } from "@/lib/storage";
 
 // Global storage key for shared date range
 const GLOBAL_DATE_RANGE_KEY = "globalDateRange";
@@ -51,10 +52,10 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
     // Mark as hydrated first to prevent hydration mismatch
     setIsHydrated(true);
 
-    const savedDateRange = localStorage.getItem(GLOBAL_DATE_RANGE_KEY);
-    const savedPeriod = localStorage.getItem(GLOBAL_PERIOD_KEY);
-    const savedUseCustomPeriod = localStorage.getItem(
-      GLOBAL_USE_CUSTOM_PERIOD_KEY
+    const savedDateRange = storage.getItem(GLOBAL_DATE_RANGE_KEY);
+    const savedPeriod = storage.getItem(GLOBAL_PERIOD_KEY);
+    const savedUseCustomPeriod = storage.getItem(
+      GLOBAL_USE_CUSTOM_PERIOD_KEY,
     );
 
     if (savedDateRange) {
@@ -72,7 +73,7 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
         setDateRangeState(dateRange);
       } catch (error) {
         console.error("Error parsing saved date range:", error);
-        localStorage.removeItem(GLOBAL_DATE_RANGE_KEY);
+        storage.removeItem(GLOBAL_DATE_RANGE_KEY);
       }
     }
 
@@ -126,25 +127,25 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
         to: range.to ? formatDateToLocal(range.to) : undefined,
       };
       console.log("💾 Saving date range to localStorage:", serializedRange);
-      localStorage.setItem(
+      storage.setItem(
         GLOBAL_DATE_RANGE_KEY,
-        JSON.stringify(serializedRange)
+        JSON.stringify(serializedRange),
       );
     } else {
-      localStorage.removeItem(GLOBAL_DATE_RANGE_KEY);
+      storage.removeItem(GLOBAL_DATE_RANGE_KEY);
     }
   }, []);
 
   // Set period and sync to localStorage
   const setPeriod = useCallback((newPeriod: number) => {
     setPeriodState(newPeriod);
-    localStorage.setItem(GLOBAL_PERIOD_KEY, newPeriod.toString());
+    storage.setItem(GLOBAL_PERIOD_KEY, newPeriod.toString());
   }, []);
 
   // Set use custom period and sync to localStorage
   const setUseCustomPeriod = useCallback((useCustom: boolean) => {
     setUseCustomPeriodState(useCustom);
-    localStorage.setItem(GLOBAL_USE_CUSTOM_PERIOD_KEY, useCustom.toString());
+    storage.setItem(GLOBAL_USE_CUSTOM_PERIOD_KEY, useCustom.toString());
   }, []);
 
   // Handle date range change
@@ -165,16 +166,16 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
       if (newDateRange?.from && newDateRange?.to) {
         setUseCustomPeriod(true);
         // Clear period-based storage from individual pages
-        localStorage.removeItem("dashboardPeriod");
-        localStorage.removeItem("dealsPeriod");
-        localStorage.removeItem("pairsSoldPeriod");
+        storage.removeItem("dashboardPeriod");
+        storage.removeItem("dealsPeriod");
+        storage.removeItem("pairsSoldPeriod");
         // Clear individual page date ranges
-        localStorage.removeItem("dashboardDateRange");
-        localStorage.removeItem("dealsDateRange");
-        localStorage.removeItem("pairsSoldDateRange");
+        storage.removeItem("dashboardDateRange");
+        storage.removeItem("dealsDateRange");
+        storage.removeItem("pairsSoldDateRange");
       }
     },
-    [setDateRange, setUseCustomPeriod]
+    [setDateRange, setUseCustomPeriod],
   );
 
   // Handle period change
@@ -184,14 +185,14 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
       setUseCustomPeriod(false);
       setDateRange(undefined);
       // Clear individual page storage
-      localStorage.removeItem("dashboardDateRange");
-      localStorage.removeItem("dealsDateRange");
-      localStorage.removeItem("pairsSoldDateRange");
-      localStorage.removeItem("dashboardPeriod");
-      localStorage.removeItem("dealsPeriod");
-      localStorage.removeItem("pairsSoldPeriod");
+      storage.removeItem("dashboardDateRange");
+      storage.removeItem("dealsDateRange");
+      storage.removeItem("pairsSoldDateRange");
+      storage.removeItem("dashboardPeriod");
+      storage.removeItem("dealsPeriod");
+      storage.removeItem("pairsSoldPeriod");
     },
-    [setPeriod, setUseCustomPeriod, setDateRange]
+    [setPeriod, setUseCustomPeriod, setDateRange],
   );
 
   // Get API URL based on current state
@@ -205,7 +206,7 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
         return `${baseUrl}?period=${period}`;
       }
     },
-    [useCustomPeriod, dateRange, period]
+    [useCustomPeriod, dateRange, period],
   );
 
   // Clear all global date state
@@ -213,16 +214,16 @@ export function useGlobalDateRange(): UseGlobalDateRangeReturn {
     setDateRange(undefined);
     setPeriod(30);
     setUseCustomPeriod(false);
-    localStorage.removeItem(GLOBAL_DATE_RANGE_KEY);
-    localStorage.removeItem(GLOBAL_PERIOD_KEY);
-    localStorage.removeItem(GLOBAL_USE_CUSTOM_PERIOD_KEY);
+    storage.removeItem(GLOBAL_DATE_RANGE_KEY);
+    storage.removeItem(GLOBAL_PERIOD_KEY);
+    storage.removeItem(GLOBAL_USE_CUSTOM_PERIOD_KEY);
     // Also clear individual page storage
-    localStorage.removeItem("dashboardDateRange");
-    localStorage.removeItem("dealsDateRange");
-    localStorage.removeItem("pairsSoldDateRange");
-    localStorage.removeItem("dashboardPeriod");
-    localStorage.removeItem("dealsPeriod");
-    localStorage.removeItem("pairsSoldPeriod");
+    storage.removeItem("dashboardDateRange");
+    storage.removeItem("dealsDateRange");
+    storage.removeItem("pairsSoldDateRange");
+    storage.removeItem("dashboardPeriod");
+    storage.removeItem("dealsPeriod");
+    storage.removeItem("pairsSoldPeriod");
   }, [setDateRange, setPeriod, setUseCustomPeriod]);
 
   return {

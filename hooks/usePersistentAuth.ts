@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { User } from "@supabase/supabase-js";
+// Using lib/supabase for backward compatibility - it now uses the official SSR pattern
 import { supabase } from "@/lib/supabase";
 import { localCache } from "@/lib/local-cache";
+import { storage } from "@/lib/storage";
 
 interface UserProfile {
   id: string;
@@ -61,7 +63,8 @@ export function usePersistentAuth(): PersistentAuthReturn {
         ttl: CACHE_TTL,
       });
 
-      if (cached && cached.sessionExpiry > Date.now()) {
+      // Verify cache exists and has valid structure
+      if (cached && cached.sessionExpiry && cached.user) {
         return cached;
       }
     } catch (error) {
@@ -90,7 +93,7 @@ export function usePersistentAuth(): PersistentAuthReturn {
 
       // Clear all related cache data
       if (typeof window !== "undefined") {
-        const keys = Object.keys(localStorage);
+        const keys = storage.keys();
         keys.forEach((key) => {
           if (
             key.includes("user_profile_") ||
@@ -100,7 +103,7 @@ export function usePersistentAuth(): PersistentAuthReturn {
             key.includes("hudlab-auth-token") ||
             key.startsWith("sb-")
           ) {
-            localStorage.removeItem(key);
+            storage.removeItem(key);
           }
         });
 
@@ -141,7 +144,7 @@ export function usePersistentAuth(): PersistentAuthReturn {
                 email: "",
                 role: "user",
                 approved: false,
-              })
+              } as any)
               .select()
               .single();
 
@@ -157,21 +160,28 @@ export function usePersistentAuth(): PersistentAuthReturn {
         return null;
       }
     },
-    []
+    [],
   );
 
   // Check if session needs refresh
   const shouldRefreshSession = useCallback(
     (cachedData: CachedUserData): boolean => {
-      const timeUntilExpiry = cachedData.sessionExpiry - Date.now();
-      const timeSinceLastRefresh = Date.now() - cachedData.lastRefresh;
+      const now = Date.now();
+      const timeUntilExpiry = cachedData.sessionExpiry - now;
+      const timeSinceLastRefresh = now - cachedData.lastRefresh;
 
+      // Refresh if:
+      // 1. Session already expired OR
+      // 2. Session expires in less than 30 minutes OR
+      // 3. Last refresh was more than 1 hour ago
+      // This ensures proactive refresh before expiration
       return (
-        timeUntilExpiry < SESSION_REFRESH_THRESHOLD ||
+        timeUntilExpiry <= 0 ||
+        timeUntilExpiry < 30 * 60 * 1000 ||
         timeSinceLastRefresh > SESSION_REFRESH_THRESHOLD
       );
     },
-    []
+    [],
   );
 
   // Refresh authentication
@@ -315,7 +325,7 @@ export function usePersistentAuth(): PersistentAuthReturn {
         };
       });
     },
-    [getCachedData, setCachedData]
+    [getCachedData, setCachedData],
   );
 
   // Initialize auth state
@@ -324,11 +334,34 @@ export function usePersistentAuth(): PersistentAuthReturn {
 
     const initializeAuth = async () => {
       try {
-        // First, try to load from cache
+        // First, check if we have a valid Supabase session
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        // If there's a session error or no session, clear cache and set unauthenticated
+        if (sessionError || !session) {
+          clearCachedData();
+          if (mounted) {
+            setState({
+              user: null,
+              profile: null,
+              loading: false,
+              error: null,
+              isAuthenticated: false,
+              isApproved: false,
+            });
+          }
+          return;
+        }
+
+        // We have a valid session, now check cache
         const cachedData = getCachedData();
 
+        // If cache exists and doesn't need refresh, use it for instant UI
         if (cachedData && !shouldRefreshSession(cachedData)) {
-          // Validate cached data before using it
+          // Validate cached data structure
           if (cachedData.user && cachedData.profile && cachedData.profile.id) {
             // Use cached data immediately for faster UI
             if (mounted) {
@@ -343,38 +376,29 @@ export function usePersistentAuth(): PersistentAuthReturn {
             }
 
             // Still refresh in background to ensure data is current
-            // but don't show loading state
             setTimeout(async () => {
               if (mounted) {
                 try {
-                  const {
-                    data: { session },
-                  } = await supabase.auth.getSession();
-                  if (session?.user) {
-                    const freshProfile = await fetchUserProfile(
-                      session.user.id
-                    );
-                    if (freshProfile && mounted) {
-                      setState((prev) => ({
-                        ...prev,
-                        profile: freshProfile,
-                        isApproved: freshProfile.approved ?? false,
-                      }));
+                  const freshProfile = await fetchUserProfile(session.user.id);
+                  if (freshProfile && mounted) {
+                    setState((prev) => ({
+                      ...prev,
+                      profile: freshProfile,
+                      isApproved: freshProfile.approved ?? false,
+                    }));
 
-                      // Update cache with fresh data
-                      const updatedCache: CachedUserData = {
-                        user: session.user,
-                        profile: freshProfile,
-                        sessionExpiry: session.expires_at
-                          ? session.expires_at * 1000
-                          : Date.now() + 60 * 60 * 1000,
-                        lastRefresh: Date.now(),
-                      };
-                      setCachedData(updatedCache);
-                    }
+                    // Update cache with fresh data
+                    const updatedCache: CachedUserData = {
+                      user: session.user,
+                      profile: freshProfile,
+                      sessionExpiry: session.expires_at
+                        ? session.expires_at * 1000
+                        : Date.now() + 60 * 60 * 1000,
+                      lastRefresh: Date.now(),
+                    };
+                    setCachedData(updatedCache);
                   }
                 } catch (error) {
-                  // Silent background refresh failure
                   console.warn("Background profile refresh failed:", error);
                 }
               }

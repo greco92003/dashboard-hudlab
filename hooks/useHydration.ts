@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { storage } from "@/lib/storage";
 
 /**
  * Hook para gerenciar hidratação de forma segura
@@ -31,7 +32,7 @@ export function useLocalStorageState<T>(
     setIsHydrated(true);
     
     try {
-      const stored = localStorage.getItem(key);
+      const stored = storage.getItem(key);
       if (stored !== null) {
         setState(JSON.parse(stored));
       }
@@ -45,7 +46,7 @@ export function useLocalStorageState<T>(
     
     if (isHydrated) {
       try {
-        localStorage.setItem(key, JSON.stringify(value));
+        storage.setItem(key, JSON.stringify(value));
       } catch (error) {
         console.warn(`Failed to write to localStorage key "${key}":`, error);
       }

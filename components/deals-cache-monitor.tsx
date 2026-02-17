@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { storage } from "@/lib/storage";
 import {
   RefreshCw,
   Database,
@@ -102,14 +103,14 @@ export function DealsCacheMonitor() {
         {
           duration: 4000,
           position: "bottom-right", // Toast no rodapé, diferente do alert superior
-        }
+        },
       );
       return; // Return early WITHOUT activating loading state
     }
 
     // Marca no localStorage que a sincronização começou
-    localStorage.setItem("hudlab_sync_state", "true");
-    localStorage.setItem("hudlab_sync_start_time", Date.now().toString());
+    storage.setItem("hudlab_sync_state", "true");
+    storage.setItem("hudlab_sync_start_time", Date.now().toString());
     startSync();
     try {
       const response = await fetch("/api/deals-health", {
@@ -126,7 +127,7 @@ export function DealsCacheMonitor() {
           if ("caches" in window) {
             const cacheNames = await caches.keys();
             await Promise.all(
-              cacheNames.map((cacheName) => caches.delete(cacheName))
+              cacheNames.map((cacheName) => caches.delete(cacheName)),
             );
             console.log("✅ Service Worker cache cleared");
           }
@@ -152,14 +153,14 @@ export function DealsCacheMonitor() {
               "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
             {
               duration: 4000,
-            }
+            },
           );
         } catch (parseError) {
           toast.warning(
             "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
             {
               duration: 4000,
-            }
+            },
           );
         }
       } else {
@@ -172,8 +173,8 @@ export function DealsCacheMonitor() {
       toast.error("Erro ao conectar com o servidor");
     } finally {
       // Remove do localStorage que a sincronização terminou
-      localStorage.removeItem("hudlab_sync_state");
-      localStorage.removeItem("hudlab_sync_start_time");
+      storage.removeItem("hudlab_sync_state");
+      storage.removeItem("hudlab_sync_start_time");
       stopSync();
     }
   };
@@ -281,8 +282,8 @@ export function DealsCacheMonitor() {
               {healthData.status === "healthy"
                 ? "Saudável"
                 : healthData.status === "warning"
-                ? "Atenção"
-                : "Crítico"}
+                  ? "Atenção"
+                  : "Crítico"}
             </Badge>
             <Button
               variant="outline"

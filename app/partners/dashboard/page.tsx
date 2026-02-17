@@ -42,6 +42,7 @@ import { toast } from "sonner";
 
 import { ChartPieEstadosNuvemshop } from "@/components/ui/chart-pie-estados-nuvemshop";
 import { TopProductCard } from "@/components/ui/top-product-card";
+import { storage } from "@/lib/storage";
 
 interface NuvemshopOrder extends FranchiseNuvemshopOrder {
   id: string;
@@ -136,9 +137,9 @@ function PartnersDashboardPage() {
 
       try {
         if (brand) {
-          localStorage.setItem("hudlab_partners_brand_filter", brand);
+          storage.setItem("hudlab_partners_brand_filter", brand);
         } else {
-          localStorage.removeItem("hudlab_partners_brand_filter");
+          storage.removeItem("hudlab_partners_brand_filter");
         }
       } catch (error) {
         console.warn("Error saving brand selection to localStorage:", error);
@@ -181,7 +182,7 @@ function PartnersDashboardPage() {
     }
 
     try {
-      const saved = localStorage.getItem("hudlab_partners_brand_filter");
+      const saved = storage.getItem("hudlab_partners_brand_filter");
       if (saved) {
         setSelectedBrandState(saved);
       }

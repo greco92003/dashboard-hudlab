@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
+import { storage } from "@/lib/storage";
 
 interface ProductVariant {
   id: string;
@@ -109,9 +110,9 @@ export default function PartnersProductsPage() {
 
       try {
         if (brand) {
-          localStorage.setItem("hudlab_partners_brand_filter", brand);
+          storage.setItem("hudlab_partners_brand_filter", brand);
         } else {
-          localStorage.removeItem("hudlab_partners_brand_filter");
+          storage.removeItem("hudlab_partners_brand_filter");
         }
       } catch (error) {
         console.warn("Error saving brand selection to localStorage:", error);
@@ -154,7 +155,7 @@ export default function PartnersProductsPage() {
     }
 
     try {
-      const saved = localStorage.getItem("hudlab_partners_brand_filter");
+      const saved = storage.getItem("hudlab_partners_brand_filter");
       if (saved) {
         setSelectedBrandState(saved);
       }
