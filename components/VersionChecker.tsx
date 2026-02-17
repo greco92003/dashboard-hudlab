@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { storage } from "@/lib/storage";
 
 /**
  * Componente que verifica a versão do build e força logout se detectar nova versão
- * 
+ *
  * Este componente deve ser incluído no layout principal da aplicação
+ *
+ * Melhorias implementadas:
+ * - Usa localStorage para persistir versão entre sessões
+ * - Verifica quando a aba ganha foco (visibilitychange)
+ * - Verifica em toda navegação de rota
+ * - Verifica periodicamente a cada 5 minutos
  */
 
 const VERSION_KEY = "app_build_version";
@@ -23,7 +30,8 @@ async function clearAllClientData() {
     const cookies = document.cookie.split(";");
     for (const cookie of cookies) {
       const eqPos = cookie.indexOf("=");
-      const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+      const name =
+        eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
 
       // Remove o cookie em todos os paths possíveis
       document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
@@ -64,11 +72,12 @@ async function checkVersion() {
 
     const data = await response.json();
     const serverVersion = data.version;
-    const clientVersion = storage.getItem(VERSION_KEY);
+    // IMPORTANTE: Usa localStorage para persistir entre sessões
+    const clientVersion = storage.getItem(VERSION_KEY, "local");
 
     // Se não há versão armazenada, é a primeira vez - armazena a versão atual
     if (!clientVersion) {
-      storage.setItem(VERSION_KEY, serverVersion);
+      storage.setItem(VERSION_KEY, serverVersion, "local");
       console.log("📦 Versão inicial armazenada:", serverVersion);
       return;
     }
@@ -80,7 +89,7 @@ async function checkVersion() {
         "\nVersão cliente:",
         clientVersion,
         "\nVersão servidor:",
-        serverVersion
+        serverVersion,
       );
       forceLogoutAndRedirect();
     }
@@ -91,23 +100,40 @@ async function checkVersion() {
 
 export function VersionChecker() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     // Verifica imediatamente ao montar
     checkVersion();
 
-    // Configura verificação periódica
+    // Configura verificação periódica a cada 5 minutos
     intervalRef.current = setInterval(checkVersion, CHECK_INTERVAL);
 
-    // Limpa o intervalo ao desmontar
+    // Verifica quando a aba ganha foco
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("👁️ Aba ganhou foco - verificando versão...");
+        checkVersion();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Limpa listeners ao desmontar
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
+
+  // Verifica a versão sempre que a rota mudar
+  useEffect(() => {
+    console.log("🔄 Navegação detectada - verificando versão...");
+    checkVersion();
+  }, [pathname]);
 
   // Este componente não renderiza nada
   return null;
 }
-
