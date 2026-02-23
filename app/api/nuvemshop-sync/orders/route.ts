@@ -5,6 +5,10 @@ import {
   isZenithProduct,
   getFranchiseFromOrderProduct,
 } from "@/types/franchise";
+import {
+  calculateGatewayFee,
+  calculateMerchantInstallmentInterest,
+} from "@/lib/payment-fees";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -58,7 +62,7 @@ async function createSupabaseServerForSync() {
           Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
         },
       },
-    }
+    },
   );
 }
 
@@ -77,7 +81,7 @@ async function createSupabaseServer() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, options),
             );
           } catch {
             // The `setAll` method was called from a Server Component.
@@ -86,7 +90,7 @@ async function createSupabaseServer() {
           }
         },
       },
-    }
+    },
   );
 }
 
@@ -106,7 +110,7 @@ function extractProvince(shippingAddress: any): string | null {
 // Helper function to filter orders by franchise
 function filterOrdersByFranchise(
   orders: any[],
-  franchise: string | null
+  franchise: string | null,
 ): any[] {
   if (!franchise) return orders;
 
@@ -121,7 +125,7 @@ function filterOrdersByFranchise(
             product.name
           }, Franchise: "${productFranchise}", Looking for: "${franchise}", Match: ${
             productFranchise === franchise
-          }`
+          }`,
         );
 
         // If no franchise info, it's not a Zenith product with franchise, so exclude it
@@ -133,7 +137,7 @@ function filterOrdersByFranchise(
 
       if (filteredProducts.length > 0) {
         console.log(
-          `[filterOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`
+          `[filterOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`,
         );
       }
 
@@ -215,6 +219,41 @@ function processCoupon(couponData: any): string | null {
   return null;
 }
 
+// Function to calculate shipping discount (free shipping)
+// When customer pays less than merchant cost, the difference is the discount
+function calculateShippingDiscount(
+  shipping_cost_customer: any,
+  shipping_cost_owner: any,
+): number | null {
+  const customerCost = shipping_cost_customer
+    ? parseFloat(shipping_cost_customer)
+    : 0;
+  const ownerCost = shipping_cost_owner ? parseFloat(shipping_cost_owner) : 0;
+
+  // If merchant pays for shipping but customer doesn't, that's the discount
+  if (ownerCost > 0 && customerCost < ownerCost) {
+    return ownerCost - customerCost;
+  }
+
+  return null;
+}
+
+// NOTE: The Nuvemshop Transaction API is ONLY available for Payment Provider apps.
+// Regular store API access does NOT have permission to access transaction details
+// including gateway_fees, transaction_taxes, and installment_interest.
+// These fields will remain NULL unless you integrate as a Payment Provider.
+// Reference: https://tiendanube.github.io/api-documentation/resources/transaction
+//
+// The following data IS available in the Order object:
+// - payment_details.installments (number of installments)
+// - payment_details.method (payment method)
+// - payment_details.credit_card_company (card brand)
+//
+// But the following are NOT available:
+// - gateway_fees (payment processing fees)
+// - transaction_taxes (taxes on transaction)
+// - installment_interest (interest rate on installments)
+
 // Function to process and save orders to Supabase
 async function processOrders(orders: any[], supabase: any) {
   const processedOrders = [];
@@ -231,15 +270,47 @@ async function processOrders(orders: any[], supabase: any) {
         "Billing address:",
         order.billing_address,
         "Shipping address:",
-        order.shipping_address
+        order.shipping_address,
       );
 
       // Debug payment status specifically
       console.log(`Order ${order.id} payment_status:`, order.payment_status);
-      console.log(
-        `Order ${order.id} full order object keys:`,
-        Object.keys(order)
+
+      // Calculate gateway fees and installment interest based on Nuvem Pago contract
+      // NOTE: These are calculated estimates based on actual contract rates
+      // Real-time transaction data is only available to Payment Provider apps
+      const paymentMethod = extractPaymentMethod(order.payment_details);
+      const installmentsCount = order.payment_details?.installments
+        ? parseInt(order.payment_details.installments)
+        : 1;
+      const totalAmount = order.total ? parseFloat(order.total) : 0;
+
+      // Gateway processing fee (taxa de processamento)
+      const gatewayFees = calculateGatewayFee(
+        paymentMethod,
+        totalAmount,
+        installmentsCount,
       );
+
+      // Installment interest paid by MERCHANT (when offering interest-free to customer)
+      // For 2x and 3x: merchant pays 6.19% and 7.57% respectively
+      // For 4x+: customer pays interest, so merchant cost is 0
+      const installmentInterest =
+        paymentMethod?.toLowerCase() === "credit_card"
+          ? calculateMerchantInstallmentInterest(totalAmount, installmentsCount)
+          : null;
+
+      // Transaction taxes are not available via API
+      const transactionTaxes = null;
+
+      console.log(`Order ${order.id} calculated fees:`, {
+        paymentMethod,
+        installments: installmentsCount,
+        totalAmount,
+        gatewayFees: gatewayFees.toFixed(2),
+        installmentInterest: installmentInterest?.toFixed(2) || "0.00",
+        totalCost: (gatewayFees + (installmentInterest || 0)).toFixed(2),
+      });
 
       // Extract and process order data according to the structure you specified
       const processedOrder = {
@@ -261,6 +332,13 @@ async function processOrders(orders: any[], supabase: any) {
         shipping_cost_customer: order.shipping_cost_customer
           ? parseFloat(order.shipping_cost_customer)
           : null,
+        shipping_cost_owner: order.shipping_cost_owner
+          ? parseFloat(order.shipping_cost_owner)
+          : null,
+        shipping_discount: calculateShippingDiscount(
+          order.shipping_cost_customer,
+          order.shipping_cost_owner,
+        ),
         coupon: processCoupon(order.coupon),
         promotional_discount: order.promotional_discount
           ? parseFloat(order.promotional_discount)
@@ -280,6 +358,11 @@ async function processOrders(orders: any[], supabase: any) {
         payment_details: order.payment_details || null,
         payment_method: extractPaymentMethod(order.payment_details),
         payment_status: order.payment_status || null,
+
+        // Transaction fees and interest (from Transaction API)
+        gateway_fees: gatewayFees,
+        transaction_taxes: transactionTaxes,
+        installment_interest: installmentInterest,
 
         // Order status
         status: order.status || null,
@@ -371,7 +454,7 @@ export async function POST(request: NextRequest) {
     // Update sync log with completion
     const syncEndTime = new Date();
     const durationSeconds = Math.floor(
-      (syncEndTime.getTime() - syncStartTime.getTime()) / 1000
+      (syncEndTime.getTime() - syncStartTime.getTime()) / 1000,
     );
 
     await supabase
@@ -410,7 +493,7 @@ export async function POST(request: NextRequest) {
         error:
           error instanceof Error ? error.message : "Unknown error occurred",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -440,7 +523,7 @@ export async function GET(request: NextRequest) {
     if (profileError || !userProfile) {
       return NextResponse.json(
         { error: "User profile not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -544,7 +627,7 @@ export async function GET(request: NextRequest) {
           return order.products.some((product: any) => {
             if (!product.product_id) return false;
             const productBrand = productBrandMap.get(
-              product.product_id.toString()
+              product.product_id.toString(),
             );
             return productBrand === brandToFilter;
           });
@@ -555,11 +638,11 @@ export async function GET(request: NextRequest) {
     // Apply franchise filtering for Zenith brand
     if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
       console.log(
-        `[Orders API] Filtering ${finalOrders.length} orders by franchise: ${selectedFranchise}`
+        `[Orders API] Filtering ${finalOrders.length} orders by franchise: ${selectedFranchise}`,
       );
       finalOrders = filterOrdersByFranchise(finalOrders, selectedFranchise);
       console.log(
-        `[Orders API] After franchise filter: ${finalOrders.length} orders`
+        `[Orders API] After franchise filter: ${finalOrders.length} orders`,
       );
     }
 
@@ -570,7 +653,7 @@ export async function GET(request: NextRequest) {
     console.log(
       `API Response: total=${totalCount}, count=${
         paginatedOrders.length
-      }, brand=${brandToFilter}, franchise=${selectedFranchise || "none"}`
+      }, brand=${brandToFilter}, franchise=${selectedFranchise || "none"}`,
     );
 
     return NextResponse.json({
@@ -589,7 +672,7 @@ export async function GET(request: NextRequest) {
         error:
           error instanceof Error ? error.message : "Unknown error occurred",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

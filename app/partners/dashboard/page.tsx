@@ -148,7 +148,7 @@ function PartnersDashboardPage() {
       // Refresh the page to hydrate with new brand data
       router.refresh();
     },
-    [canUseBrandFilter, router]
+    [canUseBrandFilter, router],
   );
 
   // Load brands from API
@@ -216,7 +216,7 @@ function PartnersDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOwnerOrAdmin, effectiveBrand]); // Remove clearDataForBrandChange to prevent infinite loop
 
-  // Function to calculate real revenue (subtotal - discounts, without shipping)
+  // Function to calculate real revenue (net revenue after all costs)
   // For Zenith with franchise filter, calculates only revenue from franchise products
   const calculateRealRevenue = useCallback(
     (order: NuvemshopOrder): number => {
@@ -250,13 +250,41 @@ function PartnersDashboardPage() {
           ? parseFloat(order.discount_gateway)
           : order.discount_gateway || 0;
 
-      // Calculate: subtotal - all discounts (without shipping)
+      const shippingDiscount =
+        typeof order.shipping_discount === "string"
+          ? parseFloat(order.shipping_discount)
+          : order.shipping_discount || 0;
+
+      const gatewayFees =
+        typeof order.gateway_fees === "string"
+          ? parseFloat(order.gateway_fees)
+          : order.gateway_fees || 0;
+
+      const transactionTaxes =
+        typeof order.transaction_taxes === "string"
+          ? parseFloat(order.transaction_taxes)
+          : order.transaction_taxes || 0;
+
+      const installmentInterest =
+        typeof order.installment_interest === "string"
+          ? parseFloat(order.installment_interest)
+          : order.installment_interest || 0;
+
+      // Calculate: subtotal - all discounts - gateway fees - taxes - installment interest
+      // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
       const realRevenue =
-        subtotal - promotionalDiscount - discountCoupon - discountGateway;
+        subtotal -
+        promotionalDiscount -
+        discountCoupon -
+        discountGateway -
+        shippingDiscount -
+        gatewayFees -
+        transactionTaxes -
+        installmentInterest;
 
       return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue); // Ensure non-negative
     },
-    [selectedFranchise, effectiveBrand]
+    [selectedFranchise, effectiveBrand],
   );
 
   // Format date to local timezone for API calls
@@ -280,7 +308,7 @@ function PartnersDashboardPage() {
 
       return dates;
     },
-    [formatDateToLocal]
+    [formatDateToLocal],
   );
 
   // Prepare chart data for period-based filtering
@@ -320,7 +348,7 @@ function PartnersDashboardPage() {
 
       setChartData(chartData);
     },
-    [generateDateRange, formatDateToLocal, calculateRealRevenue]
+    [generateDateRange, formatDateToLocal, calculateRealRevenue],
   );
 
   // Prepare chart data for custom date range
@@ -330,7 +358,7 @@ function PartnersDashboardPage() {
 
       const allDates = generateDateRange(
         customDateRange.from,
-        customDateRange.to
+        customDateRange.to,
       );
 
       // Group orders by date
@@ -361,7 +389,7 @@ function PartnersDashboardPage() {
 
       setChartData(chartData);
     },
-    [generateDateRange, formatDateToLocal, calculateRealRevenue]
+    [generateDateRange, formatDateToLocal, calculateRealRevenue],
   );
 
   // Debounced fetch function
@@ -384,7 +412,7 @@ function PartnersDashboardPage() {
           if (customDateRange?.from && customDateRange?.to) {
             params.append(
               "start_date",
-              formatDateToLocal(customDateRange.from)
+              formatDateToLocal(customDateRange.from),
             );
             params.append("end_date", formatDateToLocal(customDateRange.to));
           } else if (periodDays) {
@@ -457,7 +485,7 @@ function PartnersDashboardPage() {
       selectedFranchise,
       prepareChartDataCustom,
       prepareChartData,
-    ]
+    ],
   );
 
   // Fetch orders data
@@ -542,7 +570,7 @@ function PartnersDashboardPage() {
       formatDateToLocal,
       effectiveBrand,
       selectedFranchise,
-    ]
+    ],
   );
 
   // Function to check for recent updates
@@ -591,7 +619,7 @@ function PartnersDashboardPage() {
 
   // Handle date range change
   const handleDateRangeChangeLocal = async (
-    newDateRange: DateRange | undefined
+    newDateRange: DateRange | undefined,
   ) => {
     handleDateRangeChange(newDateRange);
     if (newDateRange?.from && newDateRange?.to) {
@@ -621,7 +649,7 @@ function PartnersDashboardPage() {
         // Commission will be recalculated by useEffect when commissionPercentage changes
         setShowCommissionSettings(false);
         toast.success(
-          `Comissão atualizada para ${effectiveBrand}: ${newCommissionPercentage}%`
+          `Comissão atualizada para ${effectiveBrand}: ${newCommissionPercentage}%`,
         );
       } else {
         const errorData = await response.json();
@@ -743,7 +771,7 @@ function PartnersDashboardPage() {
 
     console.log(
       "[Franchise Change] Reloading dashboard data for franchise:",
-      selectedFranchise
+      selectedFranchise,
     );
 
     // Reload orders with current period/date range
@@ -1114,7 +1142,7 @@ function PartnersDashboardPage() {
                             value={newCommissionPercentage}
                             onChange={(e) =>
                               setNewCommissionPercentage(
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-20 px-2 py-1 border rounded text-sm"
@@ -1158,7 +1186,7 @@ function PartnersDashboardPage() {
                     description={
                       useCustomPeriod && dateRange?.from && dateRange?.to
                         ? `Vendas de ${dateRange.from.toLocaleDateString(
-                            "pt-BR"
+                            "pt-BR",
                           )} até ${dateRange.to.toLocaleDateString("pt-BR")}`
                         : `Vendas nos últimos ${period} dias`
                     }

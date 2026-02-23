@@ -59,11 +59,16 @@ interface Order {
   products: OrderProduct[];
   subtotal: string;
   shipping_cost_customer?: string;
+  shipping_cost_owner?: string;
+  shipping_discount?: string;
   coupon?: string;
   promotional_discount?: string;
   total_discount_amount?: string;
   discount_coupon?: string;
   discount_gateway?: string;
+  gateway_fees?: string;
+  transaction_taxes?: string;
+  installment_interest?: string;
   total: string;
   payment_details?: PaymentDetails;
   payment_method?: string;
@@ -152,7 +157,7 @@ export default function PartnersOrdersPage() {
       // Refresh the page to hydrate with new brand data
       router.refresh();
     },
-    [canUseBrandFilter, router]
+    [canUseBrandFilter, router],
   );
 
   // Load brands from API
@@ -266,7 +271,7 @@ export default function PartnersOrdersPage() {
         setLoading(false);
       }
     },
-    [currentPage, itemsPerPage, effectiveBrand, selectedFranchise]
+    [currentPage, itemsPerPage, effectiveBrand, selectedFranchise],
   );
 
   // Function to check for recent updates
@@ -954,7 +959,7 @@ export default function PartnersOrdersPage() {
                                     <span>Frete:</span>
                                     <span>
                                       {formatCurrency(
-                                        order.shipping_cost_customer
+                                        order.shipping_cost_customer,
                                       )}
                                     </span>
                                   </div>
@@ -995,7 +1000,7 @@ export default function PartnersOrdersPage() {
                                     <span>
                                       -
                                       {formatCurrency(
-                                        order.promotional_discount
+                                        order.promotional_discount,
                                       )}
                                     </span>
                                   </div>
@@ -1010,7 +1015,7 @@ export default function PartnersOrdersPage() {
                                     <span>
                                       -
                                       {formatCurrency(
-                                        order.total_discount_amount
+                                        order.total_discount_amount,
                                       )}
                                     </span>
                                   </div>
@@ -1028,10 +1033,140 @@ export default function PartnersOrdersPage() {
                                   </div>
                                 )}
 
+                              {/* Shipping discount (free shipping) */}
+                              {order.shipping_discount !== null &&
+                                order.shipping_discount !== undefined &&
+                                order.shipping_discount !== "null" &&
+                                order.shipping_discount !== "undefined" &&
+                                parseFloat(order.shipping_discount) > 0 && (
+                                  <div className="flex justify-between text-orange-600">
+                                    <span>Desconto frete grátis:</span>
+                                    <span>
+                                      -{formatCurrency(order.shipping_discount)}
+                                    </span>
+                                  </div>
+                                )}
+
                               <div className="flex justify-between font-semibold border-t pt-2">
                                 <span>Total:</span>
                                 <span className="text-primary">
                                   {formatCurrency(order.total)}
+                                </span>
+                              </div>
+
+                              {/* Shipping cost paid by merchant */}
+                              {order.shipping_cost_owner !== null &&
+                                order.shipping_cost_owner !== undefined &&
+                                order.shipping_cost_owner !== "null" &&
+                                order.shipping_cost_owner !== "undefined" &&
+                                parseFloat(order.shipping_cost_owner) > 0 && (
+                                  <div className="flex justify-between text-red-600">
+                                    <span>Custo frete:</span>
+                                    <span>
+                                      -
+                                      {formatCurrency(
+                                        order.shipping_cost_owner,
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Gateway fees */}
+                              {order.gateway_fees !== null &&
+                                order.gateway_fees !== undefined &&
+                                order.gateway_fees !== "null" &&
+                                order.gateway_fees !== "undefined" &&
+                                parseFloat(order.gateway_fees) > 0 && (
+                                  <div className="flex justify-between text-red-600">
+                                    <span>Taxas gateway:</span>
+                                    <span>
+                                      -{formatCurrency(order.gateway_fees)}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Transaction taxes */}
+                              {order.transaction_taxes !== null &&
+                                order.transaction_taxes !== undefined &&
+                                order.transaction_taxes !== "null" &&
+                                order.transaction_taxes !== "undefined" &&
+                                parseFloat(order.transaction_taxes) > 0 && (
+                                  <div className="flex justify-between text-red-600">
+                                    <span>Impostos transação:</span>
+                                    <span>
+                                      -{formatCurrency(order.transaction_taxes)}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Installment interest */}
+                              {order.installment_interest !== null &&
+                                order.installment_interest !== undefined &&
+                                order.installment_interest !== "null" &&
+                                order.installment_interest !== "undefined" &&
+                                parseFloat(order.installment_interest) > 0 && (
+                                  <div className="flex justify-between text-red-600">
+                                    <span>Juros:</span>
+                                    <span>
+                                      -
+                                      {formatCurrency(
+                                        order.installment_interest,
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+
+                              {/* Net Revenue (Valor Total Real) */}
+                              <div className="flex justify-between font-bold text-lg border-t-2 border-green-600 pt-2 text-green-600">
+                                <span>Valor Total Real:</span>
+                                <span>
+                                  {formatCurrency(
+                                    (() => {
+                                      const subtotal =
+                                        parseFloat(order.subtotal) || 0;
+                                      const promotionalDiscount =
+                                        parseFloat(
+                                          order.promotional_discount ?? "",
+                                        ) || 0;
+                                      const discountCoupon =
+                                        parseFloat(
+                                          order.discount_coupon ?? "",
+                                        ) || 0;
+                                      const discountGateway =
+                                        parseFloat(
+                                          order.discount_gateway ?? "",
+                                        ) || 0;
+                                      const shippingDiscount =
+                                        parseFloat(
+                                          order.shipping_discount ?? "",
+                                        ) || 0;
+                                      const gatewayFees =
+                                        parseFloat(order.gateway_fees ?? "") ||
+                                        0;
+                                      const transactionTaxes =
+                                        parseFloat(
+                                          order.transaction_taxes ?? "",
+                                        ) || 0;
+                                      const installmentInterest =
+                                        parseFloat(
+                                          order.installment_interest ?? "",
+                                        ) || 0;
+
+                                      // Real revenue = subtotal - all discounts - fees - installment interest
+                                      // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+                                      return Math.max(
+                                        0,
+                                        subtotal -
+                                          promotionalDiscount -
+                                          discountCoupon -
+                                          discountGateway -
+                                          shippingDiscount -
+                                          gatewayFees -
+                                          transactionTaxes -
+                                          installmentInterest,
+                                      );
+                                    })().toString(),
+                                  )}
                                 </span>
                               </div>
 

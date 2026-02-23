@@ -11,6 +11,22 @@ import {
   type NuvemshopOrder,
 } from "@/types/franchise";
 
+/**
+ * IMPORTANT NOTE about Transaction Data:
+ *
+ * The following fields are NOT available via Nuvemshop's regular store API:
+ * - gateway_fees (payment processing fees)
+ * - transaction_taxes (taxes on transaction)
+ * - installment_interest (interest rate on installments)
+ *
+ * These fields are ONLY accessible through the Transaction API, which is
+ * exclusively available to Payment Provider apps (payment gateway integrations).
+ *
+ * Reference: https://tiendanube.github.io/api-documentation/resources/transaction
+ *
+ * These fields will always be NULL unless you integrate as a Payment Provider.
+ */
+
 // Interface for database order data
 interface DatabaseOrder {
   id: any;
@@ -23,17 +39,28 @@ interface DatabaseOrder {
   promotional_discount: any;
   discount_coupon: any;
   discount_gateway: any;
+  total_discount_amount: any;
   shipping_cost_customer: any;
+  shipping_cost_owner: any;
+  shipping_discount: any;
+  gateway_fees: any;
+  transaction_taxes: any;
+  installment_interest: any;
+  coupon: any;
   province: any;
   products: any;
   contact_name: any;
+  payment_details: any;
+  payment_method: any;
   status: any;
+  last_synced_at: any;
+  sync_status: any;
 }
 
 // Helper function to filter database orders by franchise
 function filterDatabaseOrdersByFranchise(
   orders: DatabaseOrder[],
-  franchise: string | null
+  franchise: string | null,
 ): DatabaseOrder[] {
   if (!franchise) return orders;
 
@@ -48,7 +75,7 @@ function filterDatabaseOrdersByFranchise(
             product.name
           }, Franchise: "${productFranchise}", Looking for: "${franchise}", Match: ${
             productFranchise === franchise
-          }`
+          }`,
         );
 
         // If no franchise info, it's not a Zenith product with franchise, so exclude it
@@ -60,7 +87,7 @@ function filterDatabaseOrdersByFranchise(
 
       if (filteredProducts.length > 0) {
         console.log(
-          `[filterDatabaseOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`
+          `[filterDatabaseOrdersByFranchise] Order ${order.order_number} has ${filteredProducts.length} products from franchise ${franchise}`,
         );
       }
 
@@ -81,6 +108,12 @@ function convertToNuvemshopOrder(dbOrder: DatabaseOrder): NuvemshopOrder {
     promotional_discount: dbOrder.promotional_discount || 0,
     discount_coupon: dbOrder.discount_coupon || 0,
     discount_gateway: dbOrder.discount_gateway || 0,
+    shipping_cost_customer: dbOrder.shipping_cost_customer || 0,
+    shipping_cost_owner: dbOrder.shipping_cost_owner || 0,
+    shipping_discount: dbOrder.shipping_discount || 0,
+    gateway_fees: dbOrder.gateway_fees || 0,
+    transaction_taxes: dbOrder.transaction_taxes || 0,
+    installment_interest: dbOrder.installment_interest || 0,
     completed_at: dbOrder.completed_at,
     created_at_nuvemshop: dbOrder.created_at_nuvemshop,
   };
@@ -117,7 +150,7 @@ export async function GET(request: NextRequest) {
     if (!allowedRoles.includes(profile.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -148,12 +181,23 @@ export async function GET(request: NextRequest) {
         promotional_discount,
         discount_coupon,
         discount_gateway,
+        total_discount_amount,
         shipping_cost_customer,
+        shipping_cost_owner,
+        shipping_discount,
+        gateway_fees,
+        transaction_taxes,
+        installment_interest,
+        coupon,
         province,
         products,
         contact_name,
-        status
-      `
+        payment_details,
+        payment_method,
+        status,
+        last_synced_at,
+        sync_status
+      `,
       )
       .eq("payment_status", "paid") // Only show orders with payment status "paid"
       .neq("status", "cancelled") // Exclude cancelled orders from commission calculations
@@ -165,7 +209,7 @@ export async function GET(request: NextRequest) {
     if (startDate && endDate) {
       // Custom date range - filter by completed_at if available, otherwise created_at_nuvemshop
       query = query.or(
-        `and(completed_at.gte.${startDate}T00:00:00.000Z,completed_at.lte.${endDate}T23:59:59.999Z),and(completed_at.is.null,created_at_nuvemshop.gte.${startDate}T00:00:00.000Z,created_at_nuvemshop.lte.${endDate}T23:59:59.999Z)`
+        `and(completed_at.gte.${startDate}T00:00:00.000Z,completed_at.lte.${endDate}T23:59:59.999Z),and(completed_at.is.null,created_at_nuvemshop.gte.${startDate}T00:00:00.000Z,created_at_nuvemshop.lte.${endDate}T23:59:59.999Z)`,
       );
     } else if (period) {
       // Period-based filtering in Brazilian timezone
@@ -185,12 +229,12 @@ export async function GET(request: NextRequest) {
             days,
             startDateTime: startDateTime.toISOString(),
             endDateTime: endDateTime.toISOString(),
-          }
+          },
         );
 
         // Filter by completed_at if available, otherwise created_at_nuvemshop
         query = query.or(
-          `and(completed_at.gte.${startISO},completed_at.lte.${endISO}),and(completed_at.is.null,created_at_nuvemshop.gte.${startISO},created_at_nuvemshop.lte.${endISO})`
+          `and(completed_at.gte.${startISO},completed_at.lte.${endISO}),and(completed_at.is.null,created_at_nuvemshop.gte.${startISO},created_at_nuvemshop.lte.${endISO})`,
         );
       }
     }
@@ -201,7 +245,7 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching orders:", error);
       return NextResponse.json(
         { error: "Failed to fetch orders" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -272,7 +316,7 @@ export async function GET(request: NextRequest) {
         return order.products.some((product: any) => {
           if (!product.product_id) return false;
           const productBrand = productBrandMap.get(
-            product.product_id.toString()
+            product.product_id.toString(),
           );
           return productBrand === brandToFilter;
         });
@@ -282,14 +326,14 @@ export async function GET(request: NextRequest) {
     // Apply franchise filtering for Zenith brand
     if (selectedFranchise && brandToFilter && isZenithProduct(brandToFilter)) {
       console.log(
-        `[Orders API] Filtering ${filteredOrders.length} orders by franchise: ${selectedFranchise}`
+        `[Orders API] Filtering ${filteredOrders.length} orders by franchise: ${selectedFranchise}`,
       );
       filteredOrders = filterDatabaseOrdersByFranchise(
         filteredOrders,
-        selectedFranchise
+        selectedFranchise,
       );
       console.log(
-        `[Orders API] After franchise filter: ${filteredOrders.length} orders`
+        `[Orders API] After franchise filter: ${filteredOrders.length} orders`,
       );
     }
 
@@ -307,7 +351,7 @@ export async function GET(request: NextRequest) {
           );
         }, 0) || 0;
     } else {
-      // Standard revenue calculation (subtotal - discounts, without shipping)
+      // Standard revenue calculation (net revenue after all costs)
       // This matches the frontend calculation and ensures consistency
       totalRevenue =
         filteredOrders?.reduce((sum, order) => {
@@ -331,70 +375,129 @@ export async function GET(request: NextRequest) {
               ? parseFloat(order.discount_gateway)
               : order.discount_gateway || 0;
 
+          const shippingDiscount =
+            typeof order.shipping_discount === "string"
+              ? parseFloat(order.shipping_discount)
+              : order.shipping_discount || 0;
+
+          const gatewayFees =
+            typeof order.gateway_fees === "string"
+              ? parseFloat(order.gateway_fees)
+              : order.gateway_fees || 0;
+
+          const transactionTaxes =
+            typeof order.transaction_taxes === "string"
+              ? parseFloat(order.transaction_taxes)
+              : order.transaction_taxes || 0;
+
+          const installmentInterest =
+            typeof order.installment_interest === "string"
+              ? parseFloat(order.installment_interest)
+              : order.installment_interest || 0;
+
+          // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
           const realRevenue =
-            subtotal - promotionalDiscount - discountCoupon - discountGateway;
+            subtotal -
+            promotionalDiscount -
+            discountCoupon -
+            discountGateway -
+            shippingDiscount -
+            gatewayFees -
+            transactionTaxes -
+            installmentInterest;
 
           return sum + Math.max(0, realRevenue);
         }, 0) || 0;
     }
 
     console.log(
-      `Dashboard API: total orders before filter=${orders?.length}, after filter=${totalOrders}, brand=${brandToFilter}, franchise=${selectedFranchise}`
+      `Dashboard API: total orders before filter=${orders?.length}, after filter=${totalOrders}, brand=${brandToFilter}, franchise=${selectedFranchise}`,
     );
 
     // Group by province for state analysis with franchise-aware revenue
     const provinceStats =
-      filteredOrders?.reduce((acc, order) => {
-        const province = order.province || "Não informado";
-        if (!acc[province]) {
-          acc[province] = {
-            count: 0,
-            revenue: 0,
-          };
-        }
-        acc[province].count += 1;
+      filteredOrders?.reduce(
+        (acc, order) => {
+          const province = order.province || "Não informado";
+          if (!acc[province]) {
+            acc[province] = {
+              count: 0,
+              revenue: 0,
+            };
+          }
+          acc[province].count += 1;
 
-        // Use franchise-aware revenue calculation if applicable
-        if (
-          selectedFranchise &&
-          brandToFilter &&
-          isZenithProduct(brandToFilter)
-        ) {
-          const nuvemshopOrder = convertToNuvemshopOrder(order);
-          acc[province].revenue += calculateFranchiseRevenue(
-            nuvemshopOrder,
-            selectedFranchise
-          );
-        } else {
-          // Standard revenue calculation (subtotal - discounts, without shipping)
-          const subtotal =
-            typeof order.subtotal === "string"
-              ? parseFloat(order.subtotal)
-              : order.subtotal || 0;
+          // Use franchise-aware revenue calculation if applicable
+          if (
+            selectedFranchise &&
+            brandToFilter &&
+            isZenithProduct(brandToFilter)
+          ) {
+            const nuvemshopOrder = convertToNuvemshopOrder(order);
+            acc[province].revenue += calculateFranchiseRevenue(
+              nuvemshopOrder,
+              selectedFranchise,
+            );
+          } else {
+            // Standard revenue calculation (net revenue after all costs)
+            const subtotal =
+              typeof order.subtotal === "string"
+                ? parseFloat(order.subtotal)
+                : order.subtotal || 0;
 
-          const promotionalDiscount =
-            typeof order.promotional_discount === "string"
-              ? parseFloat(order.promotional_discount)
-              : order.promotional_discount || 0;
+            const promotionalDiscount =
+              typeof order.promotional_discount === "string"
+                ? parseFloat(order.promotional_discount)
+                : order.promotional_discount || 0;
 
-          const discountCoupon =
-            typeof order.discount_coupon === "string"
-              ? parseFloat(order.discount_coupon)
-              : order.discount_coupon || 0;
+            const discountCoupon =
+              typeof order.discount_coupon === "string"
+                ? parseFloat(order.discount_coupon)
+                : order.discount_coupon || 0;
 
-          const discountGateway =
-            typeof order.discount_gateway === "string"
-              ? parseFloat(order.discount_gateway)
-              : order.discount_gateway || 0;
+            const discountGateway =
+              typeof order.discount_gateway === "string"
+                ? parseFloat(order.discount_gateway)
+                : order.discount_gateway || 0;
 
-          const realRevenue =
-            subtotal - promotionalDiscount - discountCoupon - discountGateway;
+            const shippingDiscount =
+              typeof order.shipping_discount === "string"
+                ? parseFloat(order.shipping_discount)
+                : order.shipping_discount || 0;
 
-          acc[province].revenue += Math.max(0, realRevenue);
-        }
+            const gatewayFees =
+              typeof order.gateway_fees === "string"
+                ? parseFloat(order.gateway_fees)
+                : order.gateway_fees || 0;
 
-        return acc;
-      }, {} as Record<string, { count: number; revenue: number }>) || {};
+            const transactionTaxes =
+              typeof order.transaction_taxes === "string"
+                ? parseFloat(order.transaction_taxes)
+                : order.transaction_taxes || 0;
+
+            const installmentInterest =
+              typeof order.installment_interest === "string"
+                ? parseFloat(order.installment_interest)
+                : order.installment_interest || 0;
+
+            // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+            const realRevenue =
+              subtotal -
+              promotionalDiscount -
+              discountCoupon -
+              discountGateway -
+              shippingDiscount -
+              gatewayFees -
+              transactionTaxes -
+              installmentInterest;
+
+            acc[province].revenue += Math.max(0, realRevenue);
+          }
+
+          return acc;
+        },
+        {} as Record<string, { count: number; revenue: number }>,
+      ) || {};
 
     return NextResponse.json({
       orders: filteredOrders,
@@ -410,7 +513,7 @@ export async function GET(request: NextRequest) {
     console.error("Error in partners orders API:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

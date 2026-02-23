@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (!allowedRoles.includes(profile.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       if (!profile.assigned_brand) {
         return NextResponse.json(
           { error: "No brand assigned" },
-          { status: 403 }
+          { status: 403 },
         );
       }
       targetBrand = profile.assigned_brand;
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       // For owners/admins without brand filter, return error since we need a specific brand
       return NextResponse.json(
         { error: "Brand parameter is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -92,33 +92,38 @@ export async function GET(request: NextRequest) {
         promotional_discount,
         discount_coupon,
         discount_gateway,
+        shipping_discount,
+        shipping_cost_owner,
+        gateway_fees,
+        transaction_taxes,
+        installment_interest,
         products,
         completed_at,
         created_at_nuvemshop
-      `
+      `,
       )
       .eq("payment_status", "paid")
       .neq("status", "cancelled") // Exclude cancelled orders from commission calculations
       .not("subtotal", "is", null)
       .or(
-        `and(completed_at.gte.${commissionStartDate}T00:00:00.000Z),and(completed_at.is.null,created_at_nuvemshop.gte.${commissionStartDate}T00:00:00.000Z)`
+        `and(completed_at.gte.${commissionStartDate}T00:00:00.000Z),and(completed_at.is.null,created_at_nuvemshop.gte.${commissionStartDate}T00:00:00.000Z)`,
       );
 
     if (ordersError) {
       console.error(
         "Error fetching orders for commission calculation:",
-        ordersError
+        ordersError,
       );
       return NextResponse.json(
         { error: "Failed to calculate commission" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(
       `[Commission Summary] Found ${
         orders?.length || 0
-      } orders for brand ${targetBrand} since ${commissionStartDate}, franchise filter: ${selectedFranchise}`
+      } orders for brand ${targetBrand} since ${commissionStartDate}, franchise filter: ${selectedFranchise}`,
     );
 
     // Get all product IDs from orders to filter by brand (same logic as orders API)
@@ -143,7 +148,7 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching brand products:", productsError);
       return NextResponse.json(
         { error: "Failed to fetch brand products" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -156,18 +161,18 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(
-      `[Commission Summary] Found ${productIds.size} unique product IDs in orders`
+      `[Commission Summary] Found ${productIds.size} unique product IDs in orders`,
     );
     console.log(
       `[Commission Summary] Found ${
         productsWithBrands?.length || 0
-      } products with brand info`
+      } products with brand info`,
     );
     console.log(
       `[Commission Summary] Products for brand ${targetBrand}:`,
       Array.from(productBrandMap.entries()).filter(
-        ([_, brand]) => brand === targetBrand
-      ).length
+        ([_, brand]) => brand === targetBrand,
+      ).length,
     );
 
     // Calculate total commission earned
@@ -204,12 +209,12 @@ export async function GET(request: NextRequest) {
         // For Zenith with franchise filter, calculate revenue only for franchise products
         const franchiseRevenue = calculateFranchiseRevenue(
           order,
-          selectedFranchise
+          selectedFranchise,
         );
         commission =
           Math.max(0, franchiseRevenue) * (commissionPercentage / 100);
       } else {
-        // Standard commission calculation
+        // Standard commission calculation (net revenue after all costs)
         const subtotal =
           typeof order.subtotal === "string"
             ? parseFloat(order.subtotal)
@@ -230,8 +235,37 @@ export async function GET(request: NextRequest) {
             ? parseFloat(order.discount_gateway)
             : order.discount_gateway || 0;
 
+        const shippingDiscount =
+          typeof order.shipping_discount === "string"
+            ? parseFloat(order.shipping_discount)
+            : order.shipping_discount || 0;
+
+        const gatewayFees =
+          typeof order.gateway_fees === "string"
+            ? parseFloat(order.gateway_fees)
+            : order.gateway_fees || 0;
+
+        const transactionTaxes =
+          typeof order.transaction_taxes === "string"
+            ? parseFloat(order.transaction_taxes)
+            : order.transaction_taxes || 0;
+
+        const installmentInterest =
+          typeof order.installment_interest === "string"
+            ? parseFloat(order.installment_interest)
+            : order.installment_interest || 0;
+
+        // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
         const realRevenue =
-          subtotal - promotionalDiscount - discountCoupon - discountGateway;
+          subtotal -
+          promotionalDiscount -
+          discountCoupon -
+          discountGateway -
+          shippingDiscount -
+          gatewayFees -
+          transactionTaxes -
+          installmentInterest;
+
         commission = Math.max(0, realRevenue) * (commissionPercentage / 100);
       }
 
@@ -239,21 +273,21 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(
-      `[Commission Summary] Processed ${processedOrders} orders for brand ${targetBrand}`
+      `[Commission Summary] Processed ${processedOrders} orders for brand ${targetBrand}`,
     );
     console.log(
       `[Commission Summary] Total commission earned: R$ ${totalCommissionEarned.toFixed(
-        2
-      )}`
+        2,
+      )}`,
     );
     console.log(
-      `[Commission Summary] Commission percentage: ${commissionPercentage}%`
+      `[Commission Summary] Commission percentage: ${commissionPercentage}%`,
     );
 
     // Get total payments made for the brand (and franchise if applicable)
     let paymentsQuery = supabase
       .from("commission_payments")
-      .select("amount")
+      .select("*")
       .eq("brand", targetBrand)
       .in("status", ["sent", "confirmed"]);
 
@@ -262,15 +296,28 @@ export async function GET(request: NextRequest) {
       paymentsQuery = paymentsQuery.eq("franchise", selectedFranchise);
     }
 
+    console.log(
+      `[Commission Summary] Fetching payments for brand: ${targetBrand}, franchise: ${selectedFranchise}`,
+    );
+
     const { data: payments, error: paymentsError } = await paymentsQuery;
 
     if (paymentsError) {
       console.error("Error fetching commission payments:", paymentsError);
       return NextResponse.json(
         { error: "Failed to fetch commission payments" },
-        { status: 500 }
+        { status: 500 },
       );
     }
+
+    console.log(
+      `[Commission Summary] Found ${payments?.length || 0} payments:`,
+    );
+    (payments || []).forEach((payment, index) => {
+      console.log(
+        `  Payment ${index + 1}: R$ ${payment.amount} - ${payment.description || "N/A"} - Status: ${payment.status} - Date: ${payment.payment_date} - ID: ${payment.id}`,
+      );
+    });
 
     const totalPaid = (payments || []).reduce((sum, payment) => {
       const amount =
@@ -283,19 +330,38 @@ export async function GET(request: NextRequest) {
     // Calculate balance
     const balance = totalCommissionEarned - totalPaid;
 
-    return NextResponse.json({
-      brand: targetBrand,
-      franchise: selectedFranchise,
-      commission_percentage: commissionPercentage,
-      total_earned: totalCommissionEarned,
-      total_paid: totalPaid,
-      balance: balance,
-    });
+    console.log(
+      `[Commission Summary] Final calculation for brand ${targetBrand}, franchise ${selectedFranchise}:`,
+    );
+    console.log(
+      `  - Total Commission Earned: R$ ${totalCommissionEarned.toFixed(2)}`,
+    );
+    console.log(`  - Total Paid: R$ ${totalPaid.toFixed(2)}`);
+    console.log(`  - Balance: R$ ${balance.toFixed(2)}`);
+    console.log(`  - Number of payments: ${payments?.length || 0}`);
+
+    return NextResponse.json(
+      {
+        brand: targetBrand,
+        franchise: selectedFranchise,
+        commission_percentage: commissionPercentage,
+        total_earned: totalCommissionEarned,
+        total_paid: totalPaid,
+        balance: balance,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      },
+    );
   } catch (error) {
     console.error("Error in commission summary GET:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

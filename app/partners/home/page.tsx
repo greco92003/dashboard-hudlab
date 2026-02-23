@@ -125,7 +125,7 @@ interface CommissionSummary {
 export default function PartnersHomePage() {
   const router = useRouter();
   const [affiliateLink, setAffiliateLink] = useState<AffiliateLink | null>(
-    null
+    null,
   );
   const [loading, setLoading] = useState(true);
   const [editingLink, setEditingLink] = useState(false);
@@ -235,7 +235,7 @@ export default function PartnersHomePage() {
       // Refresh the page to hydrate with new brand data
       router.refresh();
     },
-    [canUseBrandFilter, router]
+    [canUseBrandFilter, router],
   );
 
   // Load brands from API
@@ -324,16 +324,16 @@ export default function PartnersHomePage() {
         // Find the link that matches the selected franchise
         const franchiseSearchTerm = selectedFranchise.replace(/\s+/g, "-");
         console.log(
-          `🔍 Buscando link da Zenith para franquia: ${selectedFranchise}`
+          `🔍 Buscando link da Zenith para franquia: ${selectedFranchise}`,
         );
         console.log(`🔍 Termo de busca: ${franchiseSearchTerm}`);
         console.log(
           `🔍 Links disponíveis:`,
-          data.links?.map((l: AffiliateLink) => l.url)
+          data.links?.map((l: AffiliateLink) => l.url),
         );
 
         const franchiseLink = data.links?.find((link: AffiliateLink) =>
-          link.url.includes(franchiseSearchTerm)
+          link.url.includes(franchiseSearchTerm),
         );
 
         console.log(`🔍 Link encontrado:`, franchiseLink?.url || "NENHUM");
@@ -341,7 +341,7 @@ export default function PartnersHomePage() {
       } else {
         // For other brands or when no franchise is selected, get the first link
         setAffiliateLink(
-          data.links && data.links.length > 0 ? data.links[0] : null
+          data.links && data.links.length > 0 ? data.links[0] : null,
         );
       }
     } catch (error) {
@@ -479,13 +479,15 @@ export default function PartnersHomePage() {
         selectedFranchise
       ) {
         const franchiseContract = data.contracts?.find(
-          (c: PartnershipContract) => c.franchise === selectedFranchise
+          (c: PartnershipContract) => c.franchise === selectedFranchise,
         );
         setContract(franchiseContract || null);
       } else {
         // Get the first (and only) contract for the brand
         setContract(
-          data.contracts && data.contracts.length > 0 ? data.contracts[0] : null
+          data.contracts && data.contracts.length > 0
+            ? data.contracts[0]
+            : null,
         );
       }
     } catch (error) {
@@ -553,13 +555,13 @@ export default function PartnersHomePage() {
         selectedFranchise
       ) {
         const franchisePixKey = data.pixKeys?.find(
-          (p: PartnerPixKey) => p.franchise === selectedFranchise
+          (p: PartnerPixKey) => p.franchise === selectedFranchise,
         );
         setPixKey(franchisePixKey || null);
       } else {
         // Get the first (and only) pix key for the brand
         setPixKey(
-          data.pixKeys && data.pixKeys.length > 0 ? data.pixKeys[0] : null
+          data.pixKeys && data.pixKeys.length > 0 ? data.pixKeys[0] : null,
         );
       }
     } catch (error) {
@@ -592,6 +594,10 @@ export default function PartnersHomePage() {
 
       const response = await fetch(`${url}?${params.toString()}`, {
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
       });
 
       if (!response.ok) {
@@ -599,6 +605,14 @@ export default function PartnersHomePage() {
       }
 
       const data = await response.json();
+      console.log("[Commission Summary] Fetched data:", {
+        brand: effectiveBrand,
+        franchise: selectedFranchise,
+        total_earned: data.total_earned,
+        total_paid: data.total_paid,
+        balance: data.balance,
+        timestamp: new Date().toISOString(),
+      });
       setCommissionSummary(data);
     } catch (error) {
       console.error("Error fetching commission summary:", error);
@@ -713,7 +727,7 @@ export default function PartnersHomePage() {
     if (isZenithProduct(effectiveBrand)) {
       console.log(
         "[Franchise Change] Reloading commission data for franchise:",
-        selectedFranchise
+        selectedFranchise,
       );
       fetchCommissionSummary();
       fetchCommissionPayments();
@@ -857,7 +871,7 @@ export default function PartnersHomePage() {
       toast.success(
         editingPayment
           ? "Pagamento atualizado com sucesso!"
-          : "Pagamento registrado com sucesso!"
+          : "Pagamento registrado com sucesso!",
       );
 
       // Reset form
@@ -878,7 +892,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error saving payment:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao salvar pagamento"
+        error instanceof Error ? error.message : "Erro ao salvar pagamento",
       );
     } finally {
       setCommissionLoading(false);
@@ -897,7 +911,7 @@ export default function PartnersHomePage() {
         `/api/partners/commission-payments/${paymentId}`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       if (!response.ok) {
@@ -913,7 +927,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error deleting payment:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao excluir pagamento"
+        error instanceof Error ? error.message : "Erro ao excluir pagamento",
       );
     } finally {
       setCommissionLoading(false);
@@ -1002,7 +1016,7 @@ export default function PartnersHomePage() {
       toast.success(
         affiliateLink
           ? "Link atualizado com sucesso!"
-          : "Link criado com sucesso!"
+          : "Link criado com sucesso!",
       );
       setEditingLink(false);
       setNewLinkUrl("");
@@ -1010,7 +1024,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error in handleSaveLink:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao salvar link"
+        error instanceof Error ? error.message : "Erro ao salvar link",
       );
     }
   };
@@ -1071,7 +1085,7 @@ export default function PartnersHomePage() {
       toast.success(
         contract
           ? "Contrato atualizado com sucesso!"
-          : "Contrato criado com sucesso!"
+          : "Contrato criado com sucesso!",
       );
       setEditingContract(false);
       setNewContractUrl("");
@@ -1079,7 +1093,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error in handleSaveContract:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao salvar contrato"
+        error instanceof Error ? error.message : "Erro ao salvar contrato",
       );
     }
   };
@@ -1136,7 +1150,7 @@ export default function PartnersHomePage() {
       toast.success(
         pixKey
           ? "Chave pix atualizada com sucesso!"
-          : "Chave pix criada com sucesso!"
+          : "Chave pix criada com sucesso!",
       );
       setEditingPixKey(false);
       setNewPixKey("");
@@ -1145,7 +1159,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error in handleSavePixKey:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao salvar chave pix"
+        error instanceof Error ? error.message : "Erro ao salvar chave pix",
       );
     }
   };
@@ -1175,7 +1189,7 @@ export default function PartnersHomePage() {
         `/api/partners/coupons/${couponIdToDelete}`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       if (!response.ok) {
@@ -1190,7 +1204,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error deleting coupon:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao excluir cupom"
+        error instanceof Error ? error.message : "Erro ao excluir cupom",
       );
     } finally {
       setDeletingCoupon(null);
@@ -1218,7 +1232,7 @@ export default function PartnersHomePage() {
 
       const data = await response.json();
       toast.success(
-        `Sincronização concluída! ${data.stats.synced} cupons sincronizados.`
+        `Sincronização concluída! ${data.stats.synced} cupons sincronizados.`,
       );
 
       // Refresh the coupons list
@@ -1226,7 +1240,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error syncing coupons:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao sincronizar cupons"
+        error instanceof Error ? error.message : "Erro ao sincronizar cupons",
       );
     } finally {
       setSyncingCoupons(false);
@@ -1261,11 +1275,11 @@ export default function PartnersHomePage() {
 
       if (processedCount > 0) {
         toast.success(
-          `Auto-cupons criados! ${processedCount} de ${totalBrands} marcas processadas.`
+          `Auto-cupons criados! ${processedCount} de ${totalBrands} marcas processadas.`,
         );
       } else if (errorCount > 0) {
         toast.warning(
-          `Processamento concluído com ${errorCount} erros. Verifique os logs.`
+          `Processamento concluído com ${errorCount} erros. Verifique os logs.`,
         );
       } else {
         toast.info("Todas as marcas já possuem auto-cupons.");
@@ -1276,7 +1290,9 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error processing auto-coupons:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao processar auto-cupons"
+        error instanceof Error
+          ? error.message
+          : "Erro ao processar auto-cupons",
       );
     } finally {
       setProcessingAutoCoupons(false);
@@ -1300,7 +1316,7 @@ export default function PartnersHomePage() {
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          errorData.error || "Erro ao processar cupons pendentes"
+          errorData.error || "Erro ao processar cupons pendentes",
         );
       }
 
@@ -1313,11 +1329,11 @@ export default function PartnersHomePage() {
 
       if (processedCount > 0) {
         toast.success(
-          `Cupons processados! ${processedCount} de ${totalCoupons} cupons criados no NuvemShop.`
+          `Cupons processados! ${processedCount} de ${totalCoupons} cupons criados no NuvemShop.`,
         );
       } else if (errorCount > 0) {
         toast.warning(
-          `Processamento concluído com ${errorCount} erros. Verifique os logs.`
+          `Processamento concluído com ${errorCount} erros. Verifique os logs.`,
         );
       } else {
         toast.info("Nenhum cupom pendente para processar.");
@@ -1330,7 +1346,7 @@ export default function PartnersHomePage() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Erro ao processar cupons pendentes"
+          : "Erro ao processar cupons pendentes",
       );
     } finally {
       setProcessingPendingCoupons(false);
@@ -1365,11 +1381,11 @@ export default function PartnersHomePage() {
 
       if (processedCount > 0) {
         toast.success(
-          `Auto-links criados! ${processedCount} de ${totalBrands} marcas processadas.`
+          `Auto-links criados! ${processedCount} de ${totalBrands} marcas processadas.`,
         );
       } else if (errorCount > 0) {
         toast.warning(
-          `Processamento concluído com ${errorCount} erros. Verifique os logs.`
+          `Processamento concluído com ${errorCount} erros. Verifique os logs.`,
         );
       } else {
         toast.info("Todas as marcas já possuem auto-links.");
@@ -1380,7 +1396,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error processing auto-affiliate-links:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao processar auto-links"
+        error instanceof Error ? error.message : "Erro ao processar auto-links",
       );
     } finally {
       setProcessingAutoLinks(false);
@@ -1439,7 +1455,7 @@ export default function PartnersHomePage() {
     } catch (error) {
       console.error("Error creating advanced coupon:", error);
       toast.error(
-        error instanceof Error ? error.message : "Erro ao criar cupom"
+        error instanceof Error ? error.message : "Erro ao criar cupom",
       );
     } finally {
       setGeneratingCoupon(false);
@@ -1762,7 +1778,17 @@ export default function PartnersHomePage() {
                           Saldo Disponível
                         </span>
                       </div>
-                      <p className="text-2xl font-bold text-blue-600">
+                      <p
+                        className="text-2xl font-bold text-blue-600"
+                        onClick={() =>
+                          console.log(
+                            "[Balance Display] Current balance:",
+                            commissionSummary.balance,
+                            "Full summary:",
+                            commissionSummary,
+                          )
+                        }
+                      >
                         {formatCurrency(commissionSummary.balance)}
                       </p>
                       <p className="text-sm text-blue-600">
@@ -1978,7 +2004,7 @@ export default function PartnersHomePage() {
                                     </p>
                                     <p className="text-sm text-muted-foreground">
                                       {new Date(
-                                        payment.payment_date
+                                        payment.payment_date,
                                       ).toLocaleDateString("pt-BR")}
                                     </p>
                                   </div>
@@ -1988,15 +2014,15 @@ export default function PartnersHomePage() {
                                         payment.status === "confirmed"
                                           ? "default"
                                           : payment.status === "sent"
-                                          ? "secondary"
-                                          : "destructive"
+                                            ? "secondary"
+                                            : "destructive"
                                       }
                                     >
                                       {payment.status === "sent"
                                         ? "Enviado"
                                         : payment.status === "confirmed"
-                                        ? "Confirmado"
-                                        : "Cancelado"}
+                                          ? "Confirmado"
+                                          : "Cancelado"}
                                     </Badge>
                                     {payment.franchise && (
                                       <Badge
@@ -2042,8 +2068,8 @@ export default function PartnersHomePage() {
                                   {payment.payment_method === "pix"
                                     ? "PIX"
                                     : payment.payment_method === "bank_transfer"
-                                    ? "Transferência"
-                                    : "Outro"}
+                                      ? "Transferência"
+                                      : "Outro"}
                                 </span>
                                 {payment.payment_reference && (
                                   <span className="break-all">
@@ -2084,7 +2110,7 @@ export default function PartnersHomePage() {
                                     </p>
                                     <p className="text-sm text-muted-foreground">
                                       {new Date(
-                                        payment.payment_date
+                                        payment.payment_date,
                                       ).toLocaleDateString("pt-BR")}
                                     </p>
                                   </div>
@@ -2093,15 +2119,15 @@ export default function PartnersHomePage() {
                                       payment.status === "confirmed"
                                         ? "default"
                                         : payment.status === "sent"
-                                        ? "secondary"
-                                        : "destructive"
+                                          ? "secondary"
+                                          : "destructive"
                                     }
                                   >
                                     {payment.status === "sent"
                                       ? "Enviado"
                                       : payment.status === "confirmed"
-                                      ? "Confirmado"
-                                      : "Cancelado"}
+                                        ? "Confirmado"
+                                        : "Cancelado"}
                                   </Badge>
                                 </div>
                               </div>
@@ -2193,12 +2219,12 @@ export default function PartnersHomePage() {
                             ? selectedBrand === null && canUseBrandFilter
                               ? "Selecione uma marca para ver ou criar link de afiliados."
                               : effectiveBrand &&
-                                isZenithProduct(effectiveBrand) &&
-                                !selectedFranchise
-                              ? "Selecione uma franquia Zenith para ver o link de afiliado."
-                              : effectiveBrand
-                              ? `Nenhum link de afiliado criado para a marca "${effectiveBrand}".`
-                              : "Selecione uma marca para ver ou criar link de afiliados."
+                                  isZenithProduct(effectiveBrand) &&
+                                  !selectedFranchise
+                                ? "Selecione uma franquia Zenith para ver o link de afiliado."
+                                : effectiveBrand
+                                  ? `Nenhum link de afiliado criado para a marca "${effectiveBrand}".`
+                                  : "Selecione uma marca para ver ou criar link de afiliados."
                             : "Selecione uma marca para ver ou criar link de afiliados."}
                         </p>
                       </div>
@@ -2324,7 +2350,7 @@ export default function PartnersHomePage() {
                               // Generate default affiliate URL for the brand
                               let defaultUrl = `https://hudlab.com.br/?utm_source=LandingPage&utm_medium=${effectiveBrand.replace(
                                 /\s+/g,
-                                "-"
+                                "-",
                               )}`;
 
                               // For Zenith brand, include franchise name if selected
@@ -2334,7 +2360,7 @@ export default function PartnersHomePage() {
                               ) {
                                 defaultUrl = `https://hudlab.com.br/?utm_source=LandingPage&utm_medium=${effectiveBrand.replace(
                                   /\s+/g,
-                                  "-"
+                                  "-",
                                 )}-${selectedFranchise.replace(/\s+/g, "-")}`;
                               }
 
@@ -2403,7 +2429,7 @@ export default function PartnersHomePage() {
                         <div className="text-xl sm:text-2xl font-bold text-green-600">
                           {
                             generatedCoupons.filter(
-                              (c) => c.nuvemshopStatus === "created"
+                              (c) => c.nuvemshopStatus === "created",
                             ).length
                           }
                         </div>
@@ -2415,7 +2441,7 @@ export default function PartnersHomePage() {
                         <div className="text-xl sm:text-2xl font-bold text-yellow-600">
                           {
                             generatedCoupons.filter(
-                              (c) => c.nuvemshopStatus === "pending"
+                              (c) => c.nuvemshopStatus === "pending",
                             ).length
                           }
                         </div>
@@ -2427,7 +2453,7 @@ export default function PartnersHomePage() {
                         <div className="text-xl sm:text-2xl font-bold text-red-600">
                           {
                             generatedCoupons.filter(
-                              (c) => c.nuvemshopStatus === "error"
+                              (c) => c.nuvemshopStatus === "error",
                             ).length
                           }
                         </div>
@@ -2453,7 +2479,7 @@ export default function PartnersHomePage() {
                             const brandToUse = selectedBrand || assignedBrand;
                             if (!brandToUse) {
                               toast.error(
-                                "Selecione uma marca para criar cupons"
+                                "Selecione uma marca para criar cupons",
                               );
                               return;
                             }
@@ -2653,7 +2679,7 @@ export default function PartnersHomePage() {
                         const filteredCoupons = generatedCoupons.filter(
                           (coupon) =>
                             statusFilter === "all" ||
-                            coupon.nuvemshopStatus === statusFilter
+                            coupon.nuvemshopStatus === statusFilter,
                         );
 
                         if (filteredCoupons.length === 0) {
@@ -2719,7 +2745,7 @@ export default function PartnersHomePage() {
                                   <p className="text-xs text-muted-foreground">
                                     {coupon.percentage}% - Válido até{" "}
                                     {new Date(
-                                      coupon.validUntil
+                                      coupon.validUntil,
                                     ).toLocaleDateString("pt-BR")}
                                   </p>
                                   {coupon.brand && (
@@ -2800,7 +2826,7 @@ export default function PartnersHomePage() {
                       const filteredCount = generatedCoupons.filter(
                         (coupon) =>
                           statusFilter === "all" ||
-                          coupon.nuvemshopStatus === statusFilter
+                          coupon.nuvemshopStatus === statusFilter,
                       ).length;
                       return (
                         filteredCount > 10 && (
@@ -2883,7 +2909,7 @@ export default function PartnersHomePage() {
                                 onClick={() =>
                                   copyToClipboard(
                                     contract.contract_url,
-                                    "Contrato"
+                                    "Contrato",
                                   )
                                 }
                               >

@@ -66,13 +66,19 @@ export interface NuvemshopOrder {
   promotional_discount: number;
   discount_coupon: number;
   discount_gateway: number;
+  shipping_cost_customer?: number | null;
+  shipping_cost_owner?: number | null;
+  shipping_discount?: number | null;
+  gateway_fees?: number | null;
+  transaction_taxes?: number | null;
+  installment_interest?: number | null;
   completed_at: string;
   created_at_nuvemshop: string;
 }
 
 // Helper functions
 export function getFranchiseFromVariant(
-  variant: ProductVariant
+  variant: ProductVariant,
 ): string | null {
   // Franchise information is in values[1] (second element)
   if (variant.values && variant.values.length > 1 && variant.values[1]?.pt) {
@@ -82,7 +88,7 @@ export function getFranchiseFromVariant(
 }
 
 export function getFranchiseFromOrderProduct(
-  product: OrderProduct
+  product: OrderProduct,
 ): string | null {
   // Check if product has variant_values array (from Nuvemshop orders)
   // Format: ["42/43", "Taquara - RS"] where [0] is size and [1] is franchise
@@ -113,7 +119,7 @@ export function isZenithProduct(brand: string): boolean {
 
 export function filterProductsByFranchise(
   products: NuvemshopProduct[],
-  franchise: string | null
+  franchise: string | null,
 ): NuvemshopProduct[] {
   if (!franchise) return products;
 
@@ -137,13 +143,13 @@ export function filterProductsByFranchise(
     .filter(
       (product) =>
         // Keep non-Zenith products or Zenith products with matching variants
-        !isZenithProduct(product.brand) || product.variants.length > 0
+        !isZenithProduct(product.brand) || product.variants.length > 0,
     );
 }
 
 export function filterOrdersByFranchise(
   orders: NuvemshopOrder[],
-  franchise: string | null
+  franchise: string | null,
 ): NuvemshopOrder[] {
   if (!franchise) return orders;
 
@@ -170,10 +176,10 @@ export function filterOrdersByFranchise(
 
 export function calculateFranchiseRevenue(
   order: NuvemshopOrder,
-  franchise: string | null
+  franchise: string | null,
 ): number {
   if (!franchise) {
-    // If no franchise selected, calculate total revenue
+    // If no franchise selected, calculate total revenue (net revenue after all costs)
     const subtotal =
       typeof order.subtotal === "string"
         ? parseFloat(order.subtotal)
@@ -194,7 +200,37 @@ export function calculateFranchiseRevenue(
         ? parseFloat(order.discount_gateway)
         : order.discount_gateway || 0;
 
-    return subtotal - promotionalDiscount - discountCoupon - discountGateway;
+    const shippingDiscount =
+      typeof order.shipping_discount === "string"
+        ? parseFloat(order.shipping_discount)
+        : order.shipping_discount || 0;
+
+    const gatewayFees =
+      typeof order.gateway_fees === "string"
+        ? parseFloat(order.gateway_fees)
+        : order.gateway_fees || 0;
+
+    const transactionTaxes =
+      typeof order.transaction_taxes === "string"
+        ? parseFloat(order.transaction_taxes)
+        : order.transaction_taxes || 0;
+
+    const installmentInterest =
+      typeof order.installment_interest === "string"
+        ? parseFloat(order.installment_interest)
+        : order.installment_interest || 0;
+
+    // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+    return (
+      subtotal -
+      promotionalDiscount -
+      discountCoupon -
+      discountGateway -
+      shippingDiscount -
+      gatewayFees -
+      transactionTaxes -
+      installmentInterest
+    );
   }
 
   // Calculate revenue only for products from the selected franchise
@@ -224,7 +260,7 @@ export function calculateFranchiseRevenue(
   // Calculate the proportion of the order that belongs to this franchise
   const franchiseProportion = franchiseSubtotal / orderSubtotal;
 
-  // Apply discounts proportionally
+  // Apply discounts and costs proportionally
   const promotionalDiscount =
     typeof order.promotional_discount === "string"
       ? parseFloat(order.promotional_discount)
@@ -240,18 +276,100 @@ export function calculateFranchiseRevenue(
       ? parseFloat(order.discount_gateway)
       : order.discount_gateway || 0;
 
-  // Apply each discount proportionally to the franchise revenue
+  const shippingDiscount =
+    typeof order.shipping_discount === "string"
+      ? parseFloat(order.shipping_discount)
+      : order.shipping_discount || 0;
+
+  const gatewayFees =
+    typeof order.gateway_fees === "string"
+      ? parseFloat(order.gateway_fees)
+      : order.gateway_fees || 0;
+
+  const transactionTaxes =
+    typeof order.transaction_taxes === "string"
+      ? parseFloat(order.transaction_taxes)
+      : order.transaction_taxes || 0;
+
+  const installmentInterest =
+    typeof order.installment_interest === "string"
+      ? parseFloat(order.installment_interest)
+      : order.installment_interest || 0;
+
+  // Apply each discount and cost proportionally to the franchise revenue
+  // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
   const franchisePromotionalDiscount =
     promotionalDiscount * franchiseProportion;
   const franchiseDiscountCoupon = discountCoupon * franchiseProportion;
   const franchiseDiscountGateway = discountGateway * franchiseProportion;
+  const franchiseShippingDiscount = shippingDiscount * franchiseProportion;
+  const franchiseGatewayFees = gatewayFees * franchiseProportion;
+  const franchiseTransactionTaxes = transactionTaxes * franchiseProportion;
+  const franchiseInstallmentInterest =
+    installmentInterest * franchiseProportion;
 
-  // Calculate final franchise revenue: subtotal - proportional discounts
+  // Calculate final franchise revenue: subtotal - proportional discounts and costs
   const franchiseRevenue =
     franchiseSubtotal -
     franchisePromotionalDiscount -
     franchiseDiscountCoupon -
-    franchiseDiscountGateway;
+    franchiseDiscountGateway -
+    franchiseShippingDiscount -
+    franchiseGatewayFees -
+    franchiseTransactionTaxes -
+    franchiseInstallmentInterest;
 
   return Math.max(0, franchiseRevenue); // Ensure non-negative
+}
+
+/**
+ * Calculate Net Revenue (Faturamento Líquido)
+ * This is the revenue after all discounts including free shipping discount
+ * Formula: subtotal - promotional_discount - discount_coupon - discount_gateway - shipping_discount
+ */
+export function calculateNetRevenue(order: NuvemshopOrder): number {
+  const subtotal =
+    typeof order.subtotal === "string"
+      ? parseFloat(order.subtotal)
+      : order.subtotal || 0;
+
+  const promotionalDiscount =
+    typeof order.promotional_discount === "string"
+      ? parseFloat(order.promotional_discount)
+      : order.promotional_discount || 0;
+
+  const discountCoupon =
+    typeof order.discount_coupon === "string"
+      ? parseFloat(order.discount_coupon)
+      : order.discount_coupon || 0;
+
+  const discountGateway =
+    typeof order.discount_gateway === "string"
+      ? parseFloat(order.discount_gateway)
+      : order.discount_gateway || 0;
+
+  const shippingDiscount =
+    typeof order.shipping_discount === "string"
+      ? parseFloat(order.shipping_discount)
+      : order.shipping_discount || 0;
+
+  return (
+    subtotal -
+    promotionalDiscount -
+    discountCoupon -
+    discountGateway -
+    shippingDiscount
+  );
+}
+
+/**
+ * Calculate Commissionable Revenue (Valor Comissionável)
+ * This is the net revenue after all discounts
+ * Formula: calculateNetRevenue()
+ * This is the value on which partner commission should be calculated
+ * NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+ */
+export function calculateCommissionableRevenue(order: NuvemshopOrder): number {
+  const netRevenue = calculateNetRevenue(order);
+  return Math.max(0, netRevenue);
 }
