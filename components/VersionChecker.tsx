@@ -19,24 +19,27 @@ import { storage } from "@/lib/storage";
 const VERSION_KEY = "app_build_version";
 const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutos
 
-async function clearAllClientData() {
+async function clearAppCacheOnly() {
   try {
-    console.log("🧹 Limpando dados do cliente devido a nova versão...");
+    console.log("🧹 Limpando cache do app devido a nova versão...");
 
-    // Limpa sessionStorage e localStorage
-    storage.clearAll();
-
-    // Limpa cookies
-    const cookies = document.cookie.split(";");
-    for (const cookie of cookies) {
-      const eqPos = cookie.indexOf("=");
-      const name =
-        eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
-
-      // Remove o cookie em todos os paths possíveis
-      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+    // Limpa apenas dados de cache do app — NÃO limpa tokens de auth do Supabase
+    const localKeys = storage.keys("local");
+    for (const key of localKeys) {
+      // Preserva cookies/tokens do Supabase (sb-*) e da autenticação
+      if (
+        key.startsWith("sb-") ||
+        key.includes("supabase") ||
+        key.includes("auth") ||
+        key.includes("persistent_auth")
+      ) {
+        continue;
+      }
+      storage.removeItem(key, "local");
     }
+
+    // Limpa sessionStorage inteiramente (não tem tokens de auth)
+    storage.clear("session");
 
     // Limpa cache do service worker se disponível
     if ("caches" in window) {
@@ -44,18 +47,19 @@ async function clearAllClientData() {
       await Promise.all(cacheNames.map((name) => caches.delete(name)));
     }
 
-    console.log("✅ Dados do cliente limpos com sucesso");
+    console.log("✅ Cache do app limpo com sucesso");
   } catch (error) {
-    console.error("❌ Erro ao limpar dados do cliente:", error);
+    console.error("❌ Erro ao limpar cache do app:", error);
   }
 }
 
-function forceLogoutAndRedirect() {
-  console.log("🔄 Forçando logout devido a nova versão do sistema...");
+function reloadForNewVersion() {
+  console.log("🔄 Nova versão detectada — recarregando a página...");
 
-  clearAllClientData().then(() => {
-    // Redireciona para login com mensagem
-    window.location.href = "/login?reason=version_update";
+  clearAppCacheOnly().then(() => {
+    // Atualiza a versão armazenada com a nova antes de recarregar
+    // para evitar loop de reload
+    window.location.reload();
   });
 }
 
@@ -82,7 +86,7 @@ async function checkVersion() {
       return;
     }
 
-    // Se as versões são diferentes, força logout
+    // Se as versões são diferentes, recarrega a página preservando a sessão
     if (clientVersion !== serverVersion) {
       console.warn(
         "⚠️ Nova versão detectada!",
@@ -91,7 +95,9 @@ async function checkVersion() {
         "\nVersão servidor:",
         serverVersion,
       );
-      forceLogoutAndRedirect();
+      // Salva a nova versão ANTES de recarregar para evitar loop infinito
+      storage.setItem(VERSION_KEY, serverVersion, "local");
+      reloadForNewVersion();
     }
   } catch (error) {
     console.error("Erro ao verificar versão:", error);
