@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Clock,
   Users,
+  Zap,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -74,6 +75,11 @@ const menuGroups: MenuGroup[] = [
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
+      },
+      {
+        title: "Live Dashboard",
+        url: "/live-dashboard",
+        icon: Zap,
       },
       {
         title: "Negócios",
@@ -223,14 +229,14 @@ export function AppSidebar() {
     // Users with role "user" cannot see the "Parceiros" group
     if (isUser) {
       filteredGroups = filteredGroups.filter(
-        (group) => group.label !== "Parceiros"
+        (group) => group.label !== "Parceiros",
       );
     }
 
     // Only owners and admins can see the "Custos" group
     if (!isOwner && !isAdmin) {
       filteredGroups = filteredGroups.filter(
-        (group) => group.label !== "Custos"
+        (group) => group.label !== "Custos",
       );
     }
 
@@ -276,7 +282,7 @@ export function AppSidebar() {
             onClick={() =>
               window.open(
                 "https://drive.google.com/drive/folders/11aZgYke5pbAagggBhA0ayWTK0z38V-CK?usp=sharing",
-                "_blank"
+                "_blank",
               )
             }
             variant="outline"
