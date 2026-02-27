@@ -10,6 +10,15 @@ import {
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils";
 import { RefreshCw, TrendingUp, Target, Zap, BarChart3 } from "lucide-react";
+
+function LiveDot() {
+  return (
+    <span className="relative flex h-3 w-3">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
+    </span>
+  );
+}
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/utils/supabase/client";
 
@@ -142,7 +151,7 @@ export default function LiveDashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Zap className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500" />
+          <LiveDot />
           <h1 className="text-xl sm:text-2xl font-bold">Live Dashboard</h1>
           {loading && (
             <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -153,7 +162,7 @@ export default function LiveDashboardPage() {
             {time}
           </div>
           <div className="text-xs sm:text-sm text-muted-foreground">
-            {dateStr} • UTC-3
+            {dateStr}
           </div>
           {data && (
             <div className="text-sm font-medium text-muted-foreground">

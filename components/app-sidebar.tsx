@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Clock,
   Users,
-  Zap,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -54,6 +53,16 @@ const MetaIcon = ({ className }: { className?: string }) => (
   <FontAwesomeIcon icon={faMeta} className={className} />
 );
 
+// Live blinking dot icon for Live Dashboard
+const LiveDotIcon = ({ className }: { className?: string }) => (
+  <span
+    className={`relative flex items-center justify-center ${className ?? ""}`}
+  >
+    <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-primary opacity-75" />
+    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
+  </span>
+);
+
 // Type for menu items
 type MenuItem = {
   title: string;
@@ -72,14 +81,14 @@ const menuGroups: MenuGroup[] = [
     label: "Dados de Negócios",
     items: [
       {
+        title: "Live Dashboard",
+        url: "/live-dashboard",
+        icon: LiveDotIcon,
+      },
+      {
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
-      },
-      {
-        title: "Live Dashboard",
-        url: "/live-dashboard",
-        icon: Zap,
       },
       {
         title: "Negócios",
