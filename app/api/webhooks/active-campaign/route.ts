@@ -42,7 +42,7 @@ async function fetchDealFromAC(dealId: string) {
 // Fetch custom field data for a specific deal
 async function fetchDealCustomFields(dealId: string) {
   const res = await fetch(
-    `${BASE_URL}/api/3/dealCustomFieldData?deal=${dealId}&limit=100`,
+    `${BASE_URL}/api/3/dealCustomFieldData?filters[dealId]=${dealId}&limit=100`,
     {
       headers: { "Api-Token": API_TOKEN!, "Content-Type": "application/json" },
     },
