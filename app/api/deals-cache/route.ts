@@ -20,7 +20,7 @@ const formatDateToLocal = (date: Date): string => {
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 // STATIC-FIRST GET: Serve cached deals like static content
@@ -44,10 +44,10 @@ export async function GET(request: NextRequest) {
 
       // Use UTC dates to avoid timezone conversion issues
       startDate = new Date(
-        Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0)
+        Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0),
       );
       endDate = new Date(
-        Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59, 999)
+        Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59, 999),
       );
 
       console.log("API: Custom date range received:", {
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
           endDate: endDate.toISOString(),
           formattedStart: formatBrazilDateToLocal(startDate),
           formattedEnd: formatBrazilDateToLocal(endDate),
-        }
+        },
       );
     }
 
@@ -87,8 +87,9 @@ export async function GET(request: NextRequest) {
         closing_date, created_date, custom_field_value, custom_field_id,
         estado, "quantidade-de-pares", vendedor, designer,
         "utm-source", "utm-medium", custom_field_54,
-        contact_id, organization_id, api_updated_at, last_synced_at
-      `
+        contact_id, organization_id, api_updated_at, last_synced_at,
+        segmento_de_negocio, intencao_de_compra
+      `,
       )
       .eq("sync_status", "synced")
       .not("closing_date", "is", null)
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching deals from cache:", error);
       return NextResponse.json(
         { error: "Failed to fetch deals from cache" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -142,13 +143,13 @@ export async function GET(request: NextRequest) {
           "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
           "X-Data-Source": "static-cache",
         },
-      }
+      },
     );
   } catch (error) {
     console.error("Error in deals-cache API:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -173,7 +174,7 @@ export async function POST() {
             "Uma sincronização já está em andamento. Aguarde a finalização para iniciar outra.",
           isRunning: true,
         },
-        { status: 409 } // Conflict status
+        { status: 409 }, // Conflict status
       );
     }
 
@@ -184,7 +185,7 @@ export async function POST() {
       }/api/test/robust-deals-sync`,
       {
         method: "GET",
-      }
+      },
     );
 
     if (!syncResponse.ok) {
@@ -202,7 +203,7 @@ export async function POST() {
     console.error("Error triggering manual sync:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -52,6 +52,19 @@ async function fetchDealCustomFields(dealId: string) {
   return res.json();
 }
 
+// Fetch contact field values for a specific contact
+async function fetchContactFieldValues(contactId: string) {
+  const res = await fetch(
+    `${BASE_URL}/api/3/contacts/${contactId}/fieldValues`,
+    {
+      headers: { "Api-Token": API_TOKEN!, "Content-Type": "application/json" },
+    },
+  );
+  if (!res.ok)
+    throw new Error(`AC API error fetching contact fields: ${res.status}`);
+  return res.json();
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
@@ -103,7 +116,20 @@ export async function POST(request: NextRequest) {
     const deal = dealResponse.deal;
     if (!deal) throw new Error("Deal not found in ActiveCampaign response");
 
-    // Build custom fields map
+    // Fetch contact field values if contact exists
+    let contactFieldsResponse = null;
+    if (deal.contact) {
+      console.log(`🔍 Fetching contact fields for contact ID: ${deal.contact}`);
+      contactFieldsResponse = await fetchContactFieldValues(deal.contact);
+      console.log(
+        `✅ Contact fields response:`,
+        JSON.stringify(contactFieldsResponse, null, 2),
+      );
+    } else {
+      console.warn(`⚠️ Deal ${dealId} has no contact associated`);
+    }
+
+    // Build custom fields map (deal fields)
     const customFieldsMap = new Map<number, string>();
     const customFieldData: any[] =
       customFieldsResponse.dealCustomFieldData || [];
@@ -118,6 +144,29 @@ export async function POST(request: NextRequest) {
         );
       });
 
+    // Build contact fields map (contact fields 7 and 50)
+    const contactFieldsMap = new Map<number, string>();
+    if (contactFieldsResponse) {
+      const contactFieldValues: any[] = contactFieldsResponse.fieldValues || [];
+      console.log(
+        `📊 Processing ${contactFieldValues.length} contact field values`,
+      );
+      contactFieldValues
+        .filter((item: any) => {
+          const fieldId = parseInt(item.field);
+          return fieldId === 7 || fieldId === 50; // Segmento de Negócio and Intenção de Compra
+        })
+        .forEach((item: any) => {
+          console.log(
+            `✅ Found contact field ${item.field}: ${item.value || "(empty)"}`,
+          );
+          contactFieldsMap.set(parseInt(item.field), item.value || "");
+        });
+    }
+    console.log(
+      `📊 Contact fields map size: ${contactFieldsMap.size}, Field 7: ${contactFieldsMap.get(7) || "null"}, Field 50: ${contactFieldsMap.get(50) || "null"}`,
+    );
+
     // Transform deal using the same mapping as the sync route
     const closingDate = customFieldsMap.get(5) || null;
     const estado = customFieldsMap.get(25) || null;
@@ -126,6 +175,10 @@ export async function POST(request: NextRequest) {
     const designer = customFieldsMap.get(47) || null;
     const utmSource = customFieldsMap.get(49) || null;
     const utmMedium = customFieldsMap.get(50) || null;
+
+    // Contact custom field values (field 7 = Segmento de Negócio, field 50 = Intenção de Compra)
+    const segmentoDeNegocio = contactFieldsMap.get(7) || null;
+    const intencaoDeCompra = contactFieldsMap.get(50) || null;
 
     const processedDeal = {
       deal_id: deal.id,
@@ -149,6 +202,8 @@ export async function POST(request: NextRequest) {
       api_updated_at: deal.mdate || deal.cdate || null,
       last_synced_at: new Date().toISOString(),
       sync_status: "synced" as const,
+      segmento_de_negocio: segmentoDeNegocio,
+      intencao_de_compra: intencaoDeCompra,
     };
 
     // Upsert into deals_cache AND deals_live in parallel
@@ -179,6 +234,81 @@ export async function POST(request: NextRequest) {
       // Don't throw - deals_cache was successful, log the error
     }
 
+    // ── Ghost deal healing ───────────────────────────────────────────────────
+    // When a deal comes in with value = 0, it may be an orphan created by
+    // ActiveCampaign during a bulk owner reassignment. We look for a sibling
+    // deal on the same contact that carries the real data (value > 0) and copy
+    // the key fields over so the dashboard reflects accurate information.
+    let ghostHealed = false;
+    try {
+      const dealValue = parseFloat(deal.value || "0");
+      const contactId = deal.contact?.toString();
+
+      if (dealValue === 0 && contactId) {
+        console.log(
+          `🔍 Deal ${dealId} has value=0 — checking for ghost sibling on contact ${contactId}`,
+        );
+
+        const { data: siblings } = await supabase
+          .from("deals_cache")
+          .select(
+            `deal_id, title, value, status, stage_id, closing_date, custom_field_value, custom_field_id, estado, vendedor, designer, "quantidade-de-pares", "utm-source", "utm-medium", segmento_de_negocio, intencao_de_compra`,
+          )
+          .eq("contact_id", contactId)
+          .neq("deal_id", dealId)
+          .gt("value", 0)
+          .order("value", { ascending: false })
+          .limit(1);
+
+        if (siblings && siblings.length > 0) {
+          const ghost = siblings[0];
+          console.log(
+            `👻 Ghost deal detected! Healing active deal ${dealId} with data from ghost deal ${ghost.deal_id} (value: ${ghost.value}, title: "${ghost.title}")`,
+          );
+
+          // Copy ALL fields from ghost — status, closing_date, value, title, etc.
+          const healPatch = {
+            title: ghost.title,
+            value: ghost.value,
+            status: ghost.status,
+            stage_id: ghost.stage_id,
+            closing_date: ghost.closing_date,
+            custom_field_value: ghost.custom_field_value,
+            custom_field_id: ghost.custom_field_id,
+            estado: ghost.estado,
+            "quantidade-de-pares": ghost["quantidade-de-pares"],
+            vendedor: ghost.vendedor,
+            designer: ghost.designer,
+            "utm-source": ghost["utm-source"],
+            "utm-medium": ghost["utm-medium"],
+            segmento_de_negocio: ghost.segmento_de_negocio,
+            intencao_de_compra: ghost.intencao_de_compra,
+          };
+
+          await Promise.all([
+            supabase
+              .from("deals_cache")
+              .update(healPatch)
+              .eq("deal_id", dealId),
+            supabase.from("deals_live").update(healPatch).eq("deal_id", dealId),
+          ]);
+
+          ghostHealed = true;
+          console.log(
+            `✅ Ghost healing complete for deal ${dealId} — adopted data from ghost ${ghost.deal_id}`,
+          );
+        } else {
+          console.log(
+            `ℹ️ No ghost sibling found for deal ${dealId} on contact ${contactId}`,
+          );
+        }
+      }
+    } catch (ghostError) {
+      // Healing is non-critical — never fail the main webhook response
+      console.error(`⚠️ Ghost healing error for deal ${dealId}:`, ghostError);
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const totalTime = Date.now() - startTime;
     console.log(
       `✅ Deal ${dealId} updated in deals_cache + deals_live in ${totalTime}ms`,
@@ -187,6 +317,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       deal_id: dealId,
+      ghost_healed: ghostHealed,
       processing_time_ms: totalTime,
     });
   } catch (error) {

@@ -7,6 +7,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
 const API_TOKEN = process.env.AC_API_TOKEN;
 
 // The custom field IDs we want to extract
+// Deal custom field IDs (fetched via dealCustomFieldData)
+// Contact fields 7 (Segmento de Negócio) and 50 (Intenção de Compra) are fetched separately via fieldValues
 const TARGET_CUSTOM_FIELD_IDS = [5, 25, 39, 45, 47, 49, 50, 54];
 
 const headers = {
@@ -41,7 +43,7 @@ async function createSupabaseServer() {
           });
         },
       },
-    }
+    },
   );
 }
 
@@ -86,7 +88,7 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
         Math.floor(i / RATE_LIMIT.BATCH_SIZE) + 1
       }/${Math.ceil(urls.length / RATE_LIMIT.BATCH_SIZE)}: ${
         batch.length
-      } requests`
+      } requests`,
     );
 
     // Execute batch in parallel
@@ -98,7 +100,7 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
           console.log(
             `📡 Batch request ${index + 1}/${
               batch.length
-            }, attempt ${attempt}/${maxRetries}`
+            }, attempt ${attempt}/${maxRetries}`,
           );
           const result = await fetchJSON(url);
           return { url, result, success: true };
@@ -106,7 +108,7 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
           lastError = error;
           console.error(
             `❌ Batch request ${index + 1} attempt ${attempt} failed:`,
-            error
+            error,
           );
 
           if (attempt < maxRetries) {
@@ -140,24 +142,26 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
       const batchDuration = Date.now() - batchStartTime;
       const requiredDelay = Math.max(
         0,
-        RATE_LIMIT.MIN_BATCH_INTERVAL - batchDuration + RATE_LIMIT.SAFETY_BUFFER
+        RATE_LIMIT.MIN_BATCH_INTERVAL -
+          batchDuration +
+          RATE_LIMIT.SAFETY_BUFFER,
       );
 
       if (requiredDelay > 0) {
         console.log(
-          `⏳ Adaptive delay: batch took ${batchDuration}ms, waiting ${requiredDelay}ms more...`
+          `⏳ Adaptive delay: batch took ${batchDuration}ms, waiting ${requiredDelay}ms more...`,
         );
         await new Promise((resolve) => setTimeout(resolve, requiredDelay));
       } else {
         console.log(
-          `⚡ No delay needed: batch took ${batchDuration}ms (>= ${RATE_LIMIT.MIN_BATCH_INTERVAL}ms)`
+          `⚡ No delay needed: batch took ${batchDuration}ms (>= ${RATE_LIMIT.MIN_BATCH_INTERVAL}ms)`,
         );
       }
     }
   }
 
   console.log(
-    `✅ Parallel fetch completed: ${results.length} successful, ${errors.length} failed`
+    `✅ Parallel fetch completed: ${results.length} successful, ${errors.length} failed`,
   );
   return { results, errors };
 }
@@ -198,16 +202,16 @@ export async function GET(request: NextRequest) {
   try {
     console.log("=== ROBUST DEALS SYNC PARALLEL ===");
     console.log(
-      `🎯 Target custom field IDs: ${TARGET_CUSTOM_FIELD_IDS.join(", ")}`
+      `🎯 Target custom field IDs: ${TARGET_CUSTOM_FIELD_IDS.join(", ")}`,
     );
     console.log(
-      `⚡ Rate limiting: ${RATE_LIMIT.REQUESTS_PER_SECOND} req/sec, batch size: ${RATE_LIMIT.BATCH_SIZE}`
+      `⚡ Rate limiting: ${RATE_LIMIT.REQUESTS_PER_SECOND} req/sec, batch size: ${RATE_LIMIT.BATCH_SIZE}`,
     );
 
     if (!BASE_URL || !API_TOKEN) {
       return NextResponse.json(
         { error: "Missing environment variables. Check .env file." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -222,7 +226,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔍 Mode: ${dryRun ? "DRY RUN" : "LIVE UPDATE"}`);
     console.log(`🗑️ Clear first: ${clearFirst ? "YES" : "NO"}`);
     console.log(
-      `📊 Max deals to process: ${allDealsParam ? "ALL DEALS" : maxDeals}`
+      `📊 Max deals to process: ${allDealsParam ? "ALL DEALS" : maxDeals}`,
     );
 
     const supabase = await createSupabaseServer();
@@ -264,7 +268,7 @@ export async function GET(request: NextRequest) {
         console.error("Error clearing table:", deleteError);
         return NextResponse.json(
           { error: "Failed to clear table" },
-          { status: 500 }
+          { status: 500 },
         );
       }
       console.log("✅ deals_cache table cleared");
@@ -292,7 +296,7 @@ export async function GET(request: NextRequest) {
 
     if (allDealsParam) {
       console.log(
-        `⚡ ALL DEALS MODE: Processing all ${totalAvailableDeals} deals`
+        `⚡ ALL DEALS MODE: Processing all ${totalAvailableDeals} deals`,
       );
     }
 
@@ -328,34 +332,34 @@ export async function GET(request: NextRequest) {
     const apiDuplicatesRemoved = dealsBeforeDedup - allDeals.length;
     if (apiDuplicatesRemoved > 0) {
       console.log(
-        `⚠️ API returned ${apiDuplicatesRemoved} duplicate deals - removed (${dealsBeforeDedup} -> ${allDeals.length})`
+        `⚠️ API returned ${apiDuplicatesRemoved} duplicate deals - removed (${dealsBeforeDedup} -> ${allDeals.length})`,
       );
     }
 
     console.log(
-      `📊 STEP 1 COMPLETE: Fetched ${allDeals.length} unique deals (${dealErrors.length} errors)`
+      `📊 STEP 1 COMPLETE: Fetched ${allDeals.length} unique deals (${dealErrors.length} errors)`,
     );
 
     // Step 2: Get custom field data with parallel pagination
     console.log(
-      "🎯 STEP 2: Fetching custom field data with parallel pagination..."
+      "🎯 STEP 2: Fetching custom field data with parallel pagination...",
     );
 
     // Get total custom field data count
     const firstCustomFieldUrl = new URL(
-      `${BASE_URL}/api/3/dealCustomFieldData`
+      `${BASE_URL}/api/3/dealCustomFieldData`,
     );
     firstCustomFieldUrl.searchParams.set("limit", "1");
     firstCustomFieldUrl.searchParams.set("offset", "0");
 
     const firstCustomFieldResponse = await fetchJSON(
-      firstCustomFieldUrl.toString()
+      firstCustomFieldUrl.toString(),
     );
     const totalCustomFields = firstCustomFieldResponse.meta?.total || 0;
     const totalCustomFieldPages = Math.ceil(totalCustomFields / limit);
 
     console.log(
-      `📊 Total custom field entries: ${totalCustomFields} in ${totalCustomFieldPages} pages`
+      `📊 Total custom field entries: ${totalCustomFields} in ${totalCustomFieldPages} pages`,
     );
 
     // Create URLs for all custom field pages
@@ -383,17 +387,17 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(
-      `📊 STEP 2 COMPLETE: Fetched ${allCustomFieldData.length} custom field entries (${customFieldErrors.length} errors)`
+      `📊 STEP 2 COMPLETE: Fetched ${allCustomFieldData.length} custom field entries (${customFieldErrors.length} errors)`,
     );
 
     // Step 3: Process and filter custom field data
     console.log("🎯 STEP 3: Processing custom field data...");
     const targetCustomFieldData = allCustomFieldData.filter((item) =>
-      TARGET_CUSTOM_FIELD_IDS.includes(parseInt(item.customFieldId))
+      TARGET_CUSTOM_FIELD_IDS.includes(parseInt(item.customFieldId)),
     );
 
     console.log(
-      `📊 Filtered to ${targetCustomFieldData.length} target custom field entries`
+      `📊 Filtered to ${targetCustomFieldData.length} target custom field entries`,
     );
 
     // Step 4: Create lookup map for custom fields
@@ -412,31 +416,88 @@ export async function GET(request: NextRequest) {
     });
 
     console.log(
-      `📊 Created lookup map for ${dealCustomFieldsMap.size} deals with custom fields`
+      `📊 Created lookup map for ${dealCustomFieldsMap.size} deals with custom fields`,
     );
 
-    // Step 5: Process deals and combine with custom field data
+    // Step 4.5: Fetch contact field values (fields 7 e 50) apenas para os contacts
+    // dos deals que possuem o custom field 5 preenchido (Data Fechamento)
     console.log(
-      "🎯 STEP 5: Processing deals and combining with custom fields..."
+      "🎯 STEP 4.5: Fetching contact fields 7 and 50 for contacts of deals with field 5...",
     );
-    const processedDeals = allDeals.map((deal) => {
+
+    // Identify deals with field 5 and collect their unique contact IDs
+    const dealsWithField5 = allDeals.filter((deal) => {
+      const fields = dealCustomFieldsMap.get(deal.id.toString());
+      return fields && fields.has(5) && fields.get(5);
+    });
+
+    const relevantContactIds = [
+      ...new Set(
+        dealsWithField5.map((deal) => String(deal.contact)).filter(Boolean),
+      ),
+    ];
+
+    console.log(
+      `📊 Found ${dealsWithField5.length} deals with field 5, ${relevantContactIds.length} unique contacts to fetch`,
+    );
+
+    const contactFieldsMap = new Map<string, Map<number, string>>();
+
+    // Fetch fieldValues per contact using the correct endpoint: /api/3/contacts/{id}/fieldValues
+    const contactFieldUrls = relevantContactIds.map((contactId) => {
+      return `${BASE_URL}/api/3/contacts/${contactId}/fieldValues`;
+    });
+
+    const { results: contactFieldResults } =
+      await fetchJSONParallel(contactFieldUrls);
+
+    contactFieldResults.forEach((response: any) => {
+      if (response?.fieldValues) {
+        response.fieldValues.forEach((fv: any) => {
+          const fieldId = Number(fv.field);
+          // Only keep contact fields 7 (Segmento de Negócio) and 50 (Intenção de Compra)
+          if (fieldId === 7 || fieldId === 50) {
+            const contactId = String(fv.contact);
+            if (!contactFieldsMap.has(contactId)) {
+              contactFieldsMap.set(contactId, new Map());
+            }
+            contactFieldsMap.get(contactId)!.set(fieldId, fv.value || "");
+          }
+        });
+      }
+    });
+
+    console.log(
+      `📊 STEP 4.5 COMPLETE: Contact fields 7 and 50 fetched for ${contactFieldsMap.size} contacts`,
+    );
+
+    // Step 5: Process only deals with field 5, combining deal custom fields + contact fields
+    console.log(
+      "🎯 STEP 5: Processing deals with field 5 and combining with custom fields...",
+    );
+    const processedDeals = dealsWithField5.map((deal) => {
       const dealCustomFields =
         dealCustomFieldsMap.get(deal.id.toString()) || new Map();
 
-      // Get custom field values
+      // Deal custom field values
       const closingDate = dealCustomFields.get(5) || null; // Data Fechamento
       const estado = dealCustomFields.get(25) || null;
       const quantidadeDePares = dealCustomFields.get(39) || null;
       const vendedor = dealCustomFields.get(45) || null;
       const designer = dealCustomFields.get(47) || null;
       const utmSource = dealCustomFields.get(49) || null; // UTM Source
-      const utmMedium = dealCustomFields.get(50) || null; // UTM Medium
-      const customField54 = dealCustomFields.get(54) || null; // Custom Field 54
+      const utmMedium = dealCustomFields.get(50) || null; // UTM Medium (deal custom field 50)
+      const customField54 = dealCustomFields.get(54) || null; // Data de Embarque
 
       const convertedClosingDate = closingDate
         ? convertDateFormat(closingDate)
         : null;
       const value = parseFloat(deal.value || "0");
+
+      // Contact custom field values (field 7 = Segmento de Negócio, field 50 = Intenção de Compra)
+      const contactFields = contactFieldsMap.get(String(deal.contact));
+      const segmentoDeNegocio = contactFields?.get(7) || null;
+      const intencaoDeCompra = contactFields?.get(50) || null;
 
       return {
         deal_id: deal.id,
@@ -461,11 +522,13 @@ export async function GET(request: NextRequest) {
         api_updated_at: deal.mdate || deal.cdate || null,
         last_synced_at: new Date().toISOString(),
         sync_status: "synced" as const,
+        segmento_de_negocio: segmentoDeNegocio,
+        intencao_de_compra: intencaoDeCompra,
       };
     });
 
     console.log(
-      `📊 Processed ${processedDeals.length} deals with combined data`
+      `📊 Processed ${processedDeals.length} deals with combined data`,
     );
 
     // Step 5.5: Deduplicate deals by deal_id (keep the last occurrence)
@@ -479,11 +542,11 @@ export async function GET(request: NextRequest) {
     const duplicatesRemoved = processedDeals.length - deduplicatedDeals.length;
     if (duplicatesRemoved > 0) {
       console.log(
-        `⚠️ Removed ${duplicatesRemoved} duplicate deals (${processedDeals.length} -> ${deduplicatedDeals.length})`
+        `⚠️ Removed ${duplicatesRemoved} duplicate deals (${processedDeals.length} -> ${deduplicatedDeals.length})`,
       );
     } else {
       console.log(
-        `✅ No duplicates found - all ${deduplicatedDeals.length} deals are unique`
+        `✅ No duplicates found - all ${deduplicatedDeals.length} deals are unique`,
       );
     }
 
@@ -517,7 +580,7 @@ export async function GET(request: NextRequest) {
 
     // Step 6: Upsert deals into Supabase deals_cache table with parallel batching
     console.log(
-      "🎯 STEP 6: Upserting deals into deals_cache table with parallel processing..."
+      "🎯 STEP 6: Upserting deals into deals_cache table with parallel processing...",
     );
     let dealsUpserted = 0;
     const upsertBatchSize = 100;
@@ -534,7 +597,7 @@ export async function GET(request: NextRequest) {
     const retryUpsertWithDeadlockHandling = async (
       batch: any[],
       batchNumber: number,
-      maxRetries = 3
+      maxRetries = 3,
     ) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -547,10 +610,10 @@ export async function GET(request: NextRequest) {
             if (error.code === "40P01" && attempt < maxRetries) {
               const backoffDelay = Math.min(
                 1000 * Math.pow(2, attempt - 1),
-                5000
+                5000,
               );
               console.warn(
-                `⚠️ Batch ${batchNumber} deadlock detected, retrying in ${backoffDelay}ms (attempt ${attempt}/${maxRetries})...`
+                `⚠️ Batch ${batchNumber} deadlock detected, retrying in ${backoffDelay}ms (attempt ${attempt}/${maxRetries})...`,
               );
               await new Promise((resolve) => setTimeout(resolve, backoffDelay));
               continue;
@@ -558,19 +621,19 @@ export async function GET(request: NextRequest) {
 
             console.error(
               `❌ Batch ${batchNumber} failed after ${attempt} attempts:`,
-              error
+              error,
             );
             return { success: false, error, count: 0 };
           }
 
           console.log(
-            `✅ Upserted batch ${batchNumber}: ${batch.length} deals`
+            `✅ Upserted batch ${batchNumber}: ${batch.length} deals`,
           );
           return { success: true, count: batch.length };
         } catch (error) {
           console.error(
             `❌ Batch ${batchNumber} exception (attempt ${attempt}/${maxRetries}):`,
-            error
+            error,
           );
           if (attempt === maxRetries) {
             return { success: false, error, count: 0 };
@@ -594,8 +657,8 @@ export async function GET(request: NextRequest) {
         `💾 Processing upsert batch group ${
           Math.floor(i / parallelBatches) + 1
         }/${Math.ceil(
-          dealBatches.length / parallelBatches
-        )} (parallelism: ${parallelBatches})`
+          dealBatches.length / parallelBatches,
+        )} (parallelism: ${parallelBatches})`,
       );
 
       const upsertPromises = batchGroup.map(async (batch, batchIndex) => {
@@ -698,7 +761,7 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : "Unknown error",
         syncDurationSeconds: syncDuration,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

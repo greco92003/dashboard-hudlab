@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Clock,
   Users,
+  Trophy,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -124,6 +125,11 @@ const menuGroups: MenuGroup[] = [
         title: "Vendedores",
         url: "/sellers",
         icon: Rocket,
+      },
+      {
+        title: "Arena de Vendedores",
+        url: "/sellers_v2",
+        icon: Trophy,
       },
       {
         title: "Designers",

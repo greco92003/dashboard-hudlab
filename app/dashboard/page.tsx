@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { RefreshCw } from "lucide-react";
 import { ChartPieEstados } from "@/components/ui/chart-pie-estados";
+import { ChartPieGeneric } from "@/components/ui/chart-pie-generic";
 import { useManualSync } from "@/hooks/useManualSync";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
@@ -35,6 +36,9 @@ interface Deal {
   contact_id: string | null;
   organization_id: string | null;
   api_updated_at: string | null;
+  segmento_de_negocio: string | null;
+  intencao_de_compra: string | null;
+  [key: string]: string | number | null | undefined;
 }
 
 // Define chart data type
@@ -49,6 +53,13 @@ const formatDateToLocal = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+// Helper: shift a date back 1 year
+const shiftDateOneYearBack = (date: Date): Date => {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() - 1);
+  return d;
 };
 
 export default function DashboardPage() {
@@ -68,6 +79,12 @@ export default function DashboardPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [totalValue, setTotalValue] = useState(0);
   const [totalPairsSold, setTotalPairsSold] = useState(0);
+
+  // Previous year data
+  const [prevDeals, setPrevDeals] = useState<Deal[]>([]);
+  const [prevTotalValue, setPrevTotalValue] = useState(0);
+  const [prevTotalPairsSold, setPrevTotalPairsSold] = useState(0);
+  const [prevChartData, setPrevChartData] = useState<ChartData[]>([]);
 
   // Chart data
   const [chartData, setChartData] = useState<ChartData[]>([]);
@@ -95,7 +112,7 @@ export default function DashboardPage() {
           acc[date] += value;
           return acc;
         },
-        {}
+        {},
       );
 
       // Generate all dates in the period range
@@ -138,7 +155,7 @@ export default function DashboardPage() {
 
       setChartData(chartData);
     },
-    []
+    [],
   );
 
   // Prepare chart data from deals using custom date range
@@ -161,7 +178,7 @@ export default function DashboardPage() {
           acc[date] += value;
           return acc;
         },
-        {}
+        {},
       );
 
       // Generate all dates in the custom range
@@ -180,7 +197,7 @@ export default function DashboardPage() {
       // Get all dates in the custom range
       const allDates = generateCustomDateRange(
         customDateRange.from!,
-        customDateRange.to!
+        customDateRange.to!,
       );
 
       console.log("Dashboard: Generated date range for chart:", {
@@ -205,7 +222,7 @@ export default function DashboardPage() {
 
       setChartData(chartData);
     },
-    []
+    [],
   );
 
   // Fetch deals data based on the selected period or custom date range using cached data
@@ -289,7 +306,7 @@ export default function DashboardPage() {
         setLoading(false);
       }
     },
-    [prepareChartData, prepareChartDataCustom]
+    [prepareChartData, prepareChartDataCustom],
   );
 
   // Note: Total pairs sold is now fetched from dedicated API instead of calculated
@@ -351,7 +368,147 @@ export default function DashboardPage() {
         setTotalPairsSold(0);
       }
     },
-    []
+    [],
+  );
+
+  // Fetch previous year deals
+  const fetchPreviousYearDeals = useCallback(
+    async (selectedPeriod?: number, customDateRange?: DateRange) => {
+      try {
+        let url = "/api/deals-cache";
+        if (customDateRange?.from && customDateRange?.to) {
+          const startDate = formatDateToLocal(
+            shiftDateOneYearBack(customDateRange.from),
+          );
+          const endDate = formatDateToLocal(
+            shiftDateOneYearBack(customDateRange.to),
+          );
+          url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
+        } else if (selectedPeriod) {
+          // Calculate the same period but for one year ago
+          const now = new Date();
+          const prevYearEnd = shiftDateOneYearBack(now);
+          let monthsToSubtract = 1;
+          if (selectedPeriod === 60) monthsToSubtract = 2;
+          else if (selectedPeriod === 90) monthsToSubtract = 3;
+          const prevYearStart = new Date(prevYearEnd);
+          prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
+          url = `/api/deals-cache?startDate=${formatDateToLocal(prevYearStart)}&endDate=${formatDateToLocal(prevYearEnd)}`;
+        }
+
+        const response = await fetch(`${url}&_t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.deals) {
+          setPrevDeals(data.deals);
+          const total = data.deals.reduce(
+            (sum: number, item: Deal) => sum + (item.value || 0) / 100,
+            0,
+          );
+          setPrevTotalValue(total);
+
+          // Build previous year chart data aligned by period length
+          const groupedByDate = data.deals.reduce(
+            (acc: Record<string, number>, item: Deal) => {
+              const date =
+                item.custom_field_value?.split("T")[0] ||
+                item.closing_date?.split("T")[0];
+              if (!date) return acc;
+              const value = (item.value || 0) / 100;
+              acc[date] = (acc[date] || 0) + value;
+              return acc;
+            },
+            {},
+          );
+
+          // Generate all dates in the previous year period
+          const generateDates = (start: Date, end: Date) => {
+            const dates: string[] = [];
+            const cur = new Date(start);
+            while (cur <= end) {
+              dates.push(formatDateToLocal(cur));
+              cur.setDate(cur.getDate() + 1);
+            }
+            return dates;
+          };
+
+          let dates: string[] = [];
+          if (customDateRange?.from && customDateRange?.to) {
+            dates = generateDates(
+              shiftDateOneYearBack(customDateRange.from),
+              shiftDateOneYearBack(customDateRange.to),
+            );
+          } else if (selectedPeriod) {
+            const now = new Date();
+            const prevYearEnd = shiftDateOneYearBack(now);
+            let monthsToSubtract = 1;
+            if (selectedPeriod === 60) monthsToSubtract = 2;
+            else if (selectedPeriod === 90) monthsToSubtract = 3;
+            const prevYearStart = new Date(prevYearEnd);
+            prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
+            dates = generateDates(prevYearStart, prevYearEnd);
+          }
+
+          setPrevChartData(
+            dates.map((date) => ({ date, revenue: groupedByDate[date] || 0 })),
+          );
+        } else {
+          setPrevDeals([]);
+          setPrevTotalValue(0);
+          setPrevChartData([]);
+        }
+      } catch (error) {
+        console.error("Error fetching previous year deals:", error);
+        setPrevDeals([]);
+        setPrevTotalValue(0);
+        setPrevChartData([]);
+      }
+    },
+    [],
+  );
+
+  // Fetch previous year pairs sold
+  const fetchPreviousYearPairsSold = useCallback(
+    async (selectedPeriod?: number, customDateRange?: DateRange) => {
+      try {
+        let url = "/api/pairs-sold-total";
+        if (customDateRange?.from && customDateRange?.to) {
+          const startDate = formatDateToLocal(
+            shiftDateOneYearBack(customDateRange.from),
+          );
+          const endDate = formatDateToLocal(
+            shiftDateOneYearBack(customDateRange.to),
+          );
+          url = `/api/pairs-sold-total?startDate=${startDate}&endDate=${endDate}`;
+        } else if (selectedPeriod) {
+          const now = new Date();
+          const prevYearEnd = shiftDateOneYearBack(now);
+          let monthsToSubtract = 1;
+          if (selectedPeriod === 60) monthsToSubtract = 2;
+          else if (selectedPeriod === 90) monthsToSubtract = 3;
+          const prevYearStart = new Date(prevYearEnd);
+          prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
+          url = `/api/pairs-sold-total?startDate=${formatDateToLocal(prevYearStart)}&endDate=${formatDateToLocal(prevYearEnd)}`;
+        }
+
+        const response = await fetch(`${url}&_t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        setPrevTotalPairsSold(data.totalPairsSold ?? 0);
+      } catch (error) {
+        console.error("Error fetching previous year pairs sold:", error);
+        setPrevTotalPairsSold(0);
+      }
+    },
+    [],
   );
 
   // Initial data fetch using global date state
@@ -370,11 +527,19 @@ export default function DashboardPage() {
       });
 
       if (!useCustomPeriod) {
-        await fetchDeals(period);
-        await fetchTotalPairsSold(period);
+        await Promise.all([
+          fetchDeals(period),
+          fetchTotalPairsSold(period),
+          fetchPreviousYearDeals(period),
+          fetchPreviousYearPairsSold(period),
+        ]);
       } else {
-        await fetchDeals(period, dateRange);
-        await fetchTotalPairsSold(period, dateRange);
+        await Promise.all([
+          fetchDeals(period, dateRange),
+          fetchTotalPairsSold(period, dateRange),
+          fetchPreviousYearDeals(period, dateRange),
+          fetchPreviousYearPairsSold(period, dateRange),
+        ]);
       }
     };
 
@@ -385,6 +550,8 @@ export default function DashboardPage() {
     dateRange,
     fetchDeals,
     fetchTotalPairsSold,
+    fetchPreviousYearDeals,
+    fetchPreviousYearPairsSold,
     isHydrated,
   ]);
 
@@ -394,11 +561,23 @@ export default function DashboardPage() {
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
       fetchDeals(undefined, dateRange);
       fetchTotalPairsSold(undefined, dateRange);
+      fetchPreviousYearDeals(undefined, dateRange);
+      fetchPreviousYearPairsSold(undefined, dateRange);
     } else {
       fetchDeals(period);
       fetchTotalPairsSold(period);
+      fetchPreviousYearDeals(period);
+      fetchPreviousYearPairsSold(period);
     }
-  }, [useCustomPeriod, dateRange, period, fetchDeals, fetchTotalPairsSold]);
+  }, [
+    useCustomPeriod,
+    dateRange,
+    period,
+    fetchDeals,
+    fetchTotalPairsSold,
+    fetchPreviousYearDeals,
+    fetchPreviousYearPairsSold,
+  ]);
 
   // Register this page for automatic refresh after sync
   useDataRefresh("dashboard", refreshDashboardData);
@@ -480,7 +659,14 @@ export default function DashboardPage() {
             {loading ? (
               <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
             ) : (
-              <p className="text-xl sm:text-2xl font-bold">{totalPairsSold}</p>
+              <>
+                <p className="text-xl sm:text-2xl font-bold">
+                  {totalPairsSold}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ano anterior: {prevTotalPairsSold}
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
@@ -495,9 +681,14 @@ export default function DashboardPage() {
             {loading ? (
               <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
             ) : (
-              <p className="text-xl sm:text-2xl font-bold">
-                {formatCurrency(totalValue, "BRL")}
-              </p>
+              <>
+                <p className="text-xl sm:text-2xl font-bold">
+                  {formatCurrency(totalValue, "BRL")}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ano anterior: {formatCurrency(prevTotalValue, "BRL")}
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
@@ -513,23 +704,93 @@ export default function DashboardPage() {
             description={
               useCustomPeriod && dateRange?.from && dateRange?.to
                 ? `Faturamento de ${dateRange.from.toLocaleDateString(
-                    "pt-BR"
+                    "pt-BR",
                   )} até ${dateRange.to.toLocaleDateString("pt-BR")}`
                 : `Faturamento nos últimos ${period} dias`
             }
             data={chartData}
             period={period}
+            prevYearData={prevChartData}
           />
         )}
       </div>
 
-      {/* Estados Chart */}
-      <div className="w-full mb-4">
-        {loading ? (
-          <Skeleton className="h-[300px] sm:h-[400px] w-full" />
-        ) : (
-          <ChartPieEstados deals={deals} />
-        )}
+      {/* Estados Charts — current year + previous year side by side */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        <div>
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieEstados deals={deals} />
+          )}
+        </div>
+        <div className="opacity-50">
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieEstados
+              deals={prevDeals}
+              title="Vendas por Estado (Ano Anterior)"
+              description="Distribuição do faturamento por estado brasileiro no ano anterior"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Segmento de Negócio Charts — current year + previous year side by side */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        <div>
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieGeneric
+              deals={deals}
+              fieldKey="segmento_de_negocio"
+              title="Segmento de Negócio"
+              description="Distribuição do faturamento por segmento"
+            />
+          )}
+        </div>
+        <div className="opacity-50">
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieGeneric
+              deals={prevDeals}
+              fieldKey="segmento_de_negocio"
+              title="Segmento de Negócio (Ano Anterior)"
+              description="Distribuição do faturamento por segmento no ano anterior"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Intenção de Compra Charts — current year + previous year side by side */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        <div>
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieGeneric
+              deals={deals}
+              fieldKey="intencao_de_compra"
+              title="Intenção de Compra"
+              description="Distribuição do faturamento por intenção de compra"
+            />
+          )}
+        </div>
+        <div className="opacity-50">
+          {loading ? (
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+          ) : (
+            <ChartPieGeneric
+              deals={prevDeals}
+              fieldKey="intencao_de_compra"
+              title="Intenção de Compra (Ano Anterior)"
+              description="Distribuição do faturamento por intenção de compra no ano anterior"
+            />
+          )}
+        </div>
       </div>
 
       {/* Sync Checker - monitora sincronizações */}

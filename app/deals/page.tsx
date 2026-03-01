@@ -35,11 +35,13 @@ interface Deal {
   vendedor: string | null; // Field ID 45
   designer: string | null; // Field ID 47
   "utm-source": string | null; // Field ID 49 (UTM Source)
-  "utm-medium": string | null; // Field ID 50 (UTM Medium)
+  "utm-medium": string | null; // Deal custom field ID 50 (UTM Medium)
   custom_field_54: string | null; // Field ID 54 (Data de Embarque)
   contact_id: string | null;
   organization_id: string | null;
   api_updated_at: string | null;
+  segmento_de_negocio: string | null; // Contact field ID 7 (Segmento de Negócio)
+  intencao_de_compra: string | null; // Contact field ID 50 (Intenção de Compra)
 }
 
 export default function DealsPage() {
@@ -462,6 +464,54 @@ export default function DealsPage() {
         return row.original["utm-medium"] || "-";
       },
     },
+    {
+      accessorKey: "segmento_de_negocio",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            Segmento de Negócio
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        return row.original.segmento_de_negocio || "-";
+      },
+    },
+    {
+      accessorKey: "intencao_de_compra",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="px-0"
+          >
+            Intenção de Compra
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        return row.original.intencao_de_compra || "-";
+      },
+    },
   ];
 
   // Fetch deals data based on the selected period or custom date range using cached data
@@ -533,7 +583,7 @@ export default function DealsPage() {
         setLoading(false);
       }
     },
-    []
+    [],
   );
 
   // Handle period change using global hook
@@ -565,7 +615,7 @@ export default function DealsPage() {
     let dateRangeText = "";
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
       dateRangeText = `Período: ${dateRange.from.toLocaleDateString(
-        "pt-BR"
+        "pt-BR",
       )} - ${dateRange.to.toLocaleDateString("pt-BR")}`;
     } else {
       dateRangeText = `Período: Últimos ${period} dias`;
@@ -577,10 +627,10 @@ export default function DealsPage() {
       statusFilter === "all"
         ? "Status: Todos"
         : statusFilter === "won"
-        ? "Status: Ganhos"
-        : statusFilter === "open"
-        ? "Status: Em Andamento"
-        : "Status: Perdidos";
+          ? "Status: Ganhos"
+          : statusFilter === "open"
+            ? "Status: Em Andamento"
+            : "Status: Perdidos";
     doc.text(statusText, 14, 27);
 
     // Add total value
@@ -588,7 +638,7 @@ export default function DealsPage() {
     doc.text(
       `Valor Total: ${formatCurrency(filteredTotalValue, "BRL")}`,
       14,
-      32
+      32,
     );
 
     // Prepare table data
@@ -691,12 +741,12 @@ export default function DealsPage() {
         `Página ${i} de ${pageCount}`,
         doc.internal.pageSize.getWidth() / 2,
         doc.internal.pageSize.getHeight() - 10,
-        { align: "center" }
+        { align: "center" },
       );
       doc.text(
         `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
         14,
-        doc.internal.pageSize.getHeight() - 10
+        doc.internal.pageSize.getHeight() - 10,
       );
     }
 
@@ -845,7 +895,7 @@ export default function DealsPage() {
               Ganhos (
               {
                 deals.filter(
-                  (d) => d.status?.toLowerCase() === "won" || d.status === "1"
+                  (d) => d.status?.toLowerCase() === "won" || d.status === "1",
                 ).length
               }
               )
@@ -863,7 +913,7 @@ export default function DealsPage() {
               Em Andamento (
               {
                 deals.filter(
-                  (d) => d.status?.toLowerCase() === "open" || d.status === "0"
+                  (d) => d.status?.toLowerCase() === "open" || d.status === "0",
                 ).length
               }
               )
@@ -881,7 +931,7 @@ export default function DealsPage() {
               Perdidos (
               {
                 deals.filter(
-                  (d) => d.status?.toLowerCase() === "lost" || d.status === "2"
+                  (d) => d.status?.toLowerCase() === "lost" || d.status === "2",
                 ).length
               }
               )
@@ -896,10 +946,10 @@ export default function DealsPage() {
             {statusFilter === "all"
               ? "Faturamento Total"
               : statusFilter === "won"
-              ? "Faturamento Total (Ganhos)"
-              : statusFilter === "open"
-              ? "Valor Total (Em Andamento)"
-              : "Valor Total (Perdidos)"}
+                ? "Faturamento Total (Ganhos)"
+                : statusFilter === "open"
+                  ? "Valor Total (Em Andamento)"
+                  : "Valor Total (Perdidos)"}
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -201,21 +201,30 @@ interface Deal {
 
 interface ChartPieEstadosProps {
   deals: Deal[];
+  title?: string;
+  description?: string;
 }
 
-export function ChartPieEstados({ deals }: ChartPieEstadosProps) {
+export function ChartPieEstados({
+  deals,
+  title = "Vendas por Estado",
+  description = "Distribuição do faturamento por estado brasileiro",
+}: ChartPieEstadosProps) {
   // Processar dados dos deals para agrupar por estado
-  const estadosData = deals.reduce((acc, deal) => {
-    const estado = normalizeEstado(deal.estado);
-    const value = (deal.value || 0) / 100; // Dividir por 100 para obter valor real
+  const estadosData = deals.reduce(
+    (acc, deal) => {
+      const estado = normalizeEstado(deal.estado);
+      const value = (deal.value || 0) / 100; // Dividir por 100 para obter valor real
 
-    if (!acc[estado]) {
-      acc[estado] = 0;
-    }
-    acc[estado] += value;
+      if (!acc[estado]) {
+        acc[estado] = 0;
+      }
+      acc[estado] += value;
 
-    return acc;
-  }, {} as Record<string, number>);
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   // Arredondar valores para duas casas decimais
   Object.keys(estadosData).forEach((estado) => {
@@ -240,7 +249,7 @@ export function ChartPieEstados({ deals }: ChartPieEstadosProps) {
       value: {
         label: "Valor (R$)",
       },
-    } as ChartConfig
+    } as ChartConfig,
   );
 
   // Criar dados do chart com cores diretas
@@ -260,10 +269,8 @@ export function ChartPieEstados({ deals }: ChartPieEstadosProps) {
   return (
     <Card className="flex flex-col">
       <CardHeader className="items-center pb-0">
-        <CardTitle>Vendas por Estado</CardTitle>
-        <CardDescription>
-          Distribuição do faturamento por estado brasileiro
-        </CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 pt-0 px-2 sm:px-6 pb-2">
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start lg:items-center">

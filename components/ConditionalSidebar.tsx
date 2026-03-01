@@ -64,6 +64,7 @@ export function ConditionalSidebar({
     "/pairs-sold",
     "/programacao",
     "/sellers",
+    "/sellers_v2",
     "/designers",
     "/representantes",
     "/direct-costs",

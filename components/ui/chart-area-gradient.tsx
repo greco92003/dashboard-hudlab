@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Legend } from "recharts";
 
 import {
   Card,
@@ -21,6 +21,7 @@ import { formatCurrency } from "@/lib/utils";
 interface ChartData {
   date: string;
   revenue: number;
+  prevRevenue?: number;
 }
 
 interface ChartProps {
@@ -28,6 +29,7 @@ interface ChartProps {
   title: string;
   description: string;
   period: number;
+  prevYearData?: ChartData[];
 }
 
 export function ChartAreaGradient({
@@ -35,7 +37,16 @@ export function ChartAreaGradient({
   title,
   description,
   period,
+  prevYearData,
 }: ChartProps) {
+  // Merge previous year data into current data by index position
+  const mergedData =
+    prevYearData && prevYearData.length > 0
+      ? data.map((item, idx) => ({
+          ...item,
+          prevRevenue: prevYearData[idx]?.revenue ?? 0,
+        }))
+      : data;
   // Format date for display - Parse as local date to avoid timezone issues
   const formatDate = (dateStr: string) => {
     const [year, month, day] = dateStr.split("-").map(Number);
@@ -57,11 +68,11 @@ export function ChartAreaGradient({
 
     const firstHalfTotal = firstHalf.reduce(
       (sum, item) => sum + item.revenue,
-      0
+      0,
     );
     const secondHalfTotal = secondHalf.reduce(
       (sum, item) => sum + item.revenue,
-      0
+      0,
     );
 
     if (firstHalfTotal === 0) return { value: 0, trending: "neutral" };
@@ -79,8 +90,12 @@ export function ChartAreaGradient({
   // Configure chart
   const chartConfig = {
     revenue: {
-      label: "Faturamento",
+      label: "Ano Atual",
       color: "var(--chart-1)",
+    },
+    prevRevenue: {
+      label: "Ano Anterior",
+      color: "#9ca3af",
     },
   } satisfies ChartConfig;
 
@@ -96,7 +111,7 @@ export function ChartAreaGradient({
     const maxDate = new Date(Math.max(...dates.map((d) => d.getTime())));
 
     return `${minDate.toLocaleDateString(
-      "pt-BR"
+      "pt-BR",
     )} - ${maxDate.toLocaleDateString("pt-BR")}`;
   };
 
@@ -110,7 +125,7 @@ export function ChartAreaGradient({
         <ChartContainer config={chartConfig} className="h-full w-full">
           <AreaChart
             accessibilityLayer
-            data={data}
+            data={mergedData}
             margin={{
               left: 12,
               right: 12,
@@ -142,15 +157,32 @@ export function ChartAreaGradient({
                       <p className="text-muted-foreground">
                         {formatDate(payload[0].payload.date)}
                       </p>
-                      <p className="font-medium">
-                        {formatCurrency(payload[0].value as number)}
-                      </p>
+                      {payload.map((entry) => (
+                        <p
+                          key={entry.dataKey as string}
+                          className="font-medium"
+                          style={{ color: entry.color }}
+                        >
+                          {entry.dataKey === "prevRevenue"
+                            ? "Ano Anterior: "
+                            : "Ano Atual: "}
+                          {formatCurrency(entry.value as number)}
+                        </p>
+                      ))}
                     </div>
                   );
                 }
                 return null;
               }}
             />
+            {prevYearData && prevYearData.length > 0 && (
+              <Legend
+                verticalAlign="top"
+                formatter={(value) =>
+                  value === "revenue" ? "Ano Atual" : "Ano Anterior"
+                }
+              />
+            )}
             <defs>
               <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -165,6 +197,18 @@ export function ChartAreaGradient({
                 />
               </linearGradient>
             </defs>
+            {prevYearData && prevYearData.length > 0 && (
+              <Area
+                dataKey="prevRevenue"
+                type="monotone"
+                fill="none"
+                stroke="#9ca3af"
+                strokeWidth={1.5}
+                strokeDasharray="5 5"
+                strokeOpacity={0.6}
+                dot={false}
+              />
+            )}
             <Area
               dataKey="revenue"
               type="monotone"
