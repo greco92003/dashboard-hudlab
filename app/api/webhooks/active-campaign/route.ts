@@ -133,16 +133,35 @@ export async function POST(request: NextRequest) {
     const customFieldsMap = new Map<number, string>();
     const customFieldData: any[] =
       customFieldsResponse.dealCustomFieldData || [];
+
+    console.log(
+      `📊 Processing ${customFieldData.length} deal custom field entries`,
+    );
+
+    // Filter by dealId AND customFieldId
     customFieldData
-      .filter((item: any) =>
-        TARGET_CUSTOM_FIELD_IDS.includes(parseInt(item.customFieldId)),
-      )
+      .filter((item: any) => {
+        const itemDealId = parseInt(item.dealId);
+        const itemFieldId = parseInt(item.customFieldId);
+        const matchesDeal = itemDealId === parseInt(dealId);
+        const matchesField = TARGET_CUSTOM_FIELD_IDS.includes(itemFieldId);
+
+        if (matchesDeal && matchesField) {
+          console.log(
+            `✅ Found deal field ${itemFieldId} for deal ${dealId}: ${item.fieldValue || "(empty)"}`,
+          );
+        }
+
+        return matchesDeal && matchesField;
+      })
       .forEach((item: any) => {
         customFieldsMap.set(
           parseInt(item.customFieldId),
           item.fieldValue || "",
         );
       });
+
+    console.log(`📊 Deal custom fields map size: ${customFieldsMap.size}`);
 
     // Build contact fields map (contact fields 7 and 50)
     const contactFieldsMap = new Map<number, string>();
