@@ -1,37 +1,23 @@
 "use client";
 
-import { TrendingUp } from "lucide-react";
+import { useState } from "react";
 import { Pie, PieChart } from "recharts";
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Widget,
+  WidgetHeader,
+  WidgetContent,
+  WidgetTitle,
+  WidgetFooter,
+} from "@/components/ui/widget";
+import { Label } from "@/components/ui/label";
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
 
 // Mapeamento dos estados brasileiros
@@ -259,14 +245,16 @@ function processEstadosData(deals: Deal[]) {
   );
 
   // Criar dados do chart com cores diretas (todos os estados para o gráfico)
-  const fullChartData = sortedEstados.map(([estado, value], index) => {
-    const sigla = getEstadoSigla(estado);
-    return {
-      estado: sigla, // Usar sigla nos dados
-      value,
-      fill: CHART_COLORS[index % CHART_COLORS.length], // Cor direta
-    };
-  });
+  const fullChartData = sortedEstados
+    .filter(([, value]) => value > 0)
+    .map(([estado, value], index) => {
+      const sigla = getEstadoSigla(estado);
+      return {
+        estado: sigla, // Usar sigla nos dados
+        value,
+        fill: CHART_COLORS[index % CHART_COLORS.length], // Cor direta
+      };
+    });
 
   // Get top 5 for the legend/table only
   const legendData = fullChartData.slice(0, 5);
@@ -288,161 +276,92 @@ export function ChartPieEstados({
   deals,
   prevDeals,
   title = "Vendas por Estado",
-  description = "Distribuição do faturamento por estado brasileiro",
   showTabs = false,
 }: ChartPieEstadosProps) {
+  const [activeTab, setActiveTab] = useState<"current" | "previous">("current");
+
   const currentYearData = processEstadosData(deals);
   const prevYearData = prevDeals ? processEstadosData(prevDeals) : null;
 
-  // Render chart content
-  const renderChartContent = (
-    chartConfig: ChartConfig,
-    chartData: Array<{ estado: string; value: number; fill: string }>,
-    legendData: Array<{ estado: string; value: number; fill: string }>,
-    totalValue: number,
-    topEstado: { estado: string; value: number; fill: string } | undefined,
-  ) => (
-    <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-start lg:items-center">
-      {/* Gráfico - primeiro no mobile, à direita no desktop */}
-      <div className="w-full lg:w-2/3 flex flex-col justify-center order-1 lg:order-2">
+  const hasTabs = showTabs && !!prevYearData;
+  const activeData =
+    hasTabs && activeTab === "previous" ? prevYearData! : currentYearData;
+
+  return (
+    <Widget className="gap-0">
+      <WidgetHeader className="border-b">
+        <WidgetTitle className="text-lg">{title}</WidgetTitle>
+        <WidgetTitle className="text-lg">
+          {activeData.chartData.length} estados
+        </WidgetTitle>
+      </WidgetHeader>
+
+      <WidgetContent className="flex-col justify-start py-2">
         <ChartContainer
-          config={chartConfig}
-          className="[&_.recharts-pie-label-text]:fill-foreground w-full h-[200px] sm:h-[220px] overflow-visible"
+          config={activeData.chartConfig}
+          className="size-full max-h-44"
         >
           <PieChart>
-            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-            <Pie
-              data={chartData}
-              dataKey="value"
-              label={({ value }) => formatCurrency(Number(value), "BRL")}
-              nameKey="estado"
-              outerRadius="65%"
-              innerRadius={0}
-              cx="50%"
-              cy="50%"
+            <ChartTooltip
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name) => (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium">{name}</span>
+                      <span className="text-muted-foreground">
+                        {formatCurrency(Number(value), "BRL")}
+                      </span>
+                    </div>
+                  )}
+                  hideLabel
+                />
+              }
             />
+            <Pie data={activeData.chartData} dataKey="value" nameKey="estado" />
           </PieChart>
         </ChartContainer>
+      </WidgetContent>
 
-        {/* Informações do gráfico */}
-        <div className="flex flex-col gap-1 text-xs mt-2 text-center">
-          {topEstado && (
-            <div className="flex items-center justify-center gap-2 leading-none font-medium">
-              {topEstado.estado} lidera com{" "}
-              {formatCurrency(topEstado.value, "BRL")}{" "}
-              <TrendingUp className="h-3 w-3" />
+      <WidgetFooter className="gap-3 border-t">
+        {/* Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          {activeData.legendData.map((item) => (
+            <div key={item.estado} className="flex items-center gap-1.5">
+              <div
+                className="size-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: item.fill }}
+              />
+              <Label
+                className="text-muted-foreground text-xs cursor-default"
+                title={item.estado}
+              >
+                {item.estado.length > 7
+                  ? item.estado.slice(0, 7) + "…"
+                  : item.estado}
+              </Label>
             </div>
-          )}
-          <div className="text-muted-foreground leading-none">
-            Total de {formatCurrency(totalValue, "BRL")} em {chartData.length}{" "}
-            estados
-          </div>
+          ))}
         </div>
-      </div>
 
-      {/* Tabela - segunda no mobile, à esquerda no desktop */}
-      <div className="w-full lg:w-1/3 order-2 lg:order-1">
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs w-[35px] px-2">
-                  <TooltipProvider delayDuration={200}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>UF</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        <p>Estado</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead className="text-right text-xs px-2">Valor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {legendData.map((item, index) => (
-                <TableRow key={item.estado}>
-                  <TableCell className="flex items-center gap-1 text-xs py-1.5 w-[35px] px-2">
-                    <div
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: item.fill }}
-                    />
-                    {item.estado}
-                  </TableCell>
-                  <TableCell className="text-right font-medium text-xs py-1.5 px-2 whitespace-nowrap">
-                    {formatCurrency(item.value, "BRL")}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (showTabs && prevYearData) {
-    return (
-      <Card className="flex flex-col">
-        <CardHeader className="items-center pb-2">
-          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
-          <CardDescription className="text-xs sm:text-sm">
-            {description}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
-          <Tabs defaultValue="current" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-3">
-              <TabsTrigger value="current" className="text-xs sm:text-sm">
+        {/* Tabs no footer */}
+        {hasTabs && (
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "current" | "previous")}
+            className="w-full"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="current" className="flex-1 text-xs">
                 Ano Atual
               </TabsTrigger>
-              <TabsTrigger value="previous" className="text-xs sm:text-sm">
+              <TabsTrigger value="previous" className="flex-1 text-xs">
                 Ano Anterior
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="current" className="mt-0">
-              {renderChartContent(
-                currentYearData.chartConfig,
-                currentYearData.chartData,
-                currentYearData.legendData,
-                currentYearData.totalValue,
-                currentYearData.topEstado,
-              )}
-            </TabsContent>
-            <TabsContent value="previous" className="mt-0">
-              {renderChartContent(
-                prevYearData.chartConfig,
-                prevYearData.chartData,
-                prevYearData.legendData,
-                prevYearData.totalValue,
-                prevYearData.topEstado,
-              )}
-            </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader className="items-center pb-2">
-        <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
-        <CardDescription className="text-xs sm:text-sm">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
-        {renderChartContent(
-          currentYearData.chartConfig,
-          currentYearData.chartData,
-          currentYearData.legendData,
-          currentYearData.totalValue,
-          currentYearData.topEstado,
         )}
-      </CardContent>
-    </Card>
+      </WidgetFooter>
+    </Widget>
   );
 }

@@ -1,35 +1,22 @@
 "use client";
 
-import { TrendingUp } from "lucide-react";
+import { useState } from "react";
 import { Pie, PieChart } from "recharts";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Widget,
+  WidgetHeader,
+  WidgetContent,
+  WidgetTitle,
+  WidgetFooter,
+} from "@/components/ui/widget";
+import { Label } from "@/components/ui/label";
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
 
 const CHART_COLORS = [
@@ -66,14 +53,9 @@ interface ChartPieGenericProps {
   fieldKey: string;
   title: string;
   description: string;
+  countLabel?: string;
   emptyLabel?: string;
   showTabs?: boolean;
-}
-
-// Helper function to truncate text
-function truncateText(text: string, maxLength: number = 2): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + "...";
 }
 
 // Helper function to process deals data
@@ -99,12 +81,14 @@ function processDealsData(deals: Deal[], fieldKey: string, emptyLabel: string) {
     .map(([label, value]) => ({ label, value: Math.round(value * 100) / 100 }))
     .sort((a, b) => b.value - a.value);
 
-  // Create full chart data (all items for the pie chart)
-  const fullChartData = sorted.map(({ label, value }, index) => ({
-    label,
-    value,
-    fill: CHART_COLORS[index % CHART_COLORS.length],
-  }));
+  // Create full chart data (all items for the pie chart, excluding zero-value entries)
+  const fullChartData = sorted
+    .filter(({ value }) => value > 0)
+    .map(({ label, value }, index) => ({
+      label,
+      value,
+      fill: CHART_COLORS[index % CHART_COLORS.length],
+    }));
 
   // Create chart config for all items
   const chartConfig = sorted.reduce(
@@ -139,201 +123,98 @@ export function ChartPieGeneric({
   prevDeals,
   fieldKey,
   title,
-  description,
+  countLabel = "categorias",
   emptyLabel = "Não informado",
   showTabs = false,
 }: ChartPieGenericProps) {
+  const [activeTab, setActiveTab] = useState<"current" | "previous">("current");
+
   const currentYearData = processDealsData(deals, fieldKey, emptyLabel);
   const prevYearData = prevDeals
     ? processDealsData(prevDeals, fieldKey, emptyLabel)
     : null;
 
-  // Render chart content
-  const renderChartContent = (
-    chartConfig: ChartConfig,
-    chartData: Array<{ label: string; value: number; fill: string }>,
-    legendData: Array<{ label: string; value: number; fill: string }>,
-    totalValue: number,
-    topItem: { label: string; value: number; fill: string } | undefined,
-  ) => (
-    <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-start lg:items-center">
-      <div className="w-full lg:w-2/3 flex flex-col justify-center order-1 lg:order-2">
+  const hasTabs = showTabs && !!prevYearData;
+  const activeData =
+    hasTabs && activeTab === "previous" ? prevYearData! : currentYearData;
+
+  return (
+    <Widget className="gap-0">
+      <WidgetHeader className="border-b">
+        <WidgetTitle className="text-lg">{title}</WidgetTitle>
+        <WidgetTitle className="text-lg">
+          {activeData.chartData.length} {countLabel}
+        </WidgetTitle>
+      </WidgetHeader>
+
+      <WidgetContent className="flex-col justify-start py-2">
         <ChartContainer
-          config={chartConfig}
-          className="[&_.recharts-pie-label-text]:fill-foreground w-full h-[200px] sm:h-[220px] overflow-visible"
+          config={activeData.chartConfig}
+          className="size-full max-h-44"
         >
           <PieChart>
             <ChartTooltip
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0];
-                  return (
-                    <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl">
-                      <p className="font-medium mb-1 break-words max-w-xs">
-                        {data.name}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {formatCurrency(Number(data.value), "BRL")}
-                      </p>
+              cursor={false}
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name) => (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium break-words max-w-[180px]">
+                        {name}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatCurrency(Number(value), "BRL")}
+                      </span>
                     </div>
-                  );
-                }
-                return null;
-              }}
+                  )}
+                  hideLabel
+                />
+              }
             />
-            <Pie
-              data={chartData}
-              dataKey="value"
-              label={({ value }) => formatCurrency(Number(value), "BRL")}
-              nameKey="label"
-              outerRadius="65%"
-              innerRadius={0}
-              cx="50%"
-              cy="50%"
-            />
+            <Pie data={activeData.chartData} dataKey="value" nameKey="label" />
           </PieChart>
         </ChartContainer>
+      </WidgetContent>
 
-        {/* Informações do gráfico */}
-        <div className="flex flex-col gap-1 text-xs mt-2 text-center">
-          {topItem && (
-            <div className="flex items-center justify-center gap-2 leading-none font-medium">
-              <span className="truncate max-w-[200px]">{topItem.label}</span>{" "}
-              lidera com {formatCurrency(topItem.value, "BRL")}{" "}
-              <TrendingUp className="h-3 w-3" />
+      <WidgetFooter className="gap-3 border-t">
+        {/* Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          {activeData.legendData.map((item) => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <div
+                className="size-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: item.fill }}
+              />
+              <Label
+                className="text-muted-foreground text-xs cursor-default"
+                title={item.label}
+              >
+                {item.label.length > 7
+                  ? item.label.slice(0, 7) + "…"
+                  : item.label}
+              </Label>
             </div>
-          )}
-          <div className="text-muted-foreground leading-none">
-            Total de {formatCurrency(totalValue, "BRL")} em {chartData.length}{" "}
-            categorias
-          </div>
+          ))}
         </div>
-      </div>
-      <div className="w-full lg:w-1/3 order-2 lg:order-1">
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs w-[40px] px-2">
-                  <TooltipProvider delayDuration={200}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>Cat.</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        <p>Categoria</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableHead>
-                <TableHead className="text-right text-xs px-2">Valor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TooltipProvider delayDuration={200}>
-                {legendData.map((item) => {
-                  const isLongText = item.label.length > 2;
-                  const truncatedLabel = truncateText(item.label, 2);
 
-                  return (
-                    <TableRow key={item.label}>
-                      <TableCell className="flex items-center gap-1 text-xs py-1.5 w-[40px] px-2">
-                        <div
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: item.fill }}
-                        />
-                        {isLongText ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="truncate cursor-pointer">
-                                {truncatedLabel}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              className="max-w-xs break-words"
-                            >
-                              <p>{item.label}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="truncate">{item.label}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-xs whitespace-nowrap py-1.5 px-2">
-                        {formatCurrency(item.value, "BRL")}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TooltipProvider>
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (showTabs && prevYearData) {
-    return (
-      <Card className="flex flex-col">
-        <CardHeader className="items-center pb-2">
-          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
-          <CardDescription className="text-xs sm:text-sm">
-            {description}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
-          <Tabs defaultValue="current" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-3">
-              <TabsTrigger value="current" className="text-xs sm:text-sm">
+        {/* Tabs no footer */}
+        {hasTabs && (
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "current" | "previous")}
+            className="w-full"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="current" className="flex-1 text-xs">
                 Ano Atual
               </TabsTrigger>
-              <TabsTrigger value="previous" className="text-xs sm:text-sm">
+              <TabsTrigger value="previous" className="flex-1 text-xs">
                 Ano Anterior
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="current" className="mt-0">
-              {renderChartContent(
-                currentYearData.chartConfig,
-                currentYearData.chartData,
-                currentYearData.legendData,
-                currentYearData.totalValue,
-                currentYearData.topItem,
-              )}
-            </TabsContent>
-            <TabsContent value="previous" className="mt-0">
-              {renderChartContent(
-                prevYearData.chartConfig,
-                prevYearData.chartData,
-                prevYearData.legendData,
-                prevYearData.totalValue,
-                prevYearData.topItem,
-              )}
-            </TabsContent>
           </Tabs>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader className="items-center pb-2">
-        <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
-        <CardDescription className="text-xs sm:text-sm">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
-        {renderChartContent(
-          currentYearData.chartConfig,
-          currentYearData.chartData,
-          currentYearData.legendData,
-          currentYearData.totalValue,
-          currentYearData.topItem,
         )}
-      </CardContent>
-    </Card>
+      </WidgetFooter>
+    </Widget>
   );
 }

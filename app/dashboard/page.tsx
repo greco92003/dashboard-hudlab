@@ -747,6 +747,7 @@ export default function DashboardPage() {
               fieldKey="segmento_de_negocio"
               title="Segmento de Negócio"
               description="Distribuição do faturamento por segmento"
+              countLabel="segmentos"
               showTabs={true}
             />
           )}
@@ -763,6 +764,7 @@ export default function DashboardPage() {
               fieldKey="intencao_de_compra"
               title="Intenção de Compra"
               description="Distribuição do faturamento por intenção"
+              countLabel="intenções"
               showTabs={true}
             />
           )}
