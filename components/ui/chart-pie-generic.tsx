@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
 
 const CHART_COLORS = [
@@ -61,25 +62,22 @@ interface Deal {
 
 interface ChartPieGenericProps {
   deals: Deal[];
+  prevDeals?: Deal[];
   fieldKey: string;
   title: string;
   description: string;
   emptyLabel?: string;
+  showTabs?: boolean;
 }
 
 // Helper function to truncate text
-function truncateText(text: string, maxLength: number = 15): string {
+function truncateText(text: string, maxLength: number = 2): string {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + "...";
 }
 
-export function ChartPieGeneric({
-  deals,
-  fieldKey,
-  title,
-  description,
-  emptyLabel = "Não informado",
-}: ChartPieGenericProps) {
+// Helper function to process deals data
+function processDealsData(deals: Deal[], fieldKey: string, emptyLabel: string) {
   // Group deals by the specified field key
   const groupedData = deals.reduce(
     (acc, deal) => {
@@ -101,6 +99,14 @@ export function ChartPieGeneric({
     .map(([label, value]) => ({ label, value: Math.round(value * 100) / 100 }))
     .sort((a, b) => b.value - a.value);
 
+  // Create full chart data (all items for the pie chart)
+  const fullChartData = sorted.map(({ label, value }, index) => ({
+    label,
+    value,
+    fill: CHART_COLORS[index % CHART_COLORS.length],
+  }));
+
+  // Create chart config for all items
   const chartConfig = sorted.reduce(
     (config, { label }, index) => {
       const key = `item_${index}`;
@@ -113,131 +119,220 @@ export function ChartPieGeneric({
     { value: { label: "Valor (R$)" } } as ChartConfig,
   );
 
-  const chartData = sorted.map(({ label, value }, index) => ({
-    label,
-    value,
-    fill: CHART_COLORS[index % CHART_COLORS.length],
-  }));
+  // Get top 5 for the legend/table only
+  const legendData = fullChartData.slice(0, 5);
 
-  const totalValue = chartData.reduce((sum, item) => sum + item.value, 0);
-  const topItem = chartData[0];
+  const totalValue = fullChartData.reduce((sum, item) => sum + item.value, 0);
+  const topItem = fullChartData[0];
+
+  return {
+    chartConfig,
+    chartData: fullChartData,
+    legendData,
+    totalValue,
+    topItem,
+  };
+}
+
+export function ChartPieGeneric({
+  deals,
+  prevDeals,
+  fieldKey,
+  title,
+  description,
+  emptyLabel = "Não informado",
+  showTabs = false,
+}: ChartPieGenericProps) {
+  const currentYearData = processDealsData(deals, fieldKey, emptyLabel);
+  const prevYearData = prevDeals
+    ? processDealsData(prevDeals, fieldKey, emptyLabel)
+    : null;
+
+  // Render chart content
+  const renderChartContent = (
+    chartConfig: ChartConfig,
+    chartData: Array<{ label: string; value: number; fill: string }>,
+    legendData: Array<{ label: string; value: number; fill: string }>,
+    totalValue: number,
+    topItem: { label: string; value: number; fill: string } | undefined,
+  ) => (
+    <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 items-start lg:items-center">
+      <div className="w-full lg:w-2/3 flex flex-col justify-center order-1 lg:order-2">
+        <ChartContainer
+          config={chartConfig}
+          className="[&_.recharts-pie-label-text]:fill-foreground w-full h-[200px] sm:h-[220px] overflow-visible"
+        >
+          <PieChart>
+            <ChartTooltip
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0];
+                  return (
+                    <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl">
+                      <p className="font-medium mb-1 break-words max-w-xs">
+                        {data.name}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {formatCurrency(Number(data.value), "BRL")}
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Pie
+              data={chartData}
+              dataKey="value"
+              label={({ value }) => formatCurrency(Number(value), "BRL")}
+              nameKey="label"
+              outerRadius="65%"
+              innerRadius={0}
+              cx="50%"
+              cy="50%"
+            />
+          </PieChart>
+        </ChartContainer>
+
+        {/* Informações do gráfico */}
+        <div className="flex flex-col gap-1 text-xs mt-2 text-center">
+          {topItem && (
+            <div className="flex items-center justify-center gap-2 leading-none font-medium">
+              <span className="truncate max-w-[200px]">{topItem.label}</span>{" "}
+              lidera com {formatCurrency(topItem.value, "BRL")}{" "}
+              <TrendingUp className="h-3 w-3" />
+            </div>
+          )}
+          <div className="text-muted-foreground leading-none">
+            Total de {formatCurrency(totalValue, "BRL")} em {chartData.length}{" "}
+            categorias
+          </div>
+        </div>
+      </div>
+      <div className="w-full lg:w-1/3 order-2 lg:order-1">
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs w-[40px] px-2">
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>Cat.</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p>Categoria</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableHead>
+                <TableHead className="text-right text-xs px-2">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TooltipProvider delayDuration={200}>
+                {legendData.map((item) => {
+                  const isLongText = item.label.length > 2;
+                  const truncatedLabel = truncateText(item.label, 2);
+
+                  return (
+                    <TableRow key={item.label}>
+                      <TableCell className="flex items-center gap-1 text-xs py-1.5 w-[40px] px-2">
+                        <div
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: item.fill }}
+                        />
+                        {isLongText ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="truncate cursor-pointer">
+                                {truncatedLabel}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="max-w-xs break-words"
+                            >
+                              <p>{item.label}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="truncate">{item.label}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-xs whitespace-nowrap py-1.5 px-2">
+                        {formatCurrency(item.value, "BRL")}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TooltipProvider>
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (showTabs && prevYearData) {
+    return (
+      <Card className="flex flex-col">
+        <CardHeader className="items-center pb-2">
+          <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            {description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
+          <Tabs defaultValue="current" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-3">
+              <TabsTrigger value="current" className="text-xs sm:text-sm">
+                Ano Atual
+              </TabsTrigger>
+              <TabsTrigger value="previous" className="text-xs sm:text-sm">
+                Ano Anterior
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="current" className="mt-0">
+              {renderChartContent(
+                currentYearData.chartConfig,
+                currentYearData.chartData,
+                currentYearData.legendData,
+                currentYearData.totalValue,
+                currentYearData.topItem,
+              )}
+            </TabsContent>
+            <TabsContent value="previous" className="mt-0">
+              {renderChartContent(
+                prevYearData.chartConfig,
+                prevYearData.chartData,
+                prevYearData.legendData,
+                prevYearData.totalValue,
+                prevYearData.topItem,
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="flex flex-col">
-      <CardHeader className="items-center pb-0">
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+      <CardHeader className="items-center pb-2">
+        <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
+        <CardDescription className="text-xs sm:text-sm">
+          {description}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 pt-0 px-2 sm:px-6 pb-2">
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start lg:items-center">
-          <div className="w-full lg:w-2/3 flex flex-col justify-center order-1 lg:order-2">
-            <ChartContainer
-              config={chartConfig}
-              className="[&_.recharts-pie-label-text]:fill-foreground w-full h-[250px] sm:h-[300px] lg:h-[400px] overflow-visible"
-            >
-              <PieChart>
-                <ChartTooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0];
-                      return (
-                        <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl">
-                          <p className="font-medium mb-1 break-words max-w-xs">
-                            {data.name}
-                          </p>
-                          <p className="text-muted-foreground">
-                            {formatCurrency(Number(data.value), "BRL")}
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Pie
-                  data={chartData}
-                  dataKey="value"
-                  label={({ value }) => formatCurrency(Number(value), "BRL")}
-                  nameKey="label"
-                  outerRadius="80%"
-                  innerRadius={0}
-                  cx="50%"
-                  cy="50%"
-                />
-              </PieChart>
-            </ChartContainer>
-
-            {/* Informações do gráfico */}
-            <div className="flex flex-col gap-2 text-xs sm:text-sm mt-2 text-center">
-              {topItem && (
-                <div className="flex items-center justify-center gap-2 leading-none font-medium">
-                  {topItem.label} lidera com{" "}
-                  {formatCurrency(topItem.value, "BRL")}{" "}
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-              )}
-              <div className="text-muted-foreground leading-none">
-                Total de {formatCurrency(totalValue, "BRL")} em{" "}
-                {chartData.length} categorias
-              </div>
-            </div>
-          </div>
-          <div className="w-full lg:w-1/3 order-2 lg:order-1">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs sm:text-sm">
-                      Categoria
-                    </TableHead>
-                    <TableHead className="text-right text-xs sm:text-sm">
-                      Valor
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TooltipProvider delayDuration={200}>
-                    {chartData.map((item) => {
-                      const isLongText = item.label.length > 15;
-                      const truncatedLabel = truncateText(item.label, 15);
-
-                      return (
-                        <TableRow key={item.label}>
-                          <TableCell className="flex items-center gap-2 text-xs sm:text-sm">
-                            <div
-                              className="w-2 h-2 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: item.fill }}
-                            />
-                            {isLongText ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="truncate cursor-pointer">
-                                    {truncatedLabel}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="max-w-xs break-words"
-                                >
-                                  <p>{item.label}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <span className="truncate">{item.label}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-xs sm:text-sm whitespace-nowrap">
-                            {formatCurrency(item.value, "BRL")}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TooltipProvider>
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </div>
+      <CardContent className="flex-1 pt-0 px-2 sm:px-4 pb-2">
+        {renderChartContent(
+          currentYearData.chartConfig,
+          currentYearData.chartData,
+          currentYearData.legendData,
+          currentYearData.totalValue,
+          currentYearData.topItem,
+        )}
       </CardContent>
     </Card>
   );

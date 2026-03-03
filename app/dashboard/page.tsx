@@ -648,48 +648,52 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
-        {/* Primeira linha: Total de Pares e Faturamento Total */}
+        {/* Primeira linha: Total de Pares e Faturamento Total - Layout Horizontal */}
         <Card>
-          <CardHeader className="py-2 sm:py-3">
-            <CardTitle className="text-sm sm:text-base">
-              Total de Pares Vendidos
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2">
-            {loading ? (
-              <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
-            ) : (
-              <>
-                <p className="text-xl sm:text-2xl font-bold">
-                  {totalPairsSold}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Ano anterior: {prevTotalPairsSold}
-                </p>
-              </>
-            )}
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-shrink-0">
+                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
+                  Total de Pares Vendidos
+                </CardTitle>
+              </div>
+              {loading ? (
+                <Skeleton className="h-6 sm:h-8 w-[150px]" />
+              ) : (
+                <div className="text-right">
+                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
+                    {totalPairsSold}
+                  </p>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    Anterior: {prevTotalPairsSold}
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="py-2 sm:py-3">
-            <CardTitle className="text-sm sm:text-base">
-              Faturamento Total
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="py-2">
-            {loading ? (
-              <Skeleton className="h-6 sm:h-8 w-[150px] sm:w-[200px]" />
-            ) : (
-              <>
-                <p className="text-xl sm:text-2xl font-bold">
-                  {formatCurrency(totalValue, "BRL")}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Ano anterior: {formatCurrency(prevTotalValue, "BRL")}
-                </p>
-              </>
-            )}
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-shrink-0">
+                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
+                  Faturamento Total
+                </CardTitle>
+              </div>
+              {loading ? (
+                <Skeleton className="h-6 sm:h-8 w-[150px]" />
+              ) : (
+                <div className="text-right">
+                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
+                    {formatCurrency(totalValue, "BRL")}
+                  </p>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    Anterior: {formatCurrency(prevTotalValue, "BRL")}
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -715,79 +719,51 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Estados Charts — current year + previous year side by side */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+      {/* Gráficos de Pizza - 3 em uma linha com tabs para ano atual/anterior */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+        {/* Vendas por Estado */}
         <div>
           {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
-          ) : (
-            <ChartPieEstados deals={deals} />
-          )}
-        </div>
-        <div className="opacity-50">
-          {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+            <Skeleton className="h-[300px] w-full" />
           ) : (
             <ChartPieEstados
-              deals={prevDeals}
-              title="Vendas por Estado (Ano Anterior)"
-              description="Distribuição do faturamento por estado brasileiro no ano anterior"
+              deals={deals}
+              prevDeals={prevDeals}
+              title="Vendas por Estado"
+              description="Distribuição do faturamento por estado"
+              showTabs={true}
             />
           )}
         </div>
-      </div>
 
-      {/* Segmento de Negócio Charts — current year + previous year side by side */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        {/* Segmento de Negócio */}
         <div>
           {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+            <Skeleton className="h-[300px] w-full" />
           ) : (
             <ChartPieGeneric
               deals={deals}
+              prevDeals={prevDeals}
               fieldKey="segmento_de_negocio"
               title="Segmento de Negócio"
               description="Distribuição do faturamento por segmento"
+              showTabs={true}
             />
           )}
         </div>
-        <div className="opacity-50">
-          {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
-          ) : (
-            <ChartPieGeneric
-              deals={prevDeals}
-              fieldKey="segmento_de_negocio"
-              title="Segmento de Negócio (Ano Anterior)"
-              description="Distribuição do faturamento por segmento no ano anterior"
-            />
-          )}
-        </div>
-      </div>
 
-      {/* Intenção de Compra Charts — current year + previous year side by side */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        {/* Intenção de Compra */}
         <div>
           {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
+            <Skeleton className="h-[300px] w-full" />
           ) : (
             <ChartPieGeneric
               deals={deals}
+              prevDeals={prevDeals}
               fieldKey="intencao_de_compra"
               title="Intenção de Compra"
-              description="Distribuição do faturamento por intenção de compra"
-            />
-          )}
-        </div>
-        <div className="opacity-50">
-          {loading ? (
-            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
-          ) : (
-            <ChartPieGeneric
-              deals={prevDeals}
-              fieldKey="intencao_de_compra"
-              title="Intenção de Compra (Ano Anterior)"
-              description="Distribuição do faturamento por intenção de compra no ano anterior"
+              description="Distribuição do faturamento por intenção"
+              showTabs={true}
             />
           )}
         </div>

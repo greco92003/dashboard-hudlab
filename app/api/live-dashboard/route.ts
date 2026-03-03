@@ -19,13 +19,13 @@ export async function GET() {
     const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(totalDaysInMonth).padStart(2, "0")}`;
 
-    // Fetch won deals (status=1) for the current month with closing_date
+    // Fetch won deals (status=1) desde 01/01/2026 with closing_date
     const { data: wonDeals, error: wonError } = await supabase
       .from("deals_live")
       .select("deal_id, value, status, closing_date")
       .eq("status", "1")
       .not("closing_date", "is", null)
-      .gte("closing_date", startDate)
+      .gte("closing_date", "2026-01-01")
       .lte("closing_date", endDate + "T23:59:59");
 
     if (wonError) {
@@ -33,14 +33,14 @@ export async function GET() {
       return NextResponse.json({ error: wonError.message }, { status: 500 });
     }
 
-    // Fetch open deals (status=0) with value > 0, filtered by last_synced_at in current month
+    // Fetch open deals (status=0) with value > 0, desde 01/01/2026
     const { data: openDeals, error: openError } = await supabase
       .from("deals_live")
       .select("deal_id, value, status, last_synced_at")
       .eq("status", "0")
       .gt("value", 0)
       .not("last_synced_at", "is", null)
-      .gte("last_synced_at", startDate)
+      .gte("last_synced_at", "2026-01-01")
       .lte("last_synced_at", endDate + "T23:59:59");
 
     if (openError) {
@@ -69,21 +69,35 @@ export async function GET() {
       dailyForecast[d] = 0;
     }
 
-    // Revenue: won deals accumulated by closing_date day
+    // Revenue: won deals accumulated by closing_date day (UTC-3)
     (wonDeals || []).forEach((deal) => {
       const closingDate = new Date(deal.closing_date);
-      const day = closingDate.getUTCDate();
+      // Adjust to UTC-3
+      const closingDateUTC3 = new Date(
+        closingDate.getTime() - 3 * 60 * 60 * 1000,
+      );
+      const dealYear = closingDateUTC3.getUTCFullYear();
+      const dealMonth = closingDateUTC3.getUTCMonth();
+      const day = closingDateUTC3.getUTCDate();
+
+      // Only count deals from the current month
+      if (dealYear !== year || dealMonth !== month) return;
       if (day < 1 || day > totalDaysInMonth) return;
       // AC stores values in centavos, divide by 100
       dailyRevenue[day] += (parseFloat(deal.value) || 0) / 100;
     });
 
-    // Forecast: open deals accumulated by last_synced_at day
+    // Forecast: open deals accumulated by last_synced_at day (UTC-3)
     (openDeals || []).forEach((deal) => {
       const syncDate = new Date(deal.last_synced_at);
       // Adjust to UTC-3
       const syncDateUTC3 = new Date(syncDate.getTime() - 3 * 60 * 60 * 1000);
+      const dealYear = syncDateUTC3.getUTCFullYear();
+      const dealMonth = syncDateUTC3.getUTCMonth();
       const day = syncDateUTC3.getUTCDate();
+
+      // Only count deals from the current month
+      if (dealYear !== year || dealMonth !== month) return;
       if (day < 1 || day > totalDaysInMonth) return;
       // AC stores values in centavos, divide by 100
       dailyForecast[day] += (parseFloat(deal.value) || 0) / 100;
