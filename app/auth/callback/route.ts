@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const type = searchParams.get("type");
 
   // if "next" is in param, use it as the redirect URL
-  let next = searchParams.get("next") ?? "/dashboard";
+  let next = searchParams.get("next") ?? "/live-dashboard";
 
   // Special handling for password recovery
   if (type === "recovery") {
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   if (!next.startsWith("/")) {
     // if "next" is not a relative URL, use the default
-    next = "/dashboard";
+    next = "/live-dashboard";
   }
 
   // Log callback attempt for debugging

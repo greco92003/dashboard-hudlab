@@ -17,7 +17,7 @@ import { Clock, Mail, Shield, LogOut, RefreshCw } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
 export default function PendingApprovalPage() {
-  const { user, signOut, loading, isApproved, refreshApprovalStatus } =
+  const { user, signOut, loading, isApproved, refreshApprovalStatus, profile } =
     useAuth();
   const router = useRouter();
   const [checkingApproval, setCheckingApproval] = useState(false);
@@ -33,12 +33,16 @@ export default function PendingApprovalPage() {
     }
   }, [user, loading, router]);
 
-  // Redirect to dashboard if user is approved
+  // Redirect if user is approved
   useEffect(() => {
     if (isApproved === true) {
-      router.push("/dashboard");
+      if (profile?.role === "partners-media") {
+        router.push("/partners/home");
+      } else {
+        router.push("/live-dashboard");
+      }
     }
-  }, [isApproved, router]);
+  }, [isApproved, profile?.role, router]);
 
   // Set up periodic checking for approval status
   useEffect(() => {
@@ -46,15 +50,19 @@ export default function PendingApprovalPage() {
 
     const checkApprovalStatus = async () => {
       try {
-        const { data: profile } = await supabase
+        const { data: approvalData } = await supabase
           .from("user_profiles")
-          .select("approved")
+          .select("approved, role")
           .eq("id", user.id)
           .single();
 
-        if (profile?.approved) {
-          // User has been approved, redirect to dashboard
-          router.push("/dashboard");
+        if (approvalData?.approved) {
+          // User has been approved, redirect based on role
+          if (approvalData?.role === "partners-media") {
+            router.push("/partners/home");
+          } else {
+            router.push("/live-dashboard");
+          }
         }
       } catch (error) {
         console.error("Error checking approval status:", error);

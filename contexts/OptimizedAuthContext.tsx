@@ -1,11 +1,36 @@
 "use client";
 
-import React, { createContext, useContext, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+} from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { User } from "@supabase/supabase-js";
 import { usePersistentAuth } from "@/hooks/usePersistentAuth";
 // Using lib/supabase for backward compatibility - it now uses the official SSR pattern
 import { supabase } from "@/lib/supabase";
 import { storage } from "@/lib/storage";
+
+const PROTECTED_ROUTES = [
+  "/dashboard",
+  "/live-dashboard",
+  "/pairs-sold",
+  "/direct-costs",
+  "/taxes",
+  "/fixed-costs",
+  "/variable-costs",
+  "/profile-settings",
+  "/deals",
+  "/sellers",
+  "/designers",
+  "/representantes",
+  "/partners",
+  "/goals",
+  "/programacao",
+  "/ote",
+];
 
 interface UserProfile {
   id: string;
@@ -44,6 +69,8 @@ export function OptimizedAuthProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const {
     user,
     profile,
@@ -56,6 +83,19 @@ export function OptimizedAuthProvider({
     updateProfile,
   } = usePersistentAuth();
 
+  // Redirect to login when session is lost on a protected route
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      const isProtected = PROTECTED_ROUTES.some((route) =>
+        pathname.startsWith(route),
+      );
+      if (isProtected) {
+        router.replace("/login");
+      }
+    }
+  }, [isAuthenticated, loading, pathname, router]);
+
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -64,11 +104,29 @@ export function OptimizedAuthProvider({
       });
 
       if (!error && data.session) {
-        // The usePersistentAuth hook will handle the state update via the auth listener
-        // Force a page refresh to ensure middleware picks up the new session
-        setTimeout(() => {
-          window.location.href = "/dashboard";
-        }, 100);
+        // Fetch profile to determine redirect destination based on role
+        try {
+          const { data: profileData } = (await supabase
+            .from("user_profiles")
+            .select("role, approved")
+            .eq("id", data.session.user.id)
+            .single()) as {
+            data: { role: string; approved: boolean } | null;
+            error: unknown;
+          };
+
+          setTimeout(() => {
+            if (profileData?.role === "partners-media") {
+              window.location.href = "/partners/home";
+            } else {
+              window.location.href = "/live-dashboard";
+            }
+          }, 100);
+        } catch {
+          setTimeout(() => {
+            window.location.href = "/live-dashboard";
+          }, 100);
+        }
       }
 
       return { error };

@@ -14,9 +14,8 @@ export async function login(formData: FormData) {
     password: formData.get("password") as string,
   };
 
-  const { data: authData, error } = await supabase.auth.signInWithPassword(
-    data
-  );
+  const { data: authData, error } =
+    await supabase.auth.signInWithPassword(data);
 
   if (error) {
     redirect("/login?error=Invalid credentials");
@@ -26,7 +25,7 @@ export async function login(formData: FormData) {
   if (authData.user) {
     const { data: profile } = await supabase
       .from("user_profiles")
-      .select("approved")
+      .select("approved, role")
       .eq("id", authData.user.id)
       .single();
 
@@ -34,10 +33,17 @@ export async function login(formData: FormData) {
       revalidatePath("/", "layout");
       redirect("/pending-approval");
     }
+
+    revalidatePath("/", "layout");
+    if (profile?.role === "partners-media") {
+      redirect("/partners/home");
+    } else {
+      redirect("/live-dashboard");
+    }
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect("/live-dashboard");
 }
 
 export async function signup(formData: FormData) {

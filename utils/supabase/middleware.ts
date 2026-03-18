@@ -17,17 +17,17 @@ export async function updateSession(request: NextRequest) {
           },
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value, options }) =>
-              request.cookies.set(name, value)
+              request.cookies.set(name, value),
             );
             supabaseResponse = NextResponse.next({
               request,
             });
             cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
+              supabaseResponse.cookies.set(name, value, options),
             );
           },
         },
-      }
+      },
     );
 
     // IMPORTANT: Avoid writing any logic between createServerClient and
@@ -65,6 +65,7 @@ export async function updateSession(request: NextRequest) {
     // Define protected and auth routes
     const protectedRoutes = [
       "/dashboard",
+      "/live-dashboard",
       "/pairs-sold",
       "/direct-costs",
       "/taxes",
@@ -101,7 +102,7 @@ export async function updateSession(request: NextRequest) {
 
     const isPendingApproval = request.nextUrl.pathname === "/pending-approval";
     const isProtected = protectedRoutes.some((route) =>
-      request.nextUrl.pathname.startsWith(route)
+      request.nextUrl.pathname.startsWith(route),
     );
     const isAuth = authRoutes.includes(request.nextUrl.pathname);
     const isRoot = request.nextUrl.pathname === "/";
@@ -152,7 +153,7 @@ export async function updateSession(request: NextRequest) {
         return supabaseResponse;
       }
 
-      // User is authenticated and approved, redirect to dashboard for other auth pages
+      // User is authenticated and approved, redirect based on role for other auth pages
       if (process.env.NODE_ENV === "production") {
         console.log("Redirecting authenticated user to dashboard:", {
           path: request.nextUrl.pathname,
@@ -161,14 +162,22 @@ export async function updateSession(request: NextRequest) {
         });
       }
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
+      if (userProfile.role === "partners-media") {
+        url.pathname = "/partners/home";
+      } else {
+        url.pathname = "/live-dashboard";
+      }
       return NextResponse.redirect(url);
     }
 
     if (isRoot && user && userProfile?.approved) {
-      // Root path with authenticated and approved user, redirect to dashboard
+      // Root path with authenticated and approved user, redirect based on role
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
+      if (userProfile.role === "partners-media") {
+        url.pathname = "/partners/home";
+      } else {
+        url.pathname = "/live-dashboard";
+      }
       return NextResponse.redirect(url);
     }
 
@@ -179,7 +188,7 @@ export async function updateSession(request: NextRequest) {
       if (userProfile.role === "partners-media") {
         url.pathname = "/partners/home";
       } else {
-        url.pathname = "/dashboard";
+        url.pathname = "/live-dashboard";
       }
       return NextResponse.redirect(url);
     }
@@ -210,7 +219,7 @@ export async function updateSession(request: NextRequest) {
                 userId: user.id,
                 role: userProfile.role,
                 timestamp: new Date().toISOString(),
-              }
+              },
             );
           }
           const url = request.nextUrl.clone();
@@ -230,13 +239,13 @@ export async function updateSession(request: NextRequest) {
           });
         }
         const url = request.nextUrl.clone();
-        url.pathname = "/dashboard";
+        url.pathname = "/live-dashboard";
         return NextResponse.redirect(url);
       }
 
       // Only admins and owners can access cost management routes
       const isAdminOwnerRoute = adminOwnerRoutes.some((route) =>
-        request.nextUrl.pathname.startsWith(route)
+        request.nextUrl.pathname.startsWith(route),
       );
 
       if (isAdminOwnerRoute && !["admin", "owner"].includes(userProfile.role)) {
@@ -249,7 +258,7 @@ export async function updateSession(request: NextRequest) {
           });
         }
         const url = request.nextUrl.clone();
-        url.pathname = "/dashboard";
+        url.pathname = "/live-dashboard";
         return NextResponse.redirect(url);
       }
     }
@@ -268,7 +277,7 @@ export async function updateSession(request: NextRequest) {
       if (userProfile.role === "partners-media") {
         url.pathname = "/partners/dashboard";
       } else {
-        url.pathname = "/dashboard";
+        url.pathname = "/live-dashboard";
       }
       return NextResponse.redirect(url);
     }

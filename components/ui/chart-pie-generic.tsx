@@ -50,7 +50,8 @@ interface Deal {
 interface ChartPieGenericProps {
   deals: Deal[];
   prevDeals?: Deal[];
-  fieldKey: string;
+  fieldKey?: string;
+  keyExtractor?: (deal: Deal) => string;
   title: string;
   description: string;
   countLabel?: string;
@@ -59,15 +60,25 @@ interface ChartPieGenericProps {
 }
 
 // Helper function to process deals data
-function processDealsData(deals: Deal[], fieldKey: string, emptyLabel: string) {
-  // Group deals by the specified field key
+function processDealsData(
+  deals: Deal[],
+  fieldKey: string | undefined,
+  emptyLabel: string,
+  keyExtractor?: (deal: Deal) => string,
+) {
+  // Group deals by the specified field key or custom extractor
   const groupedData = deals.reduce(
     (acc, deal) => {
-      const rawValue = deal[fieldKey];
-      const label =
-        rawValue && String(rawValue).trim() !== ""
-          ? String(rawValue).trim()
-          : emptyLabel;
+      let label: string;
+      if (keyExtractor) {
+        label = keyExtractor(deal) || emptyLabel;
+      } else {
+        const rawValue = fieldKey ? deal[fieldKey] : null;
+        label =
+          rawValue && String(rawValue).trim() !== ""
+            ? String(rawValue).trim()
+            : emptyLabel;
+      }
       const value = (deal.value || 0) / 100;
       if (!acc[label]) acc[label] = 0;
       acc[label] += value;
@@ -122,6 +133,7 @@ export function ChartPieGeneric({
   deals,
   prevDeals,
   fieldKey,
+  keyExtractor,
   title,
   countLabel = "categorias",
   emptyLabel = "Não informado",
@@ -129,9 +141,14 @@ export function ChartPieGeneric({
 }: ChartPieGenericProps) {
   const [activeTab, setActiveTab] = useState<"current" | "previous">("current");
 
-  const currentYearData = processDealsData(deals, fieldKey, emptyLabel);
+  const currentYearData = processDealsData(
+    deals,
+    fieldKey,
+    emptyLabel,
+    keyExtractor,
+  );
   const prevYearData = prevDeals
-    ? processDealsData(prevDeals, fieldKey, emptyLabel)
+    ? processDealsData(prevDeals, fieldKey, emptyLabel, keyExtractor)
     : null;
 
   const hasTabs = showTabs && !!prevYearData;

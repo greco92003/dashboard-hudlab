@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ChartAreaGradient } from "@/components/ui/chart-area-gradient";
+import { ChartBarFaturamento } from "@/components/ui/chart-bar-faturamento";
+import { ChartBarCicloVendas } from "@/components/ui/chart-bar-ciclo-vendas";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
@@ -16,6 +18,7 @@ import { ChartPieGeneric } from "@/components/ui/chart-pie-generic";
 import { useManualSync } from "@/hooks/useManualSync";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 // Define the deal type based on the new flat API response
 interface Deal {
@@ -38,6 +41,8 @@ interface Deal {
   api_updated_at: string | null;
   segmento_de_negocio: string | null;
   intencao_de_compra: string | null;
+  "utm-source": string | null;
+  "utm-medium": string | null;
   [key: string]: string | number | null | undefined;
 }
 
@@ -88,6 +93,26 @@ export default function DashboardPage() {
 
   // Chart data
   const [chartData, setChartData] = useState<ChartData[]>([]);
+
+  // Compute average lead time (closing date - created date) in days
+  const avgLeadTime = React.useMemo(() => {
+    const valid = deals.filter((d) => {
+      const closing = d.custom_field_value || d.closing_date;
+      return closing && d.created_date;
+    });
+    if (valid.length === 0) return null;
+    const total = valid.reduce((sum, d) => {
+      const closingStr = (d.custom_field_value || d.closing_date)!.split(
+        "T",
+      )[0];
+      const createdStr = d.created_date!.split("T")[0];
+      const diff =
+        (new Date(closingStr).getTime() - new Date(createdStr).getTime()) /
+        (1000 * 60 * 60 * 24);
+      return sum + Math.max(0, diff);
+    }, 0);
+    return Math.round(total / valid.length);
+  }, [deals]);
 
   // Use manual sync hook
   const { isSyncing, handleManualSync } = useManualSync();
@@ -584,7 +609,10 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-1">
-      <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
+      <div className="flex items-center gap-2">
+        <SidebarTrigger />
+        <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
+      </div>
 
       <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 mb-4 mt-2 lg:items-center">
         {/* 3 botões de período */}
@@ -647,8 +675,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4">
-        {/* Primeira linha: Total de Pares e Faturamento Total - Layout Horizontal */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
+        {/* Primeira linha: Total de Pares, Faturamento Total e Lead Time */}
         <Card>
           <CardContent className="py-3 px-4">
             <div className="flex items-center justify-between gap-4">
@@ -696,10 +724,38 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Card 3: Lead Time */}
+        <Card>
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-shrink-0">
+                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
+                  Lead Time
+                </CardTitle>
+                <p className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">
+                  Tempo médio de fechamento
+                </p>
+              </div>
+              {loading ? (
+                <Skeleton className="h-6 sm:h-8 w-[120px]" />
+              ) : (
+                <div className="text-right">
+                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
+                    {avgLeadTime !== null ? `${avgLeadTime} dias` : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    Criação → Fechamento
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Revenue Chart */}
-      <div className="w-full mb-4">
+      {/* Revenue Charts - area + bar + ciclo de vendas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
         {loading ? (
           <Skeleton className="h-[400px] w-full" />
         ) : (
@@ -717,10 +773,28 @@ export default function DashboardPage() {
             prevYearData={prevChartData}
           />
         )}
+
+        {loading ? (
+          <Skeleton className="h-[400px] w-full" />
+        ) : (
+          <ChartBarFaturamento
+            deals={deals}
+            prevDeals={prevDeals}
+            dateRange={dateRange}
+            period={period}
+            useCustomPeriod={useCustomPeriod}
+          />
+        )}
+
+        {loading ? (
+          <Skeleton className="h-[400px] w-full" />
+        ) : (
+          <ChartBarCicloVendas deals={deals} prevDeals={prevDeals} />
+        )}
       </div>
 
-      {/* Gráficos de Pizza - 3 em uma linha com tabs para ano atual/anterior */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+      {/* Gráficos de Pizza - 4 em uma linha com tabs para ano atual/anterior */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* Vendas por Estado */}
         <div>
           {loading ? (
@@ -765,6 +839,36 @@ export default function DashboardPage() {
               title="Intenção de Compra"
               description="Distribuição do faturamento por intenção"
               countLabel="intenções"
+              showTabs={true}
+            />
+          )}
+        </div>
+
+        {/* Origem de Vendas */}
+        <div>
+          {loading ? (
+            <Skeleton className="h-[300px] w-full" />
+          ) : (
+            <ChartPieGeneric
+              deals={deals}
+              prevDeals={prevDeals}
+              keyExtractor={(deal) => {
+                const medium =
+                  typeof deal["utm-medium"] === "string"
+                    ? deal["utm-medium"].trim()
+                    : "";
+                const source =
+                  typeof deal["utm-source"] === "string"
+                    ? deal["utm-source"].trim()
+                    : "";
+                if (medium && source) return `${medium} / ${source}`;
+                if (medium) return medium;
+                if (source) return source;
+                return "Não informado";
+              }}
+              title="Origem de Vendas"
+              description="Combinação de UTM Medium e UTM Source"
+              countLabel="origens"
               showTabs={true}
             />
           )}

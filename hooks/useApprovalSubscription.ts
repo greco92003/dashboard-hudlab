@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 
 export function useApprovalSubscription() {
-  const { user, refreshAuth } = useAuth();
+  const { user, refreshAuth, profile } = useAuth();
   const router = useRouter();
   const supabase = createClient();
 
@@ -30,14 +30,18 @@ export function useApprovalSubscription() {
           // Check if the approved status changed
           if (payload.new && "approved" in payload.new) {
             if (payload.new.approved === true) {
-              // User was approved, redirect to dashboard
-              router.push("/dashboard");
+              // User was approved, redirect based on role
+              if (profile?.role === "partners-media") {
+                router.push("/partners/home");
+              } else {
+                router.push("/live-dashboard");
+              }
             } else {
               // Refresh the profile in context
               await refreshAuth();
             }
           }
-        }
+        },
       )
       .subscribe();
 

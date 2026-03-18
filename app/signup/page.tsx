@@ -28,15 +28,19 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { signUp, isAuthenticated, loading: authLoading } = useAuth();
+  const { signUp, isAuthenticated, profile, loading: authLoading } = useAuth();
   const router = useRouter();
 
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.push("/dashboard");
+      if (profile?.role === "partners-media") {
+        router.push("/partners/home");
+      } else {
+        router.push("/live-dashboard");
+      }
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, profile?.role, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +91,7 @@ export default function SignUpPage() {
           error.message.includes("disabled")
         ) {
           setError(
-            "Cadastro temporariamente desabilitado. Tente novamente mais tarde."
+            "Cadastro temporariamente desabilitado. Tente novamente mais tarde.",
           );
         } else {
           setError(`Erro ao criar conta: ${error.message}`);

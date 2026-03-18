@@ -29,6 +29,7 @@ function LoginForm() {
     signIn,
     isAuthenticated,
     isApproved,
+    profile,
     loading: authLoading,
   } = useAuth();
   const router = useRouter();
@@ -46,12 +47,16 @@ function LoginForm() {
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       if (isApproved) {
-        router.push("/dashboard");
+        if (profile?.role === "partners-media") {
+          router.push("/partners/home");
+        } else {
+          router.push("/live-dashboard");
+        }
       } else {
         router.push("/pending-approval");
       }
     }
-  }, [isAuthenticated, isApproved, authLoading, router]);
+  }, [isAuthenticated, isApproved, authLoading, profile?.role, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

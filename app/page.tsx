@@ -6,14 +6,18 @@ import { useAuth } from "@/contexts/OptimizedAuthContext";
 import { Loader2 } from "lucide-react";
 
 export default function Page() {
-  const { isAuthenticated, isApproved, loading } = useAuth();
+  const { isAuthenticated, isApproved, profile, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (isAuthenticated) {
         if (isApproved) {
-          router.push("/dashboard");
+          if (profile?.role === "partners-media") {
+            router.push("/partners/home");
+          } else {
+            router.push("/live-dashboard");
+          }
         } else {
           router.push("/pending-approval");
         }
@@ -21,7 +25,7 @@ export default function Page() {
         router.push("/home");
       }
     }
-  }, [isAuthenticated, isApproved, loading, router]);
+  }, [isAuthenticated, isApproved, profile?.role, loading, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">
