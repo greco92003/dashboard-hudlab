@@ -16,6 +16,7 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OTEMonthlyTarget } from "@/types/ote";
 import { DateRange } from "react-day-picker";
 import { formatCurrency } from "@/lib/utils";
@@ -102,6 +103,10 @@ export function ChartBarFaturamento({
   useCustomPeriod,
 }: ChartBarFaturamentoProps) {
   const [targets, setTargets] = useState<OTEMonthlyTarget[]>([]);
+  const [viewMode, setViewMode] = useState<"periodo" | "anual">("periodo");
+  const [annualDeals, setAnnualDeals] = useState<Deal[]>([]);
+  const [annualPrevDeals, setAnnualPrevDeals] = useState<Deal[]>([]);
+  const [annualLoading, setAnnualLoading] = useState(false);
 
   useEffect(() => {
     const fetchTargets = async () => {
@@ -117,6 +122,53 @@ export function ChartBarFaturamento({
     };
     fetchTargets();
   }, []);
+
+  // Derive the reference year for "Anual" view
+  const annualYear = useMemo(() => {
+    if (useCustomPeriod && dateRange?.from) {
+      return dateRange.from.getFullYear();
+    }
+    return new Date().getFullYear();
+  }, [useCustomPeriod, dateRange]);
+
+  // Fetch full-year data when switching to "Anual" view
+  useEffect(() => {
+    if (viewMode !== "anual") return;
+
+    const fetchAnnualData = async () => {
+      setAnnualLoading(true);
+      try {
+        const startDate = `${annualYear}-01-01`;
+        const endDate = `${annualYear}-12-31`;
+        const prevStartDate = `${annualYear - 1}-01-01`;
+        const prevEndDate = `${annualYear - 1}-12-31`;
+
+        const [currentRes, prevRes] = await Promise.all([
+          fetch(
+            `/api/deals-cache?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`,
+          ),
+          fetch(
+            `/api/deals-cache?startDate=${prevStartDate}&endDate=${prevEndDate}&_t=${Date.now()}`,
+          ),
+        ]);
+
+        if (currentRes.ok) {
+          const data = await currentRes.json();
+          setAnnualDeals(data.deals || []);
+        }
+        if (prevRes.ok) {
+          const data = await prevRes.json();
+          setAnnualPrevDeals(data.deals || []);
+        }
+      } catch (error) {
+        console.error("Error fetching annual data:", error);
+      } finally {
+        setAnnualLoading(false);
+      }
+    };
+
+    fetchAnnualData();
+  }, [viewMode, annualYear]);
 
   const getDateBounds = (): { from: Date; to: Date } => {
     if (useCustomPeriod && dateRange?.from && dateRange?.to) {
@@ -145,24 +197,15 @@ export function ChartBarFaturamento({
     return { month, year };
   };
 
-  const chartData = useMemo(() => {
-    const { from, to } = getDateBounds();
-
-    // Get all months in range
-    const months: { month: number; year: number }[] = [];
-    const current = new Date(from.getFullYear(), from.getMonth(), 1);
-    const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
-    while (current <= endMonth) {
-      months.push({
-        month: current.getMonth() + 1,
-        year: current.getFullYear(),
-      });
-      current.setMonth(current.getMonth() + 1);
-    }
-
-    // Group current deals by month-year key
+  // Build chart data for a given set of deals/prevDeals and a month list
+  const buildChartData = (
+    currentDeals: Deal[],
+    previousDeals: Deal[],
+    months: { month: number; year: number }[],
+    isPrevShiftedByYear: boolean,
+  ) => {
     const currentByMonth: Record<string, number> = {};
-    deals.forEach((deal) => {
+    currentDeals.forEach((deal) => {
       const my = getDealMonthYear(deal);
       if (!my) return;
       const key = `${my.year}-${my.month}`;
@@ -170,23 +213,23 @@ export function ChartBarFaturamento({
         (currentByMonth[key] || 0) + (deal.value || 0) / 100;
     });
 
-    // Group prev deals by month — map to current year equivalent key (year+1)
     const prevByMonth: Record<string, number> = {};
-    prevDeals.forEach((deal) => {
+    previousDeals.forEach((deal) => {
       const my = getDealMonthYear(deal);
       if (!my) return;
-      const key = `${my.year + 1}-${my.month}`;
+      // In period mode prevDeals are from year-1, map to current year for lookup
+      const key = isPrevShiftedByYear
+        ? `${my.year + 1}-${my.month}`
+        : `${my.year}-${my.month}`;
       prevByMonth[key] = (prevByMonth[key] || 0) + (deal.value || 0) / 100;
     });
 
-    // Build targets lookup
     const targetByMonth: Record<string, number> = {};
     targets.forEach((t) => {
       const key = `${t.year}-${t.month}`;
       targetByMonth[key] = t.target_amount;
     });
 
-    // Average meta for multi-month periods (if a month has no target, use average of all available targets in range)
     const rangeTargets = months
       .map(({ month, year }) => targetByMonth[`${year}-${month}`])
       .filter((v): v is number => v !== undefined);
@@ -198,84 +241,145 @@ export function ChartBarFaturamento({
     return months.map(({ month, year }) => {
       const key = `${year}-${month}`;
       return {
-        month: `${MONTH_NAMES[month - 1]}/${String(year).slice(2)}`,
+        month: MONTH_NAMES[month - 1],
         anoAnterior: prevByMonth[key] || 0,
         meta: targetByMonth[key] ?? (rangeTargets.length > 0 ? avgTarget : 0),
         realizado: currentByMonth[key] || 0,
       };
     });
+  };
+
+  const periodoChartData = useMemo(() => {
+    const { from, to } = getDateBounds();
+    const months: { month: number; year: number }[] = [];
+    const current = new Date(from.getFullYear(), from.getMonth(), 1);
+    const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
+    while (current <= endMonth) {
+      months.push({
+        month: current.getMonth() + 1,
+        year: current.getFullYear(),
+      });
+      current.setMonth(current.getMonth() + 1);
+    }
+    return buildChartData(deals, prevDeals, months, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deals, prevDeals, targets, dateRange, period, useCustomPeriod]);
+
+  const annualChartData = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      year: annualYear,
+    }));
+    // annualPrevDeals already contain year-1 data with correct year; use key as-is but map to annualYear for lookup
+    return buildChartData(annualDeals, annualPrevDeals, months, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annualDeals, annualPrevDeals, targets, annualYear]);
+
+  const chartData = viewMode === "anual" ? annualChartData : periodoChartData;
 
   return (
     <Card className="h-[400px] flex flex-col">
       <CardHeader className="py-3">
-        <CardTitle>Comparativo Mensal</CardTitle>
-        <CardDescription>Ano anterior · Meta · Realizado</CardDescription>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle>Comparativo Mensal</CardTitle>
+            <CardDescription>
+              {viewMode === "anual"
+                ? `Jan–Dez ${annualYear} · Ano anterior · Meta · Realizado`
+                : "Ano anterior · Meta · Realizado"}
+            </CardDescription>
+          </div>
+          <Tabs
+            value={viewMode}
+            onValueChange={(v) => setViewMode(v as "periodo" | "anual")}
+          >
+            <TabsList className="h-7">
+              <TabsTrigger value="periodo" className="text-xs px-2 py-0.5">
+                Período
+              </TabsTrigger>
+              <TabsTrigger value="anual" className="text-xs px-2 py-0.5">
+                Anual
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 pt-0">
-        <ChartContainer config={chartConfig} className="h-full w-full">
-          <BarChart
-            accessibilityLayer
-            data={chartData}
-            margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
-          >
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="month"
-              tickLine={false}
-              tickMargin={10}
-              axisLine={false}
-            />
-            <YAxis
-              tickFormatter={(v) =>
-                v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-              }
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              width={48}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                return (
-                  <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl">
-                    <p className="text-muted-foreground mb-1">
-                      {payload[0]?.payload.month}
-                    </p>
-                    {payload.map((entry) => (
-                      <p
-                        key={entry.dataKey as string}
-                        className="font-medium"
-                        style={{ color: entry.color }}
-                      >
-                        {chartConfig[entry.dataKey as keyof typeof chartConfig]
-                          ?.label ?? entry.dataKey}
-                        {": "}
-                        {formatCurrency(entry.value as number, "BRL")}
+        {annualLoading && viewMode === "anual" ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-muted-foreground text-sm animate-pulse">
+              Carregando dados anuais…
+            </div>
+          </div>
+        ) : (
+          <ChartContainer config={chartConfig} className="h-full w-full">
+            <BarChart
+              accessibilityLayer
+              data={chartData}
+              margin={{ left: 4, right: 4, top: 8, bottom: 8 }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="month"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={false}
+              />
+              <YAxis
+                tickFormatter={(v) =>
+                  v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                }
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                width={48}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  return (
+                    <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl">
+                      <p className="text-muted-foreground mb-1">
+                        {payload[0]?.payload.month}
                       </p>
-                    ))}
-                  </div>
-                );
-              }}
-            />
-            <ChartLegend content={<ChartLegendContent />} />
-            <Bar
-              dataKey="anoAnterior"
-              fill="var(--color-anoAnterior)"
-              radius={4}
-            />
-            <Bar
-              dataKey="meta"
-              fill="var(--color-meta)"
-              radius={4}
-              shape={<MetaBarShape />}
-            />
-            <Bar dataKey="realizado" fill="var(--color-realizado)" radius={4} />
-          </BarChart>
-        </ChartContainer>
+                      {payload.map((entry) => (
+                        <p
+                          key={entry.dataKey as string}
+                          className="font-medium"
+                          style={{ color: entry.color }}
+                        >
+                          {chartConfig[
+                            entry.dataKey as keyof typeof chartConfig
+                          ]?.label ?? entry.dataKey}
+                          {": "}
+                          {formatCurrency(entry.value as number, "BRL")}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                }}
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar
+                dataKey="anoAnterior"
+                fill="var(--color-anoAnterior)"
+                radius={4}
+              />
+              <Bar
+                dataKey="meta"
+                fill="var(--color-meta)"
+                radius={4}
+                shape={<MetaBarShape />}
+              />
+              <Bar
+                dataKey="realizado"
+                fill="var(--color-realizado)"
+                radius={4}
+              />
+            </BarChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </Card>
   );
