@@ -103,7 +103,10 @@ export function ChartBarFaturamento({
   useCustomPeriod,
 }: ChartBarFaturamentoProps) {
   const [targets, setTargets] = useState<OTEMonthlyTarget[]>([]);
-  const [viewMode, setViewMode] = useState<"periodo" | "anual">("periodo");
+  const [viewMode, setViewMode] = useState<"mensal" | "anual">("mensal");
+  const [mensalDeals, setMensalDeals] = useState<Deal[]>([]);
+  const [mensalPrevDeals, setMensalPrevDeals] = useState<Deal[]>([]);
+  const [mensalLoading, setMensalLoading] = useState(false);
   const [annualDeals, setAnnualDeals] = useState<Deal[]>([]);
   const [annualPrevDeals, setAnnualPrevDeals] = useState<Deal[]>([]);
   const [annualLoading, setAnnualLoading] = useState(false);
@@ -130,6 +133,75 @@ export function ChartBarFaturamento({
     }
     return new Date().getFullYear();
   }, [useCustomPeriod, dateRange]);
+
+  // Compute full-month bounds based on the selected period/dateRange
+  const mensalBounds = useMemo(() => {
+    let from: Date, to: Date;
+    if (useCustomPeriod && dateRange?.from && dateRange?.to) {
+      from = dateRange.from;
+      to = dateRange.to;
+    } else {
+      const now = new Date();
+      to = new Date(now);
+      to.setHours(23, 59, 59, 999);
+      from = new Date(now);
+      let monthsToSubtract = 1;
+      if (period === 60) monthsToSubtract = 2;
+      else if (period === 90) monthsToSubtract = 3;
+      from.setMonth(from.getMonth() - monthsToSubtract);
+      from.setHours(0, 0, 0, 0);
+    }
+    // Expand to full months
+    const start = new Date(from.getFullYear(), from.getMonth(), 1);
+    const end = new Date(to.getFullYear(), to.getMonth() + 1, 0); // last day of last month
+    const prevStart = new Date(start);
+    prevStart.setFullYear(prevStart.getFullYear() - 1);
+    const prevEnd = new Date(end);
+    prevEnd.setFullYear(prevEnd.getFullYear() - 1);
+    const fmt = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    return {
+      startDate: fmt(start),
+      endDate: fmt(end),
+      prevStartDate: fmt(prevStart),
+      prevEndDate: fmt(prevEnd),
+    };
+  }, [useCustomPeriod, dateRange, period]);
+
+  // Fetch full-month data for "Mensal" view (always kept fresh)
+  useEffect(() => {
+    const fetchMensalData = async () => {
+      setMensalLoading(true);
+      try {
+        const { startDate, endDate, prevStartDate, prevEndDate } = mensalBounds;
+        const [currentRes, prevRes] = await Promise.all([
+          fetch(
+            `/api/deals-cache?startDate=${startDate}&endDate=${endDate}&_t=${Date.now()}`,
+          ),
+          fetch(
+            `/api/deals-cache?startDate=${prevStartDate}&endDate=${prevEndDate}&_t=${Date.now()}`,
+          ),
+        ]);
+        if (currentRes.ok) {
+          const data = await currentRes.json();
+          setMensalDeals(data.deals || []);
+        }
+        if (prevRes.ok) {
+          const data = await prevRes.json();
+          setMensalPrevDeals(data.deals || []);
+        }
+      } catch (error) {
+        console.error("Error fetching mensal data:", error);
+      } finally {
+        setMensalLoading(false);
+      }
+    };
+    fetchMensalData();
+  }, [mensalBounds]);
 
   // Fetch full-year data when switching to "Anual" view
   useEffect(() => {
@@ -169,22 +241,6 @@ export function ChartBarFaturamento({
 
     fetchAnnualData();
   }, [viewMode, annualYear]);
-
-  const getDateBounds = (): { from: Date; to: Date } => {
-    if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-      return { from: dateRange.from, to: dateRange.to };
-    }
-    const now = new Date();
-    const to = new Date(now);
-    to.setHours(23, 59, 59, 999);
-    const from = new Date(now);
-    let monthsToSubtract = 1;
-    if (period === 60) monthsToSubtract = 2;
-    else if (period === 90) monthsToSubtract = 3;
-    from.setMonth(from.getMonth() - monthsToSubtract);
-    from.setHours(0, 0, 0, 0);
-    return { from, to };
-  };
 
   const getDealMonthYear = (
     deal: Deal,
@@ -249,11 +305,13 @@ export function ChartBarFaturamento({
     });
   };
 
-  const periodoChartData = useMemo(() => {
-    const { from, to } = getDateBounds();
+  const mensalChartData = useMemo(() => {
+    // Parse as local date components to avoid UTC timezone shift
+    const [sy, sm] = mensalBounds.startDate.split("-").map(Number);
+    const [ey, em] = mensalBounds.endDate.split("-").map(Number);
     const months: { month: number; year: number }[] = [];
-    const current = new Date(from.getFullYear(), from.getMonth(), 1);
-    const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
+    const current = new Date(sy, sm - 1, 1);
+    const endMonth = new Date(ey, em - 1, 1);
     while (current <= endMonth) {
       months.push({
         month: current.getMonth() + 1,
@@ -261,9 +319,9 @@ export function ChartBarFaturamento({
       });
       current.setMonth(current.getMonth() + 1);
     }
-    return buildChartData(deals, prevDeals, months, true);
+    return buildChartData(mensalDeals, mensalPrevDeals, months, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deals, prevDeals, targets, dateRange, period, useCustomPeriod]);
+  }, [mensalDeals, mensalPrevDeals, targets, mensalBounds]);
 
   const annualChartData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => ({
@@ -275,7 +333,7 @@ export function ChartBarFaturamento({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annualDeals, annualPrevDeals, targets, annualYear]);
 
-  const chartData = viewMode === "anual" ? annualChartData : periodoChartData;
+  const chartData = viewMode === "anual" ? annualChartData : mensalChartData;
 
   return (
     <Card className="h-[400px] flex flex-col">
@@ -291,11 +349,11 @@ export function ChartBarFaturamento({
           </div>
           <Tabs
             value={viewMode}
-            onValueChange={(v) => setViewMode(v as "periodo" | "anual")}
+            onValueChange={(v) => setViewMode(v as "mensal" | "anual")}
           >
             <TabsList className="h-7">
-              <TabsTrigger value="periodo" className="text-xs px-2 py-0.5">
-                Período
+              <TabsTrigger value="mensal" className="text-xs px-2 py-0.5">
+                Mensal
               </TabsTrigger>
               <TabsTrigger value="anual" className="text-xs px-2 py-0.5">
                 Anual
@@ -305,10 +363,13 @@ export function ChartBarFaturamento({
         </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 pt-0">
-        {annualLoading && viewMode === "anual" ? (
+        {(mensalLoading && viewMode === "mensal") ||
+        (annualLoading && viewMode === "anual") ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-muted-foreground text-sm animate-pulse">
-              Carregando dados anuais…
+              {viewMode === "anual"
+                ? "Carregando dados anuais…"
+                : "Carregando dados mensais…"}
             </div>
           </div>
         ) : (

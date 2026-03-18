@@ -114,6 +114,26 @@ export default function DashboardPage() {
     return Math.round(total / valid.length);
   }, [deals]);
 
+  // Compute average lead time for previous year deals
+  const avgPrevLeadTime = React.useMemo(() => {
+    const valid = prevDeals.filter((d) => {
+      const closing = d.custom_field_value || d.closing_date;
+      return closing && d.created_date;
+    });
+    if (valid.length === 0) return null;
+    const total = valid.reduce((sum, d) => {
+      const closingStr = (d.custom_field_value || d.closing_date)!.split(
+        "T",
+      )[0];
+      const createdStr = d.created_date!.split("T")[0];
+      const diff =
+        (new Date(closingStr).getTime() - new Date(createdStr).getTime()) /
+        (1000 * 60 * 60 * 24);
+      return sum + Math.max(0, diff);
+    }, 0);
+    return Math.round(total / valid.length);
+  }, [prevDeals]);
+
   // Use manual sync hook
   const { isSyncing, handleManualSync } = useManualSync();
 
@@ -745,7 +765,8 @@ export default function DashboardPage() {
                     {avgLeadTime !== null ? `${avgLeadTime} dias` : "—"}
                   </p>
                   <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Criação → Fechamento
+                    Anterior:{" "}
+                    {avgPrevLeadTime !== null ? `${avgPrevLeadTime} dias` : "—"}
                   </p>
                 </div>
               )}
