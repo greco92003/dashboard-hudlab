@@ -123,10 +123,13 @@ interface PerformanceData {
 interface TrafficAnalysisData {
   periodo: string;
   investimento: number;
-  leadsMeta: number;
-  mediaCustoLead: number;
-  cadastrosCompletos: number;
-  custoCadastroCompleto: number;
+  leads: number;
+  custoPorLead: number;
+  mockup: number;
+  mediaMock: number;
+  pares: number;
+  custoMockup: number;
+  percentualConversao: number;
 }
 
 export default function MetaMarketingPage() {
@@ -1213,16 +1216,15 @@ export default function MetaMarketingPage() {
                         <TableHead className="text-right">
                           Investimento
                         </TableHead>
-                        <TableHead className="text-right">Leads Meta</TableHead>
+                        <TableHead className="text-right">Leads</TableHead>
                         <TableHead className="text-right">
-                          Média C. por Lead
+                          C. por Lead
                         </TableHead>
-                        <TableHead className="text-right">
-                          C. Completos
-                        </TableHead>
-                        <TableHead className="text-right">
-                          Custo C. Completo
-                        </TableHead>
+                        <TableHead className="text-right">Mockup</TableHead>
+                        <TableHead className="text-right">Média Mock</TableHead>
+                        <TableHead className="text-right">Pares</TableHead>
+                        <TableHead className="text-right">C. Mockup</TableHead>
+                        <TableHead className="text-right">% de Conv.</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1235,18 +1237,33 @@ export default function MetaMarketingPage() {
                             {formatCurrency(row.investimento.toString())}
                           </TableCell>
                           <TableCell className="text-right">
-                            {row.leadsMeta}
+                            {row.leads}
                           </TableCell>
                           <TableCell className="text-right text-blue-600 font-medium">
-                            {formatCurrency(row.mediaCustoLead.toString())}
+                            {formatCurrency(row.custoPorLead.toString())}
                           </TableCell>
                           <TableCell className="text-right">
-                            {row.cadastrosCompletos}
+                            {row.mockup}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.mediaMock > 0
+                              ? row.mediaMock.toFixed(1)
+                              : "--"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.pares > 0
+                              ? row.pares.toLocaleString("pt-BR")
+                              : "--"}
                           </TableCell>
                           <TableCell className="text-right text-orange-600 font-medium">
-                            {formatCurrency(
-                              row.custoCadastroCompleto.toString(),
-                            )}
+                            {row.custoMockup > 0
+                              ? formatCurrency(row.custoMockup.toString())
+                              : "--"}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {row.percentualConversao > 0
+                              ? `${row.percentualConversao.toFixed(2)}%`
+                              : "--"}
                           </TableCell>
                         </TableRow>
                       ))}

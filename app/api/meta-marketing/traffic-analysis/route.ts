@@ -4,10 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 export interface TrafficAnalysisData {
   periodo: string;
   investimento: number;
-  leadsMeta: number;
-  mediaCustoLead: number;
-  cadastrosCompletos: number;
-  custoCadastroCompleto: number;
+  leads: number;
+  custoPorLead: number;
+  mockup: number;
+  mediaMock: number;
+  pares: number;
+  custoMockup: number;
+  percentualConversao: number;
 }
 
 export async function GET(request: NextRequest) {
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     // ID da planilha (mesma usada em /designers)
     const spreadsheetId = "1YF8vQBGo6Z6ka4uvS5UY75GDpI-YHRMQLkDDlPbEwU4";
-    const range = "Tráfego Pago!A1:F100"; // Ajuste o range conforme necessário
+    const range = "Tráfego Pago!A1:I100";
 
     // Buscar dados do Google Sheets usando a API existente
     const baseUrl = request.nextUrl.origin;
@@ -62,7 +65,7 @@ export async function GET(request: NextRequest) {
         const parseCurrency = (value: string | number): number => {
           if (typeof value === "number") return value;
           if (!value) return 0;
-          
+
           // Remove "R$", espaços, e converte vírgula para ponto
           const cleaned = value
             .toString()
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
             .replace(/\s/g, "")
             .replace(/\./g, "") // Remove separador de milhar
             .replace(/,/g, "."); // Converte vírgula decimal para ponto
-          
+
           return parseFloat(cleaned) || 0;
         };
 
@@ -78,18 +81,36 @@ export async function GET(request: NextRequest) {
         const parseNumber = (value: string | number): number => {
           if (typeof value === "number") return value;
           if (!value) return 0;
-          
-          const cleaned = value.toString().replace(/\./g, "").replace(/,/g, ".");
+
+          const cleaned = value
+            .toString()
+            .replace(/\./g, "")
+            .replace(/,/g, ".");
+          return parseFloat(cleaned) || 0;
+        };
+
+        // Função auxiliar para converter percentual (ex: "16,73%" ou "0,1673")
+        const parsePercent = (value: string | number): number => {
+          if (typeof value === "number") return value;
+          if (!value) return 0;
+          const cleaned = value
+            .toString()
+            .replace(/%/g, "")
+            .replace(/\./g, "")
+            .replace(/,/g, ".");
           return parseFloat(cleaned) || 0;
         };
 
         return {
           periodo: row["Periodo"] || row["Período"] || "",
           investimento: parseCurrency(row["Investimento"]),
-          leadsMeta: parseNumber(row["Leads Meta"]),
-          mediaCustoLead: parseCurrency(row["Média C. por Lead"]),
-          cadastrosCompletos: parseNumber(row["C. Completos"]),
-          custoCadastroCompleto: parseCurrency(row["Custo C. Completo"]),
+          leads: parseNumber(row["Leads"]),
+          custoPorLead: parseCurrency(row["C. por Lead"]),
+          mockup: parseNumber(row["Mockup"]),
+          mediaMock: parseNumber(row["Média Mock"]),
+          pares: parseNumber(row["Pares"]),
+          custoMockup: parseCurrency(row["C. Mockup"]),
+          percentualConversao: parsePercent(row["% de Conv."]),
         };
       })
       .filter((item: TrafficAnalysisData | null) => item !== null);
@@ -113,8 +134,7 @@ export async function GET(request: NextRequest) {
         error: "Failed to fetch traffic analysis data",
         details: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-

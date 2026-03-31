@@ -54,6 +54,7 @@ export function ConditionalSidebar({
     "/auth/auth-code-error",
     "/privacy-policy",
     "/terms-of-service",
+    "/resultados/2026/marco",
   ];
 
   // Routes that should have the sidebar (valid app routes)
