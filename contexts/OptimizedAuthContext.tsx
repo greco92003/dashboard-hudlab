@@ -30,6 +30,8 @@ const PROTECTED_ROUTES = [
   "/goals",
   "/programacao",
   "/ote",
+  "/ncts",
+  "/user-progress",
 ];
 
 interface UserProfile {

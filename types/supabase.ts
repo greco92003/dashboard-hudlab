@@ -202,6 +202,13 @@ export interface Database {
           avatar_url: string | null;
           approved: boolean | null;
           assigned_brand: string | null;
+          sector:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
           created_at: string;
           updated_at: string;
         };
@@ -214,6 +221,13 @@ export interface Database {
           avatar_url?: string | null;
           approved?: boolean | null;
           assigned_brand?: string | null;
+          sector?:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -226,6 +240,13 @@ export interface Database {
           avatar_url?: string | null;
           approved?: boolean | null;
           assigned_brand?: string | null;
+          sector?:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -235,7 +256,7 @@ export interface Database {
             columns: ["id"];
             referencedRelation: "users";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       designer_mockups_cache: {
@@ -777,7 +798,7 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "users";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       partners_commission_settings: {
@@ -812,7 +833,7 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "users";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       nuvemshop_sync_log: {
@@ -1012,7 +1033,7 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "nuvemshop_webhooks";
             referencedColumns: ["id"];
-          }
+          },
         ];
       };
       nuvemshop_webhook_stats: {
@@ -1192,7 +1213,7 @@ export interface Database {
           columns: ["created_by_user_id"];
           referencedRelation: "user_profiles";
           referencedColumns: ["id"];
-        }
+        },
       ];
     };
     user_notifications: {
@@ -1244,7 +1265,7 @@ export interface Database {
           columns: ["user_id"];
           referencedRelation: "user_profiles";
           referencedColumns: ["id"];
-        }
+        },
       ];
     };
     push_subscriptions: {
@@ -1296,7 +1317,7 @@ export interface Database {
           columns: ["user_id"];
           referencedRelation: "user_profiles";
           referencedColumns: ["id"];
-        }
+        },
       ];
     };
     notification_settings: {
@@ -1348,8 +1369,392 @@ export interface Database {
           columns: ["user_id"];
           referencedRelation: "user_profiles";
           referencedColumns: ["id"];
-        }
+        },
       ];
+    };
+    nct_setores: {
+      Row: {
+        id: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        nome: string;
+        cor: string;
+        lider_id: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        nome: string;
+        cor: string;
+        lider_id?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        nome?: string;
+        cor?: string;
+        lider_id?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_narrativas: {
+      Row: {
+        id: string;
+        titulo: string;
+        descricao: string | null;
+        setor_id: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        lider_id: string | null;
+        status: "em_andamento" | "concluida" | "pausada" | "cancelada";
+        progresso: number;
+        prazo_inicio: string | null;
+        prazo_fim: string | null;
+        xp_total: number;
+        logo_url: string | null;
+        criado_por: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        titulo: string;
+        descricao?: string | null;
+        setor_id: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        lider_id?: string | null;
+        status?: "em_andamento" | "concluida" | "pausada" | "cancelada";
+        progresso?: number;
+        prazo_inicio?: string | null;
+        prazo_fim?: string | null;
+        xp_total?: number;
+        logo_url?: string | null;
+        criado_por?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        titulo?: string;
+        descricao?: string | null;
+        setor_id?: "design" | "comercial" | "financeiro" | "marketing" | "rh";
+        lider_id?: string | null;
+        status?: "em_andamento" | "concluida" | "pausada" | "cancelada";
+        progresso?: number;
+        prazo_inicio?: string | null;
+        prazo_fim?: string | null;
+        xp_total?: number;
+        logo_url?: string | null;
+        criado_por?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_compromissos: {
+      Row: {
+        id: string;
+        narrativa_id: string;
+        titulo: string;
+        descricao: string | null;
+        status: "em_andamento" | "concluido" | "pausado" | "cancelado";
+        progresso: number;
+        peso: number;
+        prazo_fim: string | null;
+        responsavel_id: string | null;
+        xp_total: number;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        narrativa_id: string;
+        titulo: string;
+        descricao?: string | null;
+        status?: "em_andamento" | "concluido" | "pausado" | "cancelado";
+        progresso?: number;
+        peso?: number;
+        prazo_fim?: string | null;
+        responsavel_id?: string | null;
+        xp_total?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        narrativa_id?: string;
+        titulo?: string;
+        descricao?: string | null;
+        status?: "em_andamento" | "concluido" | "pausado" | "cancelado";
+        progresso?: number;
+        peso?: number;
+        prazo_fim?: string | null;
+        responsavel_id?: string | null;
+        xp_total?: number;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_tarefas: {
+      Row: {
+        id: string;
+        compromisso_id: string;
+        titulo: string;
+        descricao: string | null;
+        responsavel_id: string | null;
+        status:
+          | "nao_iniciada"
+          | "em_andamento"
+          | "em_revisao"
+          | "concluida"
+          | "atrasada"
+          | "bloqueada";
+        prioridade: "baixa" | "media" | "alta" | "critica";
+        peso: number;
+        prazo_fim: string | null;
+        xp_reward: number;
+        tipo: string | null;
+        checklist: Record<string, unknown> | null;
+        evidencia_url: string | null;
+        concluida_em: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        compromisso_id: string;
+        titulo: string;
+        descricao?: string | null;
+        responsavel_id?: string | null;
+        status?:
+          | "nao_iniciada"
+          | "em_andamento"
+          | "em_revisao"
+          | "concluida"
+          | "atrasada"
+          | "bloqueada";
+        prioridade?: "baixa" | "media" | "alta" | "critica";
+        peso?: number;
+        prazo_fim?: string | null;
+        xp_reward?: number;
+        tipo?: string | null;
+        checklist?: Record<string, unknown> | null;
+        evidencia_url?: string | null;
+        concluida_em?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        compromisso_id?: string;
+        titulo?: string;
+        descricao?: string | null;
+        responsavel_id?: string | null;
+        status?:
+          | "nao_iniciada"
+          | "em_andamento"
+          | "em_revisao"
+          | "concluida"
+          | "atrasada"
+          | "bloqueada";
+        prioridade?: "baixa" | "media" | "alta" | "critica";
+        peso?: number;
+        prazo_fim?: string | null;
+        xp_reward?: number;
+        tipo?: string | null;
+        checklist?: Record<string, unknown> | null;
+        evidencia_url?: string | null;
+        concluida_em?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_xp_log: {
+      Row: {
+        id: string;
+        usuario_id: string;
+        origem_tipo:
+          | "tarefa"
+          | "compromisso"
+          | "narrativa"
+          | "comentario"
+          | "streak"
+          | "bonus";
+        origem_id: string | null;
+        xp_ganho: number;
+        motivo: string;
+        created_at: string;
+      };
+      Insert: {
+        id?: string;
+        usuario_id: string;
+        origem_tipo:
+          | "tarefa"
+          | "compromisso"
+          | "narrativa"
+          | "comentario"
+          | "streak"
+          | "bonus";
+        origem_id?: string | null;
+        xp_ganho: number;
+        motivo: string;
+        created_at?: string;
+      };
+      Update: {
+        id?: string;
+        usuario_id?: string;
+        origem_tipo?:
+          | "tarefa"
+          | "compromisso"
+          | "narrativa"
+          | "comentario"
+          | "streak"
+          | "bonus";
+        origem_id?: string | null;
+        xp_ganho?: number;
+        motivo?: string;
+        created_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_ranking_snapshots: {
+      Row: {
+        id: string;
+        contexto_tipo: "geral" | "setor" | "narrativa";
+        contexto_id: string | null;
+        usuario_id: string;
+        xp_no_contexto: number;
+        posicao: number | null;
+        periodo: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+      Insert: {
+        id?: string;
+        contexto_tipo: "geral" | "setor" | "narrativa";
+        contexto_id?: string | null;
+        usuario_id: string;
+        xp_no_contexto?: number;
+        posicao?: number | null;
+        periodo?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Update: {
+        id?: string;
+        contexto_tipo?: "geral" | "setor" | "narrativa";
+        contexto_id?: string | null;
+        usuario_id?: string;
+        xp_no_contexto?: number;
+        posicao?: number | null;
+        periodo?: string | null;
+        created_at?: string;
+        updated_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_badges: {
+      Row: {
+        id: string;
+        nome: string;
+        descricao: string | null;
+        icone: string | null;
+        tipo: "conquista" | "narrativa" | "setor" | "especial";
+        narrativa_id: string | null;
+        created_at: string;
+      };
+      Insert: {
+        id?: string;
+        nome: string;
+        descricao?: string | null;
+        icone?: string | null;
+        tipo?: "conquista" | "narrativa" | "setor" | "especial";
+        narrativa_id?: string | null;
+        created_at?: string;
+      };
+      Update: {
+        id?: string;
+        nome?: string;
+        descricao?: string | null;
+        icone?: string | null;
+        tipo?: "conquista" | "narrativa" | "setor" | "especial";
+        narrativa_id?: string | null;
+        created_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_user_badges: {
+      Row: {
+        id: string;
+        usuario_id: string;
+        badge_id: string;
+        narrativa_id: string | null;
+        conquistado_em: string;
+      };
+      Insert: {
+        id?: string;
+        usuario_id: string;
+        badge_id: string;
+        narrativa_id?: string | null;
+        conquistado_em?: string;
+      };
+      Update: {
+        id?: string;
+        usuario_id?: string;
+        badge_id?: string;
+        narrativa_id?: string | null;
+        conquistado_em?: string;
+      };
+      Relationships: [];
+    };
+    nct_narrativa_participantes: {
+      Row: {
+        id: string;
+        narrativa_id: string;
+        usuario_id: string;
+        xp_nessa_narrativa: number;
+        created_at: string;
+      };
+      Insert: {
+        id?: string;
+        narrativa_id: string;
+        usuario_id: string;
+        xp_nessa_narrativa?: number;
+        created_at?: string;
+      };
+      Update: {
+        id?: string;
+        narrativa_id?: string;
+        usuario_id?: string;
+        xp_nessa_narrativa?: number;
+        created_at?: string;
+      };
+      Relationships: [];
+    };
+    nct_comentarios: {
+      Row: {
+        id: string;
+        tarefa_id: string;
+        usuario_id: string;
+        texto: string;
+        created_at: string;
+      };
+      Insert: {
+        id?: string;
+        tarefa_id: string;
+        usuario_id: string;
+        texto: string;
+        created_at?: string;
+      };
+      Update: {
+        id?: string;
+        tarefa_id?: string;
+        usuario_id?: string;
+        texto?: string;
+        created_at?: string;
+      };
+      Relationships: [];
     };
   };
   Views: {

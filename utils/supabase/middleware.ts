@@ -81,6 +81,8 @@ export async function updateSession(request: NextRequest) {
       "/programacao",
       "/ote",
       "/resultados",
+      "/ncts",
+      "/user-progress",
     ];
 
     // Define routes that require admin or owner role

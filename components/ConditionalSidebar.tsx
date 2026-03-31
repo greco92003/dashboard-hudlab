@@ -24,23 +24,26 @@ export function ConditionalSidebar({
   const [forcedOpen, setForcedOpen] = useState(true);
   const [isClientReady, setIsClientReady] = useState(false);
 
-  // Only /programacao page can have collapsible sidebar
+  // Pages where the sidebar can be collapsed by the user
   const isProgramacaoPage = pathname === "/programacao";
+  const isNctsPage = pathname.startsWith("/ncts");
+  const isCollapsiblePage = isProgramacaoPage || isNctsPage;
 
   // Check if current page needs full height layout (no padding)
-  const isFullHeightPage = pathname === "/programacao";
+  // NCT pages handle their own padding via layout.tsx
+  const isFullHeightPage = isProgramacaoPage || isNctsPage;
 
   // Mark client as ready after hydration
   useEffect(() => {
     setIsClientReady(true);
   }, []);
 
-  // Force sidebar to open when navigating away from programacao page
+  // Force sidebar to open when navigating away from collapsible pages
   useEffect(() => {
-    if (isClientReady && !isProgramacaoPage) {
+    if (isClientReady && !isCollapsiblePage) {
       setForcedOpen(true);
     }
-  }, [isProgramacaoPage, isClientReady]);
+  }, [isCollapsiblePage, isClientReady]);
 
   // Routes that should not have the sidebar
   const routesWithoutSidebar = [
@@ -82,6 +85,7 @@ export function ConditionalSidebar({
     "/partners/products",
     "/partners/orders",
     "/partners/coupons",
+    "/user-progress",
   ];
 
   // Routes that should have the sidebar closed by default
@@ -163,7 +167,7 @@ export function ConditionalSidebar({
             <div
               className={
                 isFullHeightPage
-                  ? "flex flex-col flex-1 p-4 md:p-6 overflow-hidden"
+                  ? "flex flex-col flex-1 overflow-hidden"
                   : "p-4 pt-6 md:p-6 md:pt-8"
               }
             >
@@ -183,10 +187,10 @@ export function ConditionalSidebar({
   return (
     <SidebarProvider
       defaultOpen={shouldStartClosed ? false : defaultSidebarOpen}
-      // Force sidebar open for all pages except /programacao (only after client is ready)
-      open={isClientReady && !isProgramacaoPage ? forcedOpen : undefined}
+      // Force sidebar open for all pages except collapsible pages (only after client is ready)
+      open={isClientReady && !isCollapsiblePage ? forcedOpen : undefined}
       onOpenChange={
-        isClientReady && !isProgramacaoPage ? setForcedOpen : undefined
+        isClientReady && !isCollapsiblePage ? setForcedOpen : undefined
       }
       style={
         {
@@ -203,7 +207,7 @@ export function ConditionalSidebar({
         <div
           className={
             isFullHeightPage
-              ? "flex flex-col flex-1 p-4 md:p-6 overflow-hidden"
+              ? "flex flex-col flex-1 overflow-hidden"
               : "p-4 pt-6 md:p-6 md:pt-8"
           }
         >

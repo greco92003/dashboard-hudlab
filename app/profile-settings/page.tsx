@@ -33,6 +33,21 @@ import { Loader2, Upload, Trash2, CheckCircle } from "lucide-react";
 import { UserManagement } from "@/components/UserManagement";
 import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { storage } from "@/lib/storage";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const SETORES = [
+  { id: "design", nome: "Design", cor: "#EF4444" },
+  { id: "comercial", nome: "Comercial", cor: "#EC4899" },
+  { id: "financeiro", nome: "Financeiro", cor: "#10B981" },
+  { id: "marketing", nome: "Marketing", cor: "#3B82F6" },
+  { id: "rh", nome: "RH", cor: "#EAB308" },
+] as const;
 
 export default function ProfileSettingsPage() {
   const { user, signOut } = useAuth();
@@ -50,6 +65,7 @@ export default function ProfileSettingsPage() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [sector, setSector] = useState<string>("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -82,6 +98,7 @@ export default function ProfileSettingsPage() {
     if (profile) {
       setFirstName(profile.first_name || "");
       setLastName(profile.last_name || "");
+      setSector((profile as any).sector || "");
     }
   }, [profile]);
 
@@ -203,9 +220,23 @@ export default function ProfileSettingsPage() {
         first_name: string | null;
         last_name: string | null;
         avatar_url?: string;
+        sector?:
+          | "design"
+          | "comercial"
+          | "financeiro"
+          | "marketing"
+          | "rh"
+          | null;
       } = {
         first_name: firstName || null,
         last_name: lastName || null,
+        sector: (sector || null) as
+          | "design"
+          | "comercial"
+          | "financeiro"
+          | "marketing"
+          | "rh"
+          | null,
       };
 
       if (avatarUrl) {
@@ -315,8 +346,8 @@ export default function ProfileSettingsPage() {
             message.type === "error"
               ? "destructive"
               : message.type === "success"
-              ? "success"
-              : "default"
+                ? "success"
+                : "default"
           }
         >
           {message.type === "success" && <CheckCircle className="h-4 w-4" />}
@@ -402,6 +433,28 @@ export default function ProfileSettingsPage() {
                     placeholder="Seu último nome"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sector">Setor</Label>
+                <Select value={sector} onValueChange={setSector}>
+                  <SelectTrigger id="sector">
+                    <SelectValue placeholder="Selecione seu setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SETORES.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: s.cor }}
+                          />
+                          {s.nome}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

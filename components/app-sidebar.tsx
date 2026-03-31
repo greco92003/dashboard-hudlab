@@ -21,6 +21,12 @@ import {
   Clock,
   Users,
   Trophy,
+  Map,
+  CheckSquare,
+  ListTodo,
+  Medal,
+  Star,
+  User,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -184,6 +190,46 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: "NCT",
+    items: [
+      {
+        title: "Meu Progresso",
+        url: "/user-progress",
+        icon: User,
+      },
+      {
+        title: "Dashboard NCT",
+        url: "/ncts",
+        icon: Map,
+      },
+      {
+        title: "Narrativas",
+        url: "/ncts/narrativas",
+        icon: Target,
+      },
+      {
+        title: "Compromissos",
+        url: "/ncts/compromissos",
+        icon: CheckSquare,
+      },
+      {
+        title: "Tarefas",
+        url: "/ncts/tarefas",
+        icon: ListTodo,
+      },
+      {
+        title: "Ranking NCT",
+        url: "/ncts/ranking",
+        icon: Medal,
+      },
+      {
+        title: "Conquistas",
+        url: "/ncts/conquistas",
+        icon: Star,
+      },
+    ],
+  },
+  {
     label: "Parceiros",
     items: [
       {
@@ -247,6 +293,9 @@ export function AppSidebar() {
         (group) => group.label !== "Parceiros",
       );
     }
+
+    // Filter NCT group - partners-media cannot see it (already handled above)
+    // NCT is available to all non-partners-media users
 
     // Only owners and admins can see the "Custos" group
     if (!isOwner && !isAdmin) {
