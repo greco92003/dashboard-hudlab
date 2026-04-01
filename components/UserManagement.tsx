@@ -29,6 +29,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -45,7 +56,12 @@ import {
   Trash2,
   Shield,
   Tag,
+  Star,
+  MoreHorizontal,
+  UserCheck,
+  UserX,
 } from "lucide-react";
+import { SETORES, type Setor } from "@/lib/ncts";
 import type { Database } from "@/types/supabase";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -78,6 +94,10 @@ export function UserManagement({}: UserManagementProps) {
   const [selectedBrand, setSelectedBrand] =
     useState<string>("__remove_brand__");
   const [previousRole, setPreviousRole] = useState<string | null>(null);
+
+  // Team-leader sector assignment states
+  const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
+  const [selectedSector, setSelectedSector] = useState<Setor | "">("");
 
   const supabase = createClient();
 
@@ -132,9 +152,64 @@ export function UserManagement({}: UserManagementProps) {
     }
   }, [permissions.isOwnerOrAdmin, supabase]);
 
+  const openSectorDialog = (user: UserProfile) => {
+    setSelectedUser(user);
+    setSelectedSector((user.setor_liderado as Setor) || "");
+    setSectorDialogOpen(true);
+  };
+
+  const handleSectorDialogCancel = async () => {
+    // If was just changed to team-leader and cancel, revert to previous role
+    if (previousRole && selectedUser) {
+      await revertUserRole(selectedUser.id, previousRole);
+    }
+    setSectorDialogOpen(false);
+    setSelectedUser(null);
+    setSelectedSector("");
+    setPreviousRole(null);
+  };
+
+  const updateUserSector = async (userId: string, setor: Setor | null) => {
+    setActionLoading(userId);
+    setMessage(null);
+    try {
+      const { error } = await supabase
+        .from("user_profiles")
+        .update({ setor_liderado: setor, updated_at: new Date().toISOString() })
+        .eq("id", userId);
+      if (error) throw error;
+      setMessage({
+        type: "success",
+        text: setor
+          ? `Setor liderado "${setor}" atribuído com sucesso`
+          : "Setor liderado removido",
+      });
+      await fetchUsers();
+      setSectorDialogOpen(false);
+      setSelectedUser(null);
+      setSelectedSector("");
+      setPreviousRole(null);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
+      setMessage({
+        type: "error",
+        text: `Erro ao atualizar setor: ${errorMessage}`,
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const updateUserRole = async (
     userId: string,
-    newRole: "owner" | "admin" | "user" | "manager" | "partners-media"
+    newRole:
+      | "owner"
+      | "admin"
+      | "user"
+      | "manager"
+      | "team-leader"
+      | "partners-media",
   ) => {
     setActionLoading(userId);
     setMessage(null);
@@ -168,6 +243,19 @@ export function UserManagement({}: UserManagementProps) {
           .eq("id", userId);
 
         if (error) throw error;
+      } else if (newRole === "team-leader") {
+        // Store previous role for potential rollback
+        const currentUser = users.find((u) => u.id === userId);
+        if (currentUser) {
+          setPreviousRole(currentUser.role);
+        }
+
+        const { error } = await supabase
+          .from("user_profiles")
+          .update({ role: newRole, updated_at: new Date().toISOString() })
+          .eq("id", userId);
+
+        if (error) throw error;
       } else {
         // For other roles, normal update
         const { error } = await supabase
@@ -186,22 +274,31 @@ export function UserManagement({}: UserManagementProps) {
         text:
           newRole === "partners-media"
             ? `Role atualizada para ${newRole}. Selecione a marca definitiva no dialog que será aberto.`
-            : `Role do usuário atualizada para ${newRole}`,
+            : newRole === "team-leader"
+              ? `Role atualizada para Team Leader. Selecione o setor gerenciado.`
+              : `Role do usuário atualizada para ${newRole}`,
       });
 
       await fetchUsers();
 
       // If changing to partners-media, automatically open brand selection dialog
       if (newRole === "partners-media") {
-        // Get the current user data before the role change to create the updated user object
         const currentUser = users.find((u) => u.id === userId);
         if (currentUser) {
-          // Create user object with updated role for the dialog
           const userWithNewRole = { ...currentUser, role: newRole as any };
-
-          // Small delay to ensure UI state is updated
           setTimeout(() => {
-            openBrandDialog(userWithNewRole, true); // true indicates this is a new partners-media assignment
+            openBrandDialog(userWithNewRole, true);
+          }, 200);
+        }
+      }
+
+      // If changing to team-leader, automatically open sector selection dialog
+      if (newRole === "team-leader") {
+        const currentUser = users.find((u) => u.id === userId);
+        if (currentUser) {
+          const userWithNewRole = { ...currentUser, role: newRole as any };
+          setTimeout(() => {
+            openSectorDialog(userWithNewRole);
           }, 200);
         }
       }
@@ -349,8 +446,8 @@ export function UserManagement({}: UserManagementProps) {
         prevUsers.map((user) =>
           user.id === userId
             ? { ...user, approved, updated_at: new Date().toISOString() }
-            : user
-        )
+            : user,
+        ),
       );
 
       setMessage({
@@ -447,8 +544,8 @@ export function UserManagement({}: UserManagementProps) {
             message.type === "error"
               ? "destructive"
               : message.type === "success"
-              ? "success"
-              : "default"
+                ? "success"
+                : "default"
           }
         >
           {message.type === "success" && <CheckCircle className="h-4 w-4" />}
@@ -497,12 +594,19 @@ export function UserManagement({}: UserManagementProps) {
                           user.role === "owner"
                             ? "default"
                             : user.role === "admin"
-                            ? "destructive"
-                            : user.role === "manager"
-                            ? "secondary"
-                            : user.role === "partners-media"
-                            ? "secondary"
-                            : "outline"
+                              ? "destructive"
+                              : user.role === "team-leader"
+                                ? "secondary"
+                                : user.role === "manager"
+                                  ? "secondary"
+                                  : user.role === "partners-media"
+                                    ? "secondary"
+                                    : "outline"
+                        }
+                        style={
+                          user.role === "team-leader"
+                            ? { backgroundColor: "#7c3aed", color: "white" }
+                            : undefined
                         }
                       >
                         {user.role}
@@ -521,6 +625,19 @@ export function UserManagement({}: UserManagementProps) {
                         ) : (
                           <Badge variant="secondary">Sem marca</Badge>
                         )
+                      ) : user.role === "team-leader" ? (
+                        user.setor_liderado ? (
+                          <Badge
+                            variant="outline"
+                            className="flex items-center gap-1"
+                            style={{ borderColor: "#7c3aed", color: "#7c3aed" }}
+                          >
+                            <Star className="h-3 w-3" />
+                            {user.setor_liderado}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Sem setor</Badge>
+                        )
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -535,156 +652,246 @@ export function UserManagement({}: UserManagementProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Approval/Disapproval buttons */}
+                        {/* Loading indicator */}
+                        {actionLoading === user.id && (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+
+                        {/* Pending approval badge */}
                         {!user.approved &&
-                        permissions.canApproveUser(user.role) ? (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => updateUserApproval(user.id, true)}
-                            disabled={actionLoading === user.id}
-                          >
-                            {actionLoading === user.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <CheckCircle className="h-3 w-3" />
-                            )}
-                            Aprovar
-                          </Button>
-                        ) : user.approved &&
-                          permissions.canDisapproveUser(user.role) ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => updateUserApproval(user.id, false)}
-                            disabled={actionLoading === user.id}
-                          >
-                            {actionLoading === user.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <XCircle className="h-3 w-3" />
-                            )}
-                            Desaprovar
-                          </Button>
-                        ) : null}
-
-                        {/* Role management buttons */}
-                        {user.role !== "admin" &&
-                          permissions.canChangeUserRole(user.role, "admin") && (
+                          permissions.canApproveUser(user.role) && (
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => updateUserRole(user.id, "admin")}
+                              variant="default"
+                              onClick={() => updateUserApproval(user.id, true)}
                               disabled={actionLoading === user.id}
+                              className="h-7 px-2 text-xs"
                             >
-                              {actionLoading === user.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Shield className="h-3 w-3" />
-                              )}
-                              Admin
+                              <UserCheck className="h-3 w-3" />
+                              Aprovar
                             </Button>
                           )}
 
-                        {user.role !== "partners-media" &&
-                          permissions.canChangeUserRole(
-                            user.role,
-                            "partners-media"
-                          ) && (
+                        {/* Actions dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                updateUserRole(user.id, "partners-media")
-                              }
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
                               disabled={actionLoading === user.id}
                             >
-                              {actionLoading === user.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Shield className="h-3 w-3" />
-                              )}
-                              Partners Media
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Ações</span>
                             </Button>
-                          )}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                              {user.email}
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
 
-                        {user.role !== "user" &&
-                          permissions.canChangeUserRole(user.role, "user") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateUserRole(user.id, "user")}
-                              disabled={actionLoading === user.id}
-                            >
-                              {actionLoading === user.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <XCircle className="h-3 w-3" />
-                              )}
-                              User
-                            </Button>
-                          )}
-
-                        {/* Brand assignment button for partners-media */}
-                        {user.role === "partners-media" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openBrandDialog(user)}
-                            disabled={actionLoading === user.id}
-                          >
-                            {actionLoading === user.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Tag className="h-3 w-3" />
+                            {/* Role change submenu */}
+                            {(permissions.canChangeUserRole(
+                              user.role,
+                              "admin",
+                            ) ||
+                              permissions.canChangeUserRole(
+                                user.role,
+                                "manager",
+                              ) ||
+                              permissions.canChangeUserRole(
+                                user.role,
+                                "team-leader",
+                              ) ||
+                              permissions.canChangeUserRole(
+                                user.role,
+                                "partners-media",
+                              ) ||
+                              permissions.canChangeUserRole(
+                                user.role,
+                                "user",
+                              )) && (
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <Shield className="h-4 w-4 mr-2" />
+                                  Alterar role
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent className="w-44">
+                                  <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                                    Role atual:{" "}
+                                    <span className="font-medium text-foreground">
+                                      {user.role}
+                                    </span>
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {user.role !== "admin" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "admin",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(user.id, "admin")
+                                        }
+                                      >
+                                        <Shield className="h-4 w-4 mr-2 text-red-500" />
+                                        Admin
+                                      </DropdownMenuItem>
+                                    )}
+                                  {user.role !== "manager" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "manager",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(user.id, "manager")
+                                        }
+                                      >
+                                        <Shield className="h-4 w-4 mr-2 text-blue-500" />
+                                        Manager
+                                      </DropdownMenuItem>
+                                    )}
+                                  {user.role !== "team-leader" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "team-leader",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(user.id, "team-leader")
+                                        }
+                                      >
+                                        <Star className="h-4 w-4 mr-2 text-violet-500" />
+                                        Team Leader
+                                      </DropdownMenuItem>
+                                    )}
+                                  {user.role !== "partners-media" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "partners-media",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(
+                                            user.id,
+                                            "partners-media",
+                                          )
+                                        }
+                                      >
+                                        <Tag className="h-4 w-4 mr-2 text-emerald-500" />
+                                        Partners Media
+                                      </DropdownMenuItem>
+                                    )}
+                                  {user.role !== "user" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "user",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(user.id, "user")
+                                        }
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2 text-muted-foreground" />
+                                        Usuário comum
+                                      </DropdownMenuItem>
+                                    )}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                             )}
-                            {user.assigned_brand
-                              ? "Alterar Marca"
-                              : "Atribuir Marca"}
-                          </Button>
-                        )}
 
-                        {permissions.canDeleteUser(user.role) && (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={actionLoading === user.id}
+                            {/* Role-specific config */}
+                            {user.role === "partners-media" && (
+                              <DropdownMenuItem
+                                onClick={() => openBrandDialog(user)}
                               >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Deletar Usuário</DialogTitle>
-                                <DialogDescription>
-                                  Tem certeza que deseja deletar o usuário{" "}
-                                  {user.email}? Esta ação não pode ser desfeita.
-                                </DialogDescription>
-                              </DialogHeader>
-                              <DialogFooter>
-                                <Button variant="outline">Cancelar</Button>
-                                <Button
-                                  variant="destructive"
-                                  onClick={() =>
-                                    deleteUser(user.id, user.email)
-                                  }
-                                  disabled={actionLoading === user.id}
-                                >
-                                  {actionLoading === user.id ? (
-                                    <>
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                      Deletando...
-                                    </>
-                                  ) : (
-                                    "Deletar"
+                                <Tag className="h-4 w-4 mr-2 text-emerald-500" />
+                                {user.assigned_brand
+                                  ? "Alterar marca"
+                                  : "Atribuir marca"}
+                              </DropdownMenuItem>
+                            )}
+                            {user.role === "team-leader" && (
+                              <DropdownMenuItem
+                                onClick={() => openSectorDialog(user)}
+                              >
+                                <Star className="h-4 w-4 mr-2 text-violet-500" />
+                                {user.setor_liderado
+                                  ? "Alterar setor"
+                                  : "Atribuir setor"}
+                              </DropdownMenuItem>
+                            )}
+
+                            {/* Danger zone */}
+                            {(user.approved &&
+                              permissions.canDisapproveUser(user.role)) ||
+                            permissions.canDeleteUser(user.role) ? (
+                              <>
+                                <DropdownMenuSeparator />
+                                {user.approved &&
+                                  permissions.canDisapproveUser(user.role) && (
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        updateUserApproval(user.id, false)
+                                      }
+                                      className="text-amber-600 focus:text-amber-600"
+                                    >
+                                      <UserX className="h-4 w-4 mr-2" />
+                                      Desaprovar acesso
+                                    </DropdownMenuItem>
                                   )}
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        )}
+                                {permissions.canDeleteUser(user.role) && (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <DropdownMenuItem
+                                        onSelect={(e) => e.preventDefault()}
+                                        className="text-destructive focus:text-destructive"
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Deletar usuário
+                                      </DropdownMenuItem>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>
+                                          Deletar Usuário
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                          Tem certeza que deseja deletar o
+                                          usuário {user.email}? Esta ação não
+                                          pode ser desfeita.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <DialogFooter>
+                                        <Button variant="outline">
+                                          Cancelar
+                                        </Button>
+                                        <Button
+                                          variant="destructive"
+                                          onClick={() =>
+                                            deleteUser(user.id, user.email)
+                                          }
+                                          disabled={actionLoading === user.id}
+                                        >
+                                          {actionLoading === user.id ? (
+                                            <>
+                                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                              Deletando...
+                                            </>
+                                          ) : (
+                                            "Deletar"
+                                          )}
+                                        </Button>
+                                      </DialogFooter>
+                                    </DialogContent>
+                                  </Dialog>
+                                )}
+                              </>
+                            ) : null}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -777,7 +984,7 @@ export function UserManagement({}: UserManagementProps) {
                 selectedUser &&
                 updateUserBrand(
                   selectedUser.id,
-                  selectedBrand === "__remove_brand__" ? null : selectedBrand
+                  selectedBrand === "__remove_brand__" ? null : selectedBrand,
                 )
               }
               disabled={
@@ -787,6 +994,83 @@ export function UserManagement({}: UserManagementProps) {
                 (selectedUser?.role === "partners-media" &&
                   (!selectedBrand || selectedBrand === "__remove_brand__"))
               }
+            >
+              {actionLoading === selectedUser?.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sector Assignment Dialog for Team Leaders */}
+      <Dialog
+        open={sectorDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) handleSectorDialogCancel();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Atribuir Setor ao Team Leader</DialogTitle>
+            <DialogDescription>
+              Selecione o setor que será gerenciado por {selectedUser?.email}. O
+              team leader poderá criar e editar NCTs apenas deste setor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="sector-select">Setor Gerenciado</Label>
+              <Select
+                value={selectedSector}
+                onValueChange={(v) => setSelectedSector(v as Setor)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um setor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SETORES.map((setor) => (
+                    <SelectItem key={setor.id} value={setor.id}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full"
+                          style={{ backgroundColor: setor.cor }}
+                        />
+                        <span>{setor.nome}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selectedSector && (
+                <p className="text-sm text-destructive">
+                  ⚠️ Team leaders devem ter um setor gerenciado atribuído.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleSectorDialogCancel}
+              disabled={actionLoading === selectedUser?.id}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() =>
+                selectedUser &&
+                updateUserSector(
+                  selectedUser.id,
+                  (selectedSector as Setor) || null,
+                )
+              }
+              disabled={actionLoading === selectedUser?.id || !selectedSector}
             >
               {actionLoading === selectedUser?.id ? (
                 <>

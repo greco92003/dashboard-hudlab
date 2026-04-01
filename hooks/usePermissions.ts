@@ -2,6 +2,7 @@
 
 import { useUserProfile } from "./useUserProfile";
 import type { Database } from "@/types/supabase";
+import type { Setor } from "@/lib/ncts";
 
 type UserRole = Database["public"]["Tables"]["user_profiles"]["Row"]["role"];
 
@@ -10,6 +11,7 @@ interface UsePermissionsReturn {
   isOwner: boolean;
   isAdmin: boolean;
   isManager: boolean;
+  isTeamLeader: boolean;
   isUser: boolean;
   isPartnersMedia: boolean;
 
@@ -25,6 +27,12 @@ interface UsePermissionsReturn {
   canDemoteAdmin: boolean;
   canCreateOwner: boolean;
   canManageUserRoles: boolean;
+
+  // NCT permissions for team leaders
+  canManageNarrativas: boolean;
+  canManageCompromissos: boolean;
+  canManageTarefas: boolean;
+  getSectorManaged: () => Setor | null;
 
   // User-specific permission checks
   canDeleteUser: (targetUserRole: UserRole) => boolean;
@@ -44,6 +52,7 @@ export function usePermissions(): UsePermissionsReturn {
     isOwner,
     isAdmin,
     isManager,
+    isTeamLeader,
     isPartnersMedia,
     isOwnerOrAdmin,
   } = useUserProfile();
@@ -56,11 +65,22 @@ export function usePermissions(): UsePermissionsReturn {
   const canManageUserRoles = isOwnerOrAdmin;
 
   // Permission hierarchy
-  const canDisapproveUsers = isOwnerOrAdmin; // Owners e admins podem desaprovar (com restrições)
-  const canDeleteUsers = isOwnerOrAdmin; // Owners e admins podem deletar (com restrições)
-  const canPromoteToAdmin = isOwnerOrAdmin; // Owners e admins podem promover para admin
-  const canDemoteAdmin = isOwner; // Apenas owners podem rebaixar admins
-  const canCreateOwner = isOwner; // Apenas owners podem criar outros owners
+  const canDisapproveUsers = isOwnerOrAdmin;
+  const canDeleteUsers = isOwnerOrAdmin;
+  const canPromoteToAdmin = isOwnerOrAdmin;
+  const canDemoteAdmin = isOwner;
+  const canCreateOwner = isOwner;
+
+  // NCT permissions - team leaders and above can manage NCT items
+  const canManageNarrativas = isOwner || isAdmin || isManager || isTeamLeader;
+  const canManageCompromissos = isOwner || isAdmin || isManager || isTeamLeader;
+  const canManageTarefas = isOwner || isAdmin || isManager || isTeamLeader;
+
+  // Returns the sector managed by the team leader (or null for non-team-leaders)
+  const getSectorManaged = (): Setor | null => {
+    if (!isTeamLeader) return null;
+    return (profile?.setor_liderado as Setor) ?? null;
+  };
 
   // Combined checks
   const isAdminOrManager = isAdmin || isManager;
@@ -84,7 +104,7 @@ export function usePermissions(): UsePermissionsReturn {
 
   const canChangeUserRole = (
     targetUserRole: UserRole,
-    newRole: UserRole
+    newRole: UserRole,
   ): boolean => {
     // Owners podem alterar qualquer role (exceto criar outros owners)
     if (isOwner) {
@@ -140,6 +160,7 @@ export function usePermissions(): UsePermissionsReturn {
     isOwner,
     isAdmin,
     isManager,
+    isTeamLeader,
     isUser,
     isPartnersMedia,
 
@@ -156,6 +177,12 @@ export function usePermissions(): UsePermissionsReturn {
     canCreateOwner,
     canManageUserRoles,
 
+    // NCT permissions for team leaders
+    canManageNarrativas,
+    canManageCompromissos,
+    canManageTarefas,
+    getSectorManaged,
+
     // User-specific permission checks
     canDeleteUser,
     canChangeUserRole,
@@ -169,13 +196,16 @@ export function usePermissions(): UsePermissionsReturn {
 }
 
 // Utility function to get role hierarchy level (higher number = more permissions)
+// owner=6, admin=5, manager=4, team-leader=3, partners-media=2, user=1
 export function getRoleLevel(role: UserRole): number {
   switch (role) {
     case "owner":
-      return 5;
+      return 6;
     case "admin":
-      return 4;
+      return 5;
     case "manager":
+      return 4;
+    case "team-leader":
       return 3;
     case "partners-media":
       return 2;
@@ -189,7 +219,7 @@ export function getRoleLevel(role: UserRole): number {
 // Utility function to check if a role can manage another role
 export function canManageRole(
   managerRole: UserRole,
-  targetRole: UserRole
+  targetRole: UserRole,
 ): boolean {
   // Owners can manage everyone except other owners
   if (managerRole === "owner" && targetRole !== "owner") {

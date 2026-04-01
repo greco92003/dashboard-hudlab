@@ -29,8 +29,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Upload, Trash2, CheckCircle } from "lucide-react";
+import { Loader2, Upload, Trash2, CheckCircle, Star } from "lucide-react";
 import { UserManagement } from "@/components/UserManagement";
+import { Badge } from "@/components/ui/badge";
+import { getSetor } from "@/lib/ncts";
 import { PasswordRequirements } from "@/components/ui/password-requirements";
 import { storage } from "@/lib/storage";
 import {
@@ -55,6 +57,7 @@ export default function ProfileSettingsPage() {
     profile,
     loading,
     isOwnerOrAdmin,
+    isTeamLeader,
     updateProfile,
     deleteProfile,
     refreshProfile,
@@ -456,6 +459,27 @@ export default function ProfileSettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Team Leader Badge */}
+              {isTeamLeader &&
+                profile?.setor_liderado &&
+                (() => {
+                  const setor = getSetor(profile.setor_liderado);
+                  return (
+                    <div className="space-y-2">
+                      <Label>Cargo</Label>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          className="flex items-center gap-1.5 text-sm px-3 py-1.5 font-semibold text-white"
+                          style={{ backgroundColor: setor?.cor ?? "#7c3aed" }}
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                          Líder do Setor {setor?.nome ?? profile.setor_liderado}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>

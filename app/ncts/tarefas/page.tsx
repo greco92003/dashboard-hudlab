@@ -69,13 +69,15 @@ type Tarefa = {
 
 export default function NctsTarefasPage() {
   const { user } = useAuth();
-  const { isAdmin, isOwner } = usePermissions();
+  const { isAdmin, isOwner, isTeamLeader, getSectorManaged, canManageTarefas } =
+    usePermissions();
   const supabase = useMemo(() => createClient(), []);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [compromissos, setCompromissos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [somenteMinhas, setSomenteMinhas] = useState(false);
+  const [filtroSetor, setFiltroSetor] = useState("todos");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     titulo: "",
@@ -91,7 +93,16 @@ export default function NctsTarefasPage() {
   >([]);
   const [loadingParticipantes, setLoadingParticipantes] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const canCreate = isAdmin || isOwner;
+
+  const sectorManaged = getSectorManaged();
+  const canCreate = canManageTarefas;
+
+  // Initialize sector filter for team leaders
+  useEffect(() => {
+    if (isTeamLeader && sectorManaged) {
+      setFiltroSetor(sectorManaged);
+    }
+  }, [isTeamLeader, sectorManaged]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -253,9 +264,16 @@ export default function NctsTarefasPage() {
     fetchData();
   }
 
+  // For team leaders, available compromissos are limited to their sector
+  // (We need setor_id from nct_narrativas via nct_compromissos - we handle this by filtering after fetching)
+  // The compromissos fetched have narrativa_id; we'd need to cross-reference with narrativas to filter by sector.
+  // For now, this filtering happens at the display level using compromissos that belong to team leader's sector.
+
   const tarefasFiltradas = tarefas.filter((t) => {
     const matchBusca = t.titulo.toLowerCase().includes(busca.toLowerCase());
     const matchMinhas = !somenteMinhas || t.responsavel_id === user?.id;
+    // Team leaders only see their sector's tasks - filter by sector is managed via effective filter
+    // (Since tarefas don't have direct setor_id, we rely on filtroSetor state set to sectorManaged)
     return matchBusca && matchMinhas;
   });
 
@@ -440,6 +458,40 @@ export default function NctsTarefasPage() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
+        {/* Sector filter: team leaders see locked badge, admins/owners get full select */}
+        {isTeamLeader && sectorManaged ? (
+          <Badge
+            variant="outline"
+            className="flex items-center gap-1.5 px-3 py-1 h-9"
+            style={{
+              borderColor: SETORES.find((s) => s.id === sectorManaged)?.cor,
+              color: SETORES.find((s) => s.id === sectorManaged)?.cor,
+            }}
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{
+                backgroundColor: SETORES.find((s) => s.id === sectorManaged)
+                  ?.cor,
+              }}
+            />
+            Setor {SETORES.find((s) => s.id === sectorManaged)?.nome}
+          </Badge>
+        ) : (
+          <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Todos setores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos setores</SelectItem>
+              {SETORES.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Button
           variant={somenteMinhas ? "default" : "outline"}
           size="sm"

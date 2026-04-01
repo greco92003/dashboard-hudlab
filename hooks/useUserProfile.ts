@@ -16,6 +16,7 @@ interface UseUserProfileReturn {
   isOwner: boolean;
   isAdmin: boolean;
   isManager: boolean;
+  isTeamLeader: boolean;
   isPartnersMedia: boolean;
   isOwnerOrAdmin: boolean;
   role: string | null;
@@ -99,8 +100,8 @@ export function useUserProfile(): UseUserProfileReturn {
         err instanceof Error
           ? err.message
           : typeof err === "object" && err !== null && "message" in err
-          ? String(err.message)
-          : "Erro ao carregar perfil";
+            ? String(err.message)
+            : "Erro ao carregar perfil";
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -178,6 +179,7 @@ export function useUserProfile(): UseUserProfileReturn {
     isOwner: profile?.role === "owner",
     isAdmin: profile?.role === "admin",
     isManager: profile?.role === "manager",
+    isTeamLeader: profile?.role === "team-leader",
     isPartnersMedia: profile?.role === "partners-media",
     isOwnerOrAdmin: profile?.role === "owner" || profile?.role === "admin",
     role: profile?.role || null,

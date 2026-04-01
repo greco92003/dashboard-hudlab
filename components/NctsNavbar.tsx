@@ -5,12 +5,26 @@ import Link from "next/link";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Map, Target, CheckSquare, ListTodo, Medal, Star } from "lucide-react";
+import {
+  Map,
+  Target,
+  CheckSquare,
+  ListTodo,
+  Medal,
+  Star,
+  User,
+} from "lucide-react";
 
 const NCT_LINKS = [
+  { href: "/user-progress", label: "Meu Progresso", icon: User, exact: true },
   { href: "/ncts", label: "Dashboard", icon: Map, exact: true },
   { href: "/ncts/narrativas", label: "Narrativas", icon: Target, exact: false },
-  { href: "/ncts/compromissos", label: "Compromissos", icon: CheckSquare, exact: false },
+  {
+    href: "/ncts/compromissos",
+    label: "Compromissos",
+    icon: CheckSquare,
+    exact: false,
+  },
   { href: "/ncts/tarefas", label: "Tarefas", icon: ListTodo, exact: false },
   { href: "/ncts/ranking", label: "Ranking", icon: Medal, exact: false },
   { href: "/ncts/conquistas", label: "Conquistas", icon: Star, exact: false },
@@ -43,10 +57,12 @@ export function NctsNavbar() {
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                 active
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              <Icon className={cn("h-3.5 w-3.5 shrink-0", active && "text-primary")} />
+              <Icon
+                className={cn("h-3.5 w-3.5 shrink-0", active && "text-primary")}
+              />
               <span className="hidden sm:inline">{label}</span>
             </Link>
           );
@@ -55,4 +71,3 @@ export function NctsNavbar() {
     </nav>
   );
 }
-

@@ -262,6 +262,7 @@ export function AppSidebar() {
   const {
     isPartnersMedia,
     isUser,
+    isTeamLeader,
     isOwner,
     isAdmin,
     loading: permissionsLoading,
@@ -295,7 +296,7 @@ export function AppSidebar() {
     }
 
     // Filter NCT group - partners-media cannot see it (already handled above)
-    // NCT is available to all non-partners-media users
+    // NCT is available to all non-partners-media users, including team-leaders
 
     // Only owners and admins can see the "Custos" group
     if (!isOwner && !isAdmin) {
@@ -340,8 +341,8 @@ export function AppSidebar() {
       <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3">
         <Logo className="h-14 w-max mb-6" />
         <ThemeToggle />
-        {/* Banco de Imagens - visível apenas para admin, owner e user */}
-        {(isOwner || isAdmin || isUser) && (
+        {/* Banco de Imagens - visível para admin, owner, manager, team-leader e user */}
+        {(isOwner || isAdmin || isTeamLeader || isUser) && (
           <Button
             onClick={() =>
               window.open(

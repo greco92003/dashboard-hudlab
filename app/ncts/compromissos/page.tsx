@@ -42,6 +42,7 @@ import {
   STATUS_COMPROMISSO,
   formatarData,
   diasRestantes,
+  SETORES,
 } from "@/lib/ncts";
 
 type Compromisso = {
@@ -63,13 +64,20 @@ type Compromisso = {
 
 export default function NctsCompromissosPage() {
   const { user } = useAuth();
-  const { isAdmin, isOwner } = usePermissions();
+  const {
+    isAdmin,
+    isOwner,
+    isTeamLeader,
+    getSectorManaged,
+    canManageCompromissos,
+  } = usePermissions();
   const supabase = useMemo(() => createClient(), []);
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [narrativas, setNarrativas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [filtroSetor, setFiltroSetor] = useState("todos");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     titulo: "",
@@ -80,7 +88,16 @@ export default function NctsCompromissosPage() {
     xp_total: "30",
   });
   const [salvando, setSalvando] = useState(false);
-  const canCreate = isAdmin || isOwner;
+
+  const sectorManaged = getSectorManaged();
+  const canCreate = canManageCompromissos;
+
+  // Initialize sector filter for team leaders
+  useEffect(() => {
+    if (isTeamLeader && sectorManaged) {
+      setFiltroSetor(sectorManaged);
+    }
+  }, [isTeamLeader, sectorManaged]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -145,10 +162,22 @@ export default function NctsCompromissosPage() {
     fetchData();
   }
 
+  // For team leaders, narrativas available in the form are limited to their sector
+  const narrativasDisponiveis =
+    isTeamLeader && sectorManaged
+      ? narrativas.filter((n) => n.setor_id === sectorManaged)
+      : narrativas;
+
   const filtrados = compromissos.filter((c) => {
     const matchBusca = c.titulo.toLowerCase().includes(busca.toLowerCase());
     const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
-    return matchBusca && matchStatus;
+    // Team leaders can only see their sector's compromissos
+    const effectiveFiltroSetor =
+      isTeamLeader && sectorManaged ? sectorManaged : filtroSetor;
+    const matchSetor =
+      effectiveFiltroSetor === "todos" ||
+      c._narrativa?.setor_id === effectiveFiltroSetor;
+    return matchBusca && matchStatus && matchSetor;
   });
 
   return (
@@ -205,7 +234,7 @@ export default function NctsCompromissosPage() {
                       <SelectValue placeholder="Selecione a narrativa" />
                     </SelectTrigger>
                     <SelectContent>
-                      {narrativas.map((n) => (
+                      {narrativasDisponiveis.map((n) => (
                         <SelectItem key={n.id} value={n.id}>
                           {n.titulo}
                         </SelectItem>
@@ -268,6 +297,37 @@ export default function NctsCompromissosPage() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
+        {/* Sector filter: team leaders see locked badge, admins/owners get full select */}
+        {isTeamLeader && sectorManaged ? (
+          <Badge
+            variant="outline"
+            className="flex items-center gap-1.5 px-3 py-1 h-9"
+            style={{
+              borderColor: getSetor(sectorManaged)?.cor,
+              color: getSetor(sectorManaged)?.cor,
+            }}
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ backgroundColor: getSetor(sectorManaged)?.cor }}
+            />
+            Setor {getSetor(sectorManaged)?.nome}
+          </Badge>
+        ) : (
+          <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Todos setores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos setores</SelectItem>
+              {SETORES.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
           <SelectTrigger className="w-44">
             <SelectValue />

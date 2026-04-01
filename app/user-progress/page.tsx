@@ -13,6 +13,7 @@ import {
   STATUS_COMPROMISSO,
   STATUS_NARRATIVA,
   PRIORIDADE_TAREFA,
+  SETORES,
 } from "@/lib/ncts";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,9 @@ import {
   ArrowRight,
   Flame,
   BookOpen,
+  BarChart3,
 } from "lucide-react";
+import { NctsNavbar } from "@/components/NctsNavbar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -307,7 +310,7 @@ function NarrativaItem({ narrativa }: { narrativa: Narrativa }) {
 
 export default function UserProgressPage() {
   const { user } = useAuth();
-  const { profile, isOwnerOrAdmin, isManager } = useUserProfile();
+  const { profile, isOwnerOrAdmin, isManager, isTeamLeader } = useUserProfile();
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
@@ -324,6 +327,38 @@ export default function UserProgressPage() {
   const [setorTarefasExpirando, setSetorTarefasExpirando] = useState(0);
   const [setorProgCompromissos, setSetorProgCompromissos] = useState(0);
   const [setorProgNarrativas, setSetorProgNarrativas] = useState(0);
+  // Team leader specific data
+  const [teamTarefasAtrasadas, setTeamTarefasAtrasadas] = useState<Tarefa[]>(
+    [],
+  );
+  const [teamTarefasExpirando7d, setTeamTarefasExpirando7d] = useState<
+    Tarefa[]
+  >([]);
+  const [teamMembros, setTeamMembros] = useState<
+    {
+      id: string;
+      nome: string;
+      tarefasConcluidas: number;
+      tarefasPendentes: number;
+    }[]
+  >([]);
+  // Admin/Owner all-sectors data
+  const [allSectorsData, setAllSectorsData] = useState<
+    {
+      id: string;
+      nome: string;
+      cor: string;
+      teamLeader: string | null;
+      narrativasTotal: number;
+      narrativasConcluidas: number;
+      compromissosTotal: number;
+      compromissosConcluidos: number;
+      tarefasTotal: number;
+      tarefasConcluidas: number;
+      tarefasAtrasadas: number;
+      progresso: number;
+    }[]
+  >([]);
   // Designer data
   const [designerStats, setDesignerStats] = useState<{
     mockupsFeitos: number;
@@ -331,15 +366,18 @@ export default function UserProgressPage() {
     arquivosSerigrafia: number;
   } | null>(null);
 
-  const isLider = isOwnerOrAdmin || isManager;
-  const setor = profile?.sector ?? null;
+  const isLider = isOwnerOrAdmin || isManager || isTeamLeader;
+  // For team leaders use setor_liderado, for others use sector
+  const setor = isTeamLeader
+    ? (profile?.setor_liderado ?? null)
+    : (profile?.sector ?? null);
   const isDesigner = setor === "design";
   const isComercial = setor === "comercial";
 
   useEffect(() => {
     if (!user?.id) return;
     fetchAll();
-  }, [user?.id, profile?.sector]);
+  }, [user?.id, profile?.sector, profile?.setor_liderado]);
 
   async function fetchAll() {
     setLoading(true);
@@ -450,6 +488,16 @@ export default function UserProgressPage() {
         await fetchSectorData(setor);
       }
 
+      // Fetch team leader specific data
+      if (isTeamLeader && setor) {
+        await fetchTeamLeaderData(setor);
+      }
+
+      // Fetch all sectors data for admin/owner
+      if (isOwnerOrAdmin) {
+        await fetchAllSectorsData();
+      }
+
       // Fetch designer data
       if (isDesigner && profile) {
         await fetchDesignerData(
@@ -510,6 +558,163 @@ export default function UserProgressPage() {
     }
   }
 
+  async function fetchTeamLeaderData(setorId: string) {
+    const hoje = new Date().toISOString();
+    const em7dias = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    // Fetch sector members
+    const { data: membrosData } = await supabase
+      .from("user_profiles")
+      .select("id, first_name, last_name")
+      .eq("sector", setorId);
+
+    // Fetch team tasks (by sector via narratives)
+    const [atrasadasRes, expirandoRes] = await Promise.all([
+      supabase
+        .from("nct_tarefas")
+        .select(
+          "id, titulo, status, prioridade, prazo_fim, compromisso_id, xp_reward, nct_compromissos(titulo, nct_narrativas(setor_id))",
+        )
+        .lt("prazo_fim", hoje)
+        .neq("status", "concluida")
+        .order("prazo_fim", { ascending: true })
+        .limit(10),
+      supabase
+        .from("nct_tarefas")
+        .select(
+          "id, titulo, status, prioridade, prazo_fim, compromisso_id, xp_reward, nct_compromissos(titulo, nct_narrativas(setor_id))",
+        )
+        .gte("prazo_fim", hoje)
+        .lte("prazo_fim", em7dias)
+        .neq("status", "concluida")
+        .order("prazo_fim", { ascending: true })
+        .limit(10),
+    ]);
+
+    // Filter by sector
+    const filterBySetor = (data: any[]) =>
+      data
+        .filter(
+          (t: any) => t.nct_compromissos?.nct_narrativas?.setor_id === setorId,
+        )
+        .map((t: any) => ({ ...t, _compromisso: t.nct_compromissos }));
+
+    setTeamTarefasAtrasadas(filterBySetor(atrasadasRes.data ?? []));
+    setTeamTarefasExpirando7d(filterBySetor(expirandoRes.data ?? []));
+
+    // Build members progress
+    if (membrosData) {
+      const membrosProgress = await Promise.all(
+        membrosData.map(async (m: any) => {
+          const [conclRes, pendRes] = await Promise.all([
+            supabase
+              .from("nct_tarefas")
+              .select("id", { count: "exact" })
+              .eq("responsavel_id", m.id)
+              .eq("status", "concluida"),
+            supabase
+              .from("nct_tarefas")
+              .select("id", { count: "exact" })
+              .eq("responsavel_id", m.id)
+              .neq("status", "concluida"),
+          ]);
+          return {
+            id: m.id,
+            nome: [m.first_name, m.last_name].filter(Boolean).join(" ") || "—",
+            tarefasConcluidas: conclRes.count ?? 0,
+            tarefasPendentes: pendRes.count ?? 0,
+          };
+        }),
+      );
+      setTeamMembros(membrosProgress);
+    }
+  }
+
+  async function fetchAllSectorsData() {
+    const hoje = new Date().toISOString();
+
+    // Get all team leaders to map sector -> leader
+    const { data: teamLeaders } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name, setor_liderado")
+      .eq("role", "team-leader")
+      .not("setor_liderado", "is", null);
+
+    const leaderMap: Record<string, string> = {};
+    (teamLeaders ?? []).forEach((tl: any) => {
+      if (tl.setor_liderado) {
+        leaderMap[tl.setor_liderado] =
+          [tl.first_name, tl.last_name].filter(Boolean).join(" ") || "—";
+      }
+    });
+
+    const sectorsData = await Promise.all(
+      SETORES.map(async (s) => {
+        const [
+          narrRes,
+          comprRes,
+          tarefasRes,
+          tarefasConclRes,
+          tarefasAtrasRes,
+        ] = await Promise.all([
+          supabase
+            .from("nct_narrativas")
+            .select("id, status, progresso")
+            .eq("setor_id", s.id)
+            .neq("status", "cancelada"),
+          supabase
+            .from("nct_compromissos")
+            .select("id, status, progresso, nct_narrativas!inner(setor_id)")
+            .eq("nct_narrativas.setor_id", s.id)
+            .neq("status", "cancelado"),
+          supabase
+            .from("nct_tarefas")
+            .select("id", { count: "exact" })
+            .neq("status", "cancelada"),
+          supabase
+            .from("nct_tarefas")
+            .select("id", { count: "exact" })
+            .eq("status", "concluida"),
+          supabase
+            .from("nct_tarefas")
+            .select("id", { count: "exact" })
+            .lt("prazo_fim", hoje)
+            .neq("status", "concluida"),
+        ]);
+        const narrs = narrRes.data ?? [];
+        const comprs = comprRes.data ?? [];
+        const progresso =
+          narrs.length > 0
+            ? Math.round(
+                narrs.reduce((acc: number, n: any) => acc + n.progresso, 0) /
+                  narrs.length,
+              )
+            : 0;
+        return {
+          id: s.id,
+          nome: s.nome,
+          cor: s.cor,
+          teamLeader: leaderMap[s.id] ?? null,
+          narrativasTotal: narrs.length,
+          narrativasConcluidas: narrs.filter(
+            (n: any) => n.status === "concluida",
+          ).length,
+          compromissosTotal: comprs.length,
+          compromissosConcluidos: comprs.filter(
+            (c: any) => c.status === "concluido",
+          ).length,
+          tarefasTotal: tarefasRes.count ?? 0,
+          tarefasConcluidas: tarefasConclRes.count ?? 0,
+          tarefasAtrasadas: tarefasAtrasRes.count ?? 0,
+          progresso,
+        };
+      }),
+    );
+    setAllSectorsData(sectorsData);
+  }
+
   async function fetchDesignerData(firstName: string, lastName: string) {
     const designerName = `${firstName} ${lastName}`.trim();
     if (!designerName) return;
@@ -555,448 +760,153 @@ export default function UserProgressPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6 pb-8">
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold shrink-0">
-            {loading ? "?" : nomeCompleto.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            {loading ? (
-              <Skeleton className="h-7 w-48 mb-1" />
-            ) : (
-              <h1 className="text-xl font-bold">
-                {saudacao()}, {profile?.first_name ?? nomeCompleto}! 👋
-              </h1>
-            )}
-            <div className="flex items-center gap-2 flex-wrap mt-1">
-              {setorInfo && (
-                <Badge
-                  variant="outline"
-                  style={{ borderColor: setorInfo.cor, color: setorInfo.cor }}
-                >
-                  {setorInfo.nome}
-                </Badge>
+    <div className="flex flex-col min-h-full">
+      <NctsNavbar />
+      <div className="p-4 pt-6 md:p-6 md:pt-8 flex flex-col gap-6 pb-8">
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold shrink-0">
+              {loading ? "?" : nomeCompleto.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              {loading ? (
+                <Skeleton className="h-7 w-48 mb-1" />
+              ) : (
+                <h1 className="text-xl font-bold">
+                  {saudacao()}, {profile?.first_name ?? nomeCompleto}! 👋
+                </h1>
               )}
-              {profile?.role && (
-                <Badge variant="secondary" className="capitalize">
-                  {profile.role}
-                </Badge>
-              )}
-              {!loading && (
-                <span className="text-sm text-muted-foreground">
-                  Nível {nivel.nivel} • {xpTotal.toLocaleString()} XP
-                </span>
-              )}
+              <div className="flex items-center gap-2 flex-wrap mt-1">
+                {setorInfo && (
+                  <Badge
+                    variant="outline"
+                    style={{ borderColor: setorInfo.cor, color: setorInfo.cor }}
+                  >
+                    {setorInfo.nome}
+                  </Badge>
+                )}
+                {profile?.role && (
+                  <Badge variant="secondary" className="capitalize">
+                    {profile.role}
+                  </Badge>
+                )}
+                {!loading && (
+                  <span className="text-sm text-muted-foreground">
+                    Nível {nivel.nivel} • {xpTotal.toLocaleString()} XP
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* XP Card resumido no header */}
-        {!loading && (
-          <div className="sm:ml-auto flex flex-col gap-1 min-w-[160px]">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Nível {nivel.nivel}</span>
-              <span>Nível {nivel.nivel + 1}</span>
-            </div>
-            <Progress value={nivel.progresso} className="h-2" />
-            <p className="text-xs text-muted-foreground text-right">
-              {nivel.xpAtual} / {nivel.xpProximo} XP
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Quick Stats ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <QuickStatCard
-          icon={<Zap className="h-5 w-5" />}
-          label="XP Total"
-          value={xpTotal.toLocaleString()}
-          color="text-amber-500"
-          loading={loading}
-        />
-        <QuickStatCard
-          icon={<TrendingUp className="h-5 w-5" />}
-          label="Nível"
-          value={`Nível ${nivel.nivel}`}
-          color="text-blue-500"
-          loading={loading}
-        />
-        <QuickStatCard
-          icon={<Trophy className="h-5 w-5" />}
-          label="Ranking Geral"
-          value={ranking ? `#${ranking}` : "—"}
-          color="text-purple-500"
-          loading={loading}
-        />
-        <QuickStatCard
-          icon={<AlertTriangle className="h-5 w-5" />}
-          label="Tarefas Atrasadas"
-          value={tarefasAtrasadas.length}
-          color="text-red-500"
-          loading={loading}
-        />
-        <QuickStatCard
-          icon={<ListTodo className="h-5 w-5" />}
-          label="Tarefas Pendentes"
-          value={tarefas.length}
-          color="text-slate-500"
-          loading={loading}
-        />
-        <QuickStatCard
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          label="Concluídas"
-          value={tarefasConcluidas}
-          color="text-emerald-500"
-          loading={loading}
-        />
-      </div>
-
-      {/* ── Summary Card ─────────────────────────────────────────────── */}
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Flame className="h-4 w-4 text-orange-500" />
-            Resumo de Progresso
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              {[
-                {
-                  label: "Tarefas concluídas",
-                  value: tarefasConcluidas,
-                  icon: CheckCircle2,
-                  color: "text-emerald-500",
-                },
-                {
-                  label: "Compromissos ativos",
-                  value: compromissosAtivos.length,
-                  icon: CheckSquare,
-                  color: "text-blue-500",
-                },
-                {
-                  label: "Narrativas ativas",
-                  value: narrativasAtivas.length,
-                  icon: Target,
-                  color: "text-purple-500",
-                },
-                {
-                  label: "Conquistas",
-                  value: badges.length,
-                  icon: Star,
-                  color: "text-amber-500",
-                },
-              ].map(({ label, value, icon: Icon, color }) => (
-                <div key={label} className="flex flex-col items-center gap-1">
-                  <Icon className={`h-6 w-6 ${color}`} />
-                  <p className="text-2xl font-bold">{value}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                </div>
-              ))}
+          {/* XP Card resumido no header */}
+          {!loading && (
+            <div className="sm:ml-auto flex flex-col gap-1 min-w-[160px]">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Nível {nivel.nivel}</span>
+                <span>Nível {nivel.nivel + 1}</span>
+              </div>
+              <Progress value={nivel.progresso} className="h-2" />
+              <p className="text-xs text-muted-foreground text-right">
+                {nivel.xpAtual} / {nivel.xpProximo} XP
+              </p>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* ── Two-column main area ──────────────────────────────────────── */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* ── LEFT: My Tasks ─────────────────────────────────────────── */}
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ListTodo className="h-4 w-4 text-slate-500" />
-                Minhas Tarefas
-                {!loading && (
-                  <Badge variant="secondary">{tarefas.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))
-              ) : tarefas.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
-                  <p className="text-sm">
-                    Nenhuma tarefa pendente. Ótimo trabalho!
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {tarefasAtrasadas.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-red-600 mb-1 flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3" /> Atrasadas (
-                        {tarefasAtrasadas.length})
-                      </p>
-                      {tarefasAtrasadas.map((t) => (
-                        <TarefaItem key={t.id} tarefa={t} />
-                      ))}
-                    </div>
-                  )}
-                  {tarefasExpirando.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-amber-600 mb-1 flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> Expirando em breve (
-                        {tarefasExpirando.length})
-                      </p>
-                      {tarefasExpirando.map((t) => (
-                        <TarefaItem key={t.id} tarefa={t} />
-                      ))}
-                    </div>
-                  )}
-                  {tarefasAndamento.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">
-                        Em andamento ({tarefasAndamento.length})
-                      </p>
-                      {tarefasAndamento.slice(0, 5).map((t) => (
-                        <TarefaItem key={t.id} tarefa={t} />
-                      ))}
-                    </div>
-                  )}
-                  <Link
-                    href="/ncts/tarefas"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
-                  >
-                    Ver todas as tarefas <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* ── Recent Activity ───────────────────────────────────── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-blue-500" />
-                Atividade Recente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
-                ))
-              ) : atividade.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma atividade registrada ainda.
-                </p>
-              ) : (
-                atividade.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center gap-3 py-1.5 border-b border-border last:border-0"
-                  >
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 shrink-0">
-                      <Zap className="h-3.5 w-3.5 text-amber-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{a.motivo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatarData(a.created_at)}
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      +{a.xp_ganho} XP
-                    </Badge>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
         </div>
 
-        {/* ── RIGHT: Commitments + Narratives ────────────────────────── */}
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckSquare className="h-4 w-4 text-blue-500" />
-                Meus Compromissos
-                {!loading && (
-                  <Badge variant="secondary">{compromissos.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))
-              ) : compromissos.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  Nenhum compromisso vinculado ao seu usuário.
-                </p>
-              ) : (
-                <>
-                  {compromissos.slice(0, 6).map((c) => (
-                    <CompromissoItem key={c.id} compromisso={c} />
-                  ))}
-                  <Link
-                    href="/ncts/compromissos"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
-                  >
-                    Ver todos os compromissos <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Target className="h-4 w-4 text-purple-500" />
-                Minhas Narrativas
-                {!loading && (
-                  <Badge variant="secondary">{narrativas.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                Array.from({ length: 2 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))
-              ) : narrativas.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  Você não participa de nenhuma narrativa ainda.
-                </p>
-              ) : (
-                <>
-                  {narrativas.slice(0, 6).map((n) => (
-                    <NarrativaItem key={n.id} narrativa={n} />
-                  ))}
-                  <Link
-                    href="/ncts/narrativas"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
-                  >
-                    Ver todas as narrativas <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* ── Gamification / Badges ───────────────────────────── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Star className="h-4 w-4 text-amber-500" />
-                Conquistas
-                {!loading && <Badge variant="secondary">{badges.length}</Badge>}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <Skeleton className="h-16 w-full" />
-              ) : badges.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhuma conquista ainda. Complete tarefas para ganhar badges!
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {badges.map((b) => (
-                    <div
-                      key={b.id}
-                      className="flex flex-col items-center gap-1 p-2 border rounded-lg min-w-[60px] text-center"
-                    >
-                      <span className="text-2xl">
-                        {b.nct_badges?.icone ?? "🏅"}
-                      </span>
-                      <span className="text-xs text-muted-foreground leading-tight">
-                        {b.nct_badges?.nome}
-                      </span>
-                    </div>
-                  ))}
-                  <Link
-                    href="/ncts/conquistas"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline w-full mt-1"
-                  >
-                    Ver todas as conquistas <ArrowRight className="h-3 w-3" />
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* ── Quick Stats ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <QuickStatCard
+            icon={<Zap className="h-5 w-5" />}
+            label="XP Total"
+            value={xpTotal.toLocaleString()}
+            color="text-amber-500"
+            loading={loading}
+          />
+          <QuickStatCard
+            icon={<TrendingUp className="h-5 w-5" />}
+            label="Nível"
+            value={`Nível ${nivel.nivel}`}
+            color="text-blue-500"
+            loading={loading}
+          />
+          <QuickStatCard
+            icon={<Trophy className="h-5 w-5" />}
+            label="Ranking Geral"
+            value={ranking ? `#${ranking}` : "—"}
+            color="text-purple-500"
+            loading={loading}
+          />
+          <QuickStatCard
+            icon={<AlertTriangle className="h-5 w-5" />}
+            label="Tarefas Atrasadas"
+            value={tarefasAtrasadas.length}
+            color="text-red-500"
+            loading={loading}
+          />
+          <QuickStatCard
+            icon={<ListTodo className="h-5 w-5" />}
+            label="Tarefas Pendentes"
+            value={tarefas.length}
+            color="text-slate-500"
+            loading={loading}
+          />
+          <QuickStatCard
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label="Concluídas"
+            value={tarefasConcluidas}
+            color="text-emerald-500"
+            loading={loading}
+          />
         </div>
-      </div>
 
-      {/* ── Conditional Blocks ────────────────────────────────────────── */}
-
-      {/* Sector Leader Block */}
-      {isLider && (
-        <Card className="border-blue-200 dark:border-blue-900/40">
+        {/* ── Summary Card ─────────────────────────────────────────────── */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
-              Visão do Setor
-              {setorInfo && (
-                <Badge
-                  variant="outline"
-                  style={{ borderColor: setorInfo.cor, color: setorInfo.cor }}
-                >
-                  {setorInfo.nome}
-                </Badge>
-              )}
+              <Flame className="h-4 w-4 text-orange-500" />
+              Resumo de Progresso
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
+                  <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 {[
                   {
-                    label: "Tarefas atrasadas",
-                    value: setorTarefasAtrasadas,
-                    color: "text-red-500",
-                    icon: AlertTriangle,
+                    label: "Tarefas concluídas",
+                    value: tarefasConcluidas,
+                    icon: CheckCircle2,
+                    color: "text-emerald-500",
                   },
                   {
-                    label: "Expirando em 3 dias",
-                    value: setorTarefasExpirando,
-                    color: "text-amber-500",
-                    icon: Clock,
-                  },
-                  {
-                    label: "Progresso compromissos",
-                    value: `${setorProgCompromissos}%`,
-                    color: "text-blue-500",
+                    label: "Compromissos ativos",
+                    value: compromissosAtivos.length,
                     icon: CheckSquare,
+                    color: "text-blue-500",
                   },
                   {
-                    label: "Progresso narrativas",
-                    value: `${setorProgNarrativas}%`,
-                    color: "text-purple-500",
+                    label: "Narrativas ativas",
+                    value: narrativasAtivas.length,
                     icon: Target,
+                    color: "text-purple-500",
                   },
-                ].map(({ label, value, color, icon: Icon }) => (
-                  <div
-                    key={label}
-                    className="text-center p-3 rounded-lg bg-muted/40"
-                  >
-                    <Icon className={`h-5 w-5 mx-auto mb-1 ${color}`} />
-                    <p className="text-xl font-bold">{value}</p>
+                  {
+                    label: "Conquistas",
+                    value: badges.length,
+                    icon: Star,
+                    color: "text-amber-500",
+                  },
+                ].map(({ label, value, icon: Icon, color }) => (
+                  <div key={label} className="flex flex-col items-center gap-1">
+                    <Icon className={`h-6 w-6 ${color}`} />
+                    <p className="text-2xl font-bold">{value}</p>
                     <p className="text-xs text-muted-foreground">{label}</p>
                   </div>
                 ))}
@@ -1004,110 +914,643 @@ export default function UserProgressPage() {
             )}
           </CardContent>
         </Card>
-      )}
 
-      {/* Designer Block */}
-      {isDesigner && (
-        <Card className="border-red-200 dark:border-red-900/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Palette className="h-4 w-4 text-red-500" />
-              Métricas de Design
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading || designerStats === null ? (
-              <div className="grid grid-cols-3 gap-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-4 text-center">
-                {[
-                  {
-                    label: "Mockups feitos",
-                    value: designerStats.mockupsFeitos,
-                    color: "text-red-500",
-                  },
-                  {
-                    label: "Alterações",
-                    value: designerStats.alteracoesFeitas,
-                    color: "text-orange-500",
-                  },
-                  {
-                    label: "Arquivos de serigrafia",
-                    value: designerStats.arquivosSerigrafia,
-                    color: "text-pink-500",
-                  },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="p-3 rounded-lg bg-muted/40">
-                    <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {label}
+        {/* ── Two-column main area ──────────────────────────────────────── */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* ── LEFT: My Tasks ─────────────────────────────────────────── */}
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ListTodo className="h-4 w-4 text-slate-500" />
+                  Minhas Tarefas
+                  {!loading && (
+                    <Badge variant="secondary">{tarefas.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))
+                ) : tarefas.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+                    <p className="text-sm">
+                      Nenhuma tarefa pendente. Ótimo trabalho!
                     </p>
                   </div>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-3 text-center">
-              Dados do período atual — sincronizado com Google Sheets
-            </p>
-          </CardContent>
-        </Card>
-      )}
+                ) : (
+                  <>
+                    {tarefasAtrasadas.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-red-600 mb-1 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Atrasadas (
+                          {tarefasAtrasadas.length})
+                        </p>
+                        {tarefasAtrasadas.map((t) => (
+                          <TarefaItem key={t.id} tarefa={t} />
+                        ))}
+                      </div>
+                    )}
+                    {tarefasExpirando.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-amber-600 mb-1 flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> Expirando em breve (
+                          {tarefasExpirando.length})
+                        </p>
+                        {tarefasExpirando.map((t) => (
+                          <TarefaItem key={t.id} tarefa={t} />
+                        ))}
+                      </div>
+                    )}
+                    {tarefasAndamento.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">
+                          Em andamento ({tarefasAndamento.length})
+                        </p>
+                        {tarefasAndamento.slice(0, 5).map((t) => (
+                          <TarefaItem key={t.id} tarefa={t} />
+                        ))}
+                      </div>
+                    )}
+                    <Link
+                      href="/ncts/tarefas"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
+                    >
+                      Ver todas as tarefas <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-      {/* Commercial Block */}
-      {isComercial && (
-        <Card className="border-pink-200 dark:border-pink-900/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ShoppingBag className="h-4 w-4 text-pink-500" />
-              Desempenho Comercial
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-muted/40 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Trophy className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-semibold">
-                    Ranking de Vendas
-                  </span>
+            {/* ── Recent Activity ───────────────────────────────────── */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-blue-500" />
+                  Atividade Recente
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))
+                ) : atividade.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhuma atividade registrada ainda.
+                  </p>
+                ) : (
+                  atividade.map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center gap-3 py-1.5 border-b border-border last:border-0"
+                    >
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 shrink-0">
+                        <Zap className="h-3.5 w-3.5 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{a.motivo}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatarData(a.created_at)}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        +{a.xp_ganho} XP
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── RIGHT: Commitments + Narratives ────────────────────────── */}
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4 text-blue-500" />
+                  Meus Compromissos
+                  {!loading && (
+                    <Badge variant="secondary">{compromissos.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-14 w-full" />
+                  ))
+                ) : compromissos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Nenhum compromisso vinculado ao seu usuário.
+                  </p>
+                ) : (
+                  <>
+                    {compromissos.slice(0, 6).map((c) => (
+                      <CompromissoItem key={c.id} compromisso={c} />
+                    ))}
+                    <Link
+                      href="/ncts/compromissos"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
+                    >
+                      Ver todos os compromissos{" "}
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="h-4 w-4 text-purple-500" />
+                  Minhas Narrativas
+                  {!loading && (
+                    <Badge variant="secondary">{narrativas.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  Array.from({ length: 2 }).map((_, i) => (
+                    <Skeleton key={i} className="h-14 w-full" />
+                  ))
+                ) : narrativas.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Você não participa de nenhuma narrativa ainda.
+                  </p>
+                ) : (
+                  <>
+                    {narrativas.slice(0, 6).map((n) => (
+                      <NarrativaItem key={n.id} narrativa={n} />
+                    ))}
+                    <Link
+                      href="/ncts/narrativas"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline pt-1"
+                    >
+                      Ver todas as narrativas <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ── Gamification / Badges ───────────────────────────── */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  Conquistas
+                  {!loading && (
+                    <Badge variant="secondary">{badges.length}</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <Skeleton className="h-16 w-full" />
+                ) : badges.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhuma conquista ainda. Complete tarefas para ganhar
+                    badges!
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {badges.map((b) => (
+                      <div
+                        key={b.id}
+                        className="flex flex-col items-center gap-1 p-2 border rounded-lg min-w-[60px] text-center"
+                      >
+                        <span className="text-2xl">
+                          {b.nct_badges?.icone ?? "🏅"}
+                        </span>
+                        <span className="text-xs text-muted-foreground leading-tight">
+                          {b.nct_badges?.nome}
+                        </span>
+                      </div>
+                    ))}
+                    <Link
+                      href="/ncts/conquistas"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline w-full mt-1"
+                    >
+                      Ver todas as conquistas <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* ── Conditional Blocks ────────────────────────────────────────── */}
+
+        {/* Sector Leader Block */}
+        {isLider && (
+          <Card className="border-blue-200 dark:border-blue-900/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4 text-blue-500" />
+                Visão do Setor
+                {setorInfo && (
+                  <Badge
+                    variant="outline"
+                    style={{ borderColor: setorInfo.cor, color: setorInfo.cor }}
+                  >
+                    {setorInfo.nome}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Dados de ranking serão exibidos conforme a integração com o
-                  sistema de vendas.
-                </p>
-                <Link
-                  href="/sellers"
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  Ver painel de vendedores <ArrowRight className="h-3 w-3" />
-                </Link>
-              </div>
-              <div className="p-4 rounded-lg bg-muted/40 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm font-semibold">
-                    Ranking de Treinamentos
-                  </span>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    {
+                      label: "Tarefas atrasadas",
+                      value: setorTarefasAtrasadas,
+                      color: "text-red-500",
+                      icon: AlertTriangle,
+                    },
+                    {
+                      label: "Expirando em 3 dias",
+                      value: setorTarefasExpirando,
+                      color: "text-amber-500",
+                      icon: Clock,
+                    },
+                    {
+                      label: "Progresso compromissos",
+                      value: `${setorProgCompromissos}%`,
+                      color: "text-blue-500",
+                      icon: CheckSquare,
+                    },
+                    {
+                      label: "Progresso narrativas",
+                      value: `${setorProgNarrativas}%`,
+                      color: "text-purple-500",
+                      icon: Target,
+                    },
+                  ].map(({ label, value, color, icon: Icon }) => (
+                    <div
+                      key={label}
+                      className="text-center p-3 rounded-lg bg-muted/40"
+                    >
+                      <Icon className={`h-5 w-5 mx-auto mb-1 ${color}`} />
+                      <p className="text-xl font-bold">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Progresso de treinamentos e aproveitamento serão exibidos aqui
-                  em breve.
-                </p>
-                <Link
-                  href="/ncts"
-                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                >
-                  Ver dashboard NCT <ArrowRight className="h-3 w-3" />
-                </Link>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Designer Block */}
+        {isDesigner && (
+          <Card className="border-red-200 dark:border-red-900/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Palette className="h-4 w-4 text-red-500" />
+                Métricas de Design
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading || designerStats === null ? (
+                <div className="grid grid-cols-3 gap-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {[
+                    {
+                      label: "Mockups feitos",
+                      value: designerStats.mockupsFeitos,
+                      color: "text-red-500",
+                    },
+                    {
+                      label: "Alterações",
+                      value: designerStats.alteracoesFeitas,
+                      color: "text-orange-500",
+                    },
+                    {
+                      label: "Arquivos de serigrafia",
+                      value: designerStats.arquivosSerigrafia,
+                      color: "text-pink-500",
+                    },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="p-3 rounded-lg bg-muted/40">
+                      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                Dados do período atual — sincronizado com Google Sheets
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Commercial Block */}
+        {isComercial && (
+          <Card className="border-pink-200 dark:border-pink-900/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-pink-500" />
+                Desempenho Comercial
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-muted/40 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-semibold">
+                      Ranking de Vendas
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Dados de ranking serão exibidos conforme a integração com o
+                    sistema de vendas.
+                  </p>
+                  <Link
+                    href="/sellers"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    Ver painel de vendedores <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/40 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-semibold">
+                      Ranking de Treinamentos
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Progresso de treinamentos e aproveitamento serão exibidos
+                    aqui em breve.
+                  </p>
+                  <Link
+                    href="/ncts"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    Ver dashboard NCT <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Team Leader Section ────────────────────────────────── */}
+        {isTeamLeader && setor && (
+          <div className="space-y-4">
+            <h2
+              className="text-lg font-bold flex items-center gap-2"
+              style={{ color: getSetor(setor)?.cor }}
+            >
+              <Star className="h-5 w-5" />
+              Gestão do Setor {getSetor(setor)?.nome}
+            </h2>
+
+            {/* Team Tasks Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                {
+                  label: "Tarefas Atrasadas",
+                  value: teamTarefasAtrasadas.length,
+                  color: "text-red-500",
+                  icon: AlertTriangle,
+                },
+                {
+                  label: "Expirando (7 dias)",
+                  value: teamTarefasExpirando7d.length,
+                  color: "text-amber-500",
+                  icon: Clock,
+                },
+                {
+                  label: "Progresso Compromissos",
+                  value: `${setorProgCompromissos}%`,
+                  color: "text-blue-500",
+                  icon: CheckSquare,
+                },
+                {
+                  label: "Progresso Narrativas",
+                  value: `${setorProgNarrativas}%`,
+                  color: "text-purple-500",
+                  icon: Target,
+                },
+              ].map(({ label, value, color, icon: Icon }) => (
+                <Card key={label}>
+                  <CardContent className="pt-4 pb-4 text-center">
+                    <Icon className={`h-5 w-5 mx-auto mb-1 ${color}`} />
+                    <p className="text-xl font-bold">{value}</p>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+
+            {/* Team Tasks Alerts */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="border-red-200 dark:border-red-900/40">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    Tarefas Atrasadas da Equipe
+                    <Badge variant="secondary">
+                      {teamTarefasAtrasadas.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {loading ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : teamTarefasAtrasadas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhuma tarefa atrasada 🎉
+                    </p>
+                  ) : (
+                    teamTarefasAtrasadas
+                      .slice(0, 5)
+                      .map((t) => <TarefaItem key={t.id} tarefa={t} />)
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="border-amber-200 dark:border-amber-900/40">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    Expirando em 7 dias
+                    <Badge variant="secondary">
+                      {teamTarefasExpirando7d.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {loading ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : teamTarefasExpirando7d.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhuma tarefa expirando em breve
+                    </p>
+                  ) : (
+                    teamTarefasExpirando7d
+                      .slice(0, 5)
+                      .map((t) => <TarefaItem key={t.id} tarefa={t} />)
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Team Members */}
+            {teamMembros.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    Membros da Equipe
+                    <Badge variant="secondary">{teamMembros.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {teamMembros.map((m) => {
+                      const total = m.tarefasConcluidas + m.tarefasPendentes;
+                      const pct =
+                        total > 0
+                          ? Math.round((m.tarefasConcluidas / total) * 100)
+                          : 0;
+                      return (
+                        <div key={m.id} className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold shrink-0">
+                            {m.nome.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {m.nome}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Progress value={pct} className="h-1.5 flex-1" />
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {pct}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-xs text-emerald-600 font-medium">
+                              {m.tarefasConcluidas} concluídas
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {m.tarefasPendentes} pendentes
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── Admin/Owner All-Sectors Dashboard ──────────────────── */}
+        {isOwnerOrAdmin && allSectorsData.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              Dashboard Geral por Setor
+            </h2>
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {allSectorsData.map((s) => (
+                <Card key={s.id} className="overflow-hidden">
+                  <div
+                    className="h-1.5 w-full"
+                    style={{ backgroundColor: s.cor }}
+                  />
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-3 h-3 rounded-full"
+                          style={{ backgroundColor: s.cor }}
+                        />
+                        {s.nome}
+                      </span>
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {s.progresso}% geral
+                      </Badge>
+                    </CardTitle>
+                    {s.teamLeader && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Star className="h-3 w-3" style={{ color: s.cor }} />
+                        Líder: {s.teamLeader}
+                      </p>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <Progress value={s.progresso} className="h-2 mb-3" />
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-sm font-bold">{s.narrativasTotal}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Narrativas
+                        </p>
+                        <p className="text-xs text-emerald-600">
+                          {s.narrativasConcluidas} concluídas
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">
+                          {s.compromissosTotal}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Compromissos
+                        </p>
+                        <p className="text-xs text-emerald-600">
+                          {s.compromissosConcluidos} concluídos
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">{s.tarefasTotal}</p>
+                        <p className="text-xs text-muted-foreground">Tarefas</p>
+                        {s.tarefasAtrasadas > 0 ? (
+                          <p className="text-xs text-red-600">
+                            {s.tarefasAtrasadas} atrasadas
+                          </p>
+                        ) : (
+                          <p className="text-xs text-emerald-600">
+                            {s.tarefasConcluidas} concluídas
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

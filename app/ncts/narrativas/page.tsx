@@ -75,7 +75,13 @@ type Narrativa = {
 
 export default function NctsNarrativasPage() {
   const { user } = useAuth();
-  const { isAdmin, isOwner } = usePermissions();
+  const {
+    isAdmin,
+    isOwner,
+    isTeamLeader,
+    getSectorManaged,
+    canManageNarrativas,
+  } = usePermissions();
   const supabase = useMemo(() => createClient(), []);
   const [narrativas, setNarrativas] = useState<Narrativa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +101,18 @@ export default function NctsNarrativasPage() {
   const [salvando, setSalvando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canCreate = isAdmin || isOwner;
+  // Team leader context
+  const sectorManaged = getSectorManaged();
+
+  const canCreate = canManageNarrativas;
+
+  // For team leaders, initialize the sector filter and form sector to their managed sector
+  useEffect(() => {
+    if (isTeamLeader && sectorManaged) {
+      setFiltroSetor(sectorManaged);
+      setSetoresSelecionados([sectorManaged]);
+    }
+  }, [isTeamLeader, sectorManaged]);
 
   function toggleSetor(id: string) {
     setSetoresSelecionados((prev) =>
@@ -212,15 +229,22 @@ export default function NctsNarrativasPage() {
     toast.success("Narrativa criada!");
     setCriandoOpen(false);
     setForm({ titulo: "", descricao: "", prazo_fim: "", xp_total: "100" });
-    setSetoresSelecionados([]);
+    // Restore sector for team leaders
+    setSetoresSelecionados(
+      isTeamLeader && sectorManaged ? [sectorManaged] : [],
+    );
     handleRemoveLogo();
     fetchNarrativas();
   }
 
   const filtradas = narrativas.filter((n) => {
     const matchBusca = n.titulo.toLowerCase().includes(busca.toLowerCase());
+    // Team leaders can only see their own sector's narrativas
+    const effectiveFiltroSetor =
+      isTeamLeader && sectorManaged ? sectorManaged : filtroSetor;
     const matchSetor =
-      filtroSetor === "todos" || n._setores.some((s) => s.id === filtroSetor);
+      effectiveFiltroSetor === "todos" ||
+      n._setores.some((s) => s.id === effectiveFiltroSetor);
     const matchStatus = filtroStatus === "todos" || n.status === filtroStatus;
     return matchBusca && matchSetor && matchStatus;
   });
@@ -315,48 +339,64 @@ export default function NctsNarrativasPage() {
                       (selecione um ou mais)
                     </span>
                   </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="mt-1.5 flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs hover:bg-muted/50 transition-colors"
-                      >
-                        <span
-                          className={
-                            setoresSelecionados.length === 0
-                              ? "text-muted-foreground"
-                              : ""
-                          }
+                  {/* Team leaders get their sector locked - cannot change */}
+                  {isTeamLeader && sectorManaged ? (
+                    <div className="mt-1.5 flex items-center gap-2 px-3 py-2 rounded-md border border-input bg-muted text-sm">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: getSetor(sectorManaged)?.cor,
+                        }}
+                      />
+                      <span>{getSetor(sectorManaged)?.nome}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        (fixo)
+                      </span>
+                    </div>
+                  ) : (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="mt-1.5 flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs hover:bg-muted/50 transition-colors"
                         >
-                          {setoresSelecionados.length === 0
-                            ? "Selecione os setores..."
-                            : `${setoresSelecionados.length} setor${setoresSelecionados.length > 1 ? "es" : ""} selecionado${setoresSelecionados.length > 1 ? "s" : ""}`}
-                        </span>
-                        <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-2" align="start">
-                      <div className="space-y-1">
-                        {SETORES.map((s) => (
-                          <div
-                            key={s.id}
-                            className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted cursor-pointer"
-                            onClick={() => toggleSetor(s.id)}
+                          <span
+                            className={
+                              setoresSelecionados.length === 0
+                                ? "text-muted-foreground"
+                                : ""
+                            }
                           >
-                            <Checkbox
-                              checked={setoresSelecionados.includes(s.id)}
-                              onCheckedChange={() => toggleSetor(s.id)}
-                            />
-                            <span
-                              className="h-2.5 w-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: s.cor }}
-                            />
-                            <span className="text-sm">{s.nome}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                            {setoresSelecionados.length === 0
+                              ? "Selecione os setores..."
+                              : `${setoresSelecionados.length} setor${setoresSelecionados.length > 1 ? "es" : ""} selecionado${setoresSelecionados.length > 1 ? "s" : ""}`}
+                          </span>
+                          <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-2" align="start">
+                        <div className="space-y-1">
+                          {SETORES.map((s) => (
+                            <div
+                              key={s.id}
+                              className="flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-muted cursor-pointer"
+                              onClick={() => toggleSetor(s.id)}
+                            >
+                              <Checkbox
+                                checked={setoresSelecionados.includes(s.id)}
+                                onCheckedChange={() => toggleSetor(s.id)}
+                              />
+                              <span
+                                className="h-2.5 w-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: s.cor }}
+                              />
+                              <span className="text-sm">{s.nome}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   {/* Badges dos setores selecionados */}
                   {setoresSelecionados.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
@@ -428,19 +468,37 @@ export default function NctsNarrativasPage() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
-        <Select value={filtroSetor} onValueChange={setFiltroSetor}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos setores</SelectItem>
-            {SETORES.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Team leaders see only their sector - no sector filter shown */}
+        {isTeamLeader && sectorManaged ? (
+          <Badge
+            variant="outline"
+            className="flex items-center gap-1.5 px-3 py-1 h-9"
+            style={{
+              borderColor: getSetor(sectorManaged)?.cor,
+              color: getSetor(sectorManaged)?.cor,
+            }}
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ backgroundColor: getSetor(sectorManaged)?.cor }}
+            />
+            Setor {getSetor(sectorManaged)?.nome}
+          </Badge>
+        ) : (
+          <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos setores</SelectItem>
+              {SETORES.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
           <SelectTrigger className="w-44">
             <SelectValue />

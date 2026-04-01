@@ -196,7 +196,13 @@ export interface Database {
         Row: {
           id: string;
           email: string;
-          role: "owner" | "admin" | "user" | "manager" | "partners-media";
+          role:
+            | "owner"
+            | "admin"
+            | "user"
+            | "manager"
+            | "team-leader"
+            | "partners-media";
           first_name: string | null;
           last_name: string | null;
           avatar_url: string | null;
@@ -209,13 +215,26 @@ export interface Database {
             | "marketing"
             | "rh"
             | null;
+          setor_liderado:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id: string;
           email: string;
-          role?: "owner" | "admin" | "user" | "manager" | "partners-media";
+          role?:
+            | "owner"
+            | "admin"
+            | "user"
+            | "manager"
+            | "team-leader"
+            | "partners-media";
           first_name?: string | null;
           last_name?: string | null;
           avatar_url?: string | null;
@@ -228,19 +247,39 @@ export interface Database {
             | "marketing"
             | "rh"
             | null;
+          setor_liderado?:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           email?: string;
-          role?: "owner" | "admin" | "user" | "manager" | "partners-media";
+          role?:
+            | "owner"
+            | "admin"
+            | "user"
+            | "manager"
+            | "team-leader"
+            | "partners-media";
           first_name?: string | null;
           last_name?: string | null;
           avatar_url?: string | null;
           approved?: boolean | null;
           assigned_brand?: string | null;
           sector?:
+            | "design"
+            | "comercial"
+            | "financeiro"
+            | "marketing"
+            | "rh"
+            | null;
+          setor_liderado?:
             | "design"
             | "comercial"
             | "financeiro"
