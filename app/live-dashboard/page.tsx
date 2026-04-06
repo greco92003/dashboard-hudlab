@@ -264,17 +264,47 @@ function LiveChart({
   data: DashboardData;
   formatDay: (d: string) => string;
 }) {
+  // Calculate Y-axis max based on meta, pace and revenue only (ignore forecast)
+  const otherMax = data.chartData.reduce((acc, point) => {
+    const vals = [point.meta ?? 0, point.pace ?? 0, point.revenue ?? 0];
+    return Math.max(acc, ...vals);
+  }, 0);
+  // Add 15% headroom so lines don't hit the ceiling
+  const yAxisMax = Math.ceil((otherMax * 1.15) / 10000) * 10000 || 100000;
+
+  // Latest non-null forecast value from chart data
+  const forecastValue = data.totalForecast ?? 0;
+  const forecastOverflow = forecastValue > yAxisMax;
+
+  // Clamp forecast values so they don't blow the axis; keep original for tooltip
+  const clampedChartData = data.chartData.map((point) => ({
+    ...point,
+    forecastOriginal: point.forecast, // real value for tooltip display
+    forecast:
+      point.forecast !== null ? Math.min(point.forecast, yAxisMax) : null,
+  }));
+
   return (
     <Card className="flex-1">
       <CardHeader className="py-3">
-        <CardTitle className="text-base sm:text-lg">
-          Performance do Mês — {MONTH_NAMES[data.month - 1]} {data.year}
-        </CardTitle>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <CardTitle className="text-base sm:text-lg">
+            Performance do Mês — {MONTH_NAMES[data.month - 1]} {data.year}
+          </CardTitle>
+          {/* Forecast overflow badge — only shown when forecast exceeds chart scale */}
+          {forecastOverflow && (
+            <div className="flex items-center gap-1.5 rounded-md border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-sm font-semibold text-purple-400 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-purple-500 inline-block" />
+              Forecast&nbsp;
+              <span className="font-mono">{formatCurrency(forecastValue)}</span>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 pt-0">
         <ChartContainer config={chartConfig} className="h-[420px] w-full">
           <AreaChart
-            data={data.chartData}
+            data={clampedChartData}
             margin={{ left: 12, right: 12, top: 12, bottom: 12 }}
           >
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -290,6 +320,7 @@ function LiveChart({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
+              domain={[0, yAxisMax]}
             />
             <ChartTooltip
               cursor={false}
@@ -307,11 +338,17 @@ function LiveChart({
                       <p className="text-gray-500">
                         Meta: {formatCurrency(d.meta)}
                       </p>
-                      {d.forecast !== null && (
-                        <p className="text-purple-500">
-                          Forecast: {formatCurrency(d.forecast)}
-                        </p>
-                      )}
+                      {d.forecastOriginal !== null &&
+                        d.forecastOriginal !== undefined && (
+                          <p className="text-purple-500">
+                            Forecast: {formatCurrency(d.forecastOriginal)}
+                            {d.forecastOriginal > yAxisMax && (
+                              <span className="ml-1 text-purple-400 text-xs">
+                                ↑
+                              </span>
+                            )}
+                          </p>
+                        )}
                       {d.pace !== null && (
                         <p className="text-orange-500">
                           Pace: {formatCurrency(d.pace)}
