@@ -1621,31 +1621,826 @@ function SlideOnlyTitle({
   );
 }
 
-function Slide9() {
+// ─── Organic Line Chart (SVG) ────────────────────────────────────────────────
+function OrganicLineChart({
+  historicos,
+}: {
+  historicos: {
+    semana: number;
+    storiesViews: number;
+    reelsViews: number;
+    postsAlcance: number;
+  }[];
+}) {
+  if (!historicos.length) return null;
+
+  const W = 420; // viewBox width
+  const H = 140; // viewBox height
+  const padL = 48; // left padding for Y labels
+  const padR = 12;
+  const padT = 8;
+  const padB = 28; // bottom for X labels
+
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  const allVals = historicos.flatMap((h) => [
+    h.storiesViews,
+    h.reelsViews,
+    h.postsAlcance,
+  ]);
+  const maxVal = Math.max(...allVals, 1);
+  // Round up to nearest 5000
+  const yMax = Math.ceil(maxVal / 5000) * 5000;
+  const yTicks = Array.from(
+    { length: Math.min(5, yMax / 5000 + 1) },
+    (_, i) => (yMax / 4) * i,
+  );
+
+  const xStep = innerW / (historicos.length - 1 || 1);
+
+  const toX = (i: number) => padL + i * xStep;
+  const toY = (v: number) => padT + innerH - (v / yMax) * innerH;
+
+  const makePath = (vals: number[]) =>
+    vals
+      .map(
+        (v, i) =>
+          `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`,
+      )
+      .join(" ");
+
+  const series = [
+    {
+      key: "storiesViews",
+      color: "#22d3ee",
+      vals: historicos.map((h) => h.storiesViews),
+    },
+    { key: "reelsViews", color: P, vals: historicos.map((h) => h.reelsViews) },
+    {
+      key: "postsAlcance",
+      color: "#94a3b8",
+      vals: historicos.map((h) => h.postsAlcance),
+    },
+  ];
+
   return (
-    <SlideOnlyTitle
-      title="Dados Tráfego Orgânico"
-      color="#a78bfa"
-      msg="Em breve · dados em análise"
-    />
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: "100%", overflow: "visible" }}
+    >
+      {/* Y gridlines + labels */}
+      {yTicks.map((tick) => (
+        <g key={tick}>
+          <line
+            x1={padL}
+            y1={toY(tick)}
+            x2={W - padR}
+            y2={toY(tick)}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="1"
+          />
+          <text
+            x={padL - 6}
+            y={toY(tick) + 4}
+            textAnchor="end"
+            fontSize="9"
+            fill="rgba(255,255,255,0.35)"
+          >
+            {tick >= 1000 ? `${(tick / 1000).toFixed(0)}k` : tick}
+          </text>
+        </g>
+      ))}
+      {/* X labels */}
+      {historicos.map((h, i) => (
+        <text
+          key={h.semana}
+          x={toX(i)}
+          y={H - 4}
+          textAnchor="middle"
+          fontSize="9"
+          fill="rgba(255,255,255,0.45)"
+        >
+          Sem {h.semana}
+        </text>
+      ))}
+      {/* Lines */}
+      {series.map((s) => (
+        <path
+          key={s.key}
+          d={makePath(s.vals)}
+          fill="none"
+          stroke={s.color}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ))}
+      {/* Dots */}
+      {series.map((s) =>
+        s.vals.map((v, i) => (
+          <circle
+            key={`${s.key}-${i}`}
+            cx={toX(i)}
+            cy={toY(v)}
+            r="3.5"
+            fill={s.color}
+            stroke="rgba(15,15,20,0.9)"
+            strokeWidth="1.5"
+          />
+        )),
+      )}
+    </svg>
   );
 }
-function Slide10() {
+
+// ─── Organic Traffic Types ───────────────────────────────────────────────────
+interface OrganicDashboardRow {
+  metrica: string;
+  semanaAnterior: string;
+  semanaAtual: string;
+  evolucao: string;
+}
+interface OrganicReel {
+  semana: number;
+  data: string;
+  descricao: string;
+  views: number;
+  curtidas: number;
+  comentarios: number;
+  compartilhamentos: number;
+  salvamentos: number;
+}
+interface OrganicHistorico {
+  semana: number;
+  storiesViews: number;
+  reelsViews: number;
+  postsAlcance: number;
+}
+interface OrganicTotals {
+  reelsViews: number;
+  storiesViews: number;
+  postsAlcance: number;
+  reelsCurtidas: number;
+  reelsComentarios: number;
+  reelsCompartilhamentos: number;
+  reelsSalvamentos: number;
+  totalReels: number;
+  totalStories: number;
+  totalPosts: number;
+}
+interface OrganicData {
+  dashboard: OrganicDashboardRow[];
+  reels: OrganicReel[];
+  historicos: OrganicHistorico[];
+  totals: OrganicTotals;
+}
+
+function Slide9({
+  organicData,
+  organicLoading,
+}: {
+  organicData: OrganicData | null;
+  organicLoading: boolean;
+}) {
+  if (organicLoading) {
+    return (
+      <div style={{ width: "100%" }}>
+        <SlideHeader
+          title="Tráfego Orgânico"
+          badge="Março 2026"
+          badgeColor="#a78bfa"
+        />
+        <div
+          className="fade-up-2"
+          style={{
+            ...styles.card,
+            textAlign: "center",
+            padding: 60,
+            color: "rgba(255,255,255,0.4)",
+          }}
+        >
+          Carregando dados orgânicos…
+        </div>
+      </div>
+    );
+  }
+  if (!organicData) {
+    return (
+      <SlideOnlyTitle
+        title="Tráfego Orgânico"
+        color="#a78bfa"
+        msg="Erro ao carregar dados"
+      />
+    );
+  }
+
+  const { dashboard, historicos, totals } = organicData;
+  const totalAlcance =
+    totals.reelsViews + totals.storiesViews + totals.postsAlcance;
+  const totalInteracoes =
+    totals.reelsCurtidas +
+    totals.reelsComentarios +
+    totals.reelsCompartilhamentos +
+    totals.reelsSalvamentos;
+  const maxHist = Math.max(
+    ...historicos.map((h) => h.storiesViews + h.reelsViews + h.postsAlcance),
+    1,
+  );
+
+  // Parse dashboard rows into sections
+  const storiesMetrics = dashboard.filter(
+    (d) =>
+      d.metrica.startsWith("Total de Views") ||
+      d.metrica.startsWith("Total de Interações") ||
+      d.metrica.startsWith("Total de Atividade"),
+  );
+  const reelsMetrics = dashboard.filter(
+    (d) =>
+      d.metrica.includes("Plays") ||
+      d.metrica.includes("Curtidas") ||
+      d.metrica.includes("Comentários") ||
+      d.metrica.includes("Compartilhamentos") ||
+      d.metrica.includes("Salvamentos"),
+  );
+
   return (
-    <SlideOnlyTitle
-      title="Novo Financeiro"
-      color="#22c55e"
-      msg="Em breve · estrutura em desenvolvimento"
-    />
+    <div style={{ width: "100%" }}>
+      <SlideHeader
+        title="Tráfego Orgânico"
+        badge="Março 2026"
+        badgeColor="#a78bfa"
+      />
+
+      {/* KPI Cards */}
+      <div
+        className="fade-up-2"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        {[
+          {
+            label: "Alcance Total",
+            value: fmtNum(totalAlcance),
+            color: "#a78bfa",
+          },
+          { label: "Reels Views", value: fmtNum(totals.reelsViews), color: P },
+          {
+            label: "Stories Views",
+            value: fmtNum(totals.storiesViews),
+            color: "#22d3ee",
+          },
+          {
+            label: "Posts Alcance",
+            value: fmtNum(totals.postsAlcance),
+            color: "#fbbf24",
+          },
+          {
+            label: "Interações",
+            value: fmtNum(totalInteracoes),
+            color: "#f43f5e",
+          },
+        ].map((k) => (
+          <div
+            key={k.label}
+            style={{ ...styles.card, textAlign: "center", padding: "16px 8px" }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                color: "rgba(255,255,255,0.4)",
+                marginBottom: 6,
+                textTransform: "uppercase",
+                letterSpacing: 1,
+              }}
+            >
+              {k.label}
+            </div>
+            <div
+              style={{
+                fontSize: "clamp(16px, 2vw, 24px)",
+                fontWeight: 800,
+                color: k.color,
+                lineHeight: 1,
+              }}
+            >
+              {k.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Dashboard Semanal - Comparativo */}
+      <div
+        className="fade-up-3"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+          marginBottom: 14,
+        }}
+      >
+        {/* Stories comparison */}
+        <div style={{ ...styles.card, padding: "16px 20px" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.4)",
+              marginBottom: 10,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+            }}
+          >
+            📱 Stories · Sem. Anterior → Atual
+          </div>
+          {storiesMetrics.map((m) => {
+            const evoParsed = parseFloat(
+              m.evolucao.replace(",", ".").replace("%", ""),
+            );
+            const isPositive = evoParsed > 0;
+            return (
+              <div
+                key={m.metrica}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+                  {m.metrica.replace("Total de ", "")}
+                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span
+                    style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}
+                  >
+                    {m.semanaAnterior}
+                  </span>
+                  <span
+                    style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}
+                  >
+                    →
+                  </span>
+                  <span
+                    style={{ fontSize: 12, fontWeight: 700, color: "white" }}
+                  >
+                    {m.semanaAtual}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: isPositive ? P : "#f43f5e",
+                      minWidth: 50,
+                      textAlign: "right",
+                    }}
+                  >
+                    {m.evolucao}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Evolução Semanal Line Chart */}
+        <div style={{ ...styles.card, padding: "16px 20px" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.4)",
+              marginBottom: 12,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+            }}
+          >
+            📊 Evolução Semanal de Alcance/Views
+          </div>
+          <OrganicLineChart historicos={historicos} />
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              marginTop: 10,
+              justifyContent: "center",
+            }}
+          >
+            {[
+              { label: "Stories Views", color: "#22d3ee" },
+              { label: "Reels Views", color: P },
+              { label: "Posts Alcance", color: "#94a3b8" },
+            ].map((l) => (
+              <div
+                key={l.label}
+                style={{ display: "flex", alignItems: "center", gap: 5 }}
+              >
+                <div
+                  style={{
+                    width: 18,
+                    height: 2,
+                    background: l.color,
+                    borderRadius: 1,
+                  }}
+                />
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
+                  {l.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content counts */}
+      <div className="fade-up-4" style={{ display: "flex", gap: 12 }}>
+        {[
+          { label: "Reels Publicados", value: totals.totalReels, color: P },
+          {
+            label: "Stories Publicados",
+            value: totals.totalStories,
+            color: "#22d3ee",
+          },
+          {
+            label: "Posts Publicados",
+            value: totals.totalPosts,
+            color: "#fbbf24",
+          },
+        ].map((k) => (
+          <div
+            key={k.label}
+            style={{
+              flex: 1,
+              textAlign: "center",
+              padding: "12px 8px",
+              background: "rgba(255,255,255,0.04)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                color: "rgba(255,255,255,0.4)",
+                marginBottom: 4,
+              }}
+            >
+              {k.label}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>
+              {k.value}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Slide10({
+  organicData,
+  organicLoading,
+}: {
+  organicData: OrganicData | null;
+  organicLoading: boolean;
+}) {
+  if (organicLoading) {
+    return (
+      <div style={{ width: "100%" }}>
+        <SlideHeader
+          title="Top Conteúdos"
+          badge="Orgânico"
+          badgeColor="#a78bfa"
+        />
+        <div
+          className="fade-up-2"
+          style={{
+            ...styles.card,
+            textAlign: "center",
+            padding: 60,
+            color: "rgba(255,255,255,0.4)",
+          }}
+        >
+          Carregando…
+        </div>
+      </div>
+    );
+  }
+  if (!organicData) {
+    return (
+      <SlideOnlyTitle
+        title="Top Conteúdos"
+        color="#a78bfa"
+        msg="Erro ao carregar dados"
+      />
+    );
+  }
+
+  const { reels, dashboard, totals } = organicData;
+
+  // Top 5 Reels by views
+  const topReels = [...reels].sort((a, b) => b.views - a.views).slice(0, 6);
+  const maxViews = topReels[0]?.views || 1;
+
+  // Reels metrics from dashboard
+  const reelsDash = dashboard.filter(
+    (d) =>
+      d.metrica.includes("Plays") ||
+      (d.metrica.includes("Curtidas") && !d.metrica.includes("Reach")) ||
+      d.metrica.includes("Comentários") ||
+      d.metrica.includes("Compartilhamentos") ||
+      d.metrica.includes("Salvamentos"),
+  );
+
+  return (
+    <div style={{ width: "100%" }}>
+      <SlideHeader
+        title="Top Conteúdos Orgânicos"
+        badge="Reels + Feed"
+        badgeColor="#a78bfa"
+      />
+
+      <div
+        className="fade-up-2"
+        style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12 }}
+      >
+        {/* Top Reels */}
+        <div style={{ ...styles.card, padding: "16px 20px" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "rgba(255,255,255,0.4)",
+              marginBottom: 12,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+            }}
+          >
+            🎬 Top 6 Reels · por Views
+          </div>
+          {topReels.map((r, i) => {
+            const colors = [
+              P,
+              "#22d3ee",
+              "#a78bfa",
+              "#fbbf24",
+              "#f43f5e",
+              "#34d399",
+            ];
+            const color = colors[i];
+            return (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
+                    alignItems: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      flex: 1,
+                      minWidth: 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color,
+                        minWidth: 16,
+                        textAlign: "center",
+                      }}
+                    >
+                      #{i + 1}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: "rgba(255,255,255,0.7)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {r.descricao}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span
+                      style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}
+                    >
+                      {r.data}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color }}>
+                      {fmtNum(r.views)}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    height: 6,
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(r.views / maxViews) * 100}%`,
+                      background: color,
+                      borderRadius: 3,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Reels Engagement Summary + Posts/Feed summary */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ ...styles.card, padding: "16px 20px" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.4)",
+                marginBottom: 10,
+                textTransform: "uppercase",
+                letterSpacing: 1,
+              }}
+            >
+              🎯 Reels · Sem. Anterior → Atual
+            </div>
+            {reelsDash.map((m, idx) => {
+              const evoParsed = parseFloat(
+                m.evolucao.replace(",", ".").replace("%", ""),
+              );
+              const isPositive = evoParsed > 0;
+              return (
+                <div
+                  key={`reels-${idx}`}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 5,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}
+                  >
+                    {m.metrica.replace("Total de ", "").replace(" (Plays)", "")}
+                  </span>
+                  <div
+                    style={{ display: "flex", gap: 6, alignItems: "center" }}
+                  >
+                    <span
+                      style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}
+                    >
+                      {m.semanaAnterior}
+                    </span>
+                    <span
+                      style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}
+                    >
+                      →
+                    </span>
+                    <span
+                      style={{ fontSize: 11, fontWeight: 700, color: "white" }}
+                    >
+                      {m.semanaAtual}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: isPositive ? P : "#f43f5e",
+                        minWidth: 48,
+                        textAlign: "right",
+                      }}
+                    >
+                      {m.evolucao}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Engagement Summary */}
+          <div style={{ ...styles.card, padding: "16px 20px" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "rgba(255,255,255,0.4)",
+                marginBottom: 10,
+                textTransform: "uppercase",
+                letterSpacing: 1,
+              }}
+            >
+              💡 Engajamento Total Reels
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 8,
+              }}
+            >
+              {[
+                {
+                  label: "Curtidas",
+                  value: totals.reelsCurtidas,
+                  color: "#f43f5e",
+                },
+                {
+                  label: "Comentários",
+                  value: totals.reelsComentarios,
+                  color: "#22d3ee",
+                },
+                {
+                  label: "Compartilh.",
+                  value: totals.reelsCompartilhamentos,
+                  color: P,
+                },
+                {
+                  label: "Salvamentos",
+                  value: totals.reelsSalvamentos,
+                  color: "#fbbf24",
+                },
+              ].map((k) => (
+                <div
+                  key={k.label}
+                  style={{
+                    textAlign: "center",
+                    padding: "8px 4px",
+                    background: "rgba(255,255,255,0.03)",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.35)",
+                      marginBottom: 4,
+                    }}
+                  >
+                    {k.label}
+                  </div>
+                  <div
+                    style={{ fontSize: 18, fontWeight: 800, color: k.color }}
+                  >
+                    {fmtNum(k.value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 function Slide11() {
   return (
-    <SlideOnlyTitle
-      title="Análise Operação Gargalo Zero"
-      color="#94a3b8"
-      msg="Em breve · metodologia sendo definida"
-    />
+    <div style={{ width: "100%", textAlign: "center" }}>
+      <div
+        className="fade-up"
+        style={{ margin: "0 auto 32px", width: 250, height: 250 }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/apresenta/2026/marco/gargalo-zero.png"
+          alt="Gargalo Zero"
+          style={{ width: "100%", height: "100%", objectFit: "contain" }}
+        />
+      </div>
+      <h2
+        className="fade-up-2"
+        style={{
+          fontSize: "clamp(32px, 6vw, 64px)",
+          fontWeight: 900,
+          letterSpacing: -1,
+          marginBottom: 0,
+        }}
+      >
+        Análise NCTs
+      </h2>
+    </div>
   );
 }
 
@@ -1663,7 +2458,13 @@ interface TrafficRow {
 }
 
 // ─── Slides ───────────────────────────────────────────────────────────────────
-function renderSlide(idx: number, td: TrafficRow | null, loading: boolean) {
+function renderSlide(
+  idx: number,
+  td: TrafficRow | null,
+  loading: boolean,
+  od: OrganicData | null,
+  oLoading: boolean,
+) {
   switch (idx) {
     case 0:
       return <Slide0 />;
@@ -1684,9 +2485,9 @@ function renderSlide(idx: number, td: TrafficRow | null, loading: boolean) {
     case 8:
       return <Slide8 />;
     case 9:
-      return <Slide9 />;
+      return <Slide9 organicData={od} organicLoading={oLoading} />;
     case 10:
-      return <Slide10 />;
+      return <Slide10 organicData={od} organicLoading={oLoading} />;
     case 11:
       return <Slide11 />;
     default:
@@ -1700,6 +2501,8 @@ export default function ResultadosMarco2026() {
   const [direction, setDirection] = useState<"next" | "prev">("next");
   const [trafficData, setTrafficData] = useState<TrafficRow | null>(null);
   const [trafficLoading, setTrafficLoading] = useState(true);
+  const [organicData, setOrganicData] = useState<OrganicData | null>(null);
+  const [organicLoading, setOrganicLoading] = useState(true);
   const total = 12;
 
   // Fetch investment from Meta Ads API + aggregate March weeks from Google Sheets
@@ -1775,6 +2578,31 @@ export default function ResultadosMarco2026() {
     fetchTrafficData();
   }, []);
 
+  // Fetch organic traffic data from Google Sheets
+  useEffect(() => {
+    async function fetchOrganicData() {
+      try {
+        setOrganicLoading(true);
+        const res = await fetch("/api/organic-traffic");
+        if (!res.ok) throw new Error("Failed to fetch organic traffic");
+        const data = await res.json();
+        if (data.success) {
+          setOrganicData({
+            dashboard: data.dashboard || [],
+            reels: data.reels || [],
+            historicos: data.historicos || [],
+            totals: data.totals || {},
+          });
+        }
+      } catch (e) {
+        console.error("Erro ao buscar dados orgânicos:", e);
+      } finally {
+        setOrganicLoading(false);
+      }
+    }
+    fetchOrganicData();
+  }, []);
+
   const go = useCallback(
     (dir: "next" | "prev") => {
       if (animating) return;
@@ -1831,7 +2659,13 @@ export default function ResultadosMarco2026() {
           transition: "opacity 0.3s ease, transform 0.3s ease",
         }}
       >
-        {renderSlide(current, trafficData, trafficLoading)}
+        {renderSlide(
+          current,
+          trafficData,
+          trafficLoading,
+          organicData,
+          organicLoading,
+        )}
       </div>
 
       {/* Navigation */}
