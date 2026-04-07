@@ -1120,6 +1120,80 @@ export interface Database {
         };
         Relationships: [];
       };
+      tools_costs: {
+        Row: {
+          id: string;
+          tool_name: string;
+          icon_url: string | null;
+          color: string;
+          monthly_cost: number;
+          usage_score: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+          user_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          tool_name: string;
+          icon_url?: string | null;
+          color?: string;
+          monthly_cost?: number;
+          usage_score?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          user_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          tool_name?: string;
+          icon_url?: string | null;
+          color?: string;
+          monthly_cost?: number;
+          usage_score?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          user_id?: string | null;
+        };
+        Relationships: [];
+      };
+      tools_cost_history: {
+        Row: {
+          id: string;
+          tool_id: string;
+          month: number;
+          year: number;
+          cost: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tool_id: string;
+          month: number;
+          year: number;
+          cost?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tool_id?: string;
+          month?: number;
+          year?: number;
+          cost?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tools_cost_history_tool_id_fkey";
+            columns: ["tool_id"];
+            isOneToOne: false;
+            referencedRelation: "tools_costs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       programacao_card_states: {
         Row: {
           id: string;

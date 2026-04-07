@@ -27,6 +27,7 @@ import {
   Medal,
   Star,
   User,
+  Wrench,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -176,6 +177,11 @@ const menuGroups: MenuGroup[] = [
         title: "Custos Variáveis",
         url: "/variable-costs",
         icon: Shuffle,
+      },
+      {
+        title: "Custos de Ferramentas",
+        url: "/tools-cost",
+        icon: Wrench,
       },
       {
         title: "Custos Diretos",
