@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSummary } from "@/lib/tiny/service";
+import type { FinancialFilters } from "@/lib/tiny/types";
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = req.nextUrl;
+    const filters: FinancialFilters = {
+      startDate: searchParams.get("startDate") ?? undefined,
+      endDate: searchParams.get("endDate") ?? undefined,
+    };
+
+    const data = await getSummary(filters);
+    return NextResponse.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal Server Error";
+    const status = message.includes("TINY_TOKEN") ? 503 : 500;
+    console.error("[API /financial-dashboard/summary]", message);
+    return NextResponse.json({ error: message }, { status });
+  }
+}

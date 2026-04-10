@@ -28,6 +28,7 @@ import {
   Star,
   User,
   Wrench,
+  Wallet,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -168,6 +169,11 @@ const menuGroups: MenuGroup[] = [
   {
     label: "Custos",
     items: [
+      {
+        title: "Dashboard Financeiro",
+        url: "/financial-dashboard",
+        icon: Wallet,
+      },
       {
         title: "Custos Fixos",
         url: "/fixed-costs",

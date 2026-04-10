@@ -74,6 +74,7 @@ export function ConditionalSidebar({
     "/taxes",
     "/fixed-costs",
     "/variable-costs",
+    "/financial-dashboard",
     "/profile-settings",
     "/goals",
     "/states",
