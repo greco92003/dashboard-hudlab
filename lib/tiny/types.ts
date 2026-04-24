@@ -21,14 +21,17 @@ export type FinancialPayable = {
 export type FinancialReceivable = {
   id: string;
   description: string;
-  dueDate: string; // dd/MM/yyyy
+  dueDate: string; // dd/MM/yyyy or YYYY-MM-DD
   amount: number;
+  saldo: number; // outstanding balance still to be received
+  receivedAmount: number; // amount already received (amount - saldo)
   status: "open" | "received" | "partial" | "overdue" | "canceled";
   customer?: {
     id?: string;
     name: string;
   };
   receiptMethod?: string;
+  installment?: string; // e.g. "1/3", "2/3"
 };
 
 export type FinancialCashBalance = {
@@ -81,10 +84,12 @@ export type TinyRawContaReceber = {
   descricao?: string;
   vencimento?: string;
   valor?: number | string;
+  saldo?: number | string;
   situacao?: string;
   nomeContato?: string;
   idContato?: string | number;
   formaPagamento?: string;
+  parcela?: string; // e.g. "1/3"
 };
 
 // -------------------------------------------------------
@@ -119,6 +124,10 @@ export type TinyV3RawContaReceber = {
   saldo?: number;
   numeroDocumento?: string;
   numeroBanco?: string;
+  parcela?: number;
+  totalParcelas?: number;
+  competencia?: string;
+  meioPagamento?: string;
   cliente?: {
     id?: number;
     nome?: string;

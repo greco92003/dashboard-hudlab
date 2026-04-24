@@ -16,6 +16,18 @@ function fmt(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** Parse dd/MM/yyyy or YYYY-MM-DD into a Date for sorting */
+function parseDate(dateStr: string): Date {
+  if (!dateStr) return new Date(0);
+  if (dateStr.includes("-")) {
+    // YYYY-MM-DD
+    return new Date(dateStr + "T00:00:00");
+  }
+  // dd/MM/yyyy
+  const [d, m, y] = dateStr.split("/");
+  return new Date(Number(y), Number(m) - 1, Number(d));
+}
+
 const STATUS_LABELS: Record<FinancialReceivable["status"], string> = {
   open: "Em aberto",
   received: "Recebido",
@@ -40,7 +52,10 @@ interface AccountsReceivableTableProps {
   loading?: boolean;
 }
 
-export function AccountsReceivableTable({ data, loading }: AccountsReceivableTableProps) {
+export function AccountsReceivableTable({
+  data,
+  loading,
+}: AccountsReceivableTableProps) {
   if (loading || !data) {
     return (
       <div className="space-y-2">
@@ -59,6 +74,11 @@ export function AccountsReceivableTable({ data, loading }: AccountsReceivableTab
     );
   }
 
+  // Sort chronologically by due date
+  const sorted = [...data].sort(
+    (a, b) => parseDate(a.dueDate).getTime() - parseDate(b.dueDate).getTime(),
+  );
+
   return (
     <div className="overflow-auto rounded-md border">
       <Table>
@@ -68,23 +88,37 @@ export function AccountsReceivableTable({ data, loading }: AccountsReceivableTab
             <TableHead>Descrição</TableHead>
             <TableHead>Cliente</TableHead>
             <TableHead className="text-right">Valor</TableHead>
+            <TableHead className="text-right">Saldo</TableHead>
+            <TableHead className="text-right">Recebido</TableHead>
+            <TableHead>Parcela</TableHead>
+            <TableHead>Meio de Pagamento</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Forma de Recebimento</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((row) => (
+          {sorted.map((row) => (
             <TableRow key={row.id}>
               <TableCell className="whitespace-nowrap">{row.dueDate}</TableCell>
               <TableCell>{row.description}</TableCell>
               <TableCell>{row.customer?.name ?? "—"}</TableCell>
-              <TableCell className="text-right font-medium">{fmt(row.amount)}</TableCell>
+              <TableCell className="text-right font-medium">
+                {fmt(row.amount)}
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {fmt(row.saldo)}
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {fmt(row.receivedAmount)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {row.installment ?? "—"}
+              </TableCell>
+              <TableCell>{row.receiptMethod ?? "—"}</TableCell>
               <TableCell>
                 <Badge variant={STATUS_VARIANT[row.status]}>
                   {STATUS_LABELS[row.status]}
                 </Badge>
               </TableCell>
-              <TableCell>{row.receiptMethod ?? "—"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

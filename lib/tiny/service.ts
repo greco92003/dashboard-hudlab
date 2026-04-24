@@ -184,60 +184,88 @@ export async function getTimeline(
     getReceivables(filters),
   ]);
 
-  const pointMap = new Map<string, FinancialTimelinePoint>();
+  // We store a sortable key (YYYY-MM-DD based) alongside a display label
+  const pointMap = new Map<
+    string,
+    FinancialTimelinePoint & { _sortKey: string }
+  >();
 
-  // Handles both V2 (dd/MM/yyyy) and V3 (YYYY-MM-DD) date formats
-  const periodKey = (dateStr: string): string => {
-    if (!dateStr) return "Sem data";
-    let day: string, month: string, year: string;
+  // Normalise any date string to { year, month, day } parts
+  const parseParts = (
+    dateStr: string,
+  ): { year: string; month: string; day: string } => {
     if (dateStr.includes("-")) {
-      // V3 format: YYYY-MM-DD
-      [year, month, day] = dateStr.split("-");
-    } else {
-      // V2 format: dd/MM/yyyy
-      [day, month, year] = dateStr.split("/");
+      const [y, m, d] = dateStr.split("-");
+      return { year: y, month: m, day: d };
     }
-    if (granularity === "day") return `${day}/${month}/${year}`;
+    const [d, m, y] = dateStr.split("/");
+    return { year: y, month: m, day: d };
+  };
+
+  // Returns { sortKey, label } for a given date string
+  const periodInfo = (dateStr: string): { sortKey: string; label: string } => {
+    if (!dateStr) return { sortKey: "0000-00-00", label: "Sem data" };
+    const { year, month, day } = parseParts(dateStr);
+    if (granularity === "day") {
+      return {
+        sortKey: `${year}-${month}-${day}`,
+        label: `${day}/${month}/${year}`,
+      };
+    }
     if (granularity === "week") {
       const d = new Date(Number(year), Number(month) - 1, Number(day));
       const week = Math.ceil(d.getDate() / 7);
-      return `Sem ${week} ${month}/${year}`;
+      return {
+        sortKey: `${year}-${month}-W${String(week).padStart(2, "0")}`,
+        label: `Sem ${week} ${month}/${year}`,
+      };
     }
-    return `${month}/${year}`;
+    // month
+    return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
   };
 
   for (const p of payables) {
-    const key = periodKey(p.dueDate);
-    const point = pointMap.get(key) ?? {
-      period: key,
+    const { sortKey, label } = periodInfo(p.dueDate);
+    const point = pointMap.get(sortKey) ?? {
+      period: label,
       payable: 0,
       receivable: 0,
       cashBalance: 0,
+      _sortKey: sortKey,
     };
     point.payable += p.amount;
-    pointMap.set(key, point);
+    pointMap.set(sortKey, point);
   }
 
   for (const r of receivables) {
-    const key = periodKey(r.dueDate);
-    const point = pointMap.get(key) ?? {
-      period: key,
+    const { sortKey, label } = periodInfo(r.dueDate);
+    const point = pointMap.get(sortKey) ?? {
+      period: label,
       payable: 0,
       receivable: 0,
       cashBalance: 0,
+      _sortKey: sortKey,
     };
     point.receivable += r.amount;
-    pointMap.set(key, point);
+    pointMap.set(sortKey, point);
   }
 
-  const points: FinancialTimelinePoint[] = Array.from(pointMap.values()).map(
-    (p) => ({
-      ...p,
-      cashBalance: p.receivable - p.payable,
-    }),
+  // Sort chronologically using the sortable key
+  const sorted = Array.from(pointMap.values()).sort((a, b) =>
+    a._sortKey.localeCompare(b._sortKey),
   );
 
-  points.sort((a, b) => a.period.localeCompare(b.period));
+  // Calculate cumulative cash balance (saldo de caixa):
+  // Each period: received - paid = net cash movement
+  // The line shows the running total across periods (like a bank account balance)
+  let runningBalance = 0;
+  const points: FinancialTimelinePoint[] = sorted.map(
+    ({ _sortKey: _, ...rest }) => {
+      // Only count actually paid/received amounts for real cash balance
+      runningBalance += rest.receivable - rest.payable;
+      return { ...rest, cashBalance: runningBalance };
+    },
+  );
 
   return { granularity, points };
 }

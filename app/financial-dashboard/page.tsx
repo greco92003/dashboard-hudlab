@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { SummaryCards } from "@/components/financial-dashboard/summary-cards";
-import { FinancialLineChart } from "@/components/financial-dashboard/financial-line-chart";
+import { FinancialComposedChart } from "@/components/financial-dashboard/financial-composed-chart";
 import { AccountsPayableTable } from "@/components/financial-dashboard/accounts-payable-table";
 import { AccountsReceivableTable } from "@/components/financial-dashboard/accounts-receivable-table";
 import {
@@ -19,6 +19,95 @@ import type {
   FinancialReceivable,
   FinancialTimelinePoint,
 } from "@/lib/tiny/types";
+
+// -------------------------------------------------------------------------
+// Build timeline points client-side from already-fetched payables/receivables.
+// This ensures the chart always uses the SAME data as the tables.
+// -------------------------------------------------------------------------
+function buildTimelinePoints(
+  payables: FinancialPayable[],
+  receivables: FinancialReceivable[],
+  granularity: FinancialFilterState["granularity"],
+): FinancialTimelinePoint[] {
+  const parseParts = (dateStr: string) => {
+    if (!dateStr) return null;
+    if (dateStr.includes("-")) {
+      const [y, m, d] = dateStr.split("-");
+      return { year: y, month: m, day: d };
+    }
+    const [d, m, y] = dateStr.split("/");
+    return { year: y, month: m, day: d };
+  };
+
+  const periodInfo = (dateStr: string): { sortKey: string; label: string } => {
+    if (!dateStr) return { sortKey: "0000-00-00", label: "Sem data" };
+    const parts = parseParts(dateStr);
+    if (!parts) return { sortKey: "0000-00-00", label: "Sem data" };
+    const { year, month, day } = parts;
+    if (granularity === "day") {
+      return {
+        sortKey: `${year}-${month}-${day}`,
+        label: `${day}/${month}/${year}`,
+      };
+    }
+    if (granularity === "week") {
+      const d2 = new Date(Number(year), Number(month) - 1, Number(day));
+      const week = Math.ceil(d2.getDate() / 7);
+      return {
+        sortKey: `${year}-${month}-W${String(week).padStart(2, "0")}`,
+        label: `Sem ${week} ${month}/${year}`,
+      };
+    }
+    return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
+  };
+
+  const pointMap = new Map<
+    string,
+    FinancialTimelinePoint & { _sortKey: string }
+  >();
+
+  for (const p of payables) {
+    const { sortKey, label } = periodInfo(p.dueDate);
+    const existing = pointMap.get(sortKey);
+    if (existing) {
+      existing.payable += p.amount;
+    } else {
+      pointMap.set(sortKey, {
+        period: label,
+        payable: p.amount,
+        receivable: 0,
+        cashBalance: 0,
+        _sortKey: sortKey,
+      });
+    }
+  }
+
+  for (const r of receivables) {
+    const { sortKey, label } = periodInfo(r.dueDate);
+    const existing = pointMap.get(sortKey);
+    if (existing) {
+      existing.receivable += r.amount;
+    } else {
+      pointMap.set(sortKey, {
+        period: label,
+        payable: 0,
+        receivable: r.amount,
+        cashBalance: 0,
+        _sortKey: sortKey,
+      });
+    }
+  }
+
+  const sorted = Array.from(pointMap.values()).sort((a, b) =>
+    a._sortKey.localeCompare(b._sortKey),
+  );
+
+  let running = 0;
+  return sorted.map(({ _sortKey: _, ...rest }) => {
+    running += rest.receivable - rest.payable;
+    return { ...rest, cashBalance: running };
+  });
+}
 
 // -------------------------------------------------------------------------
 // Default filter: last 6 months (monthly granularity needs multiple points)
@@ -116,31 +205,34 @@ export default function FinancialDashboardPage() {
     setError(undefined);
     try {
       const qs = buildQS(filters);
-      const tlQS = buildQS(filters, { granularity: filters.granularity });
 
-      const [summaryRes, timelineRes, payablesRes, receivablesRes] =
-        await Promise.all([
-          fetch(`/api/financial-dashboard/summary?${qs}`),
-          fetch(`/api/financial-dashboard/timeline?${tlQS}`),
-          fetch(`/api/financial-dashboard/payables?${qs}`),
-          fetch(`/api/financial-dashboard/receivables?${qs}`),
-        ]);
+      const [summaryRes, payablesRes, receivablesRes] = await Promise.all([
+        fetch(`/api/financial-dashboard/summary?${qs}`),
+        fetch(`/api/financial-dashboard/payables?${qs}`),
+        fetch(`/api/financial-dashboard/receivables?${qs}`),
+      ]);
 
-      const [s, tl, p, r] = await Promise.all([
+      const [s, p, r] = await Promise.all([
         summaryRes.json(),
-        timelineRes.json(),
         payablesRes.json(),
         receivablesRes.json(),
       ]);
 
       if (!summaryRes.ok) throw new Error(s.error);
-      if (!timelineRes.ok)
-        throw new Error(tl.error ?? "Erro ao carregar evolução financeira");
+
+      const fetchedPayables: FinancialPayable[] = p.data ?? [];
+      const fetchedReceivables: FinancialReceivable[] = r.data ?? [];
 
       setSummary(s);
-      setTimeline(tl.points ?? []);
-      setPayables(p.data ?? []);
-      setReceivables(r.data ?? []);
+      setPayables(fetchedPayables);
+      setReceivables(fetchedReceivables);
+      setTimeline(
+        buildTimelinePoints(
+          fetchedPayables,
+          fetchedReceivables,
+          filters.granularity,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
@@ -195,13 +287,13 @@ export default function FinancialDashboardPage() {
       {/* Summary cards */}
       <SummaryCards data={summary} loading={loading} />
 
-      {/* Line chart */}
+      {/* Composed chart */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Evolução Financeira</CardTitle>
         </CardHeader>
         <CardContent>
-          <FinancialLineChart data={timeline} loading={loading} />
+          <FinancialComposedChart data={timeline} loading={loading} />
         </CardContent>
       </Card>
 

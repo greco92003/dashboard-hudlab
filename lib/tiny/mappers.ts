@@ -76,11 +76,15 @@ export function mapContasPagar(
 }
 
 export function mapContaReceber(raw: TinyRawContaReceber): FinancialReceivable {
+  const amount = toNumber(raw.valor);
+  const saldo = raw.saldo !== undefined ? toNumber(raw.saldo) : amount;
   return {
     id: String(raw.id),
     description: raw.descricao ?? "Sem descrição",
     dueDate: raw.vencimento ?? "",
-    amount: toNumber(raw.valor),
+    amount,
+    saldo,
+    receivedAmount: amount - saldo,
     status: mapStatus(raw.situacao, "receber") as FinancialReceivable["status"],
     customer: raw.nomeContato
       ? {
@@ -89,6 +93,7 @@ export function mapContaReceber(raw: TinyRawContaReceber): FinancialReceivable {
         }
       : undefined,
     receiptMethod: raw.formaPagamento,
+    installment: raw.parcela ?? undefined,
   };
 }
 
@@ -127,11 +132,26 @@ export function mapV3ContasPagar(
 export function mapV3ContaReceber(
   raw: TinyV3RawContaReceber,
 ): FinancialReceivable {
+  const amount = toNumber(raw.valor);
+  const saldo = raw.saldo !== undefined ? toNumber(raw.saldo) : amount;
+
+  // Build installment string from parcela/totalParcelas or parse from historico
+  let installment: string | undefined;
+  if (raw.parcela && raw.totalParcelas) {
+    installment = `${raw.parcela}/${raw.totalParcelas}`;
+  } else if (raw.historico) {
+    // Try to extract "X/Y" pattern from historico (e.g. "Parcela 1/3")
+    const match = raw.historico.match(/(\d+)\s*\/\s*(\d+)/);
+    if (match) installment = `${match[1]}/${match[2]}`;
+  }
+
   return {
     id: String(raw.id),
     description: raw.historico ?? raw.numeroDocumento ?? "Sem descrição",
     dueDate: raw.dataVencimento ?? raw.data ?? "",
-    amount: toNumber(raw.valor),
+    amount,
+    saldo,
+    receivedAmount: amount - saldo,
     status: mapStatus(raw.situacao, "receber") as FinancialReceivable["status"],
     customer: raw.cliente?.nome
       ? {
@@ -139,6 +159,8 @@ export function mapV3ContaReceber(
           name: raw.cliente.nome,
         }
       : undefined,
+    receiptMethod: raw.meioPagamento ?? undefined,
+    installment,
   };
 }
 

@@ -32,6 +32,7 @@ import {
   calculateFranchiseRevenue,
   NuvemshopOrder as FranchiseNuvemshopOrder,
 } from "@/types/franchise";
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
 import { RefreshCw, Settings, Package, Tag, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
@@ -255,20 +256,10 @@ function PartnersDashboardPage() {
           ? parseFloat(order.shipping_discount)
           : order.shipping_discount || 0;
 
-      const gatewayFees =
-        typeof order.gateway_fees === "string"
-          ? parseFloat(order.gateway_fees)
-          : order.gateway_fees || 0;
-
-      const transactionTaxes =
-        typeof order.transaction_taxes === "string"
-          ? parseFloat(order.transaction_taxes)
-          : order.transaction_taxes || 0;
-
-      const installmentInterest =
-        typeof order.installment_interest === "string"
-          ? parseFloat(order.installment_interest)
-          : order.installment_interest || 0;
+      // Use effective fees (stored in DB when present, otherwise estimated
+      // from the payment method using Nuvem Pago rates)
+      const { gatewayFees, transactionTaxes, installmentInterest } =
+        getEffectiveOrderFees(order);
 
       // Calculate: subtotal - all discounts - gateway fees - taxes - installment interest
       // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner

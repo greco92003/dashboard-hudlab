@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
 import { storage } from "@/lib/storage";
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
 
 interface OrderProduct {
   name: string;
@@ -445,10 +446,11 @@ export default function PartnersOrdersPage() {
     }
   };
 
-  const formatCurrency = (value: string | null | undefined) => {
+  const formatCurrency = (value: string | number | null | undefined) => {
     // Handle null, undefined, empty string, or string representations of null/undefined
     if (
-      !value ||
+      value === null ||
+      value === undefined ||
       value === "null" ||
       value === "undefined" ||
       (typeof value === "string" && value.trim() === "")
@@ -456,7 +458,7 @@ export default function PartnersOrdersPage() {
       return "R$ 0,00";
     }
 
-    const numValue = parseFloat(value);
+    const numValue = typeof value === "number" ? value : parseFloat(value);
     if (isNaN(numValue)) {
       return "R$ 0,00";
     }
@@ -1071,104 +1073,78 @@ export default function PartnersOrdersPage() {
                                   </div>
                                 )}
 
-                              {/* Gateway fees */}
-                              {order.gateway_fees !== null &&
-                                order.gateway_fees !== undefined &&
-                                order.gateway_fees !== "null" &&
-                                order.gateway_fees !== "undefined" &&
-                                parseFloat(order.gateway_fees) > 0 && (
-                                  <div className="flex justify-between text-red-600">
-                                    <span>Taxas gateway:</span>
-                                    <span>
-                                      -{formatCurrency(order.gateway_fees)}
-                                    </span>
-                                  </div>
-                                )}
+                              {/* Effective fees (stored in DB or estimated from payment method + total) */}
+                              {(() => {
+                                const {
+                                  gatewayFees,
+                                  transactionTaxes,
+                                  installmentInterest,
+                                } = getEffectiveOrderFees(order);
 
-                              {/* Transaction taxes */}
-                              {order.transaction_taxes !== null &&
-                                order.transaction_taxes !== undefined &&
-                                order.transaction_taxes !== "null" &&
-                                order.transaction_taxes !== "undefined" &&
-                                parseFloat(order.transaction_taxes) > 0 && (
-                                  <div className="flex justify-between text-red-600">
-                                    <span>Impostos transação:</span>
-                                    <span>
-                                      -{formatCurrency(order.transaction_taxes)}
-                                    </span>
-                                  </div>
-                                )}
+                                const subtotal =
+                                  parseFloat(order.subtotal) || 0;
+                                const promotionalDiscount =
+                                  parseFloat(
+                                    order.promotional_discount ?? "",
+                                  ) || 0;
+                                const discountCoupon =
+                                  parseFloat(order.discount_coupon ?? "") || 0;
+                                const discountGateway =
+                                  parseFloat(order.discount_gateway ?? "") || 0;
+                                const shippingDiscount =
+                                  parseFloat(order.shipping_discount ?? "") ||
+                                  0;
 
-                              {/* Installment interest */}
-                              {order.installment_interest !== null &&
-                                order.installment_interest !== undefined &&
-                                order.installment_interest !== "null" &&
-                                order.installment_interest !== "undefined" &&
-                                parseFloat(order.installment_interest) > 0 && (
-                                  <div className="flex justify-between text-red-600">
-                                    <span>Juros:</span>
-                                    <span>
-                                      -
-                                      {formatCurrency(
-                                        order.installment_interest,
-                                      )}
-                                    </span>
-                                  </div>
-                                )}
+                                // Real revenue = subtotal - all discounts - fees - installment interest
+                                // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+                                const netRevenue = Math.max(
+                                  0,
+                                  subtotal -
+                                    promotionalDiscount -
+                                    discountCoupon -
+                                    discountGateway -
+                                    shippingDiscount -
+                                    gatewayFees -
+                                    transactionTaxes -
+                                    installmentInterest,
+                                );
 
-                              {/* Net Revenue (Valor Total Real) */}
-                              <div className="flex justify-between font-bold text-lg border-t-2 border-green-600 pt-2 text-green-600">
-                                <span>Valor Total Real:</span>
-                                <span>
-                                  {formatCurrency(
-                                    (() => {
-                                      const subtotal =
-                                        parseFloat(order.subtotal) || 0;
-                                      const promotionalDiscount =
-                                        parseFloat(
-                                          order.promotional_discount ?? "",
-                                        ) || 0;
-                                      const discountCoupon =
-                                        parseFloat(
-                                          order.discount_coupon ?? "",
-                                        ) || 0;
-                                      const discountGateway =
-                                        parseFloat(
-                                          order.discount_gateway ?? "",
-                                        ) || 0;
-                                      const shippingDiscount =
-                                        parseFloat(
-                                          order.shipping_discount ?? "",
-                                        ) || 0;
-                                      const gatewayFees =
-                                        parseFloat(order.gateway_fees ?? "") ||
-                                        0;
-                                      const transactionTaxes =
-                                        parseFloat(
-                                          order.transaction_taxes ?? "",
-                                        ) || 0;
-                                      const installmentInterest =
-                                        parseFloat(
-                                          order.installment_interest ?? "",
-                                        ) || 0;
+                                return (
+                                  <>
+                                    {gatewayFees > 0 && (
+                                      <div className="flex justify-between text-red-600">
+                                        <span>Taxas gateway:</span>
+                                        <span>
+                                          -{formatCurrency(gatewayFees)}
+                                        </span>
+                                      </div>
+                                    )}
 
-                                      // Real revenue = subtotal - all discounts - fees - installment interest
-                                      // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
-                                      return Math.max(
-                                        0,
-                                        subtotal -
-                                          promotionalDiscount -
-                                          discountCoupon -
-                                          discountGateway -
-                                          shippingDiscount -
-                                          gatewayFees -
-                                          transactionTaxes -
-                                          installmentInterest,
-                                      );
-                                    })().toString(),
-                                  )}
-                                </span>
-                              </div>
+                                    {transactionTaxes > 0 && (
+                                      <div className="flex justify-between text-red-600">
+                                        <span>Impostos transação:</span>
+                                        <span>
+                                          -{formatCurrency(transactionTaxes)}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {installmentInterest > 0 && (
+                                      <div className="flex justify-between text-red-600">
+                                        <span>Juros:</span>
+                                        <span>
+                                          -{formatCurrency(installmentInterest)}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    <div className="flex justify-between font-bold text-lg border-t-2 border-green-600 pt-2 text-green-600">
+                                      <span>Valor Total Real:</span>
+                                      <span>{formatCurrency(netRevenue)}</span>
+                                    </div>
+                                  </>
+                                );
+                              })()}
 
                               <div className="flex justify-between">
                                 <span>Pagamento:</span>

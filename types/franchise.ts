@@ -1,5 +1,7 @@
 // Types for Zenith franchise functionality
 
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
+
 export interface Franchise {
   id: string;
   name: string;
@@ -72,6 +74,9 @@ export interface NuvemshopOrder {
   gateway_fees?: number | null;
   transaction_taxes?: number | null;
   installment_interest?: number | null;
+  total?: number | string | null;
+  payment_method?: string | null;
+  payment_details?: any;
   completed_at: string;
   created_at_nuvemshop: string;
 }
@@ -205,20 +210,11 @@ export function calculateFranchiseRevenue(
         ? parseFloat(order.shipping_discount)
         : order.shipping_discount || 0;
 
-    const gatewayFees =
-      typeof order.gateway_fees === "string"
-        ? parseFloat(order.gateway_fees)
-        : order.gateway_fees || 0;
-
-    const transactionTaxes =
-      typeof order.transaction_taxes === "string"
-        ? parseFloat(order.transaction_taxes)
-        : order.transaction_taxes || 0;
-
-    const installmentInterest =
-      typeof order.installment_interest === "string"
-        ? parseFloat(order.installment_interest)
-        : order.installment_interest || 0;
+    // Resolve gateway fees / taxes / installment interest falling back to
+    // Nuvem Pago estimates when the DB value is NULL (regular API cannot
+    // read these fields - see docs/NUVEMSHOP_TRANSACTION_LIMITATIONS.md)
+    const { gatewayFees, transactionTaxes, installmentInterest } =
+      getEffectiveOrderFees(order);
 
     // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
     return (
@@ -281,20 +277,10 @@ export function calculateFranchiseRevenue(
       ? parseFloat(order.shipping_discount)
       : order.shipping_discount || 0;
 
-  const gatewayFees =
-    typeof order.gateway_fees === "string"
-      ? parseFloat(order.gateway_fees)
-      : order.gateway_fees || 0;
-
-  const transactionTaxes =
-    typeof order.transaction_taxes === "string"
-      ? parseFloat(order.transaction_taxes)
-      : order.transaction_taxes || 0;
-
-  const installmentInterest =
-    typeof order.installment_interest === "string"
-      ? parseFloat(order.installment_interest)
-      : order.installment_interest || 0;
+  // Resolve gateway fees / taxes / installment interest falling back to
+  // Nuvem Pago estimates when the DB value is NULL
+  const { gatewayFees, transactionTaxes, installmentInterest } =
+    getEffectiveOrderFees(order);
 
   // Apply each discount and cost proportionally to the franchise revenue
   // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner

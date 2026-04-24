@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
 
 // Cores distintas para o gráfico (usando cores diretas que funcionam com Recharts)
 const CHART_COLORS = [
@@ -54,12 +55,18 @@ const CHART_COLORS = [
 interface NuvemshopOrder {
   id: string;
   order_id: string;
-  total: number | null;
-  subtotal: number | null;
-  promotional_discount: number | null;
-  discount_coupon: number | null;
-  discount_gateway: number | null;
-  shipping_cost_customer: number | null;
+  total: number | string | null;
+  subtotal: number | string | null;
+  promotional_discount: number | string | null;
+  discount_coupon: number | string | null;
+  discount_gateway: number | string | null;
+  shipping_discount?: number | string | null;
+  shipping_cost_customer: number | string | null;
+  gateway_fees?: number | string | null;
+  transaction_taxes?: number | string | null;
+  installment_interest?: number | string | null;
+  payment_method?: string | null;
+  payment_details?: any;
   province: string | null;
 }
 
@@ -163,7 +170,8 @@ function getEstadoSigla(estado: string): string {
   return PROVINCE_TO_STATE[estado] || estado;
 }
 
-// Function to calculate real revenue (subtotal - discounts, without shipping)
+// Function to calculate real revenue (subtotal - discounts - effective fees,
+// without customer shipping). Mirrors the dashboard calculation.
 function calculateRealRevenue(order: NuvemshopOrder): number {
   const subtotal =
     typeof order.subtotal === "string"
@@ -185,11 +193,25 @@ function calculateRealRevenue(order: NuvemshopOrder): number {
       ? parseFloat(order.discount_gateway)
       : order.discount_gateway || 0;
 
-  // Calculate: subtotal - all discounts (without shipping)
-  const realRevenue =
-    subtotal - promotionalDiscount - discountCoupon - discountGateway;
+  const shippingDiscount =
+    typeof order.shipping_discount === "string"
+      ? parseFloat(order.shipping_discount)
+      : order.shipping_discount || 0;
 
-  return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue); // Ensure non-negative
+  const { gatewayFees, transactionTaxes, installmentInterest } =
+    getEffectiveOrderFees(order);
+
+  const realRevenue =
+    subtotal -
+    promotionalDiscount -
+    discountCoupon -
+    discountGateway -
+    shippingDiscount -
+    gatewayFees -
+    transactionTaxes -
+    installmentInterest;
+
+  return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue);
 }
 
 export function ChartPieEstadosNuvemshop({
@@ -251,17 +273,20 @@ export function ChartPieEstadosNuvemshop({
     );
   }
   // Processar dados dos pedidos para agrupar por estado
-  const estadosData = orders.reduce((acc, order) => {
-    const estado = normalizeEstado(order.province);
-    const value = calculateRealRevenue(order);
+  const estadosData = orders.reduce(
+    (acc, order) => {
+      const estado = normalizeEstado(order.province);
+      const value = calculateRealRevenue(order);
 
-    if (!acc[estado]) {
-      acc[estado] = 0;
-    }
-    acc[estado] += value;
+      if (!acc[estado]) {
+        acc[estado] = 0;
+      }
+      acc[estado] += value;
 
-    return acc;
-  }, {} as Record<string, number>);
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   // Arredondar valores para duas casas decimais
   Object.keys(estadosData).forEach((estado) => {
@@ -286,7 +311,7 @@ export function ChartPieEstadosNuvemshop({
       value: {
         label: "Valor (R$)",
       },
-    } as ChartConfig
+    } as ChartConfig,
   );
 
   // Criar dados do chart com cores diretas

@@ -167,3 +167,174 @@ export function getPaymentMethodName(
 
   return methodMap[method.toLowerCase()] || method;
 }
+
+// =====================================================
+// EFFECTIVE FEE HELPERS
+// =====================================================
+// Nuvemshop's regular store API does not expose transaction fees
+// (gateway_fees / installment_interest / transaction_taxes).
+// These helpers return the value stored in the DB when present,
+// otherwise they compute an estimate using the Nuvem Pago rates
+// so the net revenue / commission calculations stay consistent
+// with what merchants see on the Nuvemshop admin panel.
+
+export interface OrderWithFees {
+  total?: number | string | null;
+  subtotal?: number | string | null;
+  shipping_cost_customer?: number | string | null;
+  promotional_discount?: number | string | null;
+  discount_coupon?: number | string | null;
+  discount_gateway?: number | string | null;
+  shipping_discount?: number | string | null;
+  gateway_fees?: number | string | null;
+  transaction_taxes?: number | string | null;
+  installment_interest?: number | string | null;
+  payment_method?: string | null;
+  payment_details?: any;
+}
+
+// Parse numeric value returning null when the value is missing/invalid
+function parseNumericOrNull(
+  value: number | string | null | undefined,
+): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return isNaN(value) ? null : value;
+  const trimmed = value.toString().trim();
+  if (trimmed === "" || trimmed === "null" || trimmed === "undefined") {
+    return null;
+  }
+  const parsed = parseFloat(trimmed);
+  return isNaN(parsed) ? null : parsed;
+}
+
+function parseNumericOrZero(value: number | string | null | undefined): number {
+  return parseNumericOrNull(value) ?? 0;
+}
+
+/**
+ * Resolve the payment method from an order, handling array, object and
+ * flat-column payment_details formats used across sync paths.
+ */
+export function resolvePaymentMethod(order: OrderWithFees): string | null {
+  if (order.payment_method && order.payment_method.trim() !== "") {
+    return order.payment_method;
+  }
+
+  const details = order.payment_details;
+  if (!details) return null;
+
+  if (Array.isArray(details)) {
+    const first = details[0];
+    return (
+      first?.payment_method?.name ||
+      first?.payment_method ||
+      first?.method ||
+      first?.type ||
+      null
+    );
+  }
+
+  if (typeof details === "object") {
+    return details.method || details.payment_method || null;
+  }
+
+  return null;
+}
+
+/**
+ * Resolve the number of installments from the order payment details.
+ */
+function resolveInstallments(order: OrderWithFees): number {
+  const details = order.payment_details;
+  if (!details) return 1;
+
+  const raw = Array.isArray(details)
+    ? details[0]?.installments
+    : details.installments;
+
+  if (raw === undefined || raw === null) return 1;
+  const parsed = parseInt(raw.toString(), 10);
+  return isNaN(parsed) || parsed < 1 ? 1 : parsed;
+}
+
+/**
+ * Resolve the transaction total used as the base for fee calculation.
+ * Falls back to subtotal + shipping - discounts when `total` is missing.
+ */
+function resolveTotal(order: OrderWithFees): number {
+  const total = parseNumericOrNull(order.total);
+  if (total !== null && total > 0) return total;
+
+  const subtotal = parseNumericOrZero(order.subtotal);
+  const shipping = parseNumericOrZero(order.shipping_cost_customer);
+  const promotional = parseNumericOrZero(order.promotional_discount);
+  const coupon = parseNumericOrZero(order.discount_coupon);
+  const gatewayDiscount = parseNumericOrZero(order.discount_gateway);
+  const shippingDiscount = parseNumericOrZero(order.shipping_discount);
+
+  return Math.max(
+    0,
+    subtotal +
+      shipping -
+      promotional -
+      coupon -
+      gatewayDiscount -
+      shippingDiscount,
+  );
+}
+
+export interface EffectiveFees {
+  gatewayFees: number;
+  transactionTaxes: number;
+  installmentInterest: number;
+}
+
+/**
+ * Return the effective gateway fee for the order.
+ * Uses the stored DB value when present (not null), otherwise estimates it
+ * from the payment method + total using the Nuvem Pago rates.
+ */
+export function getEffectiveGatewayFees(order: OrderWithFees): number {
+  const stored = parseNumericOrNull(order.gateway_fees);
+  if (stored !== null) return Math.max(0, stored);
+
+  const method = resolvePaymentMethod(order);
+  const total = resolveTotal(order);
+  const installments = resolveInstallments(order);
+  return calculateGatewayFee(method, total, installments);
+}
+
+/**
+ * Return the effective merchant installment interest for the order.
+ * Uses the stored DB value when present, otherwise estimates it.
+ */
+export function getEffectiveInstallmentInterest(order: OrderWithFees): number {
+  const stored = parseNumericOrNull(order.installment_interest);
+  if (stored !== null) return Math.max(0, stored);
+
+  const method = resolvePaymentMethod(order);
+  if (!method || method.toLowerCase() !== "credit_card") return 0;
+
+  const total = resolveTotal(order);
+  const installments = resolveInstallments(order);
+  return calculateMerchantInstallmentInterest(total, installments);
+}
+
+/**
+ * Return the effective transaction taxes for the order.
+ * No estimate is possible for this field, so it defaults to 0 when NULL.
+ */
+export function getEffectiveTransactionTaxes(order: OrderWithFees): number {
+  return Math.max(0, parseNumericOrZero(order.transaction_taxes));
+}
+
+/**
+ * Return all effective fees in a single call.
+ */
+export function getEffectiveOrderFees(order: OrderWithFees): EffectiveFees {
+  return {
+    gatewayFees: getEffectiveGatewayFees(order),
+    transactionTaxes: getEffectiveTransactionTaxes(order),
+    installmentInterest: getEffectiveInstallmentInterest(order),
+  };
+}

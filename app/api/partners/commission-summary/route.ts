@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
-  calculateFranchiseRevenue,
   isZenithProduct,
   getFranchiseFromOrderProduct,
 } from "@/types/franchise";
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
+import { sliceOrderByProducts } from "@/lib/order-brand-slicing";
 
 export async function GET(request: NextRequest) {
   try {
@@ -89,14 +90,18 @@ export async function GET(request: NextRequest) {
         `
         order_id,
         subtotal,
+        total,
         promotional_discount,
         discount_coupon,
         discount_gateway,
         shipping_discount,
+        shipping_cost_customer,
         shipping_cost_owner,
         gateway_fees,
         transaction_taxes,
         installment_interest,
+        payment_method,
+        payment_details,
         products,
         completed_at,
         created_at_nuvemshop
@@ -175,100 +180,81 @@ export async function GET(request: NextRequest) {
       ).length,
     );
 
-    // Calculate total commission earned
+    // Build a product-level predicate combining brand + franchise filter.
+    // Each order is sliced to its matching portion so multi-brand orders
+    // don't leak revenue across brands.
+    const franchiseFilterActive = Boolean(
+      selectedFranchise && targetBrand && isZenithProduct(targetBrand),
+    );
+
+    const productPredicate = (product: any): boolean => {
+      if (!product.product_id) return false;
+      const productBrand = productBrandMap.get(product.product_id.toString());
+      if (productBrand !== targetBrand) return false;
+
+      if (franchiseFilterActive) {
+        const productFranchise = getFranchiseFromOrderProduct(product);
+        if (!productFranchise || productFranchise !== selectedFranchise) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    // Calculate total commission earned using sliced orders (brand + franchise)
     let totalCommissionEarned = 0;
     let processedOrders = 0;
 
-    for (const order of orders || []) {
-      // Check if order contains products from this brand using the same logic as orders API
-      const orderProducts = order.products || [];
-      const hasBrandProducts = orderProducts.some((product: any) => {
-        if (!product.product_id) return false;
-        const productBrand = productBrandMap.get(product.product_id.toString());
-        return productBrand === targetBrand;
-      });
-
-      if (!hasBrandProducts) continue;
-
-      // For Zenith brand with franchise filter, check if order has products from the selected franchise
-      if (selectedFranchise && targetBrand && isZenithProduct(targetBrand)) {
-        const hasFranchiseProducts = orderProducts.some((product: any) => {
-          const productFranchise = getFranchiseFromOrderProduct(product);
-          return productFranchise === selectedFranchise;
-        });
-
-        if (!hasFranchiseProducts) continue;
-      }
+    for (const rawOrder of orders || []) {
+      const slicedOrder = sliceOrderByProducts(rawOrder, productPredicate);
+      if (!slicedOrder) continue;
 
       processedOrders++;
 
-      // Calculate commission based on franchise filter
-      let commission = 0;
+      const subtotal =
+        typeof slicedOrder.subtotal === "string"
+          ? parseFloat(slicedOrder.subtotal)
+          : slicedOrder.subtotal || 0;
 
-      if (selectedFranchise && targetBrand && isZenithProduct(targetBrand)) {
-        // For Zenith with franchise filter, calculate revenue only for franchise products
-        const franchiseRevenue = calculateFranchiseRevenue(
-          order,
-          selectedFranchise,
-        );
-        commission =
-          Math.max(0, franchiseRevenue) * (commissionPercentage / 100);
-      } else {
-        // Standard commission calculation (net revenue after all costs)
-        const subtotal =
-          typeof order.subtotal === "string"
-            ? parseFloat(order.subtotal)
-            : order.subtotal || 0;
+      const promotionalDiscount =
+        typeof slicedOrder.promotional_discount === "string"
+          ? parseFloat(slicedOrder.promotional_discount)
+          : slicedOrder.promotional_discount || 0;
 
-        const promotionalDiscount =
-          typeof order.promotional_discount === "string"
-            ? parseFloat(order.promotional_discount)
-            : order.promotional_discount || 0;
+      const discountCoupon =
+        typeof slicedOrder.discount_coupon === "string"
+          ? parseFloat(slicedOrder.discount_coupon)
+          : slicedOrder.discount_coupon || 0;
 
-        const discountCoupon =
-          typeof order.discount_coupon === "string"
-            ? parseFloat(order.discount_coupon)
-            : order.discount_coupon || 0;
+      const discountGateway =
+        typeof slicedOrder.discount_gateway === "string"
+          ? parseFloat(slicedOrder.discount_gateway)
+          : slicedOrder.discount_gateway || 0;
 
-        const discountGateway =
-          typeof order.discount_gateway === "string"
-            ? parseFloat(order.discount_gateway)
-            : order.discount_gateway || 0;
+      const shippingDiscount =
+        typeof slicedOrder.shipping_discount === "string"
+          ? parseFloat(slicedOrder.shipping_discount)
+          : slicedOrder.shipping_discount || 0;
 
-        const shippingDiscount =
-          typeof order.shipping_discount === "string"
-            ? parseFloat(order.shipping_discount)
-            : order.shipping_discount || 0;
+      // Use effective fees (fall back to Nuvem Pago estimates when NULL).
+      // When the order was sliced, fees are already scaled numbers.
+      const { gatewayFees, transactionTaxes, installmentInterest } =
+        getEffectiveOrderFees(slicedOrder as any);
 
-        const gatewayFees =
-          typeof order.gateway_fees === "string"
-            ? parseFloat(order.gateway_fees)
-            : order.gateway_fees || 0;
+      // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
+      const realRevenue =
+        subtotal -
+        promotionalDiscount -
+        discountCoupon -
+        discountGateway -
+        shippingDiscount -
+        gatewayFees -
+        transactionTaxes -
+        installmentInterest;
 
-        const transactionTaxes =
-          typeof order.transaction_taxes === "string"
-            ? parseFloat(order.transaction_taxes)
-            : order.transaction_taxes || 0;
-
-        const installmentInterest =
-          typeof order.installment_interest === "string"
-            ? parseFloat(order.installment_interest)
-            : order.installment_interest || 0;
-
-        // NOTE: shipping_cost_owner is NOT deducted as it's an operational cost of the store, not the partner
-        const realRevenue =
-          subtotal -
-          promotionalDiscount -
-          discountCoupon -
-          discountGateway -
-          shippingDiscount -
-          gatewayFees -
-          transactionTaxes -
-          installmentInterest;
-
-        commission = Math.max(0, realRevenue) * (commissionPercentage / 100);
-      }
-
+      const commission =
+        Math.max(0, realRevenue) * (commissionPercentage / 100);
       totalCommissionEarned += commission;
     }
 

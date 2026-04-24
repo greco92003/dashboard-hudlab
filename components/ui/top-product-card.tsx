@@ -9,6 +9,7 @@ import { Package, TrendingUp, ShoppingCart } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import Image from "next/image";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getEffectiveOrderFees } from "@/lib/payment-fees";
 
 interface TopProduct {
   id: string;
@@ -24,12 +25,18 @@ interface NuvemshopOrder {
   order_number: string | null;
   completed_at: string | null;
   created_at_nuvemshop: string | null;
-  total: number | null;
-  subtotal: number | null;
-  promotional_discount: number | null;
-  discount_coupon: number | null;
-  discount_gateway: number | null;
-  shipping_cost_customer: number | null;
+  total: number | string | null;
+  subtotal: number | string | null;
+  promotional_discount: number | string | null;
+  discount_coupon: number | string | null;
+  discount_gateway: number | string | null;
+  shipping_discount?: number | string | null;
+  shipping_cost_customer: number | string | null;
+  gateway_fees?: number | string | null;
+  transaction_taxes?: number | string | null;
+  installment_interest?: number | string | null;
+  payment_method?: string | null;
+  payment_details?: any;
   province: string | null;
   products: any[] | null;
 }
@@ -64,7 +71,8 @@ export function TopProductCard({
       ? propSelectedBrand
       : searchParams.get("brand");
 
-  // Function to calculate real revenue (subtotal - discounts, without shipping)
+  // Function to calculate real revenue (subtotal - discounts - effective fees,
+  // without customer shipping). Mirrors the dashboard calculation.
   const calculateRealRevenue = useCallback((order: NuvemshopOrder): number => {
     const subtotal =
       typeof order.subtotal === "string"
@@ -86,11 +94,25 @@ export function TopProductCard({
         ? parseFloat(order.discount_gateway)
         : order.discount_gateway || 0;
 
-    // Calculate: subtotal - all discounts (without shipping)
-    const realRevenue =
-      subtotal - promotionalDiscount - discountCoupon - discountGateway;
+    const shippingDiscount =
+      typeof order.shipping_discount === "string"
+        ? parseFloat(order.shipping_discount)
+        : order.shipping_discount || 0;
 
-    return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue); // Ensure non-negative
+    const { gatewayFees, transactionTaxes, installmentInterest } =
+      getEffectiveOrderFees(order);
+
+    const realRevenue =
+      subtotal -
+      promotionalDiscount -
+      discountCoupon -
+      discountGateway -
+      shippingDiscount -
+      gatewayFees -
+      transactionTaxes -
+      installmentInterest;
+
+    return isNaN(realRevenue) ? 0 : Math.max(0, realRevenue);
   }, []);
 
   // Process orders data to find top product
@@ -122,7 +144,7 @@ export function TopProductCard({
           if (order.products && Array.isArray(order.products)) {
             // Calculate the order's real revenue
             const orderRealRevenue = calculateRealRevenue(order);
-            const orderTotal = order.subtotal || 0;
+            const orderTotal = parseFloat(String(order.subtotal || 0)) || 0;
 
             // Calculate the proportion of real revenue to subtotal
             const revenueRatio =
@@ -181,7 +203,7 @@ export function TopProductCard({
         setLoading(false);
       }
     },
-    [calculateRealRevenue]
+    [calculateRealRevenue],
   );
 
   // Effect to process data when orders change
