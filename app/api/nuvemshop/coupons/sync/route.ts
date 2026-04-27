@@ -36,7 +36,7 @@ async function fetchNuvemshopAPI(endpoint: string, options: RequestInit = {}) {
 // Helper function to extract brand from product IDs
 async function getBrandFromProducts(
   productIds: number[],
-  supabase: any
+  supabase: any,
 ): Promise<string | null> {
   if (!productIds || productIds.length === 0) return null;
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     if (!allowedRoles.includes(profile.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
           error.message.includes("Last page")
         ) {
           console.log(
-            `✅ Pagination complete - reached last page (page ${page - 1})`
+            `✅ Pagination complete - reached last page (page ${page - 1})`,
           );
           hasMore = false;
         }
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
             const simpleCouponsData = await fetchNuvemshopAPI("/coupons");
             console.log(
               "Simple coupons response:",
-              JSON.stringify(simpleCouponsData, null, 2)
+              JSON.stringify(simpleCouponsData, null, 2),
             );
 
             const simpleCoupons = Array.isArray(simpleCouponsData)
@@ -158,8 +158,34 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `✅ Successfully fetched ${allCoupons.length} coupons from Nuvemshop`
+      `✅ Successfully fetched ${allCoupons.length} coupons from Nuvemshop`,
     );
+
+    // Load all distinct brands once so we can infer from coupon codes generically.
+    const { data: brandRows } = await supabase
+      .from("nuvemshop_products")
+      .select("brand")
+      .not("brand", "is", null);
+    const knownBrands = Array.from(
+      new Set((brandRows || []).map((r: any) => r.brand).filter(Boolean)),
+    ) as string[];
+
+    // Build tokenized matchers (split brand on spaces/dashes, lowercase) for loose matching against codes.
+    const brandMatchers = knownBrands.map((brand) => ({
+      brand,
+      tokens: brand
+        .toLowerCase()
+        .split(/[\s\-_]+/)
+        .filter((t) => t.length >= 3),
+    }));
+
+    function inferBrandFromCode(code: string): string | null {
+      const normalized = code.toLowerCase();
+      for (const { brand, tokens } of brandMatchers) {
+        if (tokens.some((t) => normalized.includes(t))) return brand;
+      }
+      return null;
+    }
 
     let syncedCount = 0;
     let errorCount = 0;
@@ -178,27 +204,28 @@ export async function POST(request: NextRequest) {
           if (!brand && nuvemshopCoupon.products[0]?.name?.pt) {
             const productName =
               nuvemshopCoupon.products[0].name.pt.toLowerCase();
-            if (productName.includes("desculpa")) {
-              brand = "Desculpa qualquer coisa";
+            const matched = brandMatchers.find(({ tokens }) =>
+              tokens.some((t) => productName.includes(t)),
+            );
+            if (matched) {
+              brand = matched.brand;
               console.log(`Inferred brand from product name: ${brand}`);
             }
           }
         }
 
-        // For coupons without brand, try to infer from coupon code or use a default
+        // Fallback: infer from the coupon code using known brand tokens
         if (!brand) {
-          // Check if coupon code contains brand information
-          if (
-            nuvemshopCoupon.code.includes("DESCULPA") ||
-            nuvemshopCoupon.code.includes("TESTE")
-          ) {
-            brand = "Desculpa qualquer coisa";
-            console.log(`Inferred brand from coupon code: ${brand}`);
+          const inferred = inferBrandFromCode(nuvemshopCoupon.code);
+          if (inferred) {
+            brand = inferred;
+            console.log(
+              `Inferred brand "${brand}" from coupon code "${nuvemshopCoupon.code}"`,
+            );
           } else {
-            // For now, let's sync all coupons and use "Unknown" as brand
             brand = "Unknown";
             console.log(
-              `Coupon ${nuvemshopCoupon.code} - no brand found, using "Unknown"`
+              `Coupon ${nuvemshopCoupon.code} - no brand found, using "Unknown"`,
             );
           }
         }
@@ -226,7 +253,7 @@ export async function POST(request: NextRequest) {
           oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
           validUntil = oneYearFromNow.toISOString();
           console.log(
-            `Coupon ${nuvemshopCoupon.code} has no end_date, setting to 1 year from now: ${validUntil}`
+            `Coupon ${nuvemshopCoupon.code} has no end_date, setting to 1 year from now: ${validUntil}`,
           );
         }
 
@@ -254,10 +281,10 @@ export async function POST(request: NextRequest) {
           if (updateError) {
             console.error(
               `Error updating coupon ${nuvemshopCoupon.code}:`,
-              updateError
+              updateError,
             );
             errors.push(
-              `Update error for ${nuvemshopCoupon.code}: ${updateError.message}`
+              `Update error for ${nuvemshopCoupon.code}: ${updateError.message}`,
             );
             errorCount++;
           } else {
@@ -273,10 +300,10 @@ export async function POST(request: NextRequest) {
           if (insertError) {
             console.error(
               `Error inserting coupon ${nuvemshopCoupon.code}:`,
-              insertError
+              insertError,
             );
             errors.push(
-              `Insert error for ${nuvemshopCoupon.code}: ${insertError.message}`
+              `Insert error for ${nuvemshopCoupon.code}: ${insertError.message}`,
             );
             errorCount++;
           } else {
@@ -287,19 +314,19 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error(
           `Error processing coupon ${nuvemshopCoupon.code}:`,
-          error
+          error,
         );
         errors.push(
           `Processing error for ${nuvemshopCoupon.code}: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`
+          }`,
         );
         errorCount++;
       }
     }
 
     console.log(
-      `🎉 Coupon sync completed! ✅ Synced: ${syncedCount} | ❌ Errors: ${errorCount}`
+      `🎉 Coupon sync completed! ✅ Synced: ${syncedCount} | ❌ Errors: ${errorCount}`,
     );
 
     return NextResponse.json({
@@ -319,7 +346,7 @@ export async function POST(request: NextRequest) {
         error:
           error instanceof Error ? error.message : "Failed to sync coupons",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

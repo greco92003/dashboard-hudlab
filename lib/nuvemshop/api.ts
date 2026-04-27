@@ -15,12 +15,14 @@ export interface NuvemshopCouponPayload {
   combines_with_other_discounts?: boolean;
   categories?: number[];
   products?: number[];
+  // Resolved server-side from nuvemshop_products mapping (not sent to Nuvemshop)
+  brand?: string | null;
 }
 
 // Helper function to make authenticated requests to Nuvemshop API
 export async function fetchNuvemshopAPI(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<any> {
   const accessToken = process.env.NUVEMSHOP_ACCESS_TOKEN;
   const userId = process.env.NUVEMSHOP_USER_ID;
@@ -33,7 +35,7 @@ export async function fetchNuvemshopAPI(
 
   try {
     console.log(
-      `🌐 NuvemShop API Request: ${options.method || "GET"} ${endpoint}`
+      `🌐 NuvemShop API Request: ${options.method || "GET"} ${endpoint}`,
     );
 
     const response = await fetch(url, {
@@ -47,20 +49,20 @@ export async function fetchNuvemshopAPI(
     });
 
     console.log(
-      `📡 NuvemShop API Response: ${response.status} ${response.statusText}`
+      `📡 NuvemShop API Response: ${response.status} ${response.statusText}`,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `❌ NuvemShop API Error: ${response.status} - ${errorText}`
+        `❌ NuvemShop API Error: ${response.status} - ${errorText}`,
       );
 
       // Tentar parsear erro como JSON para mais detalhes
       try {
         const errorJson = JSON.parse(errorText);
         throw new Error(
-          `NuvemShop API Error ${response.status}: ${JSON.stringify(errorJson)}`
+          `NuvemShop API Error ${response.status}: ${JSON.stringify(errorJson)}`,
         );
       } catch (parseError) {
         throw new Error(`NuvemShop API Error ${response.status}: ${errorText}`);
@@ -78,7 +80,7 @@ export async function fetchNuvemshopAPI(
 
 // Função específica para criar cupons no NuvemShop
 export async function createNuvemshopCoupon(
-  couponData: NuvemshopCouponPayload
+  couponData: NuvemshopCouponPayload,
 ): Promise<any> {
   console.log(`🎫 Creating coupon in NuvemShop: ${couponData.code}`);
 
@@ -92,7 +94,7 @@ export async function createNuvemshopCoupon(
     !couponData.value
   ) {
     throw new Error(
-      "Valor é obrigatório para cupons de porcentagem ou valor absoluto"
+      "Valor é obrigatório para cupons de porcentagem ou valor absoluto",
     );
   }
 
