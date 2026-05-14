@@ -48,7 +48,7 @@ export default function DealsPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalValue, setTotalValue] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("won");
 
   // Use global date range hook
   const {
@@ -624,13 +624,11 @@ export default function DealsPage() {
 
     // Add status filter info
     const statusText =
-      statusFilter === "all"
-        ? "Status: Todos"
-        : statusFilter === "won"
-          ? "Status: Ganhos"
-          : statusFilter === "open"
-            ? "Status: Em Andamento"
-            : "Status: Perdidos";
+      statusFilter === "won"
+        ? "Status: Ganhos"
+        : statusFilter === "open"
+          ? "Status: Em Andamento"
+          : "Status: Perdidos";
     doc.text(statusText, 14, 27);
 
     // Add total value
@@ -795,7 +793,6 @@ export default function DealsPage() {
 
   // Filter deals based on status
   const filteredDeals = deals.filter((deal) => {
-    if (statusFilter === "all") return true;
     const status = deal.status?.toLowerCase();
 
     if (statusFilter === "won") {
@@ -806,7 +803,7 @@ export default function DealsPage() {
       return status === "lost" || status === "2";
     }
 
-    return true;
+    return false;
   });
 
   // Calculate filtered total value
@@ -876,13 +873,6 @@ export default function DealsPage() {
           </Label>
           <div className="flex flex-wrap gap-2">
             <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
-              onClick={() => setStatusFilter("all")}
-              size="sm"
-            >
-              Todos ({deals.length})
-            </Button>
-            <Button
               variant={statusFilter === "won" ? "default" : "outline"}
               onClick={() => setStatusFilter("won")}
               size="sm"
@@ -943,13 +933,11 @@ export default function DealsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {statusFilter === "all"
-              ? "Faturamento Total"
-              : statusFilter === "won"
-                ? "Faturamento Total (Ganhos)"
-                : statusFilter === "open"
-                  ? "Valor Total (Em Andamento)"
-                  : "Valor Total (Perdidos)"}
+            {statusFilter === "won"
+              ? "Faturamento Total (Ganhos)"
+              : statusFilter === "open"
+                ? "Valor Total (Em Andamento)"
+                : "Valor Total (Perdidos)"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -960,11 +948,9 @@ export default function DealsPage() {
               <p className="text-3xl font-bold">
                 {formatCurrency(filteredTotalValue, "BRL")}
               </p>
-              {statusFilter !== "all" && (
-                <p className="text-sm text-muted-foreground">
-                  {filteredDeals.length} de {deals.length} negócios
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground">
+                {filteredDeals.length} de {deals.length} negócios
+              </p>
             </div>
           )}
         </CardContent>

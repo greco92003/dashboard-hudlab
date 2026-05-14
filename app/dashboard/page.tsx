@@ -316,10 +316,16 @@ export default function DashboardPage() {
         const data = await response.json();
 
         if (data.deals) {
-          setDeals(data.deals);
+          // Only count won deals for dashboard metrics
+          const wonDeals = data.deals.filter((d: Deal) => {
+            const s = d.status?.toLowerCase();
+            return s === "won" || s === "1";
+          });
 
-          // Calculate total value
-          const total = data.deals.reduce((sum: number, item: Deal) => {
+          setDeals(wonDeals);
+
+          // Calculate total value from won deals only
+          const total = wonDeals.reduce((sum: number, item: Deal) => {
             // Divide by 100 to get real values (database stores values multiplied by 100)
             return sum + (item.value || 0) / 100;
           }, 0);
@@ -328,11 +334,11 @@ export default function DashboardPage() {
 
           // Note: Total pairs sold is now fetched from dedicated API
 
-          // Prepare chart data
+          // Prepare chart data from won deals only
           if (customDateRange?.from && customDateRange?.to) {
-            prepareChartDataCustom(data.deals, customDateRange);
+            prepareChartDataCustom(wonDeals, customDateRange);
           } else if (selectedPeriod) {
-            prepareChartData(data.deals, selectedPeriod);
+            prepareChartData(wonDeals, selectedPeriod);
           }
         } else {
           setDeals([]);
@@ -449,15 +455,21 @@ export default function DashboardPage() {
 
         const data = await response.json();
         if (data.deals) {
-          setPrevDeals(data.deals);
-          const total = data.deals.reduce(
+          // Only count won deals for previous year comparison
+          const prevWonDeals = data.deals.filter((d: Deal) => {
+            const s = d.status?.toLowerCase();
+            return s === "won" || s === "1";
+          });
+
+          setPrevDeals(prevWonDeals);
+          const total = prevWonDeals.reduce(
             (sum: number, item: Deal) => sum + (item.value || 0) / 100,
             0,
           );
           setPrevTotalValue(total);
 
-          // Build previous year chart data aligned by period length
-          const groupedByDate = data.deals.reduce(
+          // Build previous year chart data aligned by period length (won deals only)
+          const groupedByDate = prevWonDeals.reduce(
             (acc: Record<string, number>, item: Deal) => {
               const date =
                 item.custom_field_value?.split("T")[0] ||
