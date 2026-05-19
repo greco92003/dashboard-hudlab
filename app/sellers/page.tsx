@@ -295,10 +295,12 @@ export default function SellersPage() {
         const data = await response.json();
 
         if (data.deals) {
-          // Filtrar apenas deals que têm vendedor
-          const dealsWithSellers = data.deals.filter(
-            (deal: Deal) => deal.vendedor && deal.vendedor.trim() !== ""
-          );
+          // Filtrar apenas deals ganhos (won) que têm vendedor
+          const dealsWithSellers = data.deals.filter((deal: Deal) => {
+            const status = deal.status?.toLowerCase();
+            const isWon = status === "won" || status === "1";
+            return isWon && deal.vendedor && deal.vendedor.trim() !== "";
+          });
           setDeals(dealsWithSellers);
 
           // Calculate total value - divide by 100 to get real values
@@ -308,27 +310,30 @@ export default function SellersPage() {
           setTotalValue(total);
 
           // Calculate seller statistics
-          const sellerStats = dealsWithSellers.reduce((acc: any, deal: any) => {
-            const rawSellerName = deal.vendedor || "Não informado";
-            const sellerName = normalizeSellerName(rawSellerName);
-            const dealValue = (deal.value || 0) / 100;
-            const dealPairs = parseInt(deal["quantidade-de-pares"] || "0");
+          const sellerStats = dealsWithSellers.reduce(
+            (acc: any, deal: any) => {
+              const rawSellerName = deal.vendedor || "Não informado";
+              const sellerName = normalizeSellerName(rawSellerName);
+              const dealValue = (deal.value || 0) / 100;
+              const dealPairs = parseInt(deal["quantidade-de-pares"] || "0");
 
-            if (!acc[sellerName]) {
-              acc[sellerName] = {
-                name: sellerName,
-                totalValue: 0,
-                totalPairs: 0,
-                dealsCount: 0,
-              };
-            }
+              if (!acc[sellerName]) {
+                acc[sellerName] = {
+                  name: sellerName,
+                  totalValue: 0,
+                  totalPairs: 0,
+                  dealsCount: 0,
+                };
+              }
 
-            acc[sellerName].totalValue += dealValue;
-            acc[sellerName].totalPairs += dealPairs;
-            acc[sellerName].dealsCount += 1;
+              acc[sellerName].totalValue += dealValue;
+              acc[sellerName].totalPairs += dealPairs;
+              acc[sellerName].dealsCount += 1;
 
-            return acc;
-          }, {} as Record<string, SellerStats>);
+              return acc;
+            },
+            {} as Record<string, SellerStats>,
+          );
 
           // Convert to array and sort by total value (descending)
           const sortedSellers = Object.values(sellerStats)
@@ -349,7 +354,7 @@ export default function SellersPage() {
         setLoading(false);
       }
     },
-    []
+    [],
   );
 
   // Handle period change (local function to maintain state)

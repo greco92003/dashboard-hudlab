@@ -321,10 +321,12 @@ export default function DesignersPage() {
         const data = await response.json();
 
         if (data.deals) {
-          // Filtrar apenas deals que têm designer
-          const dealsWithDesigners = data.deals.filter(
-            (deal: Deal) => deal.designer && deal.designer.trim() !== ""
-          );
+          // Filtrar apenas deals ganhos (won) que têm designer
+          const dealsWithDesigners = data.deals.filter((deal: Deal) => {
+            const status = deal.status?.toLowerCase();
+            const isWon = status === "won" || status === "1";
+            return isWon && deal.designer && deal.designer.trim() !== "";
+          });
           setDeals(dealsWithDesigners);
 
           // Calculate total value - divide by 100 to get real values
@@ -356,7 +358,7 @@ export default function DesignersPage() {
 
               return acc;
             },
-            {} as Record<string, DesignerStats>
+            {} as Record<string, DesignerStats>,
           );
 
           // Convert to array and sort by total value (descending)
@@ -379,7 +381,7 @@ export default function DesignersPage() {
         setLoading(false);
       }
     },
-    []
+    [],
   );
 
   // Handle period change (local function to maintain state)
@@ -397,10 +399,7 @@ export default function DesignersPage() {
     const newShowGoals = !showGoals;
     setShowGoals(newShowGoals);
     if (isClient) {
-      storage.setItem(
-        "designers-goals-expanded",
-        JSON.stringify(newShowGoals)
-      );
+      storage.setItem("designers-goals-expanded", JSON.stringify(newShowGoals));
     }
   };
 
