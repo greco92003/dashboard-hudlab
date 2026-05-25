@@ -255,34 +255,41 @@ export default function FinancialDashboardPage() {
         onReset={() => setFilters(defaultFilters())}
       />
 
-      {/* OAuth not configured banner */}
-      {error?.includes("OAuth não configurado") && (
-        <div className="rounded-xl border bg-muted/50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <Wallet className="h-8 w-8 text-muted-foreground shrink-0" />
-          <div className="flex-1">
-            <p className="font-medium">
-              Conecte o Tiny ERP para ver seus dados financeiros
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              O app Tiny está configurado. Clique em &quot;Conectar Tiny&quot;
-              para autorizar o acesso.
-            </p>
+      {/* OAuth banner – shown for any auth-related error */}
+      {error &&
+        /oauth não configurado|token expirado|conectar tiny/i.test(error) && (
+          <div className="rounded-xl border bg-muted/50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <Wallet className="h-8 w-8 text-muted-foreground shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium">
+                {error.includes("expirado")
+                  ? "Sessão do Tiny ERP expirada"
+                  : "Conecte o Tiny ERP para ver seus dados financeiros"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {error.includes("expirado")
+                  ? 'O token de acesso expirou. Clique em "Reconectar Tiny" para renovar a autorização.'
+                  : 'O app Tiny está configurado. Clique em "Conectar Tiny" para autorizar o acesso.'}
+              </p>
+            </div>
+            <Button asChild>
+              <a href="/api/financial-dashboard/oauth">
+                <Link className="h-4 w-4 mr-2" />
+                {error.includes("expirado")
+                  ? "Reconectar Tiny"
+                  : "Conectar Tiny"}
+              </a>
+            </Button>
           </div>
-          <Button asChild>
-            <a href="/api/financial-dashboard/oauth">
-              <Link className="h-4 w-4 mr-2" />
-              Conectar Tiny
-            </a>
-          </Button>
-        </div>
-      )}
+        )}
 
       {/* Generic error banner */}
-      {error && !error.includes("OAuth não configurado") && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error &&
+        !/oauth não configurado|token expirado|conectar tiny/i.test(error) && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
       {/* Summary cards */}
       <SummaryCards data={summary} loading={loading} />

@@ -9,7 +9,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens } from "@/lib/tiny/auth";
+import {
+  exchangeCodeForTokens,
+  saveRefreshTokenToSupabase,
+} from "@/lib/tiny/auth";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -29,25 +32,27 @@ export async function GET(req: NextRequest) {
   }
 
   if (!code) {
-    return NextResponse.json({ error: "code ausente na query string" }, { status: 400 });
+    return NextResponse.json(
+      { error: "code ausente na query string" },
+      { status: 400 },
+    );
   }
 
   try {
     const tokens = await exchangeCodeForTokens(code);
 
+    // Persist immediately so the app works without env var changes
+    await saveRefreshTokenToSupabase(tokens.refresh_token);
+
     return new NextResponse(
       html(`
         <h2 style="color:#22c55e">✅ Autorização concluída!</h2>
-        <p>Copie o <strong>refresh_token</strong> abaixo e adicione no seu <code>.env.local</code>:</p>
-        <pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all">TINY_REFRESH_TOKEN=${tokens.refresh_token}</pre>
-        <p style="color:#94a3b8;font-size:14px">
-          Após adicionar a variável, <strong>reinicie o servidor de desenvolvimento</strong> (<code>npm run dev</code>)
-          e acesse <a href="/financial-dashboard">/financial-dashboard</a>.
-        </p>
+        <p>O token foi salvo automaticamente no Supabase. O dashboard já está pronto para uso.</p>
+        <p><a href="/financial-dashboard" style="font-weight:bold">→ Abrir Dashboard Financeiro</a></p>
         <hr/>
         <details>
-          <summary style="cursor:pointer;color:#94a3b8;font-size:13px">Ver access_token (debug)</summary>
-          <pre style="font-size:11px;color:#6b7280;overflow-x:auto;white-space:pre-wrap;word-break:break-all">${tokens.access_token}</pre>
+          <summary style="cursor:pointer;color:#94a3b8;font-size:13px">Backup: refresh_token (para .env.local)</summary>
+          <pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;font-size:11px">TINY_REFRESH_TOKEN=${tokens.refresh_token}</pre>
         </details>
       `),
       { headers: { "Content-Type": "text/html" } },

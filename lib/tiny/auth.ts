@@ -3,8 +3,16 @@
  *
  * Strategy (in priority order):
  *  1. V3 OAuth2 – Authorization Code flow (preferred)
- *     Requires TINY_CLIENT_ID + TINY_CLIENT_SECRET + TINY_REFRESH_TOKEN
+ *     Requires TINY_CLIENT_ID + TINY_CLIENT_SECRET
+ *     Refresh token is persisted in Supabase system_config table (key: tiny_refresh_token)
+ *     Falls back to TINY_REFRESH_TOKEN env var if Supabase has no token
  *  2. V2 – Simple token (TINY_TOKEN) – legacy fallback
+ *
+ * Token lifecycle:
+ *  - Access token expires in ~4 hours (cached in memory)
+ *  - Refresh token expires after 24 hours of inactivity (Tiny's Keycloak config)
+ *  - A cron job (/api/cron/refresh-tiny-token) runs every 6 hours to keep it alive
+ *  - Each time the refresh token is used, the new one is saved back to Supabase
  */
 
 // ---------------------------------------------------------------------------
@@ -14,6 +22,8 @@
 export const TINY_OAUTH_BASE =
   "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect";
 
+const SUPABASE_TOKEN_KEY = "tiny_refresh_token";
+
 // ---------------------------------------------------------------------------
 // In-memory access-token cache (per server process)
 // ---------------------------------------------------------------------------
@@ -21,10 +31,70 @@ export const TINY_OAUTH_BASE =
 let _v3Cache: { accessToken: string; expiresAt: number } | null = null;
 
 // ---------------------------------------------------------------------------
+// Supabase token persistence helpers
+// ---------------------------------------------------------------------------
+
+/** Saves the refresh token to the system_config table in Supabase. */
+export async function saveRefreshTokenToSupabase(
+  refreshToken: string,
+): Promise<void> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) return;
+
+    await fetch(`${supabaseUrl}/rest/v1/system_config`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify({
+        key: SUPABASE_TOKEN_KEY,
+        value: refreshToken,
+        description:
+          "Tiny ERP OAuth2 refresh token (auto-renovado pelo sistema)",
+      }),
+    });
+  } catch {
+    // Non-fatal – log only
+    console.warn("[Tiny] Could not save refresh token to Supabase");
+  }
+}
+
+/** Reads the refresh token from system_config (most up-to-date) or env var fallback. */
+async function loadRefreshTokenFromSupabase(): Promise<string | null> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) return null;
+
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/system_config?key=eq.${SUPABASE_TOKEN_KEY}&select=value`,
+      {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return (rows as { value: string }[])[0]?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // V3 – OAuth2 Authorization Code helpers
 // ---------------------------------------------------------------------------
 
-/** True when all V3 OAuth env vars are present. */
+/** True when V3 client credentials are present (refresh token may be in Supabase). */
 export function hasOAuthCredentials(): boolean {
   return !!(
     process.env.TINY_CLIENT_ID &&
@@ -41,6 +111,7 @@ export function hasClientCredentials(): boolean {
 /**
  * Returns the URL the user should visit to authorize the app.
  * After authorization Tiny will redirect to TINY_REDIRECT_URI with ?code=...
+ * Requests offline_access so the refresh token survives idle periods.
  */
 export function buildOAuthAuthorizationUrl(): string {
   const clientId = process.env.TINY_CLIENT_ID;
@@ -56,7 +127,7 @@ export function buildOAuthAuthorizationUrl(): string {
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: "openid",
+    scope: "openid offline_access",
   });
 
   return `${TINY_OAUTH_BASE}/auth?${params.toString()}`;
@@ -100,21 +171,34 @@ export async function exchangeCodeForTokens(code: string): Promise<{
 }
 
 /**
- * Returns a valid access token using the stored refresh token.
- * Caches the result in memory until 30 s before expiry.
+ * Returns a valid access token.
+ * Priority for the refresh token:
+ *   1. Supabase system_config (always the most recent after any refresh)
+ *   2. TINY_REFRESH_TOKEN env var (initial seed / local dev fallback)
+ * After each successful refresh the new refresh token is saved back to Supabase.
+ * Result is cached in memory until 60 s before expiry.
  */
 export async function getTinyV3AccessToken(): Promise<string> {
   const now = Date.now();
 
-  if (_v3Cache && _v3Cache.expiresAt > now + 30_000) {
+  if (_v3Cache && _v3Cache.expiresAt > now + 60_000) {
     return _v3Cache.accessToken;
   }
 
   const clientId = process.env.TINY_CLIENT_ID;
   const clientSecret = process.env.TINY_CLIENT_SECRET;
-  const refreshToken = process.env.TINY_REFRESH_TOKEN;
 
-  if (!clientId || !clientSecret || !refreshToken) {
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "[Tiny] OAuth não configurado. Acesse /financial-dashboard e clique em 'Conectar Tiny' para autorizar.",
+    );
+  }
+
+  // Supabase has the latest rotated token; env var is the initial seed fallback
+  const refreshToken =
+    (await loadRefreshTokenFromSupabase()) ?? process.env.TINY_REFRESH_TOKEN;
+
+  if (!refreshToken) {
     throw new Error(
       "[Tiny] OAuth não configurado. Acesse /financial-dashboard e clique em 'Conectar Tiny' para autorizar.",
     );
@@ -135,9 +219,16 @@ export async function getTinyV3AccessToken(): Promise<string> {
 
   const data = await res.json();
   if (!res.ok) {
+    // Token expirado ou inválido → força re-autenticação
+    _v3Cache = null;
     throw new Error(
-      `[Tiny] Falha ao renovar token: ${data.error_description ?? res.statusText}`,
+      `[Tiny] Token expirado. Acesse /financial-dashboard e clique em 'Conectar Tiny' para re-autorizar. (${data.error_description ?? res.statusText})`,
     );
+  }
+
+  // Persist the new (rotated) refresh token so the next call uses it
+  if (data.refresh_token) {
+    await saveRefreshTokenToSupabase(data.refresh_token);
   }
 
   _v3Cache = {

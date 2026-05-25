@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-designer-mockups",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-tiny-token",
+      "schedule": "0 */6 * * *"
     }
   ],
   "functions": {
