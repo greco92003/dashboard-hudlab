@@ -1,7 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { FUNNEL_STAGES } from "@/app/api/manychat/tags/route";
 
-const MANYCHAT_BASE_URL = "https://api.manychat.com";
+// Date range helpers
+function getPeriodRange(period: "weekly" | "monthly" | "yearly"): {
+  currentStart: Date;
+  currentEnd: Date;
+  previousStart: Date;
+  previousEnd: Date;
+} {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const daysMap = { weekly: 7, monthly: 30, yearly: 365 };
+  const days = daysMap[period];
+
+  const currentStart = new Date(today);
+  currentStart.setDate(today.getDate() - days);
+  const currentEnd = new Date(today);
+  currentEnd.setHours(23, 59, 59, 999);
+
+  const previousStart = new Date(currentStart);
+  previousStart.setDate(currentStart.getDate() - days);
+  const previousEnd = new Date(currentStart);
+  previousEnd.setHours(23, 59, 59, 999);
+
+  return { currentStart, currentEnd, previousStart, previousEnd };
+}
 
 export interface FunnelStage {
   id: number;
@@ -79,17 +104,46 @@ function getMockFunnelData(
   return { stages, period, overallConversionRate, isMock: true };
 }
 
-async function fetchTagsFromManyChat(token: string) {
-  const response = await fetch(`${MANYCHAT_BASE_URL}/fb/page/getTags`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    next: { revalidate: 300 },
-  });
-  if (!response.ok) throw new Error(`ManyChat API error: ${response.status}`);
-  const data = await response.json();
-  return data.data || [];
+async function querySupabaseCounts(
+  period: "weekly" | "monthly" | "yearly",
+): Promise<{
+  currentCounts: Record<string, number>;
+  previousCounts: Record<string, number>;
+}> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return { currentCounts: {}, previousCounts: {} };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  const { currentStart, currentEnd, previousStart, previousEnd } =
+    getPeriodRange(period);
+
+  const [currentResult, previousResult] = await Promise.all([
+    supabase
+      .from("manychat_tag_events")
+      .select("stage_slug")
+      .gte("occurred_at", currentStart.toISOString())
+      .lte("occurred_at", currentEnd.toISOString()),
+    supabase
+      .from("manychat_tag_events")
+      .select("stage_slug")
+      .gte("occurred_at", previousStart.toISOString())
+      .lte("occurred_at", previousEnd.toISOString()),
+  ]);
+
+  const toCounts = (rows: { stage_slug: string }[] | null) =>
+    (rows ?? []).reduce<Record<string, number>>((acc, row) => {
+      acc[row.stage_slug] = (acc[row.stage_slug] ?? 0) + 1;
+      return acc;
+    }, {});
+
+  return {
+    currentCounts: toCounts(currentResult.data),
+    previousCounts: toCounts(previousResult.data),
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -107,31 +161,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(getMockFunnelData(period));
     }
 
-    // Fetch all tags and map only the defined funnel stages in order
-    const allTags: { id: number; name: string }[] =
-      await fetchTagsFromManyChat(token);
+    // Query real counts from Supabase
+    const { currentCounts, previousCounts } = await querySupabaseCounts(period);
 
-    const stages: FunnelStage[] = FUNNEL_STAGES.map((stage, i) => {
-      const match = allTags.find(
-        (t) => t.name.toLowerCase() === stage.manychatName.toLowerCase(),
-      );
-      return {
-        id: match?.id ?? i + 1,
-        name: stage.displayName,
-        order: i + 1,
-        count: 0,
-        previousCount: 0,
-        conversionFromPrevious: null,
-        growthRate: 0,
-      };
-    });
+    const totalCurrentEvents = Object.values(currentCounts).reduce(
+      (a, b) => a + b,
+      0,
+    );
+
+    // If no events recorded yet, fall back to mock with a flag
+    if (totalCurrentEvents === 0) {
+      const mockData = getMockFunnelData(period);
+      return NextResponse.json({ ...mockData, isMock: true, noDataYet: true });
+    }
+
+    const displayNames = FUNNEL_STAGES.map((s) => s.displayName);
+    const slugs = [
+      "lead",
+      "emailcoletado",
+      "viumockupautomatico",
+      "conheceumodeloseprecos",
+      "solicitouorcamento",
+      "informouquantidade",
+      "informouestado",
+      "orcamentogerado",
+      "solicitoumockupoficial",
+      "negociofechado",
+    ];
+
+    const current = slugs.map((s) => currentCounts[s] ?? 0);
+    const previous = slugs.map((s) => previousCounts[s] ?? 0);
+
+    const stages = buildStages(displayNames, current, previous);
+    const first = stages[0].count;
+    const last = stages[stages.length - 1].count;
+    const overallConversionRate =
+      first > 0 ? Math.round((last / first) * 1000) / 10 : 0;
 
     return NextResponse.json({
       stages,
       period,
-      overallConversionRate: 0,
+      overallConversionRate,
       isMock: false,
-      needsConfiguration: true,
     });
   } catch (error) {
     console.error("Erro ao montar funil ManyChat:", error);
