@@ -29,6 +29,7 @@ import {
   User,
   Wrench,
   Wallet,
+  Filter,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -98,6 +99,11 @@ const menuGroups: MenuGroup[] = [
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
+      },
+      {
+        title: "Funil",
+        url: "/funil",
+        icon: Filter,
       },
       {
         title: "Negócios",
