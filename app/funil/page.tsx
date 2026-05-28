@@ -30,6 +30,7 @@ import {
   Phone,
   Mail,
   ChevronUp,
+  Clock,
 } from "lucide-react";
 
 type Period = "weekly" | "monthly" | "yearly";
@@ -553,6 +554,22 @@ function LeadCard({
   const hasPhone = !!lead.telefone;
   const hasEmail = !!lead.email;
 
+  const daysInList = Math.floor(
+    (Date.now() - new Date(lead.occurred_at).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const daysLabel =
+    daysInList === 0
+      ? "hoje"
+      : daysInList === 1
+        ? "1 dia"
+        : `${daysInList} dias`;
+  const daysBadgeClass =
+    daysInList >= 8
+      ? "text-xs shrink-0 border-red-500 text-red-600 bg-red-50 dark:bg-red-950/30"
+      : daysInList >= 4
+        ? "text-xs shrink-0 border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-950/30"
+        : "text-xs shrink-0";
+
   return (
     <div className="flex items-start justify-between gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/30 transition-colors">
       <div className="flex-1 min-w-0">
@@ -565,6 +582,14 @@ function LeadCard({
           )}
           <Badge variant="outline" className="text-xs shrink-0">
             {lead.stage_name}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={daysBadgeClass}
+            title="Dias na lista desde o primeiro contato"
+          >
+            <Clock className="h-3 w-3 mr-1" />
+            {daysLabel}
           </Badge>
         </div>
         <div className="flex items-center gap-3 mt-1 flex-wrap">
