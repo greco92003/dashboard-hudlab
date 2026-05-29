@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -24,35 +25,9 @@ import {
   Target,
   Users,
   ListChecks,
-  Archive,
-  ArchiveRestore,
-  PhoneCall,
-  Phone,
-  Mail,
-  ChevronUp,
-  Clock,
 } from "lucide-react";
 
 type Period = "weekly" | "monthly" | "yearly";
-
-interface FollowUpLead {
-  subscriber_id: string;
-  nome: string | null;
-  telefone: string | null;
-  email: string | null;
-  quantidade_pares: number | null;
-  stage_slug: string;
-  stage_name: string;
-  stage_order: number;
-  occurred_at: string;
-}
-
-interface FollowUpData {
-  listaA: FollowUpLead[];
-  listaB: FollowUpLead[];
-  listaC: FollowUpLead[];
-  archived: FollowUpLead[];
-}
 
 interface FunnelStage {
   id: number;
@@ -208,10 +183,6 @@ export default function FunilPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [showFollowUp, setShowFollowUp] = useState(false);
-  const [followUpData, setFollowUpData] = useState<FollowUpData | null>(null);
-  const [followUpLoading, setFollowUpLoading] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -238,48 +209,6 @@ export default function FunilPage() {
     return () => controller.abort();
   }, [period, refreshKey]);
 
-  const loadFollowUp = useCallback(async () => {
-    setFollowUpLoading(true);
-    try {
-      const res = await fetch("/api/manychat/followup");
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
-      const data: FollowUpData = await res.json();
-      setFollowUpData(data);
-    } catch {
-      // silently fail
-    } finally {
-      setFollowUpLoading(false);
-    }
-  }, []);
-
-  const handleFollowUpToggle = () => {
-    if (!showFollowUp && !followUpData) {
-      loadFollowUp();
-    }
-    setShowFollowUp((v) => !v);
-  };
-
-  const handleArchive = async (lead: FollowUpLead, listaOrigem: string) => {
-    await fetch("/api/manychat/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscriber_id: lead.subscriber_id,
-        lista_origem: listaOrigem,
-      }),
-    });
-    loadFollowUp();
-  };
-
-  const handleUnarchive = async (lead: FollowUpLead) => {
-    await fetch("/api/manychat/archive", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriber_id: lead.subscriber_id }),
-    });
-    loadFollowUp();
-  };
-
   const handlePeriodChange = (value: string) => {
     setPeriod(value as Period);
   };
@@ -288,11 +217,22 @@ export default function FunilPage() {
     <div className="flex flex-1 flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Funil de Vendas</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Acompanhe a jornada dos seus leads do primeiro ao último contato
-          </p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Funil de Vendas
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Acompanhe a jornada dos seus leads do primeiro ao último contato
+            </p>
+          </div>
+          <Button asChild size="sm" className="w-fit gap-2">
+            <Link href="/funil/followup">
+              <ListChecks className="h-4 w-4" />
+              Lista de Follow-Up
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </Button>
         </div>
         <div className="flex items-center gap-3">
           <Tabs value={period} onValueChange={handlePeriodChange}>
@@ -391,36 +331,6 @@ export default function FunilPage() {
           period={PERIOD_LABELS[period]}
         />
       )}
-
-      {/* Follow-Up Toggle + Lists */}
-      <div className="flex flex-col gap-4">
-        <Button
-          variant={showFollowUp ? "default" : "outline"}
-          size="sm"
-          className="w-fit gap-2"
-          onClick={handleFollowUpToggle}
-        >
-          <ListChecks className="h-4 w-4" />
-          Lista de Follow-Up
-          {showFollowUp ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
-        </Button>
-
-        {showFollowUp && (
-          <FollowUpSection
-            data={followUpData}
-            loading={followUpLoading}
-            showArchived={showArchived}
-            onToggleArchived={() => setShowArchived((v) => !v)}
-            onArchive={handleArchive}
-            onUnarchive={handleUnarchive}
-            onRefresh={loadFollowUp}
-          />
-        )}
-      </div>
     </div>
   );
 }
@@ -531,320 +441,6 @@ function FunnelStages({ stages }: { stages: FunnelStage[] }) {
           total={stages.length}
         />
       ))}
-    </div>
-  );
-}
-
-// ─── Follow-Up Components ────────────────────────────────────────────────────
-
-function LeadCard({
-  lead,
-  listLabel,
-  onArchive,
-  onUnarchive,
-  isArchived,
-}: {
-  lead: FollowUpLead;
-  listLabel: string;
-  onArchive?: () => void;
-  onUnarchive?: () => void;
-  isArchived?: boolean;
-}) {
-  const name = lead.nome ?? `ID: ${lead.subscriber_id}`;
-  const hasPhone = !!lead.telefone;
-  const hasEmail = !!lead.email;
-
-  const daysInList = Math.floor(
-    (Date.now() - new Date(lead.occurred_at).getTime()) / (1000 * 60 * 60 * 24),
-  );
-  const daysLabel =
-    daysInList === 0
-      ? "hoje"
-      : daysInList === 1
-        ? "1 dia"
-        : `${daysInList} dias`;
-  const daysBadgeClass =
-    daysInList >= 8
-      ? "text-xs shrink-0 border-red-500 text-red-600 bg-red-50 dark:bg-red-950/30"
-      : daysInList >= 4
-        ? "text-xs shrink-0 border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-950/30"
-        : "text-xs shrink-0";
-
-  return (
-    <div className="flex items-start justify-between gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/30 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm truncate">{name}</span>
-          {lead.quantidade_pares !== null && (
-            <Badge variant="secondary" className="text-xs shrink-0">
-              {lead.quantidade_pares} pares
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-xs shrink-0">
-            {lead.stage_name}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={daysBadgeClass}
-            title="Dias na lista desde o primeiro contato"
-          >
-            <Clock className="h-3 w-3 mr-1" />
-            {daysLabel}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-3 mt-1 flex-wrap">
-          {lead.telefone && (
-            <a
-              href={`https://wa.me/${lead.telefone.replace(/\D/g, "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-emerald-600 hover:underline"
-            >
-              <Phone className="h-3 w-3" />
-              {lead.telefone}
-            </a>
-          )}
-          {lead.email && (
-            <a
-              href={`mailto:${lead.email}`}
-              className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-            >
-              <Mail className="h-3 w-3" />
-              {lead.email}
-            </a>
-          )}
-          {!hasPhone && !hasEmail && (
-            <span className="text-xs text-muted-foreground">Sem contato</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {!isArchived && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1 text-xs"
-            onClick={onArchive}
-            title="Marcar como contactado e arquivar"
-          >
-            <PhoneCall className="h-3 w-3" />
-            Contactado
-          </Button>
-        )}
-        {isArchived && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1 text-xs"
-            onClick={onUnarchive}
-            title="Desarquivar lead"
-          >
-            <ArchiveRestore className="h-3 w-3" />
-            Desarquivar
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LeadList({
-  title,
-  description,
-  leads,
-  listKey,
-  color,
-  onArchive,
-}: {
-  title: string;
-  description: string;
-  leads: FollowUpLead[];
-  listKey: string;
-  color: string;
-  onArchive: (lead: FollowUpLead, lista: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-
-  return (
-    <Card className="border-border/60">
-      <CardHeader
-        className="pb-3 cursor-pointer select-none"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            <CardTitle className="text-base">{title}</CardTitle>
-            <Badge
-              className="text-xs font-bold"
-              style={{ backgroundColor: color, color: "#fff" }}
-            >
-              {leads.length}
-            </Badge>
-          </div>
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-        <CardDescription className="text-xs mt-1">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      {expanded && (
-        <CardContent className="pt-0">
-          {leads.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Nenhum lead nesta lista
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {leads.map((lead) => (
-                <LeadCard
-                  key={lead.subscriber_id}
-                  lead={lead}
-                  listLabel={listKey}
-                  onArchive={() => onArchive(lead, listKey)}
-                />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
-  );
-}
-
-function FollowUpSection({
-  data,
-  loading,
-  showArchived,
-  onToggleArchived,
-  onArchive,
-  onUnarchive,
-  onRefresh,
-}: {
-  data: FollowUpData | null;
-  loading: boolean;
-  showArchived: boolean;
-  onToggleArchived: () => void;
-  onArchive: (lead: FollowUpLead, lista: string) => void;
-  onUnarchive: (lead: FollowUpLead) => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ListChecks className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Lista de Follow-Up</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={showArchived ? "default" : "outline"}
-            className="gap-1 text-xs"
-            onClick={onToggleArchived}
-          >
-            <Archive className="h-3.5 w-3.5" />
-            Arquivados
-            {data && data.archived.length > 0 && (
-              <Badge variant="secondary" className="text-xs ml-1">
-                {data.archived.length}
-              </Badge>
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-48 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : data ? (
-        <>
-          <LeadList
-            title="Lista A — Alta Prioridade"
-            description="Leads com 36 pares ou mais que ainda não solicitaram mockup oficial"
-            leads={data.listaA}
-            listKey="A"
-            color="#1A00FF"
-            onArchive={onArchive}
-          />
-          <LeadList
-            title="Lista B — Média Prioridade"
-            description="Leads com menos de 36 pares que ainda não solicitaram mockup oficial"
-            leads={data.listaB}
-            listKey="B"
-            color="#FF9900"
-            onArchive={onArchive}
-          />
-          <LeadList
-            title="Lista C — Reengajamento"
-            description="Leads que só viram modelos e preços e não avançaram"
-            leads={data.listaC}
-            listKey="C"
-            color="#FF1A00"
-            onArchive={onArchive}
-          />
-
-          {showArchived && (
-            <Card className="border-border/40 opacity-80">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Archive className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Arquivados</CardTitle>
-                  <Badge variant="secondary" className="text-xs">
-                    {data.archived.length}
-                  </Badge>
-                </div>
-                <CardDescription className="text-xs mt-1">
-                  Leads já contactados. Clique em Desarquivar para devolvê-los à
-                  lista original.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {data.archived.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    Nenhum lead arquivado
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {data.archived.map((lead) => (
-                      <LeadCard
-                        key={lead.subscriber_id}
-                        lead={lead}
-                        listLabel="archived"
-                        isArchived
-                        onUnarchive={() => onUnarchive(lead)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </>
-      ) : (
-        <div className="text-center py-8 text-muted-foreground">
-          <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">Nenhum dado disponível</p>
-        </div>
-      )}
     </div>
   );
 }

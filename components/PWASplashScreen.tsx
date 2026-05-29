@@ -43,64 +43,28 @@ export function PWASplashScreen({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[9999] flex items-center justify-center bg-black",
+        "fixed inset-0 z-[9999] flex items-center justify-center bg-primary",
         "transition-opacity duration-500",
         isAnimating ? "opacity-100" : "opacity-0",
-        className
+        className,
       )}
     >
-      <div className="flex flex-col items-center justify-center space-y-6">
-        {/* Logo */}
-        <div
-          className={cn(
-            "transition-all duration-1000 ease-out",
-            isAnimating
-              ? "opacity-100 scale-100 translate-y-0"
-              : "opacity-0 scale-95 translate-y-4"
-          )}
-        >
-          <div className="relative w-24 h-24 md:w-32 md:h-32">
-            <Image
-              src="/icons/icon-128x128.png"
-              alt="HudLab Logo"
-              width={128}
-              height={128}
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </div>
-
-        {/* App Name */}
-        <div
-          className={cn(
-            "transition-all duration-1000 ease-out delay-300",
-            isAnimating
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-4"
-          )}
-        >
-          <h1 className="text-white text-xl md:text-2xl font-semibold text-center">
-            HudLab Dashboard
-          </h1>
-          <p className="text-gray-400 text-sm md:text-base text-center mt-2">
-            Gestão e análise de vendas
-          </p>
-        </div>
-
-        {/* Loading indicator */}
-        <div
-          className={cn(
-            "transition-all duration-1000 ease-out delay-500",
-            isAnimating
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-4"
-          )}
-        >
-          <div className="flex space-x-1">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse delay-75"></div>
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse delay-150"></div>
-          </div>
+      <div
+        className={cn(
+          "transition-all duration-1000 ease-out",
+          isAnimating
+            ? "opacity-100 scale-100 translate-y-0"
+            : "opacity-0 scale-95 translate-y-4",
+        )}
+      >
+        <div className="relative w-24 h-24 md:w-32 md:h-32">
+          <Image
+            src="/icons/icon-128x128.png"
+            alt="HudLab Logo"
+            width={128}
+            height={128}
+            className="w-full h-full object-contain"
+          />
         </div>
       </div>
     </div>
@@ -114,7 +78,7 @@ export function useIsPWA() {
   useEffect(() => {
     // Check if running in standalone mode (PWA)
     const isStandalone = window.matchMedia(
-      "(display-mode: standalone)"
+      "(display-mode: standalone)",
     ).matches;
     // Check if launched from home screen on iOS
     const isIOSStandalone = (window.navigator as any).standalone === true;
