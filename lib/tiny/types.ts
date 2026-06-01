@@ -42,9 +42,18 @@ export type FinancialCashBalance = {
 
 export type FinancialTimelinePoint = {
   period: string;
+  // Aggregate (Previsto + Realizado)
   payable: number;
   receivable: number;
-  cashBalance: number;
+  // Realizado (situacao = pago / recebido)
+  realizedIn: number;
+  realizedOut: number;
+  // Previsto (aberto / prevista / parcial / atrasadas)
+  predictedIn: number;
+  predictedOut: number;
+  // Cumulative running balances
+  cashBalance: number; // realized + predicted (all entries)
+  realizedBalance: number; // realized only
 };
 
 // -------------------------------------------------------
@@ -52,10 +61,22 @@ export type FinancialTimelinePoint = {
 // -------------------------------------------------------
 
 export type FinancialDashboardSummaryResponse = {
+  // Aggregate
   totalPayable: number;
   totalReceivable: number;
   cashBalance: number;
   netForecast: number;
+  // Realizado (status pago/recebido)
+  totalPaid: number;
+  totalReceived: number;
+  realizedNet: number;
+  // Previsto (status aberto/prevista/parcial/atrasadas)
+  totalToPay: number;
+  totalToReceive: number;
+  predictedNet: number;
+  // Diagnostics
+  payablesCount: number;
+  receivablesCount: number;
 };
 
 export type FinancialDashboardTimelineResponse = {
@@ -145,4 +166,6 @@ export type FinancialFilters = {
   endDate?: string; // YYYY-MM-DD
   status?: string;
   granularity?: "day" | "week" | "month";
+  /** Conta Azul-style view: realized only, predicted only, or both */
+  viewMode?: "realized" | "predicted" | "both";
 };

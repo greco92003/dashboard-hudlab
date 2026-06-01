@@ -24,6 +24,14 @@ import type {
   TinyV3RawContaPagar,
   TinyV3RawContaReceber,
 } from "./types";
+import type { TinyEndpointKey } from "./endpoints";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const V3_PAGE_LIMIT = 100;
+const V3_MAX_PAGES = 50; // safety cap → up to 5000 records per query
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,6 +40,7 @@ import type {
 /**
  * Builds query-string params for the Tiny API.
  * V2 uses `dataInicial`/`dataFinal`; V3 uses `dataInicialVencimento`/`dataFinalVencimento`.
+ * Note: `limit`/`offset` are added by `fetchAllPagesV3`, not here.
  */
 function buildDateParams(filters: FinancialFilters): Record<string, string> {
   const mode = getAuthMode();
@@ -42,13 +51,46 @@ function buildDateParams(filters: FinancialFilters): Record<string, string> {
     if (filters.endDate) p["dataFinalVencimento"] = filters.endDate;
     if (filters.status && filters.status !== "all")
       p["situacao"] = filters.status;
-    p["limit"] = "100";
   } else {
     if (filters.startDate) p["dataInicial"] = filters.startDate;
     if (filters.endDate) p["dataFinal"] = filters.endDate;
     if (filters.status) p["situacao"] = filters.status;
   }
   return p;
+}
+
+/**
+ * Loops through Tiny V3 paginated endpoints until all items are retrieved.
+ * Stops when: items < limit, or offset+items >= total, or MAX_PAGES reached.
+ */
+async function fetchAllPagesV3<T>(
+  endpointKey: TinyEndpointKey,
+  baseParams: Record<string, string>,
+): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+
+  for (let page = 0; page < V3_MAX_PAGES; page++) {
+    const params = {
+      ...baseParams,
+      limit: String(V3_PAGE_LIMIT),
+      offset: String(offset),
+    };
+    const json = await tinyGet(endpointKey, { params });
+    const items = extractListV3<T>(json);
+    all.push(...items);
+
+    const obj = json as Record<string, unknown>;
+    const paginacao = obj?.paginacao as { total?: number } | undefined;
+    const total = paginacao?.total;
+
+    if (items.length < V3_PAGE_LIMIT) break;
+    if (total !== undefined && offset + items.length >= total) break;
+
+    offset += V3_PAGE_LIMIT;
+  }
+
+  return all;
 }
 
 /**
@@ -94,14 +136,16 @@ export async function getPayables(
   filters: FinancialFilters = {},
 ): Promise<FinancialPayable[]> {
   const mode = getAuthMode();
-  const json = await tinyGet("contasPagar", {
-    params: buildDateParams(filters),
-  });
+  const baseParams = buildDateParams(filters);
 
   if (mode === "v3-oauth") {
-    const raw = extractListV3<TinyV3RawContaPagar>(json);
+    const raw = await fetchAllPagesV3<TinyV3RawContaPagar>(
+      "contasPagar",
+      baseParams,
+    );
     return mapV3ContasPagar(raw);
   }
+  const json = await tinyGet("contasPagar", { params: baseParams });
   const raw = extractListV2<Parameters<typeof mapContasPagar>[0][0]>(
     json,
     "contas",
@@ -113,14 +157,16 @@ export async function getReceivables(
   filters: FinancialFilters = {},
 ): Promise<FinancialReceivable[]> {
   const mode = getAuthMode();
-  const json = await tinyGet("contasReceber", {
-    params: buildDateParams(filters),
-  });
+  const baseParams = buildDateParams(filters);
 
   if (mode === "v3-oauth") {
-    const raw = extractListV3<TinyV3RawContaReceber>(json);
+    const raw = await fetchAllPagesV3<TinyV3RawContaReceber>(
+      "contasReceber",
+      baseParams,
+    );
     return mapV3ContasReceber(raw);
   }
+  const json = await tinyGet("contasReceber", { params: baseParams });
   const raw = extractListV2<Parameters<typeof mapContasReceber>[0][0]>(
     json,
     "contas",
@@ -158,20 +204,100 @@ export async function getCashBalance(
 export async function getSummary(
   filters: FinancialFilters = {},
 ): Promise<FinancialDashboardSummaryResponse> {
-  const [payables, receivables, cashBalance] = await Promise.all([
+  const [payables, receivables] = await Promise.all([
     getPayables(filters),
     getReceivables(filters),
-    getCashBalance(filters),
   ]);
 
   const totalPayable = payables.reduce((s, p) => s + p.amount, 0);
   const totalReceivable = receivables.reduce((s, r) => s + r.amount, 0);
 
+  // Realized = already paid/received
+  const totalPaid = payables
+    .filter((p) => p.status === "paid")
+    .reduce((s, p) => s + p.amount, 0);
+  const totalReceived = receivables
+    .filter((r) => r.status === "received")
+    .reduce((s, r) => s + r.amount, 0);
+
+  // Predicted = scheduled / not realized yet (excludes canceled and paid/received)
+  const totalToPay = payables
+    .filter((p) => p.status !== "paid" && p.status !== "canceled")
+    .reduce((s, p) => s + p.amount, 0);
+  const totalToReceive = receivables
+    .filter((r) => r.status !== "received" && r.status !== "canceled")
+    .reduce((s, r) => s + r.amount, 0);
+
   return {
     totalPayable,
     totalReceivable,
-    cashBalance: cashBalance.balance,
+    cashBalance: totalReceived - totalPaid,
     netForecast: totalReceivable - totalPayable,
+    totalPaid,
+    totalReceived,
+    realizedNet: totalReceived - totalPaid,
+    totalToPay,
+    totalToReceive,
+    predictedNet: totalToReceive - totalToPay,
+    payablesCount: payables.length,
+    receivablesCount: receivables.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Timeline helpers
+// ---------------------------------------------------------------------------
+
+function parseDateParts(
+  dateStr: string,
+): { year: string; month: string; day: string } | null {
+  if (!dateStr) return null;
+  if (dateStr.includes("-")) {
+    const [y, m, d] = dateStr.split("-");
+    return { year: y, month: m, day: d };
+  }
+  const [d, m, y] = dateStr.split("/");
+  return { year: y, month: m, day: d };
+}
+
+function periodInfo(
+  dateStr: string,
+  granularity: "day" | "week" | "month",
+): { sortKey: string; label: string } {
+  const parts = parseDateParts(dateStr);
+  if (!parts) return { sortKey: "0000-00-00", label: "Sem data" };
+  const { year, month, day } = parts;
+  if (granularity === "day") {
+    return {
+      sortKey: `${year}-${month}-${day}`,
+      label: `${day}/${month}/${year}`,
+    };
+  }
+  if (granularity === "week") {
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    const week = Math.ceil(d.getDate() / 7);
+    return {
+      sortKey: `${year}-${month}-W${String(week).padStart(2, "0")}`,
+      label: `Sem ${week} ${month}/${year}`,
+    };
+  }
+  return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
+}
+
+type TimelineBucket = FinancialTimelinePoint & { _sortKey: string };
+
+function emptyBucket(label: string, sortKey: string): TimelineBucket {
+  return {
+    period: label,
+    payable: 0,
+    receivable: 0,
+    realizedIn: 0,
+    realizedOut: 0,
+    predictedIn: 0,
+    predictedOut: 0,
+    cashBalance: 0,
+    realizedBalance: 0,
+    _sortKey: sortKey,
   };
 }
 
@@ -184,86 +310,48 @@ export async function getTimeline(
     getReceivables(filters),
   ]);
 
-  // We store a sortable key (YYYY-MM-DD based) alongside a display label
-  const pointMap = new Map<
-    string,
-    FinancialTimelinePoint & { _sortKey: string }
-  >();
-
-  // Normalise any date string to { year, month, day } parts
-  const parseParts = (
-    dateStr: string,
-  ): { year: string; month: string; day: string } => {
-    if (dateStr.includes("-")) {
-      const [y, m, d] = dateStr.split("-");
-      return { year: y, month: m, day: d };
+  const pointMap = new Map<string, TimelineBucket>();
+  const getBucket = (date: string): TimelineBucket => {
+    const { sortKey, label } = periodInfo(date, granularity);
+    let b = pointMap.get(sortKey);
+    if (!b) {
+      b = emptyBucket(label, sortKey);
+      pointMap.set(sortKey, b);
     }
-    const [d, m, y] = dateStr.split("/");
-    return { year: y, month: m, day: d };
-  };
-
-  // Returns { sortKey, label } for a given date string
-  const periodInfo = (dateStr: string): { sortKey: string; label: string } => {
-    if (!dateStr) return { sortKey: "0000-00-00", label: "Sem data" };
-    const { year, month, day } = parseParts(dateStr);
-    if (granularity === "day") {
-      return {
-        sortKey: `${year}-${month}-${day}`,
-        label: `${day}/${month}/${year}`,
-      };
-    }
-    if (granularity === "week") {
-      const d = new Date(Number(year), Number(month) - 1, Number(day));
-      const week = Math.ceil(d.getDate() / 7);
-      return {
-        sortKey: `${year}-${month}-W${String(week).padStart(2, "0")}`,
-        label: `Sem ${week} ${month}/${year}`,
-      };
-    }
-    // month
-    return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
+    return b;
   };
 
   for (const p of payables) {
-    const { sortKey, label } = periodInfo(p.dueDate);
-    const point = pointMap.get(sortKey) ?? {
-      period: label,
-      payable: 0,
-      receivable: 0,
-      cashBalance: 0,
-      _sortKey: sortKey,
-    };
-    point.payable += p.amount;
-    pointMap.set(sortKey, point);
+    if (p.status === "canceled") continue;
+    const b = getBucket(p.dueDate);
+    b.payable += p.amount;
+    if (p.status === "paid") b.realizedOut += p.amount;
+    else b.predictedOut += p.amount;
   }
 
   for (const r of receivables) {
-    const { sortKey, label } = periodInfo(r.dueDate);
-    const point = pointMap.get(sortKey) ?? {
-      period: label,
-      payable: 0,
-      receivable: 0,
-      cashBalance: 0,
-      _sortKey: sortKey,
-    };
-    point.receivable += r.amount;
-    pointMap.set(sortKey, point);
+    if (r.status === "canceled") continue;
+    const b = getBucket(r.dueDate);
+    b.receivable += r.amount;
+    if (r.status === "received") b.realizedIn += r.amount;
+    else b.predictedIn += r.amount;
   }
 
-  // Sort chronologically using the sortable key
   const sorted = Array.from(pointMap.values()).sort((a, b) =>
     a._sortKey.localeCompare(b._sortKey),
   );
 
-  // Calculate cumulative cash balance (saldo de caixa):
-  // Each period: received - paid = net cash movement
-  // The line shows the running total across periods (like a bank account balance)
-  let runningBalance = 0;
+  let runningAll = 0;
+  let runningRealized = 0;
   const points: FinancialTimelinePoint[] = sorted.map(
     ({ _sortKey: _, ...rest }) => {
-      // Only count actually paid/received amounts for real cash balance
-      runningBalance += rest.receivable - rest.payable;
-      return { ...rest, cashBalance: runningBalance };
+      runningAll += rest.receivable - rest.payable;
+      runningRealized += rest.realizedIn - rest.realizedOut;
+      return {
+        ...rest,
+        cashBalance: runningAll,
+        realizedBalance: runningRealized,
+      };
     },
   );
 

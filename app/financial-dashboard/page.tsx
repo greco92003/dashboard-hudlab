@@ -61,51 +61,61 @@ function buildTimelinePoints(
     return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
   };
 
-  const pointMap = new Map<
-    string,
-    FinancialTimelinePoint & { _sortKey: string }
-  >();
+  type Bucket = FinancialTimelinePoint & { _sortKey: string };
+  const empty = (label: string, sortKey: string): Bucket => ({
+    period: label,
+    payable: 0,
+    receivable: 0,
+    realizedIn: 0,
+    realizedOut: 0,
+    predictedIn: 0,
+    predictedOut: 0,
+    cashBalance: 0,
+    realizedBalance: 0,
+    _sortKey: sortKey,
+  });
+
+  const pointMap = new Map<string, Bucket>();
+  const bucketFor = (date: string): Bucket => {
+    const { sortKey, label } = periodInfo(date);
+    let b = pointMap.get(sortKey);
+    if (!b) {
+      b = empty(label, sortKey);
+      pointMap.set(sortKey, b);
+    }
+    return b;
+  };
 
   for (const p of payables) {
-    const { sortKey, label } = periodInfo(p.dueDate);
-    const existing = pointMap.get(sortKey);
-    if (existing) {
-      existing.payable += p.amount;
-    } else {
-      pointMap.set(sortKey, {
-        period: label,
-        payable: p.amount,
-        receivable: 0,
-        cashBalance: 0,
-        _sortKey: sortKey,
-      });
-    }
+    if (p.status === "canceled") continue;
+    const b = bucketFor(p.dueDate);
+    b.payable += p.amount;
+    if (p.status === "paid") b.realizedOut += p.amount;
+    else b.predictedOut += p.amount;
   }
 
   for (const r of receivables) {
-    const { sortKey, label } = periodInfo(r.dueDate);
-    const existing = pointMap.get(sortKey);
-    if (existing) {
-      existing.receivable += r.amount;
-    } else {
-      pointMap.set(sortKey, {
-        period: label,
-        payable: 0,
-        receivable: r.amount,
-        cashBalance: 0,
-        _sortKey: sortKey,
-      });
-    }
+    if (r.status === "canceled") continue;
+    const b = bucketFor(r.dueDate);
+    b.receivable += r.amount;
+    if (r.status === "received") b.realizedIn += r.amount;
+    else b.predictedIn += r.amount;
   }
 
   const sorted = Array.from(pointMap.values()).sort((a, b) =>
     a._sortKey.localeCompare(b._sortKey),
   );
 
-  let running = 0;
+  let runningAll = 0;
+  let runningRealized = 0;
   return sorted.map(({ _sortKey: _, ...rest }) => {
-    running += rest.receivable - rest.payable;
-    return { ...rest, cashBalance: running };
+    runningAll += rest.receivable - rest.payable;
+    runningRealized += rest.realizedIn - rest.realizedOut;
+    return {
+      ...rest,
+      cashBalance: runningAll,
+      realizedBalance: runningRealized,
+    };
   });
 }
 
@@ -128,6 +138,7 @@ function defaultFilters(): FinancialFilterState {
     endDate: `${endY}-${String(endM + 1).padStart(2, "0")}-${lastDay}`,
     status: "all",
     granularity: "month",
+    viewMode: "both",
   };
 }
 
@@ -200,11 +211,20 @@ export default function FinancialDashboardPage() {
     [filters.startDate, filters.endDate, filters.granularity],
   );
 
+  // viewMode is intentionally NOT a fetch dep — it only affects display
+  const { startDate, endDate, status, granularity } = filters;
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
-      const qs = buildQS(filters);
+      const qs = buildQS({
+        startDate,
+        endDate,
+        status,
+        granularity,
+        viewMode: "both",
+      });
 
       const [summaryRes, payablesRes, receivablesRes] = await Promise.all([
         fetch(`/api/financial-dashboard/summary?${qs}`),
@@ -227,18 +247,14 @@ export default function FinancialDashboardPage() {
       setPayables(fetchedPayables);
       setReceivables(fetchedReceivables);
       setTimeline(
-        buildTimelinePoints(
-          fetchedPayables,
-          fetchedReceivables,
-          filters.granularity,
-        ),
+        buildTimelinePoints(fetchedPayables, fetchedReceivables, granularity),
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [startDate, endDate, status, granularity]);
 
   useEffect(() => {
     fetchAll();
@@ -292,15 +308,25 @@ export default function FinancialDashboardPage() {
         )}
 
       {/* Summary cards */}
-      <SummaryCards data={summary} loading={loading} />
+      <SummaryCards
+        data={summary}
+        loading={loading}
+        viewMode={filters.viewMode}
+      />
 
       {/* Composed chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Evolução Financeira</CardTitle>
+          <CardTitle className="text-base">
+            Fluxo de Caixa — Previsto e Realizado
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <FinancialComposedChart data={timeline} loading={loading} />
+          <FinancialComposedChart
+            data={timeline}
+            loading={loading}
+            viewMode={filters.viewMode}
+          />
         </CardContent>
       </Card>
 

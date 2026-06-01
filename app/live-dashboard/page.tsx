@@ -117,13 +117,13 @@ export default function LiveDashboardPage() {
   useEffect(() => {
     fetchData();
 
-    // Subscribe to realtime changes on deals_live
+    // Subscribe to realtime changes on deals_cache (same source as /dashboard)
     const supabase = createClient();
     const channel = supabase
-      .channel("deals_live_changes")
+      .channel("deals_cache_changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "deals_live" },
+        { event: "*", schema: "public", table: "deals_cache" },
         () => {
           // Re-fetch aggregated data when any deal changes
           fetchData();

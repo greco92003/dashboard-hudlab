@@ -13,13 +13,15 @@ export async function GET(req: NextRequest) {
     const filters: FinancialFilters = {
       startDate: searchParams.get("startDate") ?? undefined,
       endDate: searchParams.get("endDate") ?? undefined,
+      status: searchParams.get("status") ?? undefined,
       granularity,
     };
 
     const data = await getTimeline(filters);
     return NextResponse.json(data);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal Server Error";
+    const message =
+      err instanceof Error ? err.message : "Internal Server Error";
     const status = message.includes("TINY_TOKEN") ? 503 : 500;
     console.error("[API /financial-dashboard/timeline]", message);
     return NextResponse.json({ error: message }, { status });

@@ -19,14 +19,16 @@ export async function GET() {
     const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(totalDaysInMonth).padStart(2, "0")}`;
 
-    // Fetch won deals (status=1) desde 01/01/2026 with closing_date
+    // Fetch won deals (status "1" or "won") with closing_date in current month
+    // Source: deals_cache (same as /dashboard) for consistency
     const { data: wonDeals, error: wonError } = await supabase
-      .from("deals_live")
+      .from("deals_cache")
       .select("deal_id, value, status, closing_date")
-      .eq("status", "1")
+      .eq("sync_status", "synced")
+      .in("status", ["1", "won"])
       .not("closing_date", "is", null)
-      .gte("closing_date", "2026-01-01")
-      .lte("closing_date", endDate + "T23:59:59");
+      .gte("closing_date", startDate)
+      .lte("closing_date", endDate);
 
     if (wonError) {
       console.error("❌ Error fetching won deals:", wonError);
@@ -35,8 +37,9 @@ export async function GET() {
 
     // Fetch open deals (status=0) with value > 0, desde 01/01/2026
     const { data: openDeals, error: openError } = await supabase
-      .from("deals_live")
+      .from("deals_cache")
       .select("deal_id, value, status, last_synced_at")
+      .eq("sync_status", "synced")
       .eq("status", "0")
       .gt("value", 0)
       .not("last_synced_at", "is", null)
@@ -69,19 +72,16 @@ export async function GET() {
       dailyForecast[d] = 0;
     }
 
-    // Revenue: won deals accumulated by closing_date day (UTC-3)
+    // Revenue: won deals accumulated by closing_date day
+    // closing_date is a plain DATE string ("YYYY-MM-DD"); extract via split("T")[0]
+    // to match /dashboard exactly and avoid any timezone shift.
     (wonDeals || []).forEach((deal) => {
-      const closingDate = new Date(deal.closing_date);
-      // Adjust to UTC-3
-      const closingDateUTC3 = new Date(
-        closingDate.getTime() - 3 * 60 * 60 * 1000,
-      );
-      const dealYear = closingDateUTC3.getUTCFullYear();
-      const dealMonth = closingDateUTC3.getUTCMonth();
-      const day = closingDateUTC3.getUTCDate();
+      const dateStr = deal.closing_date?.split("T")[0];
+      if (!dateStr) return;
+      const [dealYear, dealMonth, day] = dateStr.split("-").map(Number);
 
       // Only count deals from the current month
-      if (dealYear !== year || dealMonth !== month) return;
+      if (dealYear !== year || dealMonth !== month + 1) return;
       if (day < 1 || day > totalDaysInMonth) return;
       // AC stores values in centavos, divide by 100
       dailyRevenue[day] += (parseFloat(deal.value) || 0) / 100;

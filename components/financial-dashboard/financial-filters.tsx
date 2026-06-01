@@ -17,6 +17,7 @@ export type FinancialFilterState = {
   endDate: string;
   status: string;
   granularity: "day" | "week" | "month";
+  viewMode: "realized" | "predicted" | "both";
 };
 
 interface FinancialFiltersProps {
@@ -25,7 +26,11 @@ interface FinancialFiltersProps {
   onReset: () => void;
 }
 
-export function FinancialFilters({ filters, onChange, onReset }: FinancialFiltersProps) {
+export function FinancialFilters({
+  filters,
+  onChange,
+  onReset,
+}: FinancialFiltersProps) {
   return (
     <div className="flex flex-wrap gap-4 items-end">
       <div className="flex flex-col gap-1.5">
@@ -48,6 +53,28 @@ export function FinancialFilters({ filters, onChange, onReset }: FinancialFilter
           onChange={(e) => onChange({ ...filters, endDate: e.target.value })}
           className="w-40"
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label>Visão</Label>
+        <Select
+          value={filters.viewMode}
+          onValueChange={(v) =>
+            onChange({
+              ...filters,
+              viewMode: v as FinancialFilterState["viewMode"],
+            })
+          }
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="both">Previsto e Realizado</SelectItem>
+            <SelectItem value="realized">Realizado</SelectItem>
+            <SelectItem value="predicted">Previsto</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -74,7 +101,10 @@ export function FinancialFilters({ filters, onChange, onReset }: FinancialFilter
         <Select
           value={filters.granularity}
           onValueChange={(v) =>
-            onChange({ ...filters, granularity: v as FinancialFilterState["granularity"] })
+            onChange({
+              ...filters,
+              granularity: v as FinancialFilterState["granularity"],
+            })
           }
         >
           <SelectTrigger className="w-32">
@@ -88,7 +118,12 @@ export function FinancialFilters({ filters, onChange, onReset }: FinancialFilter
         </Select>
       </div>
 
-      <Button variant="outline" size="sm" onClick={onReset} className="h-9 gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onReset}
+        className="h-9 gap-1.5"
+      >
         <RotateCcw className="h-3.5 w-3.5" />
         Resetar
       </Button>
