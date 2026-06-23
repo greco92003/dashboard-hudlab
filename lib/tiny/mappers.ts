@@ -114,6 +114,12 @@ export function mapV3ContaPagar(raw: TinyV3RawContaPagar): FinancialPayable {
     dueDate: raw.dataVencimento ?? raw.data ?? "",
     amount: toNumber(raw.valor),
     status: mapStatus(raw.situacao, "pagar") as FinancialPayable["status"],
+    category: raw.categoria?.descricao
+      ? {
+          id: raw.categoria.id ? String(raw.categoria.id) : undefined,
+          name: raw.categoria.descricao,
+        }
+      : undefined,
     supplier: raw.cliente?.nome
       ? {
           id: raw.cliente.id ? String(raw.cliente.id) : undefined,
@@ -153,6 +159,12 @@ export function mapV3ContaReceber(
     saldo,
     receivedAmount: amount - saldo,
     status: mapStatus(raw.situacao, "receber") as FinancialReceivable["status"],
+    category: raw.categoria?.descricao
+      ? {
+          id: raw.categoria.id ? String(raw.categoria.id) : undefined,
+          name: raw.categoria.descricao,
+        }
+      : undefined,
     customer: raw.cliente?.nome
       ? {
           id: raw.cliente.id ? String(raw.cliente.id) : undefined,

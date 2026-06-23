@@ -26,6 +26,10 @@ export type FinancialReceivable = {
   saldo: number; // outstanding balance still to be received
   receivedAmount: number; // amount already received (amount - saldo)
   status: "open" | "received" | "partial" | "overdue" | "canceled";
+  category?: {
+    id?: string;
+    name: string;
+  };
   customer?: {
     id?: string;
     name: string;
@@ -133,6 +137,16 @@ export type TinyV3RawContaPagar = {
     fantasia?: string;
     cpfCnpj?: string;
   };
+  // Only returned by GET /contas-pagar/{id} (not by the list endpoint)
+  categoria?: {
+    id?: number;
+    descricao?: string;
+  };
+  marcadores?: { descricao?: string }[];
+  formaPagamento?: {
+    id?: number;
+    nome?: string;
+  };
 };
 
 export type TinyV3RawContaReceber = {
@@ -155,6 +169,12 @@ export type TinyV3RawContaReceber = {
     fantasia?: string;
     cpfCnpj?: string;
   };
+  // Only returned by GET /contas-receber/{id} (not by the list endpoint)
+  categoria?: {
+    id?: number;
+    descricao?: string;
+  };
+  marcadores?: { descricao?: string }[];
 };
 
 // -------------------------------------------------------

@@ -11,10 +11,11 @@ export async function GET(req: NextRequest) {
       status: searchParams.get("status") ?? undefined,
     };
 
-    const data = await getPayables(filters);
+    const data = await getPayables(filters, { withCategory: true });
     return NextResponse.json({ data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal Server Error";
+    const message =
+      err instanceof Error ? err.message : "Internal Server Error";
     const status = message.includes("TINY_TOKEN") ? 503 : 500;
     console.error("[API /financial-dashboard/payables]", message);
     return NextResponse.json({ error: message }, { status });

@@ -32,6 +32,7 @@ import type { TinyEndpointKey } from "./endpoints";
 
 const V3_PAGE_LIMIT = 100;
 const V3_MAX_PAGES = 50; // safety cap → up to 5000 records per query
+const V3_DETAIL_CONCURRENCY = 2; // parallel detail fetches when enriching with category (keep low to avoid 429)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,17 +133,76 @@ function extractListV3<T>(json: unknown): T[] {
 // Public functions
 // ---------------------------------------------------------------------------
 
+/**
+ * Runs async tasks with a fixed concurrency. Preserves input order in the result.
+ * Used to enrich Tiny V3 list items with details (categoria/marcadores) without
+ * overwhelming the API (rate-limited at ~120 req/min).
+ */
+async function runWithConcurrency<TIn, TOut>(
+  items: TIn[],
+  limit: number,
+  task: (item: TIn, index: number) => Promise<TOut>,
+): Promise<TOut[]> {
+  const results: TOut[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= items.length) return;
+        results[idx] = await task(items[idx], idx);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * V3 only: enriches list items (which lack `categoria`) by fetching each
+ * record via GET /contas-pagar/{id} or /contas-receber/{id}.
+ * Failures on individual fetches are swallowed so a single 4xx/5xx does not
+ * break the whole listing – the affected item keeps the list-level data.
+ */
+async function enrichV3WithDetails<
+  T extends { id: number; categoria?: { id?: number; descricao?: string } },
+>(endpointKey: TinyEndpointKey, items: T[]): Promise<T[]> {
+  if (items.length === 0) return items;
+  return runWithConcurrency(items, V3_DETAIL_CONCURRENCY, async (item) => {
+    try {
+      const detail = await tinyGet<T>(endpointKey, { idPath: item.id });
+      return { ...item, ...detail };
+    } catch (err) {
+      console.warn(
+        `[Tiny] enrichV3WithDetails skipped id=${item.id}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return item;
+    }
+  });
+}
+
+export type GetPayablesOptions = {
+  /** V3 only: fetch each item individually to populate `category` (slower). */
+  withCategory?: boolean;
+};
+
 export async function getPayables(
   filters: FinancialFilters = {},
+  options: GetPayablesOptions = {},
 ): Promise<FinancialPayable[]> {
   const mode = getAuthMode();
   const baseParams = buildDateParams(filters);
 
   if (mode === "v3-oauth") {
-    const raw = await fetchAllPagesV3<TinyV3RawContaPagar>(
+    let raw = await fetchAllPagesV3<TinyV3RawContaPagar>(
       "contasPagar",
       baseParams,
     );
+    if (options.withCategory) {
+      raw = await enrichV3WithDetails("contasPagar", raw);
+    }
     return mapV3ContasPagar(raw);
   }
   const json = await tinyGet("contasPagar", { params: baseParams });
@@ -155,15 +215,19 @@ export async function getPayables(
 
 export async function getReceivables(
   filters: FinancialFilters = {},
+  options: GetPayablesOptions = {},
 ): Promise<FinancialReceivable[]> {
   const mode = getAuthMode();
   const baseParams = buildDateParams(filters);
 
   if (mode === "v3-oauth") {
-    const raw = await fetchAllPagesV3<TinyV3RawContaReceber>(
+    let raw = await fetchAllPagesV3<TinyV3RawContaReceber>(
       "contasReceber",
       baseParams,
     );
+    if (options.withCategory) {
+      raw = await enrichV3WithDetails("contasReceber", raw);
+    }
     return mapV3ContasReceber(raw);
   }
   const json = await tinyGet("contasReceber", { params: baseParams });

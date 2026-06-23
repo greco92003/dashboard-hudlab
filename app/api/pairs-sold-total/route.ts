@@ -16,7 +16,7 @@ const formatDateToLocal = (date: Date): string => {
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 // API to get total pairs sold from deals cache
@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
 
       // Use UTC dates to avoid timezone conversion issues
       startDate = new Date(
-        Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0)
+        Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0),
       );
       endDate = new Date(
-        Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59, 999)
+        Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59, 999),
       );
 
       console.log("Pairs API: Custom date range received:", {
@@ -69,15 +69,16 @@ export async function GET(request: NextRequest) {
           endDate: endDate.toISOString(),
           formattedStart: formatBrazilDateToLocal(startDate),
           formattedEnd: formatBrazilDateToLocal(endDate),
-        }
+        },
       );
     }
 
-    // Fetch deals from cache and sum quantidade-de-pares field
+    // Fetch deals from cache and sum quantidade-de-pares field (won deals only)
     const { data: deals, error } = await supabase
       .from("deals_cache")
       .select('"quantidade-de-pares"')
       .eq("sync_status", "synced")
+      .in("status", ["won", "1"])
       .not("closing_date", "is", null)
       .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
       .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate));
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       console.error("Error fetching deals from cache:", error);
       return NextResponse.json(
         { error: "Failed to fetch deals from cache" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -126,13 +127,13 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "public, max-age=300", // Cache for 5 minutes
         },
-      }
+      },
     );
   } catch (error) {
     console.error("Error in pairs-sold-total API:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

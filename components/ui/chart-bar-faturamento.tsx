@@ -51,6 +51,11 @@ const MONTH_NAMES = [
   "Dez",
 ];
 
+const isWonDeal = (d: Deal & { status?: string | null }) => {
+  const s = d.status?.toLowerCase();
+  return s === "won" || s === "1";
+};
+
 const chartConfig = {
   anoAnterior: { label: "Ano Anterior", color: "hsl(220 9% 60%)" },
   meta: { label: "Meta", color: "hsl(330 80% 60%)" },
@@ -188,11 +193,11 @@ export function ChartBarFaturamento({
         ]);
         if (currentRes.ok) {
           const data = await currentRes.json();
-          setMensalDeals(data.deals || []);
+          setMensalDeals((data.deals || []).filter(isWonDeal));
         }
         if (prevRes.ok) {
           const data = await prevRes.json();
-          setMensalPrevDeals(data.deals || []);
+          setMensalPrevDeals((data.deals || []).filter(isWonDeal));
         }
       } catch (error) {
         console.error("Error fetching mensal data:", error);
@@ -226,11 +231,11 @@ export function ChartBarFaturamento({
 
         if (currentRes.ok) {
           const data = await currentRes.json();
-          setAnnualDeals(data.deals || []);
+          setAnnualDeals((data.deals || []).filter(isWonDeal));
         }
         if (prevRes.ok) {
           const data = await prevRes.json();
-          setAnnualPrevDeals(data.deals || []);
+          setAnnualPrevDeals((data.deals || []).filter(isWonDeal));
         }
       } catch (error) {
         console.error("Error fetching annual data:", error);

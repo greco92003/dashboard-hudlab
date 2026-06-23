@@ -30,6 +30,15 @@ const SUPABASE_TOKEN_KEY = "tiny_refresh_token";
 
 let _v3Cache: { accessToken: string; expiresAt: number } | null = null;
 
+/**
+ * In-flight refresh promise (mutex).
+ * If multiple concurrent callers detect that the cache is stale they all
+ * await THIS same promise instead of each launching their own refresh call.
+ * Without this, rotating refresh tokens get invalidated by the second caller
+ * before the first caller has finished saving the new token.
+ */
+let _refreshInFlight: Promise<string> | null = null;
+
 // ---------------------------------------------------------------------------
 // Supabase token persistence helpers
 // ---------------------------------------------------------------------------
@@ -177,6 +186,12 @@ export async function exchangeCodeForTokens(code: string): Promise<{
  *   2. TINY_REFRESH_TOKEN env var (initial seed / local dev fallback)
  * After each successful refresh the new refresh token is saved back to Supabase.
  * Result is cached in memory until 60 s before expiry.
+ *
+ * Thread-safe: concurrent callers that find the cache stale share a single
+ * in-flight refresh promise so only ONE token-refresh request is ever sent.
+ * This is critical because Tiny uses rotating refresh tokens — a second
+ * simultaneous refresh would invalidate the first and corrupt auth for
+ * all subsequent requests.
  */
 export async function getTinyV3AccessToken(): Promise<string> {
   const now = Date.now();
@@ -185,6 +200,21 @@ export async function getTinyV3AccessToken(): Promise<string> {
     return _v3Cache.accessToken;
   }
 
+  // Already refreshing? Await the existing promise so we don't send a second
+  // refresh request with the (soon-to-be-invalidated) old refresh token.
+  if (_refreshInFlight) {
+    return _refreshInFlight;
+  }
+
+  _refreshInFlight = _doRefreshToken().finally(() => {
+    _refreshInFlight = null;
+  });
+
+  return _refreshInFlight;
+}
+
+async function _doRefreshToken(): Promise<string> {
+  const now = Date.now();
   const clientId = process.env.TINY_CLIENT_ID;
   const clientSecret = process.env.TINY_CLIENT_SECRET;
 

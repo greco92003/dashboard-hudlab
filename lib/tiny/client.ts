@@ -25,6 +25,16 @@ function sleep(ms: number) {
 type TinyClientOptions = {
   params?: Record<string, string>;
   skipRetry?: boolean;
+  /**
+   * V3 only: appends `/{idPath}` (and optional subResource) to the base endpoint,
+   * e.g. tinyGet("contasPagar", { idPath: "123" }) → GET /contas-pagar/123.
+   * Ignored on V2 mode (V2 uses dedicated PHP endpoints per operation).
+   */
+  idPath?: string | number;
+  /**
+   * V3 only: appended after `idPath`, e.g. `marcadores` → /contas-pagar/{id}/marcadores.
+   */
+  subResource?: string;
 };
 
 export async function tinyGet<T = unknown>(
@@ -49,7 +59,11 @@ export async function tinyGet<T = unknown>(
 
       if (mode === "v3-oauth") {
         // V3 – Bearer token, REST endpoints
-        const path = tinyV3Endpoints[endpointKey];
+        const basePath = tinyV3Endpoints[endpointKey];
+        const idSegment =
+          options.idPath !== undefined ? `/${options.idPath}` : "";
+        const subSegment = options.subResource ? `/${options.subResource}` : "";
+        const path = `${basePath}${idSegment}${subSegment}`;
         const qp = new URLSearchParams(options.params ?? {});
         url = `${TINY_V3_BASE_URL}${path}${qp.size ? `?${qp.toString()}` : ""}`;
         fetchOptions = {
@@ -70,6 +84,9 @@ export async function tinyGet<T = unknown>(
       const res = await fetch(url, fetchOptions);
 
       if (res.status === 429) {
+        lastError = new Error(
+          `[TinyClient] ${endpointKey} → HTTP 429: rate limited (attempt ${attempt + 1}/${attempts})`,
+        );
         await sleep(RETRY_DELAY_MS * 4);
         continue;
       }
