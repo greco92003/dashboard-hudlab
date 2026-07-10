@@ -30,6 +30,7 @@ import {
   Wrench,
   Wallet,
   Filter,
+  Truck,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -98,6 +99,11 @@ const menuGroups: MenuGroup[] = [
       {
         title: "Dashboard",
         url: "/dashboard",
+        icon: LayoutDashboard,
+      },
+      {
+        title: "Dashboard GHL",
+        url: "/dashboard-ghl",
         icon: LayoutDashboard,
       },
       {
@@ -244,6 +250,16 @@ const menuGroups: MenuGroup[] = [
         title: "Conquistas",
         url: "/ncts/conquistas",
         icon: Star,
+      },
+    ],
+  },
+  {
+    label: "Logística",
+    items: [
+      {
+        title: "Cotar Frete",
+        url: "/cotar-frete",
+        icon: Truck,
       },
     ],
   },

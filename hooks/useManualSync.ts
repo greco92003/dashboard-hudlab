@@ -188,6 +188,35 @@ export function useManualSync() {
       const result = await response.json();
       console.log("✅ Sync completed successfully:", result);
 
+      // Validate won deals against ActiveCampaign right after the sync.
+      // The full sync only upserts what AC returns and never prunes, so stale
+      // "won" rows (webhook races, deals deleted in AC) survive it — the
+      // validator corrects them to AC's live state. Non-fatal on error.
+      try {
+        console.log("🔎 Running won-deals validation against AC...");
+        const validateResponse = await fetch("/api/cron/validate-won-deals", {
+          method: "POST",
+        });
+        if (validateResponse.ok) {
+          const validation = await validateResponse.json();
+          console.log("✅ Won-deals validation completed:", {
+            suspects: validation.suspects,
+            corrected: validation.corrected,
+            deleted: validation.deleted,
+          });
+        } else {
+          console.warn(
+            "⚠️ Won-deals validation failed:",
+            await validateResponse.text()
+          );
+        }
+      } catch (validationError) {
+        console.warn(
+          "⚠️ Won-deals validation error (non-fatal):",
+          validationError
+        );
+      }
+
       // Refresh the data after successful sync
       console.log("✅ Test sync completed, refreshing data...");
       setTimeout(() => {

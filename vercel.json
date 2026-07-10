@@ -5,6 +5,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/validate-won-deals",
+      "schedule": "30 6 * * *"
+    },
+    {
       "path": "/api/cron/sync-designer-mockups",
       "schedule": "0 8 * * *"
     },
@@ -21,6 +25,9 @@
       "maxDuration": 300
     },
     "app/api/cron/sync-deals/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/validate-won-deals/route.ts": {
       "maxDuration": 300
     },
     "app/api/deals-cache/route.ts": {
