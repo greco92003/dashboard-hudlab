@@ -6,7 +6,8 @@ const API_TOKEN = process.env.AC_API_TOKEN;
 const WEBHOOK_SECRET = process.env.AC_WEBHOOK_SECRET;
 
 // Custom field IDs (same as the sync route)
-const TARGET_CUSTOM_FIELD_IDS = [5, 25, 39, 45, 47, 49, 50];
+// Field 54 = Data de Embarque (used by programacao_cache)
+const TARGET_CUSTOM_FIELD_IDS = [5, 25, 39, 45, 47, 49, 50, 54];
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,6 +64,29 @@ async function fetchContactFieldValues(contactId: string) {
   if (!res.ok)
     throw new Error(`AC API error fetching contact fields: ${res.status}`);
   return res.json();
+}
+
+// Deal stage titles (stage_id -> title), cached in memory for 1 hour
+let stageMapCache: { map: Map<string, string>; timestamp: number } | null =
+  null;
+
+async function getStageTitle(stageId: string | null): Promise<string | null> {
+  if (!stageId) return null;
+  const oneHour = 60 * 60 * 1000;
+  if (!stageMapCache || Date.now() - stageMapCache.timestamp > oneHour) {
+    const res = await fetch(`${BASE_URL}/api/3/dealStages?limit=100`, {
+      headers: { "Api-Token": API_TOKEN!, "Content-Type": "application/json" },
+    });
+    if (!res.ok)
+      throw new Error(`AC API error fetching deal stages: ${res.status}`);
+    const data = await res.json();
+    const map = new Map<string, string>();
+    (data.dealStages || []).forEach((stage: { id: string; title: string }) => {
+      map.set(stage.id.toString(), stage.title);
+    });
+    stageMapCache = { map, timestamp: Date.now() };
+  }
+  return stageMapCache.map.get(stageId.toString()) || null;
 }
 
 export async function POST(request: NextRequest) {
@@ -253,6 +277,68 @@ export async function POST(request: NextRequest) {
       // Don't throw - deals_cache was successful, log the error
     }
 
+    // ── programacao_cache maintenance ────────────────────────────────────────
+    // /programacao only shows won deals. Keep its cache in sync on every deal
+    // change: upsert when the deal is won, remove it otherwise. The page
+    // subscribes to this table via Supabase Realtime.
+    try {
+      if (String(deal.status) === "1") {
+        const stageTitle = await getStageTitle(deal.stage?.toString() || null);
+        const { error: programacaoError } = await supabase
+          .from("programacao_cache")
+          .upsert(
+            {
+              deal_id: deal.id,
+              title: deal.title || "",
+              value: parseInt(deal.value) || 0,
+              currency: deal.currency || "BRL",
+              stage_id: deal.stage?.toString() || null,
+              stage_title: stageTitle,
+              data_embarque: customFieldsMap.get(54) || null,
+              created_date: deal.cdate
+                ? new Date(deal.cdate).toISOString()
+                : null,
+              estado,
+              quantidade_pares: quantidadeDePares,
+              vendedor,
+              designer,
+              contact_id: deal.contact || null,
+              organization_id: deal.organization || null,
+              api_updated_at: deal.mdate
+                ? new Date(deal.mdate).toISOString()
+                : null,
+              last_synced_at: new Date().toISOString(),
+              sync_status: "synced",
+            },
+            { onConflict: "deal_id" },
+          );
+        if (programacaoError) {
+          console.error(
+            "❌ Error upserting deal into programacao_cache:",
+            programacaoError,
+          );
+        }
+      } else {
+        const { error: programacaoDeleteError } = await supabase
+          .from("programacao_cache")
+          .delete()
+          .eq("deal_id", dealId);
+        if (programacaoDeleteError) {
+          console.error(
+            "❌ Error removing deal from programacao_cache:",
+            programacaoDeleteError,
+          );
+        }
+      }
+    } catch (programacaoError) {
+      // programacao_cache is secondary — never fail the main webhook response
+      console.error(
+        `⚠️ programacao_cache maintenance error for deal ${dealId}:`,
+        programacaoError,
+      );
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // ── Ghost deal healing ───────────────────────────────────────────────────
     // When a deal comes in with value = 0, it may be an orphan created by
     // ActiveCampaign during a bulk owner reassignment. We look for a sibling
@@ -262,8 +348,13 @@ export async function POST(request: NextRequest) {
     try {
       const dealValue = parseFloat(deal.value || "0");
       const contactId = deal.contact?.toString();
+      // Only heal deals in the main pipeline (group 1 = Atendimento).
+      // Recycled prospecting cards (pipelines 8/9/10) are intentionally
+      // zeroed/reopened by the team — healing them copies won status and
+      // value from the real sibling deal and re-inflates revenue.
+      const dealGroup = deal.group?.toString();
 
-      if (dealValue === 0 && contactId) {
+      if (dealValue === 0 && contactId && dealGroup === "1") {
         console.log(
           `🔍 Deal ${dealId} has value=0 — checking for ghost sibling on contact ${contactId}`,
         );

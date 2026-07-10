@@ -84,7 +84,7 @@ export default function ProgramacaoPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
-  const [visibleGroups, setVisibleGroups] = useState<Set<string>>(new Set());
+  const [searchTerm, setSearchTerm] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(100); // 100 is default, can go down to show more cards
@@ -258,6 +258,34 @@ export default function ProgramacaoPage() {
   useEffect(() => {
     fetchProgramacaoData();
     loadActiveCardsFromSupabase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Supabase Realtime: refresh silently when the ActiveCampaign webhook (or a
+  // manual sync) touches programacao_cache. Debounced because syncs upsert
+  // hundreds of rows in bursts.
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const channel = supabase
+      .channel("programacao_cache_changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "programacao_cache" },
+        () => {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchProgramacaoData(false, true);
+          }, 1500);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load from localStorage after hydration
@@ -276,16 +304,11 @@ export default function ProgramacaoPage() {
       setSortDirection(savedSortDirection as "asc" | "desc");
     }
 
-    // Load visibleGroups
-    const savedVisibleGroups = storage.getItem("programacao-visibleGroups");
-    if (savedVisibleGroups) {
-      try {
-        const parsed = JSON.parse(savedVisibleGroups);
-        setVisibleGroups(new Set(parsed));
-      } catch {
-        // Ignore parse errors
-      }
-    }
+    // Legacy key from the removed group-visibility feature. It stored a
+    // snapshot of date-based group ids, which rotted as dates changed and
+    // hid the new columns — clean it up from both storages.
+    storage.removeItem("programacao-visibleGroups");
+    storage.removeItem("programacao-visibleGroups", "local");
 
     // Load isHeaderCollapsed
     const savedHeaderCollapsed = storage.getItem("programacao-headerCollapsed");
@@ -314,16 +337,6 @@ export default function ProgramacaoPage() {
     }
   }, [sortDirection, isHydrated]);
 
-  // Save visibleGroups to localStorage
-  useEffect(() => {
-    if (isHydrated && visibleGroups.size > 0) {
-      storage.setItem(
-        "programacao-visibleGroups",
-        JSON.stringify(Array.from(visibleGroups)),
-      );
-    }
-  }, [visibleGroups, isHydrated]);
-
   // Save isHeaderCollapsed to localStorage
   useEffect(() => {
     if (isHydrated) {
@@ -341,19 +354,8 @@ export default function ProgramacaoPage() {
     }
   }, [zoomLevel, isHydrated]);
 
-  // Initialize visible groups and active cards when data is loaded
+  // Initialize active cards when data is loaded
   useEffect(() => {
-    if (data && visibleGroups.size === 0) {
-      const allGroupIds = new Set<string>();
-      const reorganizedGroups = getReorganizedGroups();
-      reorganizedGroups.forEach((group) => {
-        if (group.deals.length > 0) {
-          allGroupIds.add(group.id);
-        }
-      });
-      setVisibleGroups(allGroupIds);
-    }
-
     // Initialize new cards as active in Supabase if they don't exist
     if (data) {
       const initializeNewCards = async () => {
@@ -412,11 +414,11 @@ export default function ProgramacaoPage() {
       initializeNewCards();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, visibleGroups.size]);
+  }, [data]);
 
-  const fetchProgramacaoData = async (showToast = false) => {
+  const fetchProgramacaoData = async (showToast = false, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       const response = await fetch("/api/programacao");
