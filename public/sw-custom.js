@@ -1,11 +1,26 @@
 // =====================================================
-// CUSTOM SERVICE WORKER FOR PUSH NOTIFICATIONS
+// CUSTOM SERVICE WORKER — PUSH NOTIFICATIONS ONLY (SEM CACHE)
 // =====================================================
-// Este service worker customizado adiciona funcionalidades de push notifications
-// ao service worker gerado automaticamente pelo next-pwa
-
-// Importar o service worker principal do next-pwa
-importScripts('/sw.js');
+// SW_VERSION: 2026-07-15-no-cache
+//
+// IMPORTANTE — por que este SW NÃO cacheia mais nada:
+// - O build usa `next build --turbopack`. O @ducanh2912/next-pwa é um plugin de
+//   WEBPACK e não roda sob turbopack, então o /sw.js do Workbox não é regenerado
+//   (além de estar no .gitignore). O /sw.js versionado/servido ficava CONGELADO e
+//   o `importScripts('/sw.js')` reintroduzia o cache do Workbox, que servia:
+//     • GET /api/* de até 24h atrás  → deals/datas de embarque desatualizados;
+//     • bundles JS antigos           → /programacao "com 3 colunas".
+//   Era isso que obrigava a "limpar cookies" (na verdade, o Cache Storage) na mão.
+// - Este é um dashboard online: dados sempre frescos > offline com dados velhos.
+//   Removemos a camada de cache do Workbox. O servidor já manda `no-store` em tudo.
+// - Push notifications continuam funcionando (é o único motivo real deste SW).
+//
+// Ao trocar/atualizar este arquivo, o `activate` abaixo PURGA todos os caches
+// antigos (apis, precache, static-js...) deixados pelo Workbox — corrige de vez
+// quem já estava preso a dados/bundles velhos, sem precisar limpar dados do site.
+//
+// NÃO reintroduza `importScripts('/sw.js')` aqui sem antes migrar o PWA para uma
+// solução compatível com turbopack (ex.: serwist) e revisar as regras de cache.
 
 // =====================================================
 // PUSH NOTIFICATION HANDLERS
@@ -323,7 +338,24 @@ self.addEventListener('install', function(event) {
 // Log quando o service worker é ativado
 self.addEventListener('activate', function(event) {
   console.log('✅ Custom SW activated');
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    // Purga TODOS os caches deixados por versões anteriores (Workbox: apis,
+    // precache, static-js-assets, etc.). Como este SW não cacheia mais nada,
+    // isso garante conteúdo sempre fresco e limpa quem estava com dados velhos.
+    caches
+      .keys()
+      .then(function (names) {
+        return Promise.all(
+          names.map(function (name) {
+            console.log('🧹 Removendo cache antigo:', name);
+            return caches.delete(name);
+          })
+        );
+      })
+      .then(function () {
+        return self.clients.claim();
+      })
+  );
 });
 
 // Log para debugging

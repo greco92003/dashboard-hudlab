@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 // Using lib/supabase for backward compatibility - it now uses the official SSR pattern
 import { supabase } from "@/lib/supabase";
 import {
@@ -40,6 +41,8 @@ import {
   ZoomIn,
   ZoomOut,
   Power,
+  Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
@@ -723,6 +726,43 @@ export default function ProgramacaoPage() {
     });
   };
 
+  // ── Busca ──────────────────────────────────────────────────────────────────
+  // Filtra os deals por título, vendedor, designer, estágio e data de embarque.
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const dealMatchesSearch = (deal: Deal): boolean => {
+    if (!normalizedSearch) return true;
+    return [
+      deal.title,
+      deal.vendedor,
+      deal.designer,
+      deal.stageTitle,
+      deal.customField54 ? formatDate(deal.customField54) : null,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedSearch);
+  };
+
+  // Grupos reorganizados já com o filtro de busca aplicado (grupos vazios saem).
+  const getDisplayGroups = (): Group[] => {
+    const groups = getReorganizedGroups();
+    if (!normalizedSearch) return groups;
+    return groups
+      .map((group) => {
+        const deals = group.deals.filter(dealMatchesSearch);
+        return { ...group, deals, dealsCount: deals.length };
+      })
+      .filter((group) => group.deals.length > 0);
+  };
+
+  const displayGroups = getDisplayGroups();
+  const displayTotalDeals = displayGroups.reduce(
+    (sum, group) => sum + group.deals.length,
+    0,
+  );
+
   return (
     <div className="flex flex-1 flex-col gap-4 min-w-0">
       {/* Collapsible Header Section */}
@@ -814,7 +854,7 @@ export default function ProgramacaoPage() {
       ) : data && data.groups.length > 0 ? (
         <div className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0 min-w-0">
           {/* Summary Header with Collapse Toggle and Zoom Controls */}
-          <div className="flex items-center justify-between flex-shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
               <Button
@@ -836,6 +876,29 @@ export default function ProgramacaoPage() {
               </Button>
               <h2 className="text-xl font-bold">Data de Embarque</h2>
             </div>
+
+            {/* Search — sempre visível, mesmo com o cabeçalho recolhido */}
+            <div className="relative order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar deal, vendedor, designer..."
+                className="h-9 pl-8 pr-8"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Limpar busca"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               {/* Zoom Controls */}
               <div className="flex items-center gap-1 border rounded-md p-1">
@@ -864,15 +927,30 @@ export default function ProgramacaoPage() {
                 </Button>
               </div>
               <Badge variant="outline">
-                {data.summary.totalDeals}{" "}
-                {data.summary.totalDeals === 1 ? "deal" : "deals"}
+                {displayTotalDeals}{" "}
+                {displayTotalDeals === 1 ? "deal" : "deals"}
+                {normalizedSearch ? ` de ${data.summary.totalDeals}` : ""}
               </Badge>
             </div>
           </div>
 
           {/* Kanban Cards Container with white border */}
           <div className="flex-1 min-h-0 min-w-0 border border-white rounded-lg bg-transparent overflow-hidden">
-            {/* Groups - Horizontal Scroll with scrollbar on top */}
+            {normalizedSearch && displayGroups.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+                <Search className="h-8 w-8 opacity-50" />
+                <p>
+                  Nenhum deal encontrado para{" "}
+                  <span className="font-semibold text-foreground">
+                    &quot;{searchTerm}&quot;
+                  </span>
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setSearchTerm("")}>
+                  Limpar busca
+                </Button>
+              </div>
+            ) : (
+            /* Groups - Horizontal Scroll with scrollbar on top */
             <div
               className="overflow-x-auto h-full"
               style={{ transform: "rotateX(180deg)" }}
@@ -881,7 +959,7 @@ export default function ProgramacaoPage() {
                 className="flex gap-4 min-w-max h-full p-4 justify-center"
                 style={{ transform: "rotateX(180deg)" }}
               >
-                {getReorganizedGroups()
+                {displayGroups
                   .filter((group) => group.deals.length > 0)
                   .map((group) => (
                     <div
@@ -1019,6 +1097,7 @@ export default function ProgramacaoPage() {
                   ))}
               </div>
             </div>
+            )}
           </div>
         </div>
       ) : (

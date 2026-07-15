@@ -66,6 +66,29 @@ export default async function Layout({
                   navigator.serviceWorker.register('/sw-custom.js')
                     .then(function(registration) {
                       console.log('✅ SW registered: ', registration);
+
+                      // Auto-update: quando um novo deploy publica um SW novo, recarrega
+                      // a aba assim que ele instala — evita ficar preso a bundles antigos
+                      // em cache (ex.: /programacao voltando a mostrar colunas/datas velhas).
+                      function watchInstalling(worker) {
+                        if (!worker) return;
+                        worker.addEventListener('statechange', function() {
+                          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('♻️ Nova versão detectada — recarregando');
+                            window.location.reload();
+                          }
+                        });
+                      }
+                      watchInstalling(registration.installing);
+                      registration.addEventListener('updatefound', function() {
+                        watchInstalling(registration.installing);
+                      });
+
+                      // Verifica atualização ao voltar para a aba e a cada 30 min.
+                      document.addEventListener('visibilitychange', function() {
+                        if (document.visibilityState === 'visible') registration.update();
+                      });
+                      setInterval(function() { registration.update(); }, 30 * 60 * 1000);
                     })
                     .catch(function(registrationError) {
                       console.log('❌ SW registration failed: ', registrationError);
