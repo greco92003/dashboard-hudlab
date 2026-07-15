@@ -399,3 +399,8 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// O sync completo do ActiveCampaign (buscar deals + custom fields com rate limit)
+// leva ~1-2 min — acima do timeout padrão do Vercel. Usado pelo botão "Atualizar"
+// e pelo cron /api/cron/sync-programacao.
+export const maxDuration = 300;

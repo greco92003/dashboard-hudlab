@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/refresh-tiny-token",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-programacao",
+      "schedule": "0 7 * * *"
     }
   ],
   "functions": {
@@ -28,6 +32,12 @@
       "maxDuration": 300
     },
     "app/api/cron/validate-won-deals/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/sync-programacao/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/programacao/sync/route.ts": {
       "maxDuration": 300
     },
     "app/api/deals-cache/route.ts": {
