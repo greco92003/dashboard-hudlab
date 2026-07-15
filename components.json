@@ -19,6 +19,7 @@
     "hooks": "@/hooks"
   },
   "registries": {
-    "@blocks": "https://blocks.so/r/{name}.json"
+    "@blocks": "https://blocks.so/r/{name}.json",
+    "@bklit": "https://ui.bklit.com/r/{name}.json"
   }
 }

@@ -687,33 +687,6 @@ export default function ProgramacaoPage() {
     setIsDealDialogOpen(true);
   };
 
-  const handleGroupToggle = (groupId: string) => {
-    setVisibleGroups((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupId)) {
-        newSet.delete(groupId);
-      } else {
-        newSet.add(groupId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectAllGroups = () => {
-    const allGroupIds = new Set<string>();
-    const reorganizedGroups = getReorganizedGroups();
-    reorganizedGroups.forEach((group) => {
-      if (group.deals.length > 0) {
-        allGroupIds.add(group.id);
-      }
-    });
-    setVisibleGroups(allGroupIds);
-  };
-
-  const handleDeselectAllGroups = () => {
-    setVisibleGroups(new Set());
-  };
-
   const handleZoomIn = () => {
     setZoomLevel((prev) => Math.min(prev + 10, 100)); // Max 100%
   };
@@ -909,10 +882,7 @@ export default function ProgramacaoPage() {
                 style={{ transform: "rotateX(180deg)" }}
               >
                 {getReorganizedGroups()
-                  .filter(
-                    (group) =>
-                      group.deals.length > 0 && visibleGroups.has(group.id),
-                  )
+                  .filter((group) => group.deals.length > 0)
                   .map((group) => (
                     <div
                       key={group.id}
