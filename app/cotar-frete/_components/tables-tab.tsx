@@ -29,6 +29,9 @@ import {
   Mail,
   CheckCircle,
   AlertCircle,
+  Zap,
+  Globe,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { parsePriceTable, parseCoverage, type ParsedLane, type ParsedCoverage } from "@/lib/freight/parse";
@@ -43,6 +46,23 @@ const emptyCarrier = (): Partial<FreightCarrier> => ({
   notes: "",
 });
 
+// Transportadoras integradas via API em tempo real (config no servidor;
+// contatos editáveis vêm da linha em freight_carriers com api_slug)
+interface ApiCarrier {
+  id: string;
+  name: string;
+  enabled: boolean;
+  modal: string;
+  tipo_frete: string;
+  cnpj_remetente: string | null;
+  origin_label: string;
+  website: string | null;
+  db: FreightCarrier | null;
+}
+
+const formatCnpj = (v: string) =>
+  v.length === 14 ? `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5, 8)}/${v.slice(8, 12)}-${v.slice(12)}` : v;
+
 export default function TablesTab({
   carriers,
   loading,
@@ -54,6 +74,18 @@ export default function TablesTab({
 }) {
   const [tables, setTables] = useState<CarrierTable[]>([]);
   const [coverageCounts, setCoverageCounts] = useState<Record<string, number>>({});
+  const [apiCarriers, setApiCarriers] = useState<ApiCarrier[]>([]);
+
+  const fetchApiCarriers = useCallback(() => {
+    fetch("/api/freight/api-carriers")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setApiCarriers(Array.isArray(rows) ? rows : []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchApiCarriers();
+  }, [fetchApiCarriers]);
 
   const fetchTables = useCallback(async () => {
     try {
@@ -100,6 +132,7 @@ export default function TablesTab({
     toast.success(cEdit ? "Transportadora atualizada" : "Transportadora criada");
     setCDialog(false);
     refresh();
+    fetchApiCarriers();
   };
   const deleteCarrier = async (id: string) => {
     if (!confirm("Excluir esta transportadora, suas tabelas e cobertura?")) return;
@@ -274,7 +307,7 @@ export default function TablesTab({
 
       {loading ? (
         <p className="text-muted-foreground text-sm">Carregando...</p>
-      ) : carriers.length === 0 ? (
+      ) : carriers.length === 0 && apiCarriers.length === 0 ? (
         <Card className="flex items-center justify-center min-h-[180px] border-dashed">
           <div className="text-center text-muted-foreground space-y-2">
             <Truck className="h-8 w-8 mx-auto opacity-30" />
@@ -317,6 +350,11 @@ export default function TablesTab({
                           </span>
                         )}
                       </div>
+                      {carrier.notes && (
+                        <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                          {carrier.notes}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openCarrier(carrier)}>
@@ -379,6 +417,84 @@ export default function TablesTab({
               </Card>
             );
           })}
+
+          {/* carriers integrated via live API — read-only, config comes from the server */}
+          {apiCarriers.map((ac) => (
+            <Card key={ac.id}>
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h3 className="font-semibold">{ac.name}</h3>
+                      <Badge variant={ac.enabled ? "default" : "secondary"} className="text-xs">
+                        {ac.enabled ? "Ativa" : "Não configurada"}
+                      </Badge>
+                      <Badge className="text-xs bg-blue-600 hover:bg-blue-600 text-white">
+                        <Zap className="h-3 w-3 mr-1" /> API · tempo real
+                      </Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Truck className="h-3 w-3" /> {ac.modal} · Frete {ac.tipo_frete}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> origem: {ac.origin_label}
+                      </span>
+                      {ac.cnpj_remetente && (
+                        <span>CNPJ remetente: {formatCnpj(ac.cnpj_remetente)}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-1">
+                      {ac.db?.phone && (
+                        <span className="flex items-center gap-1">
+                          <PhoneCall className="h-3 w-3" /> {ac.db.phone}
+                        </span>
+                      )}
+                      {ac.db?.email && (
+                        <span className="flex items-center gap-1">
+                          <Mail className="h-3 w-3" /> {ac.db.email}
+                        </span>
+                      )}
+                      {ac.website && (
+                        <a
+                          href={ac.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 hover:underline"
+                        >
+                          <Globe className="h-3 w-3" /> {ac.website.replace(/^https?:\/\//, "")}
+                        </a>
+                      )}
+                    </div>
+                    {ac.db?.notes && (
+                      <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                        {ac.db.notes}
+                      </p>
+                    )}
+                  </div>
+                  {ac.db && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => openCarrier(ac.db!)}
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Cotação em tempo real via API — não usa tabelas importadas. Preço e prazo são
+                    retornados pela transportadora no momento da cotação, com impostos e taxas
+                    inclusos.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
@@ -422,7 +538,7 @@ export default function TablesTab({
                 onChange={(e) => setCForm((f) => ({ ...f, notes: e.target.value }))}
               />
             </div>
-            {cEdit && (
+            {cEdit && !cEdit.api_slug && (
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"

@@ -73,6 +73,7 @@ export default function QuoteTab({ volumes }: { volumes: FreightVolume[] }) {
         if (typeof d.valorNf === "string") setValorNf(d.valorNf);
         if (Array.isArray(d.lines) && d.lines.length) setLines(d.lines);
         if (d.cepInfo?.city && d.cepInfo?.uf) setCepInfo(d.cepInfo);
+        if (d.resp && Array.isArray(d.resp.results)) setResp(d.resp);
       }
     } catch {
       /* ignore */
@@ -84,12 +85,12 @@ export default function QuoteTab({ volumes }: { volumes: FreightVolume[] }) {
     try {
       sessionStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ destino, valorNf, lines, cepInfo }),
+        JSON.stringify({ destino, valorNf, lines, cepInfo, resp }),
       );
     } catch {
       /* ignore */
     }
-  }, [restored, destino, valorNf, lines, cepInfo]);
+  }, [restored, destino, valorNf, lines, cepInfo, resp]);
 
   const lookupCep = async () => {
     const d = destino.replace(/\D/g, "");

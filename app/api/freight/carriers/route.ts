@@ -26,9 +26,12 @@ export async function GET() {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    // api_slug != null são transportadoras via API (ex.: Braspress) — exibidas
+    // como card próprio via /api/freight/api-carriers, não na lista normal.
     const { data, error } = await supabase
       .from("freight_carriers")
       .select("*")
+      .is("api_slug", null)
       .order("name", { ascending: true });
 
     if (error) throw error;

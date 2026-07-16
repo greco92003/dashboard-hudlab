@@ -20,6 +20,7 @@ export interface FreightCarrier {
   website: string | null;
   notes: string | null;
   active: boolean;
+  api_slug?: string | null;
   created_at: string;
 }
 
