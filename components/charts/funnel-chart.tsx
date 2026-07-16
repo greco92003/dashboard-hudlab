@@ -34,6 +34,12 @@ export interface FunnelStage {
    * Outer halo rings use the first stop color as their solid color.
    */
   gradient?: FunnelGradientStop[];
+  /**
+   * Extra styles applied to this segment's value and stage-name labels.
+   * Useful when labels overlap the funnel body and need to contrast with
+   * the segment color (e.g. a custom `color` plus a `textShadow` halo).
+   */
+  labelStyle?: CSSProperties;
 }
 
 export interface FunnelChartProps {
@@ -623,8 +629,13 @@ function SegmentLabel({
 }) {
   const display = stage.displayValue ?? formatValue(stage.value);
 
+  const labelStyle = stage.labelStyle;
+
   const valueEl = showValues && (
-    <span className="whitespace-nowrap font-semibold text-foreground text-sm">
+    <span
+      className="whitespace-nowrap font-semibold text-foreground text-sm"
+      style={labelStyle}
+    >
       {display}
     </span>
   );
@@ -634,7 +645,10 @@ function SegmentLabel({
     </span>
   );
   const labelEl = showLabels && (
-    <span className="whitespace-nowrap font-medium text-muted-foreground text-xs">
+    <span
+      className="whitespace-nowrap font-medium text-muted-foreground text-xs"
+      style={labelStyle}
+    >
       {stage.label}
     </span>
   );
