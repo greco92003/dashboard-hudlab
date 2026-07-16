@@ -57,12 +57,12 @@ export function PWASplashScreen({
             : "opacity-0 scale-95 translate-y-4",
         )}
       >
-        <div className="relative w-24 h-24 md:w-32 md:h-32">
+        <div className="relative h-48 w-48 md:h-64 md:w-64">
           <Image
-            src="/icons/icon-128x128.png"
+            src="/Logo.png"
             alt="HudLab Logo"
-            width={128}
-            height={128}
+            width={512}
+            height={512}
             className="w-full h-full object-contain"
           />
         </div>

@@ -129,6 +129,16 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: "Logística",
+    items: [
+      {
+        title: "Cotar Frete",
+        url: "/cotar-frete",
+        icon: Truck,
+      },
+    ],
+  },
+  {
     label: "Marketing",
     items: [
       {
@@ -250,16 +260,6 @@ const menuGroups: MenuGroup[] = [
         title: "Conquistas",
         url: "/ncts/conquistas",
         icon: Star,
-      },
-    ],
-  },
-  {
-    label: "Logística",
-    items: [
-      {
-        title: "Cotar Frete",
-        url: "/cotar-frete",
-        icon: Truck,
       },
     ],
   },
