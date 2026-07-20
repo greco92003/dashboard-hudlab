@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -50,6 +51,9 @@ function matchesAdName(utmMedium: string | null, adName: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");

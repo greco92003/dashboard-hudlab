@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -53,6 +54,9 @@ async function getBrandFromProducts(
 // POST - Sync coupons from Nuvemshop to Supabase
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createClient();
 
     // Check authentication

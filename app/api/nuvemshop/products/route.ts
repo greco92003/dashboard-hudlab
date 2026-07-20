@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -36,6 +37,9 @@ async function fetchNuvemshopAPI(endpoint: string, options: RequestInit = {}) {
 // GET - Fetch products from Nuvemshop
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Check authentication
@@ -116,6 +120,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new product in Nuvemshop
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Check authentication
@@ -155,6 +162,9 @@ export async function POST(request: NextRequest) {
 // POST - Sync products from Nuvemshop to local database
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Check authentication

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 const MANYCHAT_BASE_URL = "https://api.manychat.com";
 
@@ -45,6 +46,9 @@ export const FUNNEL_STAGES = [
 ] as const;
 
 export async function GET() {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const token = process.env.MANYCHAT_API_TOKEN;
 

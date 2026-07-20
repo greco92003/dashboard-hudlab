@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -26,6 +27,9 @@ async function createSupabaseServer() {
 
 // Health check endpoint for deals cache system
 export async function GET(request: Request) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createSupabaseServer();
     const startTime = Date.now();
@@ -274,6 +278,9 @@ export async function GET(request: Request) {
 
 // POST endpoint to trigger emergency sync
 export async function POST() {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     console.log("Emergency sync triggered via health endpoint");
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdminOrCron } from "@/lib/security/route-guards";
 
 // Environment variables for ActiveCampaign
 const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
@@ -164,6 +165,9 @@ const TARGET_CUSTOM_FIELD_IDS = [25, 39, 45, 47, 54];
 
 // POST endpoint to sync deals from ActiveCampaign to programacao_cache
 export async function POST(request: NextRequest) {
+  const authError = await requireAdminOrCron(request);
+  if (authError) return authError;
+
   const startTime = Date.now();
 
   try {

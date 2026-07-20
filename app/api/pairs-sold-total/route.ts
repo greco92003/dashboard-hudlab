@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 import {
   calculateBrazilDateRange,
@@ -21,6 +22,9 @@ const supabase = createClient(
 
 // API to get total pairs sold from deals cache
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const period = parseInt(searchParams.get("period") || "30");

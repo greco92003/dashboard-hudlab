@@ -6,9 +6,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { fetchNuvemshopAPI } from "@/lib/nuvemshop/api";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "all"; // products, coupons, or all
@@ -293,6 +297,9 @@ async function cleanupCoupons(supabase: any) {
 
 // Health check endpoint
 export async function GET() {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   return NextResponse.json({
     status: "healthy",
     endpoint: "cleanup",

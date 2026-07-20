@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "security:package1": "node scripts/security-package1-check.mjs",
     "webhooks:setup": "node scripts/setup-webhooks.js",
     "webhooks:list": "node scripts/setup-webhooks.js list",
     "webhooks:health": "node scripts/setup-webhooks.js health",

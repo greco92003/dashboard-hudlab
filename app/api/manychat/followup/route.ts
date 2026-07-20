@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 
 export interface FollowUpLead {
@@ -34,6 +35,9 @@ const STAGE_ORDER: Record<string, number> = {
 };
 
 export async function GET() {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

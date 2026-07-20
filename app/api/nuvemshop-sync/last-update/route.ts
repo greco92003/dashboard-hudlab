@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     // Get the most recent last_synced_at timestamp from both orders and products
     const { data: ordersData, error: ordersError } = await supabase
       .from("nuvemshop_orders")

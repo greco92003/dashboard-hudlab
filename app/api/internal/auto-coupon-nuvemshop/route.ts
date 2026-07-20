@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { blockDiagnosticRouteInProduction } from "@/lib/security/route-guards";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -35,6 +36,9 @@ async function fetchNuvemshopAPI(endpoint: string, options: RequestInit = {}) {
 
 // POST - Create auto-coupon in Nuvemshop for a brand
 export async function POST(request: NextRequest) {
+  const blocked = blockDiagnosticRouteInProduction();
+  if (blocked) return blocked;
+
   try {
     const supabase = await createClient();
 
@@ -164,6 +168,9 @@ export async function POST(request: NextRequest) {
 
 // GET - Check status of auto-coupon system
 export async function GET(request: NextRequest) {
+  const blocked = blockDiagnosticRouteInProduction();
+  if (blocked) return blocked;
+
   try {
     const supabase = await createClient();
 

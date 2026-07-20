@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 import {
   GHL_FUNNEL_PATHS,
@@ -230,6 +231,9 @@ function variantActivity(
 }
 
 export async function GET(request: Request) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const range = parseRange(searchParams);

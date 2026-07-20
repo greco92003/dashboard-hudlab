@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeGoogleSheet, appendGoogleSheet } from "@/lib/google-sheets";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const body = await request.json();
     const { 
       spreadsheetId, 
@@ -71,6 +75,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const body = await request.json();
     const { 
       spreadsheetId, 

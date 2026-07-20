@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 const SPREADSHEET_ID = "1quUeu99dGnLK4RUl5DGAsblDgJ0-Wr51";
 const BASE_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=`;
@@ -60,6 +61,9 @@ async function fetchCSVTab(
 }
 
 export async function GET(_request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     // Fetch all tabs in parallel via public CSV export (works for xlsx files)
     const [dashboardRaw, reelsRaw, storiesRaw, postsRaw, historicosRaw] =

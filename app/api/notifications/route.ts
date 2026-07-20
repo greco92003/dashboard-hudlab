@@ -256,7 +256,10 @@ export async function POST(request: NextRequest) {
       try {
         await fetch(`${request.nextUrl.origin}/api/notifications/send-push`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+          },
           body: JSON.stringify({
             notificationId: notification.id,
             userIds: targetUsers.map((u) => u.id),

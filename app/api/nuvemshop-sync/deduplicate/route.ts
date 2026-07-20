@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // Type for product data used in deduplication
 type ProductForDeduplication = {
@@ -18,6 +19,9 @@ type ProductForDeduplication = {
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
     const { searchParams } = new URL(request.url);
     const dryRun = searchParams.get("dry_run") === "true"; // Se true, apenas simula sem fazer alterações
@@ -240,6 +244,9 @@ async function deduplicateProducts(supabase: any, dryRun: boolean) {
 // Create the RPC function for finding duplicates (to be run in Supabase)
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
 
     // Create the RPC function in the database
@@ -299,6 +306,9 @@ export async function PUT(request: NextRequest) {
 
 // Health check endpoint
 export async function GET() {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   return NextResponse.json({
     status: "healthy",
     endpoint: "deduplicate",

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const accessToken = process.env.META_ACCESS_TOKEN;
     const businessId = process.env.META_BUSINESS_ID;

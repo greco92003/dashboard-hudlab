@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 // Environment variables
 const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
@@ -42,6 +43,9 @@ async function fetchJSON(url: string, timeout = 10000) {
 
 // GET endpoint to fetch UTM data for a specific contact
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const contactId = searchParams.get("contactId");

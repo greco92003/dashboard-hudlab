@@ -1,6 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PUBLIC_ROUTES = [
+  "/home",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/terms-of-service",
+  "/privacy-policy",
+  "/pending-approval",
+  "/auth/auth-code-error",
+];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -65,18 +77,6 @@ export async function updateSession(request: NextRequest) {
     // Pages are private by default. Keeping only the intentionally public pages
     // here prevents newly-created dashboard pages from accidentally bypassing
     // authentication (as happened with /cotar-frete).
-    const publicRoutes = [
-      "/home",
-      "/login",
-      "/signup",
-      "/forgot-password",
-      "/reset-password",
-      "/terms-of-service",
-      "/privacy-policy",
-      "/pending-approval",
-      "/auth/auth-code-error",
-    ];
-
     // Define routes that require admin or owner role
     const adminOwnerRoutes = [
       "/admin",
@@ -98,7 +98,7 @@ export async function updateSession(request: NextRequest) {
 
     const pathname = request.nextUrl.pathname;
     const isPendingApproval = pathname === "/pending-approval";
-    const isPublic = publicRoutes.some(
+    const isPublic = PUBLIC_ROUTES.some(
       (route) => pathname === route || pathname.startsWith(`${route}/`),
     );
     const isAuth = authRoutes.includes(request.nextUrl.pathname);
@@ -300,7 +300,16 @@ export async function updateSession(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    // In case of error, allow the request to continue
-    return supabaseResponse;
+    const pathname = request.nextUrl.pathname;
+    const isPublic = PUBLIC_ROUTES.some(
+      (route) => pathname === route || pathname.startsWith(`${route}/`),
+    );
+
+    if (isPublic) return supabaseResponse;
+
+    const url = request.nextUrl.clone();
+    url.pathname = "/home";
+    url.searchParams.set("auth_error", "1");
+    return NextResponse.redirect(url);
   }
 }

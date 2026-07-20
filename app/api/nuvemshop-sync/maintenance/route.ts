@@ -5,9 +5,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
     const { searchParams } = new URL(request.url);
     const operations = searchParams.get("operations")?.split(",") || ["cleanup", "deduplicate"];
@@ -171,6 +175,9 @@ async function performDeduplication(supabase: any, dryRun: boolean) {
 // Get maintenance status and recommendations
 export async function GET() {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
 
     // Get statistics about potential issues

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import {
   buildBrandIndex,
   inferCouponBrand,
@@ -74,6 +75,9 @@ async function fetchAllNuvemshopCoupons(): Promise<any[]> {
 // back to token matching against product names / coupon code).
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createClient();
 
     const {
@@ -171,6 +175,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new coupon in Nuvemshop
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createClient();
 
     // Check authentication

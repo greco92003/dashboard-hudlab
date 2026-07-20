@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
 
 // POST - Configure NuvemShop credentials in the database
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 
@@ -98,6 +102,9 @@ export async function POST(request: NextRequest) {
 
 // GET - Check current credential configuration status
 export async function GET(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // This endpoint resets the sync lock if it gets stuck
 // Only accessible with the correct admin key
 
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     // Verify admin access
     const authHeader = request.headers.get("authorization");
@@ -39,4 +43,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdminOrCron } from "@/lib/security/route-guards";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,9 @@ const supabase = createClient(
 // POST - Criar notificação automática de venda
 export async function POST(request: NextRequest) {
   try {
+    const authError = await requireAdminOrCron(request);
+    if (authError) return authError;
+
     const body = await request.json();
 
     const {
@@ -145,7 +149,10 @@ export async function POST(request: NextRequest) {
         `${request.nextUrl.origin}/api/notifications/send-push`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+          },
           body: JSON.stringify({
             notificationId: notification.id,
             userIds: brandPartners.map((p) => p.id),

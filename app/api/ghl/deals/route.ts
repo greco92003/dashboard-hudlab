@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import {
   getGhlDeals,
   filterDealsByClosingDate,
@@ -13,6 +14,9 @@ import {
 // provisional /dashboard-ghl page during the ActiveCampaign -> GHL migration.
 
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const period = parseInt(searchParams.get("period") || "30");

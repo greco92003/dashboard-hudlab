@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  requireAdmin,
+  requireAdminOrInternal,
+} from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
 import {
   createNuvemshopCoupon,
@@ -7,11 +11,13 @@ import {
 
 // POST - Process pending auto-coupons and create them in Nuvemshop
 export async function POST(request: NextRequest) {
+  const authError = await requireAdminOrInternal(request);
+  if (authError) return authError;
+
   try {
     // Check for service role authentication (for webhook calls)
     const authHeader = request.headers.get("authorization");
-    const isServiceRole =
-      authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+    const isServiceRole = authHeader?.startsWith("Bearer ") === true;
 
     let supabase;
 
@@ -224,6 +230,9 @@ export async function POST(request: NextRequest) {
 
 // GET - Check status of pending auto-coupons
 export async function GET(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 

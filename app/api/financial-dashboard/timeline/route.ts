@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeline } from "@/lib/tiny/service";
 import type { FinancialFilters } from "@/lib/tiny/types";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(req: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = req.nextUrl;
     const granularity = (searchParams.get("granularity") ?? "month") as

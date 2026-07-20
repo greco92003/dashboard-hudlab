@@ -9,6 +9,27 @@ const BUILD_VERSION =
   Date.now().toString();
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const pathSegments = pathname.split("/").filter(Boolean);
+  const isDiagnosticApi =
+    pathname === "/api/internal/auto-coupon-nuvemshop" ||
+    pathname === "/api/live-dashboard/seed" ||
+    (pathname.startsWith("/api/") &&
+      pathSegments.some(
+        (segment) =>
+          segment === "test" ||
+          segment === "debug" ||
+          segment === "demo" ||
+          segment.startsWith("test-"),
+      ));
+
+  if (process.env.NODE_ENV === "production" && isDiagnosticApi) {
+    return NextResponse.json(
+      { error: "Not found" },
+      { status: 404, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   // Skip middleware for static assets and API routes
   const skipPaths = [
     "/api/",
@@ -60,6 +81,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|eot)|storage).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|eot)|storage).*)",
   ],
 };

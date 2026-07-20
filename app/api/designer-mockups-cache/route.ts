@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 import { getAllDesigners } from "@/lib/constants/designers";
+import {
+  requireAdminOrCron,
+  requireApprovedUser,
+} from "@/lib/security/route-guards";
 
 // In-memory lock to prevent concurrent syncs
 let syncInProgress = false;
@@ -33,6 +37,9 @@ function createSupabaseServerForCache() {
 // GET - Retrieve cached mockups data
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireApprovedUser();
+    if (!access.ok) return access.response;
+
     const { searchParams } = new URL(request.url);
     const designers = searchParams.get("designers")?.split(",") || [];
     const startDate = searchParams.get("startDate");
@@ -175,6 +182,9 @@ export async function GET(request: NextRequest) {
 
 // POST - Sync data from Google Sheets to cache
 export async function POST(request: NextRequest) {
+  const authError = await requireAdminOrCron(request);
+  if (authError) return authError;
+
   console.log("🚀 POST /api/designer-mockups-cache called");
 
   // Check if sync is already in progress (with timeout)

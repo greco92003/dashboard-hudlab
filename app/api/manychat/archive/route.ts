@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabase() {
@@ -10,6 +11,9 @@ function getSupabase() {
 
 // POST /api/manychat/archive — archive a lead
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const { subscriber_id, lista_origem } = await request.json();
     if (!subscriber_id) {
@@ -37,6 +41,9 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/manychat/archive — unarchive a lead
 export async function DELETE(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const { subscriber_id } = await request.json();
     if (!subscriber_id) {

@@ -7,8 +7,12 @@
 
 import { NextResponse } from "next/server";
 import { buildOAuthAuthorizationUrl } from "@/lib/tiny/auth";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function GET() {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const authUrl = buildOAuthAuthorizationUrl();
     return NextResponse.redirect(authUrl);

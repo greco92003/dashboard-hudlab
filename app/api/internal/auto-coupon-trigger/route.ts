@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireBearerSecret } from "@/lib/security/route-guards";
 
 // Internal endpoint to be called by database triggers
 // This endpoint will call the auto-coupon generation API
 export async function POST(request: NextRequest) {
   try {
-    // Verify this is an internal call (you might want to add a secret header)
-    const authHeader = request.headers.get("authorization");
-    const expectedSecret = process.env.INTERNAL_API_SECRET || "internal-secret";
-    
-    if (authHeader !== `Bearer ${expectedSecret}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authError = requireBearerSecret(
+      request,
+      process.env.INTERNAL_API_SECRET,
+      "INTERNAL_API_SECRET",
+    );
+    if (authError) return authError;
 
     const body = await request.json();
     const { brand } = body;
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         // Use a service account or admin token for internal calls
-        "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
       },
       body: JSON.stringify({ brand }),
     });

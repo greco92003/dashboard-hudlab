@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { requireAdmin } from "@/lib/security/route-guards";
 import {
   isZenithProduct,
   getFranchiseFromOrderProduct,
@@ -414,6 +415,9 @@ async function processOrders(orders: any[], supabase: any) {
 // Main sync function
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
 
     // Get query parameters
@@ -501,6 +505,9 @@ export async function POST(request: NextRequest) {
 // GET method to fetch orders from database
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     // Use regular Supabase client for GET operations (needs auth)
     const supabase = await createSupabaseServer();
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { blockDiagnosticRouteInProduction } from "@/lib/security/route-guards";
 
 const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
 const API_TOKEN = process.env.AC_API_TOKEN;
@@ -115,6 +116,9 @@ async function fetchJSONParallel(urls: string[], maxRetries = 3) {
 }
 
 export async function GET(request: NextRequest) {
+  const blocked = blockDiagnosticRouteInProduction();
+  if (blocked) return blocked;
+
   const startTime = Date.now();
   try {
     if (!BASE_URL || !API_TOKEN) {

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  requireAdmin,
+  requireBearerSecret,
+} from "@/lib/security/route-guards";
 
 // Nuvemshop API configuration
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -36,15 +40,25 @@ async function fetchNuvemshopAPI(endpoint: string, options: RequestInit = {}) {
 // POST - Manually trigger auto-generation for a specific brand
 export async function POST(request: NextRequest) {
   try {
-    // Check for service role authentication (for webhook calls)
     const authHeader = request.headers.get("authorization");
-    const isServiceRole =
-      authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+    const isInternalCall = authHeader?.startsWith("Bearer ") === true;
+
+    if (isInternalCall) {
+      const authError = requireBearerSecret(
+        request,
+        process.env.INTERNAL_API_SECRET,
+        "INTERNAL_API_SECRET",
+      );
+      if (authError) return authError;
+    } else {
+      const access = await requireAdmin();
+      if (!access.ok) return access.response;
+    }
 
     let supabase;
     let user = null;
 
-    if (isServiceRole) {
+    if (isInternalCall) {
       // Use service role client for webhook calls
       const { createClient } = await import("@supabase/supabase-js");
       supabase = createClient(

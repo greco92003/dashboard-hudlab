@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 // Interface para os dados da tabela de Análise de Cadastros
 export interface TrafficAnalysisData {
@@ -14,6 +15,9 @@ export interface TrafficAnalysisData {
 }
 
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     console.log("📊 Fetching Traffic Analysis data from Google Sheets...");
 

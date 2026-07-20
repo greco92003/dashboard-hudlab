@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // This endpoint forces a sync of designer mockups data
 // It can be called to manually trigger a full sync
 
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     // Verify admin access
     const authHeader = request.headers.get("authorization");
@@ -63,4 +67,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

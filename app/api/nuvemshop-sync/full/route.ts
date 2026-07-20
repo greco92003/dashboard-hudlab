@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
 // Updated to fix RLS and schema issues
@@ -384,6 +385,9 @@ async function processProducts(products: any[], supabase: any) {
 // Main full sync function
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
 
     // Get query parameters
@@ -587,6 +591,9 @@ export async function POST(request: NextRequest) {
 // GET method to get sync status and recent logs
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
     const { searchParams } = new URL(request.url);
 

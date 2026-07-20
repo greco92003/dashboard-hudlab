@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 // Create Supabase client with service role key for cron operations
 // This bypasses RLS policies and allows full database access for automated tasks
@@ -29,6 +30,9 @@ function createSupabaseServiceClient() {
 // Uses same logic as manual sync button (always syncs, 90 days period)
 export async function GET(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     // Verify this is a legitimate cron request
     const authHeader = request.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -48,11 +52,12 @@ export async function GET(request: NextRequest) {
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync-parallel?allDeals=true`,
+      }/api/internal/sync-deals?allDeals=true`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
         },
         signal: controller.signal,
       }
@@ -100,8 +105,11 @@ export async function GET(request: NextRequest) {
 }
 
 // Manual trigger endpoint (for testing) - same logic as GET and manual button
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     console.log(
       "🚀 Manual cron trigger requested - using same logic as manual button..."
     );
@@ -114,11 +122,12 @@ export async function POST() {
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync-parallel?allDeals=true`,
+      }/api/internal/sync-deals?allDeals=true`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
         },
         signal: controller.signal,
       }

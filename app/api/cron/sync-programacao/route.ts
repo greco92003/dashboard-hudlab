@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 // Rede de segurança da /programacao.
 //
@@ -21,7 +22,10 @@ async function runProgramacaoSync() {
       }/api/programacao/sync`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
+        },
         signal: controller.signal,
       }
     );
@@ -49,6 +53,9 @@ function toErrorMessage(error: unknown): string {
 // Cron diário (ver vercel.json). Autenticado via CRON_SECRET, igual aos demais crons.
 export async function GET(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     const authHeader = request.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       console.log("Unauthorized cron request (sync-programacao)");
@@ -76,8 +83,11 @@ export async function GET(request: NextRequest) {
 }
 
 // Trigger manual para teste (mesma lógica do GET, sem exigir CRON_SECRET).
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     console.log("🚀 Trigger manual sync-programacao...");
     const syncResult = await runProgramacaoSync();
 

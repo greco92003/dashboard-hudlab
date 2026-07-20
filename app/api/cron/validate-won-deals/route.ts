@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 // Validates every "won" deal in deals_cache/deals_live against ActiveCampaign
 // live data. Deals marked won in the cache but not won in AC get corrected to
@@ -219,6 +220,9 @@ async function validateWonDeals(dryRun: boolean) {
 // Cron endpoint (requires CRON_SECRET, like /api/cron/sync-deals)
 export async function GET(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     const authHeader = request.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -239,6 +243,9 @@ export async function GET(request: NextRequest) {
 // preview what would be corrected without writing anything.
 export async function POST(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     const { searchParams } = new URL(request.url);
     const dryRun = searchParams.get("dryRun") === "1";
 

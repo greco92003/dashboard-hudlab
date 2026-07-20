@@ -10,8 +10,12 @@
 
 import { NextResponse } from "next/server";
 import { getTinyV3AccessToken, getAuthMode } from "@/lib/tiny/auth";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 export async function GET(request: Request) {
+  const authError = requireCronSecret(request);
+  if (authError) return authError;
+
   // Vercel cron jobs send this header for security
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -32,13 +36,12 @@ export async function GET(request: Request) {
     // Calling getTinyV3AccessToken() forces a refresh (ignores in-memory cache
     // because each cron invocation is a fresh serverless function instance).
     // The new refresh token is automatically saved to Supabase inside the function.
-    const accessToken = await getTinyV3AccessToken();
+    await getTinyV3AccessToken();
 
     return NextResponse.json({
       ok: true,
       message: "Token Tiny renovado com sucesso e salvo no Supabase.",
       expiresIn: "~4h (próxima renovação em 6h)",
-      tokenPreview: `${accessToken.slice(0, 20)}…`,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

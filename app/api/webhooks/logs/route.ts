@@ -4,11 +4,15 @@
 // API para visualizar e gerenciar logs de webhooks
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 // GET - Listar logs de webhooks
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
     
     // Verificar autenticação
@@ -107,6 +111,9 @@ export async function GET(request: NextRequest) {
 // POST - Reprocessar webhook
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
     
     // Verificar autenticação
@@ -215,6 +222,9 @@ export async function POST(request: NextRequest) {
 // DELETE - Limpar logs antigos
 export async function DELETE(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
     
     // Verificar autenticação

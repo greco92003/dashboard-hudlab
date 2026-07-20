@@ -13,8 +13,12 @@ import {
   exchangeCodeForTokens,
   saveRefreshTokenToSupabase,
 } from "@/lib/tiny/auth";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function GET(req: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const error = searchParams.get("error");

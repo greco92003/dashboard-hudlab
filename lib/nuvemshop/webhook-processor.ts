@@ -1049,7 +1049,7 @@ export class NuvemshopWebhookProcessor {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+            Authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
           },
         }
       );

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
 
 // GET endpoint to fetch deals from programacao_cache organized by shipping date
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 

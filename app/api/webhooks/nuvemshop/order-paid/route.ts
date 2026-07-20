@@ -171,7 +171,10 @@ export async function POST(request: NextRequest) {
               `${request.nextUrl.origin}/api/notifications/sale-notification`,
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${process.env.CRON_SECRET}`,
+                },
                 body: JSON.stringify({
                   orderId: orderData.order_id,
                   orderNumber: orderData.order_number,

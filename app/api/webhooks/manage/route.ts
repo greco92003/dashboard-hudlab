@@ -4,6 +4,7 @@
 // API para registrar, listar, atualizar e deletar webhooks
 
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { NuvemshopWebhookManager } from "@/lib/nuvemshop/webhook-manager";
 import { NuvemshopWebhookEvent } from "@/types/webhooks";
@@ -11,6 +12,9 @@ import { NuvemshopWebhookEvent } from "@/types/webhooks";
 // GET - Listar webhooks registrados
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Verificar autenticação
@@ -84,6 +88,9 @@ export async function GET(request: NextRequest) {
 // POST - Registrar novo webhook
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Verificar autenticação
@@ -177,6 +184,9 @@ export async function POST(request: NextRequest) {
 // PUT - Sincronizar webhooks
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Verificar autenticação
@@ -245,6 +255,9 @@ export async function PUT(request: NextRequest) {
 // DELETE - Deletar webhook
 export async function DELETE(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServer();
 
     // Verificar autenticação

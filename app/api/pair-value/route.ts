@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 
 // GET - Retrieve the current pair value
 export async function GET() {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
     const { data, error } = await supabase
@@ -43,6 +47,9 @@ export async function GET() {
 
 // POST - Create or update the pair value
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
     const { value } = await request.json();

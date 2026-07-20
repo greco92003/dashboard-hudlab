@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getUserProfile } from "@/lib/auth-utils";
 import webpush from "web-push";
+import { createServiceClient } from "@/lib/supabase/service";
+import { requireAdminOrCron } from "@/lib/security/route-guards";
 
 // Configurar web-push com as chaves VAPID
 const vapidKeys = {
@@ -18,12 +18,8 @@ if (!vapidKeys.privateKey) {
 }
 
 console.log("🔑 VAPID Keys status:", {
-  publicKey: vapidKeys.publicKey
-    ? `${vapidKeys.publicKey.substring(0, 20)}...`
-    : "NOT SET",
-  privateKey: vapidKeys.privateKey
-    ? `${vapidKeys.privateKey.substring(0, 20)}...`
-    : "NOT SET",
+  publicKeyConfigured: Boolean(vapidKeys.publicKey),
+  privateKeyConfigured: Boolean(vapidKeys.privateKey),
 });
 
 webpush.setVapidDetails(
@@ -35,32 +31,11 @@ webpush.setVapidDetails(
 // POST - Enviar push notifications
 export async function POST(request: NextRequest) {
   try {
-    // Verificar se é uma requisição de teste com service key
-    const authHeader = request.headers.get("Authorization");
-    const isTestMode = request.headers.get("x-test-mode") === "true";
+    const authError = await requireAdminOrCron(request);
+    if (authError) return authError;
 
-    let supabase;
-    let profile = null;
-
-    if (
-      isTestMode &&
-      authHeader?.includes(process.env.SUPABASE_SERVICE_ROLE_KEY!)
-    ) {
-      // Usar service client para testes
-      const { createServiceClient } = await import("@/lib/supabase/service");
-      supabase = createServiceClient();
-
-      // Para testes, não precisamos de profile específico
-      console.log("🧪 Test mode: Using service client");
-    } else {
-      // Autenticação normal
-      supabase = await createClient();
-      profile = await getUserProfile(supabase);
-
-      if (!profile) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-    }
+    // This privileged client is unreachable until the admin/cron guard passes.
+    const supabase: any = createServiceClient();
 
     const body = await request.json();
     const { notificationId, userIds, title, message, type, data } = body;
@@ -93,7 +68,8 @@ export async function POST(request: NextRequest) {
           .select("user_id")
           .eq("notification_id", notificationId);
 
-        targetUserIds = userNotifications?.map((un) => un.user_id) || [];
+        targetUserIds =
+          userNotifications?.map((un: { user_id: string }) => un.user_id) || [];
       }
     }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET() {
   try {
+    const access = await requireApprovedUser();
+    if (!access.ok) return access.response;
+
     // Current month boundaries in UTC-3
     const now = new Date();
     const utcMinus3 = new Date(now.getTime() - 3 * 60 * 60 * 1000);

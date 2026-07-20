@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { fetchNuvemshopAPI } from "@/lib/nuvemshop/api";
 
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createSupabaseServer();
 

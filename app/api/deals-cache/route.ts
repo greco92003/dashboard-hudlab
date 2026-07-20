@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 import {
   calculateBrazilDateRange,
   formatBrazilDateToLocal,
@@ -26,6 +27,9 @@ const supabase = createClient(
 // STATIC-FIRST GET: Serve cached deals like static content
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireApprovedUser();
+    if (!access.ok) return access.response;
+
     const { searchParams } = new URL(request.url);
     const period = parseInt(searchParams.get("period") || "30");
     const startDateParam = searchParams.get("startDate");
@@ -157,6 +161,9 @@ export async function GET(request: NextRequest) {
 // POST endpoint to manually trigger sync
 export async function POST() {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     console.log("Manual sync trigger requested");
 
     // Check if there's already a sync running

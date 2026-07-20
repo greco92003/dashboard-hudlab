@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
 import {
   createNuvemshopCoupon,
@@ -7,6 +8,9 @@ import {
 
 // POST - Process all brands that need auto-coupons
 export async function POST(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 
@@ -286,6 +290,9 @@ export async function POST(request: NextRequest) {
 
 // GET - Check status of auto-coupons for all brands
 export async function GET(request: NextRequest) {
+  const access = await requireAdmin();
+  if (!access.ok) return access.response;
+
   try {
     const supabase = await createClient();
 

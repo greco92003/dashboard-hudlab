@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllDesigners } from "@/lib/constants/designers";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     // Verificar se a requisição tem o secret correto
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
@@ -28,6 +32,7 @@ export async function GET(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.CRON_SECRET}`,
       },
       body: JSON.stringify({
         designers: getAllDesigners(), // Use centralized designer list
@@ -91,6 +96,9 @@ export async function GET(request: NextRequest) {
 // POST method for manual trigger
 export async function POST(request: NextRequest) {
   try {
+    const authError = requireCronSecret(request);
+    if (authError) return authError;
+
     console.log("🔄 MANUAL - Starting designer mockups sync...");
 
     const body = await request.json();
@@ -113,6 +121,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.CRON_SECRET}`,
       },
       body: JSON.stringify(requestBody),
     });

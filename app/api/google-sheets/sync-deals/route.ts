@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { writeGoogleSheet, appendGoogleSheet } from "@/lib/google-sheets";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 // Create Supabase client for sync operations
 async function createSupabaseServerForSync() {
@@ -24,6 +25,9 @@ async function createSupabaseServerForSync() {
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const body = await request.json();
     const { 
       spreadsheetId, 

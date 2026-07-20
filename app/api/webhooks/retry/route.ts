@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/security/route-guards";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { NuvemshopWebhookProcessor } from "@/lib/nuvemshop/webhook-processor";
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
     const { logId } = await request.json();
 
@@ -116,6 +120,9 @@ export async function POST(request: NextRequest) {
 // Endpoint para retry em lote de webhooks falhados
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const supabase = await createSupabaseServerForSync();
     const { searchParams } = new URL(request.url);
 

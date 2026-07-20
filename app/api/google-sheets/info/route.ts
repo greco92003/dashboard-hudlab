@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGoogleSheetsClient } from "@/lib/google-sheets";
+import { requireAdmin } from "@/lib/security/route-guards";
 
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const { searchParams } = new URL(request.url);
     const spreadsheetId = searchParams.get('spreadsheetId');
 
@@ -42,6 +46,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireAdmin();
+    if (!access.ok) return access.response;
+
     const body = await request.json();
     const { spreadsheetId } = body;
 

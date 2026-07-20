@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -9,6 +10,9 @@ const formatDateToLocal = (date: Date): string => {
 };
 
 export async function GET(request: NextRequest) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const startDateParam = searchParams.get("startDate");
