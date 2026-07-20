@@ -62,31 +62,24 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
-    // Define protected and auth routes
-    const protectedRoutes = [
-      "/dashboard",
-      "/live-dashboard",
-      "/pairs-sold",
-      "/direct-costs",
-      "/taxes",
-      "/fixed-costs",
-      "/variable-costs",
-      "/profile-settings",
-      "/deals",
-      "/sellers",
-      "/designers",
-      "/representantes",
-      "/partners",
-      "/goals",
-      "/programacao",
-      "/ote",
-      "/resultados",
-      "/ncts",
-      "/user-progress",
+    // Pages are private by default. Keeping only the intentionally public pages
+    // here prevents newly-created dashboard pages from accidentally bypassing
+    // authentication (as happened with /cotar-frete).
+    const publicRoutes = [
+      "/home",
+      "/login",
+      "/signup",
+      "/forgot-password",
+      "/reset-password",
+      "/terms-of-service",
+      "/privacy-policy",
+      "/pending-approval",
+      "/auth/auth-code-error",
     ];
 
     // Define routes that require admin or owner role
     const adminOwnerRoutes = [
+      "/admin",
       "/direct-costs",
       "/taxes",
       "/fixed-costs",
@@ -103,12 +96,14 @@ export async function updateSession(request: NextRequest) {
       "/reset-password",
     ];
 
-    const isPendingApproval = request.nextUrl.pathname === "/pending-approval";
-    const isProtected = protectedRoutes.some((route) =>
-      request.nextUrl.pathname.startsWith(route),
+    const pathname = request.nextUrl.pathname;
+    const isPendingApproval = pathname === "/pending-approval";
+    const isPublic = publicRoutes.some(
+      (route) => pathname === route || pathname.startsWith(`${route}/`),
     );
     const isAuth = authRoutes.includes(request.nextUrl.pathname);
-    const isRoot = request.nextUrl.pathname === "/";
+    const isRoot = pathname === "/";
+    const isProtected = !isRoot && !isPublic;
 
     // Redirect logic
     if (isProtected && !user) {

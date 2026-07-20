@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   DollarSign,
   HandCoins,
@@ -12,7 +12,6 @@ import {
   Settings,
   ShoppingBag,
   Shuffle,
-  LogOut,
   Package,
   ShoppingCart,
   Home,
@@ -35,12 +34,10 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/contexts/OptimizedAuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 
-import { SidebarUserInfo } from "@/components/SidebarUserInfo";
 import { SidebarSkeleton } from "@/components/SidebarSkeleton";
-import { PWAInstallButton } from "@/components/PWAInstallButton";
+import { NavUser } from "@/components/nav-user";
 
 import {
   Sidebar,
@@ -292,7 +289,6 @@ const menuGroups: MenuGroup[] = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { signOut } = useAuth();
   const {
     isPartnersMedia,
     isUser,
@@ -308,10 +304,6 @@ export function AppSidebar() {
   if (permissionsLoading) {
     return <SidebarSkeleton />;
   }
-
-  const handleLogout = async () => {
-    await signOut();
-  };
 
   // Filter menu groups based on user role
   const getFilteredMenuGroups = (): MenuGroup[] => {
@@ -439,35 +431,7 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarMenu>
-          {/* User info as a menu item */}
-          <SidebarMenuItem>
-            <SidebarUserInfo />
-          </SidebarMenuItem>
-
-          {/* Settings button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="/profile-settings" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                <span>Configurações</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          {/* PWA Install button */}
-          <SidebarMenuItem>
-            <PWAInstallButton />
-          </SidebarMenuItem>
-
-          {/* Logout button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-              <span>Sair</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   );

@@ -398,12 +398,22 @@ export default function ProgramacaoPage() {
               is_active: true,
             }));
 
+            // upsert com ignoreDuplicates: o efeito pode rodar em paralelo
+            // (Strict Mode / data mudando) e inserts simultâneos violavam o
+            // UNIQUE (deal_id) com 409
             const { error: insertError } = await supabase
               .from("programacao_card_states")
-              .insert(newStates as any);
+              .upsert(newStates as any, {
+                onConflict: "deal_id",
+                ignoreDuplicates: true,
+              });
 
             if (insertError) {
-              console.error("Error inserting new card states:", insertError);
+              console.error(
+                "Error inserting new card states:",
+                insertError.message,
+                insertError,
+              );
             } else {
               // Reload active cards after inserting new ones
               loadActiveCardsFromSupabase();
