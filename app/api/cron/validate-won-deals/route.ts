@@ -1,9 +1,12 @@
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requireCronSecret } from "@/lib/security/route-guards";
+import {
+  requireAdminOrCron,
+  requireCronSecret,
+} from "@/lib/security/route-guards";
 
-// Validates every "won" deal in deals_cache/deals_live against ActiveCampaign
+// Validates every "won" deal in deals_cache against ActiveCampaign
 // live data. Deals marked won in the cache but not won in AC get corrected to
 // AC's current state; deals deleted from AC get removed. This protects the
 // dashboards' revenue numbers from stale rows that the daily full sync and
@@ -74,7 +77,7 @@ interface SuspectResult {
   detail?: string;
 }
 
-async function validateWonDeals(dryRun: boolean) {
+async function validateWonDeals(dryRun: boolean, requestId: string) {
   if (!BASE_URL || !API_TOKEN) {
     throw new Error("Missing ActiveCampaign environment variables");
   }
@@ -118,10 +121,20 @@ async function validateWonDeals(dryRun: boolean) {
 
           if (res.status === 404) {
             if (!dryRun) {
-              await Promise.all([
-                supabase.from("deals_cache").delete().eq("deal_id", dealId),
-                supabase.from("deals_live").delete().eq("deal_id", dealId),
-              ]);
+              const { error: markError } = await supabase
+                .from("deals_cache")
+                .update({
+                  last_change_source: "validator",
+                  last_request_id: requestId,
+                })
+                .eq("deal_id", dealId);
+              if (markError) throw markError;
+
+              const { error: deleteError } = await supabase
+                .from("deals_cache")
+                .delete()
+                .eq("deal_id", dealId);
+              if (deleteError) throw deleteError;
             }
             return {
               deal_id: dealId,
@@ -156,13 +169,16 @@ async function validateWonDeals(dryRun: boolean) {
             stage_id: acDeal.stage || null,
             api_updated_at: acDeal.mdate || null,
             last_synced_at: new Date().toISOString(),
+            last_change_source: "validator",
+            last_request_id: requestId,
           };
 
           if (!dryRun) {
-            await Promise.all([
-              supabase.from("deals_cache").update(patch).eq("deal_id", dealId),
-              supabase.from("deals_live").update(patch).eq("deal_id", dealId),
-            ]);
+            const { error: updateError } = await supabase
+              .from("deals_cache")
+              .update(patch)
+              .eq("deal_id", dealId);
+            if (updateError) throw updateError;
           }
 
           return {
@@ -209,10 +225,14 @@ async function validateWonDeals(dryRun: boolean) {
   };
 
   console.log(
-    `✅ validate-won-deals ${dryRun ? "(DRY RUN) " : ""}` +
-      `AC won=${summary.wonInAC} cache won=${summary.wonInCache} ` +
-      `suspects=${summary.suspects} corrected=${summary.corrected} ` +
-      `deleted=${summary.deleted} stillWon=${summary.stillWon} errors=${summary.errors}`,
+    JSON.stringify({
+      level: "info",
+      event: "validate_won_deals_done",
+      route: "/api/cron/validate-won-deals",
+      requestId,
+      ...summary,
+      results: undefined,
+    }),
   );
 
   return summary;
@@ -229,7 +249,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const summary = await validateWonDeals(false);
+    const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
+    const summary = await validateWonDeals(false, requestId);
     return NextResponse.json(summary);
   } catch (error) {
     console.error("validate-won-deals cron error:", error);
@@ -244,13 +265,14 @@ export async function GET(request: NextRequest) {
 // preview what would be corrected without writing anything.
 export async function POST(request: NextRequest) {
   try {
-    const authError = requireCronSecret(request);
+    const authError = await requireAdminOrCron(request);
     if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
     const dryRun = searchParams.get("dryRun") === "1";
 
-    const summary = await validateWonDeals(dryRun);
+    const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
+    const summary = await validateWonDeals(dryRun, requestId);
     return NextResponse.json(summary);
   } catch (error) {
     console.error("validate-won-deals manual trigger error:", error);

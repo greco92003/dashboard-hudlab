@@ -434,6 +434,9 @@ export interface Database {
           designer: string | null;
           "utm-source": string | null;
           "utm-medium": string | null;
+          custom_field_54: string | null;
+          segmento_de_negocio: string | null;
+          intencao_de_compra: string | null;
           contact_id: string | null;
           organization_id: string | null;
           last_synced_at: string;
@@ -442,6 +445,14 @@ export interface Database {
           sync_error_message: string | null;
           created_at: string;
           updated_at: string;
+          last_change_source:
+            | "webhook"
+            | "cron"
+            | "manual"
+            | "validator"
+            | "legacy"
+            | "unknown";
+          last_request_id: string | null;
         };
         Insert: {
           id?: string;
@@ -461,6 +472,9 @@ export interface Database {
           designer?: string | null;
           "utm-source"?: string | null;
           "utm-medium"?: string | null;
+          custom_field_54?: string | null;
+          segmento_de_negocio?: string | null;
+          intencao_de_compra?: string | null;
           contact_id?: string | null;
           organization_id?: string | null;
           last_synced_at?: string;
@@ -469,6 +483,14 @@ export interface Database {
           sync_error_message?: string | null;
           created_at?: string;
           updated_at?: string;
+          last_change_source?:
+            | "webhook"
+            | "cron"
+            | "manual"
+            | "validator"
+            | "legacy"
+            | "unknown";
+          last_request_id?: string | null;
         };
         Update: {
           id?: string;
@@ -488,6 +510,9 @@ export interface Database {
           designer?: string | null;
           "utm-source"?: string | null;
           "utm-medium"?: string | null;
+          custom_field_54?: string | null;
+          segmento_de_negocio?: string | null;
+          intencao_de_compra?: string | null;
           contact_id?: string | null;
           organization_id?: string | null;
           last_synced_at?: string;
@@ -496,6 +521,50 @@ export interface Database {
           sync_error_message?: string | null;
           created_at?: string;
           updated_at?: string;
+          last_change_source?:
+            | "webhook"
+            | "cron"
+            | "manual"
+            | "validator"
+            | "legacy"
+            | "unknown";
+          last_request_id?: string | null;
+        };
+        Relationships: [];
+      };
+      deals_change_log: {
+        Row: {
+          id: string;
+          deal_id: string;
+          operation: "INSERT" | "UPDATE" | "DELETE";
+          source: string;
+          request_id: string | null;
+          changed_fields: string[];
+          before_data: Json | null;
+          after_data: Json | null;
+          changed_at: string;
+        };
+        Insert: {
+          id?: string;
+          deal_id: string;
+          operation: "INSERT" | "UPDATE" | "DELETE";
+          source: string;
+          request_id?: string | null;
+          changed_fields?: string[];
+          before_data?: Json | null;
+          after_data?: Json | null;
+          changed_at?: string;
+        };
+        Update: {
+          id?: string;
+          deal_id?: string;
+          operation?: "INSERT" | "UPDATE" | "DELETE";
+          source?: string;
+          request_id?: string | null;
+          changed_fields?: string[];
+          before_data?: Json | null;
+          after_data?: Json | null;
+          changed_at?: string;
         };
         Relationships: [];
       };
@@ -512,6 +581,8 @@ export interface Database {
           error_message: string | null;
           sync_duration_seconds: number | null;
           created_at: string;
+          sync_source: "cron" | "manual" | "legacy" | "unknown";
+          request_id: string | null;
         };
         Insert: {
           id?: string;
@@ -525,6 +596,8 @@ export interface Database {
           error_message?: string | null;
           sync_duration_seconds?: number | null;
           created_at?: string;
+          sync_source?: "cron" | "manual" | "legacy" | "unknown";
+          request_id?: string | null;
         };
         Update: {
           id?: string;
@@ -538,6 +611,8 @@ export interface Database {
           error_message?: string | null;
           sync_duration_seconds?: number | null;
           created_at?: string;
+          sync_source?: "cron" | "manual" | "legacy" | "unknown";
+          request_id?: string | null;
         };
         Relationships: [];
       };
