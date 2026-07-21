@@ -1,0 +1,20 @@
+-- ============================================================
+-- Funil por anúncio com MARCOS (aplicado no Dashboard-v2 via MCP
+-- em 2026-07-21, migration meta_ghl_bi_marcos_por_anuncio_v2)
+--
+-- v_funnel_por_anuncio: por ad_id —
+--   leads_ghl -> orcamentos (valor_orcamentos, pares_orcamentos)
+--   -> mockups -> negociacoes -> vendas (faturamento, pares_vendidos)
+--   + custo_por_lead / _orcamento / _mockup / _negociacao / cpa_venda
+-- Marcos por NOME de etapa (resiliente a reordenação):
+--   orçamento='Orçamento Gerado', mockup='Amostra Digital Enviada',
+--   negociação='Negociação', venda='Pagamento Confirmado'
+-- "Atingiu" = maior etapa vista (snapshots diários + etapa atual).
+-- Valor/pares contam a partir de Orçamento Gerado (não é o valor
+-- final da venda — mede o anúncio no caminho; lead time > 30 dias).
+--
+-- v_funil_etapas / v_custo_por_etapa: filtradas por is_funil
+-- (Cadastro Inicial até Pagamento Confirmado).
+--
+-- Conteúdo completo: ver migration no histórico do Supabase.
+-- ============================================================

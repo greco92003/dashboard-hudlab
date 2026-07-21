@@ -79,6 +79,7 @@ export function ConditionalSidebar({
     "/goals",
     "/states",
     "/meta-marketing",
+    "/meta-marketing-ghl",
     "/partners",
     "/partners/home",
     "/partners/dashboard",

@@ -143,6 +143,11 @@ const menuGroups: MenuGroup[] = [
         url: "/meta-marketing",
         icon: MetaIcon,
       },
+      {
+        title: "Meta Marketing GHL",
+        url: "/meta-marketing-ghl",
+        icon: MetaIcon,
+      },
     ],
   },
   {
