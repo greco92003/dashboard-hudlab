@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // ENDPOINT PARA TESTAR WEBHOOKS
 // =====================================================
@@ -8,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 // Payloads de exemplo para diferentes eventos

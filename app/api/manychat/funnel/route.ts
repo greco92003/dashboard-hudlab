@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
@@ -112,7 +113,7 @@ async function querySupabaseCounts(
   previousCounts: Record<string, number>;
 }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseKey = getSupabaseSecretKey();
 
   if (!supabaseUrl || !supabaseKey) {
     return { currentCounts: {}, previousCounts: {} };

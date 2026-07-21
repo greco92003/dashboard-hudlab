@@ -1,6 +1,5 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { requireAdmin } from "@/lib/security/route-guards";
 
 const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
@@ -12,7 +11,7 @@ async function createSupabaseServerForSync() {
 
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    getSupabaseSecretKey(),
     {
       auth: {
         autoRefreshToken: false,
@@ -20,39 +19,6 @@ async function createSupabaseServerForSync() {
       },
       db: {
         schema: "public",
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-      },
-    }
-  );
-}
-
-// Create Supabase client for regular operations
-async function createSupabaseServer() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
       },
     }
   );
@@ -594,7 +560,7 @@ export async function GET(request: NextRequest) {
     const access = await requireAdmin();
     if (!access.ok) return access.response;
 
-    const supabase = await createSupabaseServer();
+    const supabase = await createSupabaseServerForSync();
     const { searchParams } = new URL(request.url);
 
     const limit = parseInt(searchParams.get("limit") || "10");

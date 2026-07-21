@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireCronSecret } from "@/lib/security/route-guards";
@@ -15,13 +16,13 @@ const API_TOKEN = process.env.AC_API_TOKEN;
 function createSupabaseServiceClient() {
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    !process.env.SUPABASE_SERVICE_ROLE_KEY
+    !getSupabaseSecretKey()
   ) {
     throw new Error("Missing Supabase environment variables");
   }
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    getSupabaseSecretKey(),
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 }

@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
@@ -40,7 +41,7 @@ export async function GET() {
 
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = getSupabaseSecretKey();
 
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ listaA: [], listaB: [], listaC: [], archived: [] });

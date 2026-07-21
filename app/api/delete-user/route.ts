@@ -1,6 +1,14 @@
 import { requireUser } from "@/lib/security/route-guards";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json(
+    { success: false, error: message },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
+}
 
 export async function DELETE(request: Request) {
   try {
@@ -8,17 +16,24 @@ export async function DELETE(request: Request) {
     if (!access.ok) return access.response;
 
     const supabase = await createClient();
+    const service = createServiceClient() as any;
     const { userId } = await request.json();
 
     if (!userId || typeof userId !== "string") {
-      return NextResponse.json(
-        { success: false, error: "ID do usuário é obrigatório" },
-        { status: 400 },
-      );
+      return jsonError("ID do usuário é obrigatório", 400);
     }
 
+    const { data: target, error: targetError } = await service
+      .from("user_profiles")
+      .select("id, role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (targetError) throw targetError;
+    if (!target) return jsonError("Usuário não encontrado", 404);
+
     if (userId !== access.user.id) {
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await service
         .from("user_profiles")
         .select("approved, role")
         .eq("id", access.user.id)
@@ -27,41 +42,33 @@ export async function DELETE(request: Request) {
       const canDeleteOtherUser =
         !profileError &&
         profile?.approved === true &&
-        ["admin", "owner"].includes(profile.role);
+        (profile.role === "owner"
+          ? target.role !== "owner"
+          : profile.role === "admin" &&
+            !["owner", "admin"].includes(target.role));
 
       if (!canDeleteOtherUser) {
-        return NextResponse.json(
-          { success: false, error: "Permissão insuficiente" },
-          { status: 403 },
-        );
+        return jsonError("Permissão insuficiente", 403);
       }
     }
 
-    const { data, error } = await supabase.rpc("delete_user_account", {
-      user_id_to_delete: userId,
-    });
+    const { error } = await service.auth.admin.deleteUser(userId);
 
     if (error) {
-      console.error("Error calling delete_user_account:", error);
-      return NextResponse.json(
-        { success: false, error: "Erro interno do servidor" },
-        { status: 500 },
-      );
+      console.error("Error deleting Supabase auth user:", error);
+      return jsonError("Erro interno do servidor", 500);
     }
 
-    if (data.success) {
-      if (userId === access.user.id) {
-        await supabase.auth.signOut({ scope: "global" });
-      }
-      return NextResponse.json(data);
+    if (userId === access.user.id) {
+      await supabase.auth.signOut({ scope: "global" });
     }
 
-    return NextResponse.json(data, { status: 400 });
+    return NextResponse.json(
+      { success: true, message: "Conta deletada com sucesso" },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     console.error("Error in delete-user API:", error);
-    return NextResponse.json(
-      { success: false, error: "Erro interno do servidor" },
-      { status: 500 },
-    );
+    return jsonError("Erro interno do servidor", 500);
   }
 }

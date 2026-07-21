@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 
@@ -5,7 +6,7 @@ import type { Database } from "@/types/supabase";
 // This bypasses RLS policies and should only be used in secure server environments
 export function createServiceClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseServiceKey = getSupabaseSecretKey();
 
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error("Missing Supabase environment variables for service client");

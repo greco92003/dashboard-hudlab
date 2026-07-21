@@ -1,4 +1,5 @@
 "use client";
+import { getSupabasePublishableKey } from "@/lib/supabase/keys-public";
 
 import { storage } from "@/lib/storage";
 
@@ -140,7 +141,7 @@ export const debugHelpers = {
 
     // Check Supabase environment variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseKey = getSupabasePublishableKey();
 
     console.log("Supabase URL:", supabaseUrl ? "✅ Present" : "❌ Missing");
     console.log("Supabase Key:", supabaseKey ? "✅ Present" : "❌ Missing");

@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireAdmin,
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       const { createClient } = await import("@supabase/supabase-js");
       supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+        getSupabaseSecretKey()
       );
       console.log("🔧 Using service role authentication for webhook call");
     } else {

@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // PROCESSADOR DE WEBHOOKS NUVEMSHOP
 // =====================================================
@@ -16,7 +17,7 @@ import {
 // Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 // Configuração da API do Nuvemshop
@@ -157,10 +158,11 @@ export class NuvemshopWebhookProcessor {
 
     console.log(`✅ Order ${orderId} processed and saved`);
 
-    // Check if order contains coupon information and sync it
-    if (orderData.coupon && orderData.coupon.trim() !== "") {
+    // `coupon` is an array in the Nuvemshop API. Reuse the normalized value
+    // produced by processOrderData instead of treating the raw payload as text.
+    if (processedOrder.coupon) {
       try {
-        await this.syncCouponFromOrder(orderData);
+        await this.syncCouponFromOrder(processedOrder.coupon);
       } catch (error) {
         console.error(`⚠️ Failed to sync coupon from order ${orderId}:`, error);
         // Don't fail the order processing if coupon sync fails
@@ -1074,18 +1076,18 @@ export class NuvemshopWebhookProcessor {
   }
 
   // Sync coupon information from order data
-  private async syncCouponFromOrder(orderData: any): Promise<void> {
+  private async syncCouponFromOrder(couponCode: string): Promise<void> {
     try {
-      const couponCode = orderData.coupon?.trim();
-      if (!couponCode) return;
+      const normalizedCouponCode = couponCode.trim();
+      if (!normalizedCouponCode) return;
 
-      console.log(`🎫 Syncing coupon from order: ${couponCode}`);
+      console.log(`🎫 Syncing coupon from order: ${normalizedCouponCode}`);
 
       // Check if this coupon already exists in our database
       const { data: existingCoupon, error: searchError } = await supabase
         .from("generated_coupons")
         .select("*")
-        .eq("code", couponCode)
+        .eq("code", normalizedCouponCode)
         .single();
 
       if (searchError && searchError.code !== "PGRST116") {
@@ -1108,7 +1110,7 @@ export class NuvemshopWebhookProcessor {
           console.error(`Failed to update coupon usage:`, updateError);
         } else {
           console.log(
-            `✅ Updated coupon ${couponCode} usage count to ${currentUses + 1}`
+            `✅ Updated coupon ${normalizedCouponCode} usage count to ${currentUses + 1}`
           );
         }
       } else {
@@ -1117,20 +1119,22 @@ export class NuvemshopWebhookProcessor {
           // First, try to find the coupon by searching all coupons
           const allCoupons = await this.fetchFromNuvemshop("/coupons");
           const matchingCoupon = allCoupons.find(
-            (c: any) => c.code === couponCode
+            (c: any) => c.code === normalizedCouponCode
           );
 
           if (matchingCoupon) {
             console.log(
-              `🎫 Found coupon ${couponCode} in NuvemShop, syncing to database`
+              `🎫 Found coupon ${normalizedCouponCode} in NuvemShop, syncing to database`
             );
             await this.syncCouponToDatabase(matchingCoupon, "order/sync");
           } else {
-            console.log(`⚠️ Coupon ${couponCode} not found in NuvemShop API`);
+            console.log(
+              `⚠️ Coupon ${normalizedCouponCode} not found in NuvemShop API`
+            );
           }
         } catch (error) {
           console.error(
-            `Failed to fetch coupon ${couponCode} from NuvemShop:`,
+            `Failed to fetch coupon ${normalizedCouponCode} from NuvemShop:`,
             error
           );
         }

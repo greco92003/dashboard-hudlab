@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // WEBHOOK ESPECÍFICO: COUPON DELETED
 // =====================================================
@@ -9,7 +10,7 @@ import { secureWebhookMiddleware } from "@/lib/nuvemshop/webhook-security";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 export async function POST(request: NextRequest) {

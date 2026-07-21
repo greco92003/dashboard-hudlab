@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 const withPWA = require("@ducanh2912/next-pwa").default;
 
 const nextConfig: NextConfig = {
+  // Explicitly expose only the publishable key; DASHBOARD_SECRET stays server-only.
+  env: {
+    NEXT_PUBLIC_DASHBOARD_PUBLISHABLE:
+      process.env.DASHBOARD_PUBLISHABLE ||
+      process.env.NEXT_PUBLIC_DASHBOARD_PUBLISHABLE,
+  },
   // Add empty turbopack config to silence the warning
   turbopack: {},
   images: {

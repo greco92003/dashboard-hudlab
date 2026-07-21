@@ -1,3 +1,5 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
+import { getSupabasePublishableKey } from "@/lib/supabase/keys-public";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -7,7 +9,7 @@ export async function createClient() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabasePublishableKey(),
     {
       cookies: {
         getAll() {
@@ -35,7 +37,7 @@ export async function createSupabaseServer() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabasePublishableKey(),
     {
       cookies: {
         getAll() {
@@ -63,7 +65,7 @@ export async function createSupabaseServerForSync() {
 
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    getSupabaseSecretKey(),
     {
       auth: {
         autoRefreshToken: false,
@@ -71,11 +73,6 @@ export async function createSupabaseServerForSync() {
       },
       db: {
         schema: "public",
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        },
       },
     }
   );

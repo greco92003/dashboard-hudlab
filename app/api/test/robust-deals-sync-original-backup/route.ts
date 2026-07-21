@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // BACKUP DA IMPLEMENTAÇÃO ORIGINAL DO ROBUST-DEALS-SYNC
 // Data do backup: 2024-01-15
 // Motivo: Substituição pela versão paralela otimizada
@@ -30,7 +31,7 @@ async function createSupabaseServer() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    getSupabaseSecretKey(),
     {
       cookies: {
         getAll() {

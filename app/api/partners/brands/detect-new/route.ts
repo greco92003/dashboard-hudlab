@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/utils/supabase/server";
 
 // POST - Detect new brands and generate auto-coupons
@@ -96,9 +97,10 @@ export async function POST(request: NextRequest) {
     };
 
     // Generate auto-coupons for new brands
+    const service = createServiceClient() as any;
     for (const brand of newBrands) {
       try {
-        const { data: result, error: generateError } = await supabase.rpc(
+        const { data: result, error: generateError } = await service.rpc(
           "generate_auto_coupon_for_brand",
           {
             brand_name: brand,

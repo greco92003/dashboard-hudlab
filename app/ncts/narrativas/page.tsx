@@ -162,6 +162,16 @@ export default function NctsNarrativasPage() {
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const allowedTypes = new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+    ]);
+    if (!allowedTypes.has(file.type)) {
+      e.target.value = "";
+      return toast.error("Formato inválido. Use JPEG, PNG, WebP ou GIF.");
+    }
     if (file.size > 2 * 1024 * 1024)
       return toast.error("Imagem deve ter no máximo 2MB.");
     setLogoFile(file);
@@ -301,7 +311,7 @@ export default function NctsNarrativasPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     className="hidden"
                     onChange={handleLogoChange}
                   />

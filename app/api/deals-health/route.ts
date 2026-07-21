@@ -1,3 +1,4 @@
+import { getSupabasePublishableKey } from "@/lib/supabase/keys-public";
 import { NextResponse } from "next/server";
 import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 import { createServerClient } from "@supabase/ssr";
@@ -9,7 +10,7 @@ async function createSupabaseServer() {
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabasePublishableKey(),
     {
       cookies: {
         getAll() {

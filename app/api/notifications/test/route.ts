@@ -85,8 +85,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-            "x-test-mode": "true",
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
           },
           body: JSON.stringify({
             notificationId: notification.id,

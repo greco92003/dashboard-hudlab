@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
@@ -16,7 +17,7 @@ const SYNC_TIMEOUT = 5 * 60 * 1000; // 5 minutes timeout
 function createSupabaseServerForCache() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    getSupabaseSecretKey(),
     {
       auth: {
         autoRefreshToken: false,
@@ -24,11 +25,6 @@ function createSupabaseServerForCache() {
       },
       db: {
         schema: "public",
-      },
-      global: {
-        headers: {
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        },
       },
     }
   );

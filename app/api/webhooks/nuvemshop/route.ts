@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // ENDPOINT GENÉRICO PARA WEBHOOKS NUVEMSHOP
 // =====================================================
@@ -12,7 +13,7 @@ import { NuvemshopWebhookEvent } from "@/types/webhooks";
 // Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 // Instância do processador

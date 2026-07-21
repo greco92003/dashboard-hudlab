@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // ENDPOINT DE TESTE PARA WEBHOOK DE PRODUTO
 // =====================================================
@@ -9,7 +10,7 @@ import { NuvemshopWebhookProcessor } from "@/lib/nuvemshop/webhook-processor";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 const processor = new NuvemshopWebhookProcessor();

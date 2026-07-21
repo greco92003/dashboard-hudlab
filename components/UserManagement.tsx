@@ -66,6 +66,10 @@ import type { Database } from "@/types/supabase";
 import { usePermissions } from "@/hooks/usePermissions";
 
 type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
+type AdminProfileUpdate = Pick<
+  Database["public"]["Tables"]["user_profiles"]["Update"],
+  "role" | "approved" | "assigned_brand" | "setor_liderado"
+>;
 
 interface UserManagementProps {
   isAdmin: boolean;
@@ -93,13 +97,31 @@ export function UserManagement({}: UserManagementProps) {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [selectedBrand, setSelectedBrand] =
     useState<string>("__remove_brand__");
-  const [previousRole, setPreviousRole] = useState<string | null>(null);
+  const [previousRole, setPreviousRole] = useState<UserProfile["role"] | null>(
+    null,
+  );
 
   // Team-leader sector assignment states
   const [sectorDialogOpen, setSectorDialogOpen] = useState(false);
   const [selectedSector, setSelectedSector] = useState<Setor | "">("");
 
   const supabase = createClient();
+
+  const updateAdminProfile = async (
+    userId: string,
+    updates: AdminProfileUpdate,
+  ) => {
+    const response = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Erro ao atualizar usuário");
+    }
+    return result as UserProfile;
+  };
 
   const fetchUsers = useCallback(async () => {
     if (!permissions.isOwnerOrAdmin) return;
@@ -173,11 +195,7 @@ export function UserManagement({}: UserManagementProps) {
     setActionLoading(userId);
     setMessage(null);
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({ setor_liderado: setor, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-      if (error) throw error;
+      await updateAdminProfile(userId, { setor_liderado: setor });
       setMessage({
         type: "success",
         text: setor
@@ -233,16 +251,10 @@ export function UserManagement({}: UserManagementProps) {
         const defaultBrand = brands?.[0]?.brand || "Desculpa Qualquer Coisa";
 
         // Update both role and assign temporary brand in one operation
-        const { error } = await supabase
-          .from("user_profiles")
-          .update({
-            role: newRole,
-            assigned_brand: defaultBrand,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", userId);
-
-        if (error) throw error;
+        await updateAdminProfile(userId, {
+          role: newRole,
+          assigned_brand: defaultBrand,
+        });
       } else if (newRole === "team-leader") {
         // Store previous role for potential rollback
         const currentUser = users.find((u) => u.id === userId);
@@ -250,23 +262,10 @@ export function UserManagement({}: UserManagementProps) {
           setPreviousRole(currentUser.role);
         }
 
-        const { error } = await supabase
-          .from("user_profiles")
-          .update({ role: newRole, updated_at: new Date().toISOString() })
-          .eq("id", userId);
-
-        if (error) throw error;
+        await updateAdminProfile(userId, { role: newRole });
       } else {
         // For other roles, normal update
-        const { error } = await supabase
-          .from("user_profiles")
-          .update({
-            role: newRole,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", userId);
-
-        if (error) throw error;
+        await updateAdminProfile(userId, { role: newRole });
       }
 
       setMessage({
@@ -330,15 +329,7 @@ export function UserManagement({}: UserManagementProps) {
         return;
       }
 
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          assigned_brand: brand,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
-
-      if (error) throw error;
+      await updateAdminProfile(userId, { assigned_brand: brand });
 
       setMessage({
         type: "success",
@@ -363,18 +354,15 @@ export function UserManagement({}: UserManagementProps) {
     }
   };
 
-  const revertUserRole = async (userId: string, originalRole: string) => {
+  const revertUserRole = async (
+    userId: string,
+    originalRole: UserProfile["role"],
+  ) => {
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          role: originalRole,
-          assigned_brand: null, // Remove the temporary brand
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
-
-      if (error) throw error;
+      await updateAdminProfile(userId, {
+        role: originalRole,
+        assigned_brand: null,
+      });
 
       setMessage({
         type: "success",
@@ -430,16 +418,7 @@ export function UserManagement({}: UserManagementProps) {
     setMessage(null);
 
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          approved,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
-        .select();
-
-      if (error) throw error;
+      await updateAdminProfile(userId, { approved });
 
       // Update the local state immediately
       setUsers((prevUsers) =>

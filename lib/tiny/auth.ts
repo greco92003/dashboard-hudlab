@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 /**
  * Tiny/Olist – Authentication helpers
  *
@@ -49,7 +50,7 @@ export async function saveRefreshTokenToSupabase(
 ): Promise<void> {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = getSupabaseSecretKey();
     if (!supabaseUrl || !serviceKey) return;
 
     await fetch(`${supabaseUrl}/rest/v1/system_config`, {
@@ -57,7 +58,6 @@ export async function saveRefreshTokenToSupabase(
       headers: {
         "Content-Type": "application/json",
         apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
         Prefer: "resolution=merge-duplicates",
       },
       body: JSON.stringify({
@@ -77,7 +77,7 @@ export async function saveRefreshTokenToSupabase(
 async function loadRefreshTokenFromSupabase(): Promise<string | null> {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = getSupabaseSecretKey();
     if (!supabaseUrl || !serviceKey) return null;
 
     const res = await fetch(
@@ -85,7 +85,6 @@ async function loadRefreshTokenFromSupabase(): Promise<string | null> {
       {
         headers: {
           apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
         },
         cache: "no-store",
       },

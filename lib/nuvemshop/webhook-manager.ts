@@ -1,3 +1,4 @@
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 // =====================================================
 // GERENCIADOR DE WEBHOOKS NUVEMSHOP
 // =====================================================
@@ -18,7 +19,7 @@ const NUVEMSHOP_API_BASE_URL = "https://api.nuvemshop.com.br/v1";
 // Cliente Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  getSupabaseSecretKey()
 );
 
 // Classe para gerenciar webhooks
