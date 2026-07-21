@@ -92,6 +92,7 @@ async function getStageTitle(stageId: string | null): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
 
   try {
     // Optional secret token validation via query param
@@ -129,7 +130,13 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `🔔 ActiveCampaign deal update webhook received for deal ID: ${dealId}`,
+      JSON.stringify({
+        level: "info",
+        event: "active_campaign_deal_webhook_start",
+        route: "/api/webhooks/active-campaign",
+        requestId,
+        dealId,
+      }),
     );
 
     // Fetch deal details and custom fields in parallel
@@ -147,8 +154,14 @@ export async function POST(request: NextRequest) {
       console.log(`🔍 Fetching contact fields for contact ID: ${deal.contact}`);
       contactFieldsResponse = await fetchContactFieldValues(deal.contact);
       console.log(
-        `✅ Contact fields response:`,
-        JSON.stringify(contactFieldsResponse, null, 2),
+        JSON.stringify({
+          level: "info",
+          event: "active_campaign_contact_fields_loaded",
+          requestId,
+          dealId,
+          contactId: String(deal.contact),
+          fieldCount: contactFieldsResponse?.fieldValues?.length || 0,
+        }),
       );
     } else {
       console.warn(`⚠️ Deal ${dealId} has no contact associated`);
@@ -248,17 +261,15 @@ export async function POST(request: NextRequest) {
       sync_status: "synced" as const,
       segmento_de_negocio: segmentoDeNegocio,
       intencao_de_compra: intencaoDeCompra,
+      last_change_source: "webhook",
+      last_request_id: requestId,
     };
 
-    // Upsert into deals_cache AND deals_live in parallel
-    const [cacheResult, liveResult] = await Promise.all([
-      supabase
-        .from("deals_cache")
-        .upsert(processedDeal, { onConflict: "deal_id" }),
-      supabase
-        .from("deals_live")
-        .upsert(processedDeal, { onConflict: "deal_id" }),
-    ]);
+    // ActiveCampaign is authoritative for each deal. Never infer financial or
+    // status fields from another deal that happens to share the same contact.
+    const cacheResult = await supabase
+      .from("deals_cache")
+      .upsert(processedDeal, { onConflict: "deal_id" });
 
     if (cacheResult.error) {
       console.error(
@@ -268,14 +279,6 @@ export async function POST(request: NextRequest) {
       throw new Error(
         `Supabase deals_cache upsert error: ${cacheResult.error.message}`,
       );
-    }
-
-    if (liveResult.error) {
-      console.error(
-        "❌ Error upserting deal into deals_live:",
-        liveResult.error,
-      );
-      // Don't throw - deals_cache was successful, log the error
     }
 
     // ── programacao_cache maintenance ────────────────────────────────────────
@@ -340,101 +343,36 @@ export async function POST(request: NextRequest) {
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // ── Ghost deal healing ───────────────────────────────────────────────────
-    // When a deal comes in with value = 0, it may be an orphan created by
-    // ActiveCampaign during a bulk owner reassignment. We look for a sibling
-    // deal on the same contact that carries the real data (value > 0) and copy
-    // the key fields over so the dashboard reflects accurate information.
-    let ghostHealed = false;
-    try {
-      const dealValue = parseFloat(deal.value || "0");
-      const contactId = deal.contact?.toString();
-      // Only heal deals in the main pipeline (group 1 = Atendimento).
-      // Recycled prospecting cards (pipelines 8/9/10) are intentionally
-      // zeroed/reopened by the team — healing them copies won status and
-      // value from the real sibling deal and re-inflates revenue.
-      const dealGroup = deal.group?.toString();
-
-      if (dealValue === 0 && contactId && dealGroup === "1") {
-        console.log(
-          `🔍 Deal ${dealId} has value=0 — checking for ghost sibling on contact ${contactId}`,
-        );
-
-        const { data: siblings } = await supabase
-          .from("deals_cache")
-          .select(
-            `deal_id, title, value, status, stage_id, closing_date, custom_field_value, custom_field_id, estado, vendedor, designer, "quantidade-de-pares", "utm-source", "utm-medium", segmento_de_negocio, intencao_de_compra`,
-          )
-          .eq("contact_id", contactId)
-          .neq("deal_id", dealId)
-          .gt("value", 0)
-          .order("value", { ascending: false })
-          .limit(1);
-
-        if (siblings && siblings.length > 0) {
-          const ghost = siblings[0];
-          console.log(
-            `👻 Ghost deal detected! Healing active deal ${dealId} with data from ghost deal ${ghost.deal_id} (value: ${ghost.value}, title: "${ghost.title}")`,
-          );
-
-          // Copy ALL fields from ghost — status, closing_date, value, title, etc.
-          const healPatch = {
-            title: ghost.title,
-            value: ghost.value,
-            status: ghost.status,
-            stage_id: ghost.stage_id,
-            closing_date: ghost.closing_date,
-            custom_field_value: ghost.custom_field_value,
-            custom_field_id: ghost.custom_field_id,
-            estado: ghost.estado,
-            "quantidade-de-pares": ghost["quantidade-de-pares"],
-            vendedor: ghost.vendedor,
-            designer: ghost.designer,
-            "utm-source": ghost["utm-source"],
-            "utm-medium": ghost["utm-medium"],
-            segmento_de_negocio: ghost.segmento_de_negocio,
-            intencao_de_compra: ghost.intencao_de_compra,
-          };
-
-          await Promise.all([
-            supabase
-              .from("deals_cache")
-              .update(healPatch)
-              .eq("deal_id", dealId),
-            supabase.from("deals_live").update(healPatch).eq("deal_id", dealId),
-          ]);
-
-          ghostHealed = true;
-          console.log(
-            `✅ Ghost healing complete for deal ${dealId} — adopted data from ghost ${ghost.deal_id}`,
-          );
-        } else {
-          console.log(
-            `ℹ️ No ghost sibling found for deal ${dealId} on contact ${contactId}`,
-          );
-        }
-      }
-    } catch (ghostError) {
-      // Healing is non-critical — never fail the main webhook response
-      console.error(`⚠️ Ghost healing error for deal ${dealId}:`, ghostError);
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
     const totalTime = Date.now() - startTime;
     console.log(
-      `✅ Deal ${dealId} updated in deals_cache + deals_live in ${totalTime}ms`,
+      JSON.stringify({
+        level: "info",
+        event: "active_campaign_deal_webhook_done",
+        route: "/api/webhooks/active-campaign",
+        requestId,
+        dealId,
+        durationMs: totalTime,
+      }),
     );
 
     return NextResponse.json({
       success: true,
       deal_id: dealId,
-      ghost_healed: ghostHealed,
       processing_time_ms: totalTime,
     });
   } catch (error) {
     const totalTime = Date.now() - startTime;
     const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("❌ ActiveCampaign webhook error:", error);
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "active_campaign_deal_webhook_failed",
+        route: "/api/webhooks/active-campaign",
+        requestId,
+        error: message,
+        durationMs: totalTime,
+      }),
+    );
     return NextResponse.json(
       { success: false, error: message, processing_time_ms: totalTime },
       { status: 500 },

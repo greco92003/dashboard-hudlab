@@ -1,7 +1,7 @@
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
+import { requireAdminOrCron } from "@/lib/security/route-guards";
 
 // Environment variables
 const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
@@ -27,22 +27,14 @@ const RATE_LIMIT = {
 };
 
 // Create Supabase client with service role key
-async function createSupabaseServer() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
+function createSupabaseServer() {
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     getSupabaseSecretKey(),
     {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     },
   );
@@ -197,11 +189,29 @@ function convertDateFormat(dateString: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAdminOrCron(request);
+  if (authError) return authError;
+
   const startTime = Date.now();
   let syncLogId: string | null = null;
+  const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
+  const syncSource =
+    request.headers.get("authorization") ===
+    `Bearer ${process.env.CRON_SECRET}`
+      ? "cron"
+      : "manual";
 
   try {
     console.log("=== ROBUST DEALS SYNC PARALLEL ===");
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "deals_sync_start",
+        route: "/api/test/robust-deals-sync-parallel",
+        requestId,
+        source: syncSource,
+      }),
+    );
     console.log(
       `🎯 Target custom field IDs: ${TARGET_CUSTOM_FIELD_IDS.join(", ")}`,
     );
@@ -230,7 +240,7 @@ export async function GET(request: NextRequest) {
       `📊 Max deals to process: ${allDealsParam ? "ALL DEALS" : maxDeals}`,
     );
 
-    const supabase = await createSupabaseServer();
+    const supabase = createSupabaseServer();
 
     // Create sync log entry (only for live updates, not dry runs)
     if (!dryRun) {
@@ -244,6 +254,8 @@ export async function GET(request: NextRequest) {
           deals_added: 0,
           deals_updated: 0,
           deals_deleted: 0,
+          sync_source: syncSource,
+          request_id: requestId,
         })
         .select("id")
         .single();
@@ -525,6 +537,8 @@ export async function GET(request: NextRequest) {
         sync_status: "synced" as const,
         segmento_de_negocio: segmentoDeNegocio,
         intencao_de_compra: intencaoDeCompra,
+        last_change_source: syncSource,
+        last_request_id: requestId,
       };
     });
 
@@ -683,6 +697,17 @@ export async function GET(request: NextRequest) {
 
     const syncDuration = (Date.now() - startTime) / 1000;
     console.log(`🎉 PARALLEL SYNC COMPLETED in ${syncDuration}s`);
+    console.log(
+      JSON.stringify({
+        level: "info",
+        event: "deals_sync_done",
+        route: "/api/test/robust-deals-sync-parallel",
+        requestId,
+        source: syncSource,
+        durationMs: Date.now() - startTime,
+        dealsProcessed: deduplicatedDeals.length,
+      }),
+    );
 
     // Update sync log with success (only for live updates)
     if (!dryRun && syncLogId) {
@@ -733,6 +758,17 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("❌ Sync error:", error);
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "deals_sync_failed",
+        route: "/api/test/robust-deals-sync-parallel",
+        requestId,
+        source: syncSource,
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - startTime,
+      }),
+    );
     const syncDuration = (Date.now() - startTime) / 1000;
 
     // Update sync log with error (only for live updates)
