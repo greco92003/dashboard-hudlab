@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { createBrowserClient } from '@supabase/ssr';
 import type { User } from '@supabase/supabase-js';
 import { storage } from "@/lib/storage";
+import { getSupabasePublishableKey } from "@/lib/supabase/keys-public";
 
 interface UserProfile {
   id: string;
@@ -39,7 +40,7 @@ export function StableAuthProvider({ children }: { children: React.ReactNode }) 
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    getSupabasePublishableKey()
   );
 
   // Cache para perfil do usuário
