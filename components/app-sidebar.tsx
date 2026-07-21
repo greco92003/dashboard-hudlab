@@ -169,6 +169,11 @@ const menuGroups: MenuGroup[] = [
         icon: Palette,
       },
       {
+        title: "Designers GHL",
+        url: "/designers-ghl",
+        icon: Palette,
+      },
+      {
         title: "Representantes",
         url: "/representantes",
         icon: Users,
