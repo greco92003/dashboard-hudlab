@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownRight, ArrowUpRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import {
@@ -34,8 +33,9 @@ import {
   fmtBrl,
   fmtNum,
   fmtDataCurta,
-  hojeSaoPaulo,
-  inicioSemana,
+  addDias,
+  diaAnterior,
+  periodoAnterior,
   type Periodo,
   periodoParaDatas,
 } from "../lib";
@@ -105,10 +105,9 @@ interface SeriePonto {
   bucket: string;
   investimento: number;
   faturamento: number;
-  parcial: boolean;
+  investimentoAnterior: number;
+  faturamentoAnterior: number;
 }
-
-type Granularidade = "diario" | "semanal" | "mensal";
 
 // Métricas em que aumento é ruim (custos): inverte a cor da variação
 const CUSTO_KEYS = new Set(["spend", "cpa_pedido", "cpl", "cpc", "custo_por_par"]);
@@ -130,12 +129,6 @@ function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
   );
 }
 
-function bucketDe(dateStr: string, g: Granularidade): string {
-  if (g === "diario") return dateStr;
-  if (g === "mensal") return `${dateStr.slice(0, 7)}-01`;
-  return inicioSemana(dateStr);
-}
-
 export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [funil, setFunil] = useState<FunilRow[]>([]);
@@ -145,32 +138,51 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   const [saudePct, setSaudePct] = useState<number | null>(null);
   const [metaDiario, setMetaDiario] = useState<{ date: string; spend: number }[]>([]);
   const [vendasDiario, setVendasDiario] = useState<{ venda_em: string; monetary_value: number }[]>([]);
+  const [metaAnteriorDiario, setMetaAnteriorDiario] = useState<{ date: string; spend: number }[]>([]);
+  const [vendasAnteriorDiario, setVendasAnteriorDiario] = useState<
+    { venda_em: string; monetary_value: number }[]
+  >([]);
   const [pipelineNomes, setPipelineNomes] = useState<Map<string, string>>(new Map());
-  const [granularidade, setGranularidade] = useState<Granularidade>("semanal");
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
+  // Gráfico Investimento vs Faturamento: sempre diário, respeita o
+  // período selecionado, exclui hoje (sempre parcial) e compara com o
+  // período imediatamente anterior de mesma duração (mesmo nº de dias).
+  const { inicio, fim } = periodoParaDatas(periodo);
+  const realFim = diaAnterior(fim); // fim do período selecionado é sempre "hoje"; excluído
+  const anterior = periodoAnterior(inicio, realFim);
+
   useEffect(() => {
     const supabase = createClient();
-    const { inicio, fim } = periodoParaDatas(periodo);
     let cancel = false;
     setLoading(true);
     setErro(null);
 
     (async () => {
-      const [rpc, meta, vendas, funilQ, custoQ, fonteQ, funnelAds, saude, pipes] =
+      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, custoQ, fonteQ, funnelAds, saude, pipes] =
         await Promise.all([
           supabase.rpc("get_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
           supabase
             .from("meta_insights_daily")
             .select("date, spend")
             .gte("date", inicio)
-            .lte("date", fim),
+            .lte("date", realFim),
           supabase
             .from("v_vendas")
             .select("venda_em, monetary_value")
             .gte("venda_em", `${inicio}T00:00:00`)
-            .lte("venda_em", `${fim}T23:59:59`),
+            .lte("venda_em", `${realFim}T23:59:59`),
+          supabase
+            .from("meta_insights_daily")
+            .select("date, spend")
+            .gte("date", anterior.inicio)
+            .lte("date", anterior.fim),
+          supabase
+            .from("v_vendas")
+            .select("venda_em, monetary_value")
+            .gte("venda_em", `${anterior.inicio}T00:00:00`)
+            .lte("venda_em", `${anterior.fim}T23:59:59`),
           supabase.from("v_funil_etapas").select("*"),
           supabase.from("v_custo_por_etapa").select("*"),
           supabase.from("v_desempenho_fonte").select("*"),
@@ -197,6 +209,10 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
       setMetaDiario(meta.data ?? []);
       setVendasDiario(
         (vendas.data ?? []).filter((v) => v.venda_em) as { venda_em: string; monetary_value: number }[]
+      );
+      setMetaAnteriorDiario(metaAnt.data ?? []);
+      setVendasAnteriorDiario(
+        (vendasAnt.data ?? []).filter((v) => v.venda_em) as { venda_em: string; monetary_value: number }[]
       );
       setPipelineNomes(
         new Map(
@@ -310,28 +326,47 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
     },
   ];
 
-  // Série investimento vs faturamento na granularidade escolhida.
-  // O bucket que contém "hoje" está incompleto (semana/mês em
-  // andamento) — marcado para não ser lido como uma queda real.
-  const bucketAtual = bucketDe(hojeSaoPaulo(), granularidade);
-  const buckets = new Map<string, SeriePonto>();
-  const get = (b: string) => {
-    let p = buckets.get(b);
-    if (!p) {
-      p = { bucket: b, investimento: 0, faturamento: 0, parcial: b === bucketAtual };
-      buckets.set(b, p);
-    }
-    return p;
-  };
+  // Série diária investimento vs faturamento, alinhada por posição
+  // (dia 0, 1, 2...) entre o período selecionado (excluindo hoje,
+  // sempre parcial) e o período anterior de mesma duração — permite
+  // sobrepor as duas linhas mesmo com datas de calendário diferentes.
+  const investimentoPorDia = new Map<string, number>();
+  const faturamentoPorDia = new Map<string, number>();
+  const investimentoAnteriorPorDia = new Map<string, number>();
+  const faturamentoAnteriorPorDia = new Map<string, number>();
   for (const r of metaDiario) {
-    get(bucketDe(r.date, granularidade)).investimento += Number(r.spend) || 0;
+    investimentoPorDia.set(r.date, (investimentoPorDia.get(r.date) ?? 0) + (Number(r.spend) || 0));
   }
   for (const vd of vendasDiario) {
-    get(bucketDe(vd.venda_em.slice(0, 10), granularidade)).faturamento +=
-      Number(vd.monetary_value) || 0;
+    const d = vd.venda_em.slice(0, 10);
+    faturamentoPorDia.set(d, (faturamentoPorDia.get(d) ?? 0) + (Number(vd.monetary_value) || 0));
   }
-  const serie = [...buckets.values()].sort((x, y) => x.bucket.localeCompare(y.bucket));
-  const ultimoPonto = serie[serie.length - 1];
+  for (const r of metaAnteriorDiario) {
+    investimentoAnteriorPorDia.set(
+      r.date,
+      (investimentoAnteriorPorDia.get(r.date) ?? 0) + (Number(r.spend) || 0)
+    );
+  }
+  for (const vd of vendasAnteriorDiario) {
+    const d = vd.venda_em.slice(0, 10);
+    faturamentoAnteriorPorDia.set(d, (faturamentoAnteriorPorDia.get(d) ?? 0) + (Number(vd.monetary_value) || 0));
+  }
+  const diasTotal =
+    Math.round(
+      (new Date(`${realFim}T12:00:00`).getTime() - new Date(`${inicio}T12:00:00`).getTime()) /
+        86400000
+    ) + 1;
+  const serie: SeriePonto[] = Array.from({ length: Math.max(diasTotal, 0) }, (_, offset) => {
+    const dataAtual = addDias(inicio, offset);
+    const dataAnterior = addDias(anterior.inicio, offset);
+    return {
+      bucket: dataAtual,
+      investimento: investimentoPorDia.get(dataAtual) ?? 0,
+      faturamento: faturamentoPorDia.get(dataAtual) ?? 0,
+      investimentoAnterior: investimentoAnteriorPorDia.get(dataAnterior) ?? 0,
+      faturamentoAnterior: faturamentoAnteriorPorDia.get(dataAnterior) ?? 0,
+    };
+  });
 
   const maxFunil = Math.max(1, ...funil.map((f) => f.qtd));
   const maxCusto = Math.max(1, ...custoEtapa.map((c) => c.custo_por_oportunidade ?? 0));
@@ -436,29 +471,13 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
 
         {/* Investimento vs Faturamento */}
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 gap-2">
-            <div>
-              <CardTitle>Investimento vs. Faturamento</CardTitle>
-              <CardDescription>
-                Faturamento = oportunidades marcadas como ganhas (won) no GHL
-              </CardDescription>
-            </div>
-            <Tabs
-              value={granularidade}
-              onValueChange={(g) => setGranularidade(g as Granularidade)}
-            >
-              <TabsList className="h-8">
-                <TabsTrigger value="diario" className="text-xs px-2">
-                  Diário
-                </TabsTrigger>
-                <TabsTrigger value="semanal" className="text-xs px-2">
-                  Semanal
-                </TabsTrigger>
-                <TabsTrigger value="mensal" className="text-xs px-2">
-                  Mensal
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <CardHeader>
+            <CardTitle>Investimento vs. Faturamento</CardTitle>
+            <CardDescription>
+              Diário, sempre excluindo hoje (dado parcial) · linhas
+              tracejadas = período anterior de mesma duração, alinhado por
+              dia · Faturamento = oportunidades marcadas como ganhas (won)
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {serie.length === 0 ? (
@@ -466,60 +485,60 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
                 Sem dados no período. Rode os syncs para começar a coletar.
               </p>
             ) : (
-              <>
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={serie}>
-                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis
-                        dataKey="bucket"
-                        tickFormatter={fmtDataCurta}
-                        fontSize={11}
-                      />
-                      <YAxis
-                        tickFormatter={(x: number) => fmtBrl(x)}
-                        fontSize={11}
-                        width={85}
-                      />
-                      <Tooltip
-                        formatter={(x: number) => fmtBrl(x)}
-                        labelFormatter={(bucket: string) =>
-                          `${fmtDataCurta(bucket)}${bucket === bucketAtual ? " (em andamento)" : ""}`
-                        }
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="investimento"
-                        name="Investimento"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="faturamento"
-                        name="Faturamento"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                {ultimoPonto?.parcial && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    * Último ponto ({fmtDataCurta(ultimoPonto.bucket)}) é um{" "}
-                    {granularidade === "diario"
-                      ? "dia"
-                      : granularidade === "semanal"
-                        ? "período semanal"
-                        : "período mensal"}{" "}
-                    em andamento — inclui só os dados até hoje, por isso costuma
-                    aparecer mais baixo que o anterior.
-                  </p>
-                )}
-              </>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={serie}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis dataKey="bucket" tickFormatter={fmtDataCurta} fontSize={11} />
+                    <YAxis
+                      tickFormatter={(x: number) => fmtBrl(x)}
+                      fontSize={11}
+                      width={85}
+                    />
+                    <Tooltip
+                      formatter={(x: number) => fmtBrl(x)}
+                      labelFormatter={(bucket: string) => fmtDataCurta(bucket)}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="investimento"
+                      name="Investimento"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="faturamento"
+                      name="Faturamento"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="investimentoAnterior"
+                      name="Investimento (período anterior)"
+                      stroke="#f59e0b"
+                      strokeOpacity={0.45}
+                      strokeDasharray="4 4"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="faturamentoAnterior"
+                      name="Faturamento (período anterior)"
+                      stroke="#10b981"
+                      strokeOpacity={0.45}
+                      strokeDasharray="4 4"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -69,6 +69,24 @@ export function periodoParaDatas(p: Periodo): { inicio: string; fim: string } {
   return { inicio: fmt(inicio), fim };
 }
 
+// Um dia antes da data informada (YYYY-MM-DD)
+export function diaAnterior(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+// Soma (ou subtrai, com n negativo) dias a uma data (YYYY-MM-DD)
+export function addDias(dateStr: string, n: number): string {
+  const d = new Date(`${dateStr}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
 // Período imediatamente anterior, com a mesma duração (dias) do
 // período informado — mesma regra usada em get_resumo_periodo no banco.
 export function periodoAnterior(inicio: string, fim: string): { inicio: string; fim: string } {
