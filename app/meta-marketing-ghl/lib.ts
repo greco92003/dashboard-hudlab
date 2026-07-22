@@ -68,3 +68,20 @@ export function periodoParaDatas(p: Periodo): { inicio: string; fim: string } {
   inicio.setDate(inicio.getDate() - dias);
   return { inicio: fmt(inicio), fim };
 }
+
+// Período imediatamente anterior, com a mesma duração (dias) do
+// período informado — mesma regra usada em get_resumo_periodo no banco.
+export function periodoAnterior(inicio: string, fim: string): { inicio: string; fim: string } {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  const dIni = new Date(`${inicio}T12:00:00`);
+  const dFim = new Date(`${fim}T12:00:00`);
+  const dias = Math.round((dFim.getTime() - dIni.getTime()) / 86400000);
+  const fimAnterior = new Date(dIni);
+  fimAnterior.setDate(fimAnterior.getDate() - 1);
+  const inicioAnterior = new Date(fimAnterior);
+  inicioAnterior.setDate(inicioAnterior.getDate() - dias);
+  return { inicio: fmt(inicioAnterior), fim: fmt(fimAnterior) };
+}

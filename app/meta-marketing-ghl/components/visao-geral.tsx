@@ -55,6 +55,8 @@ interface Kpis {
   pares_vendidos: number | null;
   ticket_medio_par: number | null;
   custo_por_par: number | null;
+  mockups: number;
+  custo_por_mockup: number | null;
 }
 
 interface Resumo {
@@ -172,9 +174,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
           supabase.from("v_funil_etapas").select("*"),
           supabase.from("v_custo_por_etapa").select("*"),
           supabase.from("v_desempenho_fonte").select("*"),
-          supabase
-            .from("v_funnel_por_anuncio")
-            .select("campaign_name, spend_total, faturamento, vendas"),
+          supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
           supabase
             .from("v_atribuicao_saude")
             .select("semana, pct_com_utm")
@@ -239,8 +239,8 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
-          {Array.from({ length: 7 }).map((_, i) => (
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
@@ -283,6 +283,12 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
       label: "Leads",
       valor: fmtNum(a.leads),
       sub: `CPL ${nd(a.cpl, fmtBrl)}`,
+    },
+    {
+      key: "mockups",
+      label: "Solicitações de Mockup",
+      valor: fmtNum(a.mockups),
+      sub: `Custo/mockup ${nd(a.custo_por_mockup, fmtBrl)}`,
     },
     {
       key: "faturamento",
@@ -359,7 +365,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
       )}
 
       {/* KPIs com variação vs período anterior */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
         {kpis.map((k) => (
           <Card key={k.key}>
             <CardHeader className="pb-2 px-4 pt-4">

@@ -51,7 +51,7 @@ function MetaMarketingGhlContent() {
             Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
           </p>
         </div>
-        {aba === "visao-geral" && (
+        {(aba === "visao-geral" || aba === "anuncios") && (
           <Select
             value={periodo}
             onValueChange={(v) => setParam("periodo", v)}
@@ -81,7 +81,7 @@ function MetaMarketingGhlContent() {
           <VisaoGeral periodo={periodo} />
         </TabsContent>
         <TabsContent value="anuncios" className="mt-4">
-          <Anuncios />
+          <Anuncios periodo={periodo} />
         </TabsContent>
         <TabsContent value="regioes" className="mt-4">
           <Regioes />

@@ -1,0 +1,25 @@
+-- ============================================================
+-- Ajustes pré-produção (aplicado no Dashboard-v2 via MCP em 2026-07-22)
+--
+-- 1) get_funnel_por_anuncio(p_inicio, p_fim): versão parametrizada
+--    de v_funnel_por_anuncio, escopada por período. Coorte = leads
+--    (oportunidades) CRIADOS no período; marcos (orçamento, mockup,
+--    negociação, venda) = alcançados até agora por essa coorte —
+--    mesmo raciocínio já usado na view all-time, só que a "janela"
+--    de entrada de leads agora é o período selecionado. Meta
+--    (spend/impressões/cliques) filtra por data real.
+--    Usada pela aba Anúncios (período atual + período anterior, pra
+--    calcular variação % por métrica) e pelo "Top 5 campanhas" da
+--    Visão Geral.
+--
+-- 2) _kpis_periodo: corrige o mesmo bug de data (contact.created_at
+--    -> opportunity.created_at) no KPI de "leads", e adiciona
+--    mockups/custo_por_mockup ("Custo por Solicitação de Mockup"),
+--    coorte igual ao item 1.
+--
+-- v_funnel_por_anuncio (all-time) continua existindo como view, sem
+-- uso pelo frontend por ora (Anúncios sempre chama a função agora).
+--
+-- Conteúdo completo das funções: ver migration
+-- "meta_ghl_bi_periodo_anuncios_e_mockup_kpi" no histórico do Supabase.
+-- ============================================================
