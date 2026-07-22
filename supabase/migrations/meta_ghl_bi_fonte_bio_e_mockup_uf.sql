@@ -1,0 +1,37 @@
+-- ============================================================
+-- Ajustes 2026-07-22 (aplicado no Dashboard-v2 via MCP)
+--
+-- 1) Tráfego "Link da Bio" / perfil do Instagram sem ad_id real
+--    não é UTM quebrada — é um canal legítimo (usuário vê o anúncio,
+--    visita o perfil e clica no link da bio em vez de clicar direto
+--    no anúncio). Passa a ser tratado como fonte própria
+--    "Instagram/Facebook (perfil)" em v_desempenho_fonte, e é
+--    excluído da tabela de Anúncios (v_funnel_por_anuncio,
+--    get_funnel_por_anuncio) e do alerta de "UTM sem match"
+--    (v_utm_sem_match).
+--    Regra: ad_id "real" = string numérica de 10+ dígitos (formato
+--    dos ad_id do Meta, ex: 120249103838680551). Genérico — não é
+--    uma lista fixa de valores conhecidos.
+--
+-- 2) v_desempenho_uf_mes ganha coluna "mockups": Custo por Lead por
+--    estado usava leads_ghl, mas o campo UF só é preenchido de forma
+--    confiável quando o lead chega no orçamento — antes disso não
+--    temos essa info, então "leads por estado" é um número poluído.
+--    "mockups" usa a mesma lógica de coorte+etapa alcançada já usada
+--    em get_funnel_por_anuncio/_kpis_periodo (oportunidade criada,
+--    alcançou "Amostra Digital Enviada" ou além) — mesma metodologia
+--    do KPI "Solicitações de Mockup" da Visão Geral, quebrado por
+--    estado. Reconciliação: soma dos mockups por estado bate quase
+--    exatamente com o KPI geral; a pequena diferença é 100% explicada
+--    por (a) oportunidades sem UF conhecido ainda e (b) oportunidades
+--    cujo contato não foi sincronizado ainda (o sync diário resolve).
+--
+-- NOTA: a migration original desta mudança (mesmo nome) teve a
+-- transação revertida por completo por um erro em uma instrução
+-- posterior (mudança de coluna em view sem DROP). O conteúdo real
+-- ficou dividido em duas migrations de reaplicação no histórico do
+-- Supabase: "meta_ghl_bi_uf_mes_mockups_v2" (v_desempenho_uf_mes +
+-- v_sazonalidade_regiao) e "meta_ghl_bi_fonte_bio_reaplicar"
+-- (v_desempenho_fonte, v_funnel_por_anuncio, get_funnel_por_anuncio,
+-- v_utm_sem_match). Ver histórico do Supabase para o SQL completo.
+-- ============================================================

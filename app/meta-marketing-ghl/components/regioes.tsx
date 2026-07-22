@@ -27,6 +27,7 @@ interface UfMesRow {
   spend: number;
   leads_meta: number;
   leads_ghl: number;
+  mockups: number;
   vendas: number;
   faturamento: number;
 }
@@ -44,7 +45,7 @@ interface SazonalidadeRow {
 const ORDEM_REGIOES = ["Sul", "Sudeste", "Centro-Oeste", "Nordeste", "Norte"];
 const ORDEM_ESTACOES = ["verão", "outono", "inverno", "primavera"];
 
-type Metrica = "roas" | "spend" | "cpl";
+type Metrica = "roas" | "spend" | "custo_mockup";
 
 export function Regioes() {
   const [rows, setRows] = useState<UfMesRow[]>([]);
@@ -79,7 +80,7 @@ export function Regioes() {
     }
     const valor = (r: UfMesRow) => {
       if (metrica === "spend") return r.spend;
-      if (metrica === "cpl") return r.leads_ghl > 0 ? r.spend / r.leads_ghl : 0;
+      if (metrica === "custo_mockup") return r.mockups > 0 ? r.spend / r.mockups : 0;
       return r.spend > 0 ? r.faturamento / r.spend : 0;
     };
     let maxValor = 0;
@@ -105,7 +106,7 @@ export function Regioes() {
   const celValor = (r: UfMesRow | undefined) => {
     if (!r) return null;
     if (metrica === "spend") return r.spend;
-    if (metrica === "cpl") return r.leads_ghl > 0 ? r.spend / r.leads_ghl : null;
+    if (metrica === "custo_mockup") return r.mockups > 0 ? r.spend / r.mockups : null;
     return r.spend > 0 ? r.faturamento / r.spend : null;
   };
 
@@ -126,11 +127,15 @@ export function Regioes() {
             <CardTitle>Desempenho por estado e mês</CardTitle>
             <CardDescription>
               Lado Meta: região do clique • Lado GHL: estado informado pelo
-              lead. Intensidade da célula ={" "}
+              lead. Custo/Mockup usa a mesma régua do KPI &quot;Solicitações de
+              Mockup&quot; da Visão Geral (oportunidade que chegou em Amostra
+              Digital Enviada) — o UF só é confiável a partir do orçamento,
+              então contar por lead bruto por estado ficaria poluído.
+              Intensidade da célula ={" "}
               {metrica === "roas"
                 ? "ROAS (verde forte = melhor)"
-                : metrica === "cpl"
-                  ? "CPL (âmbar forte = lead mais caro)"
+                : metrica === "custo_mockup"
+                  ? "Custo/Mockup (âmbar forte = mockup mais caro)"
                   : "investimento (âmbar forte = mais verba)"}
               .
             </CardDescription>
@@ -142,7 +147,7 @@ export function Regioes() {
             <SelectContent>
               <SelectItem value="roas">ROAS</SelectItem>
               <SelectItem value="spend">Investimento</SelectItem>
-              <SelectItem value="cpl">CPL</SelectItem>
+              <SelectItem value="custo_mockup">Custo/Mockup</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
@@ -201,7 +206,7 @@ export function Regioes() {
                                 }}
                                 title={
                                   r
-                                    ? `${uf} ${m.slice(0, 7)} — invest.: ${fmtBrl(r.spend)} | leads GHL: ${r.leads_ghl} | vendas: ${r.vendas} | fat.: ${fmtBrl(r.faturamento)}`
+                                    ? `${uf} ${m.slice(0, 7)} — invest.: ${fmtBrl(r.spend)} | mockups: ${r.mockups} | vendas: ${r.vendas} | fat.: ${fmtBrl(r.faturamento)}`
                                     : undefined
                                 }
                               >
