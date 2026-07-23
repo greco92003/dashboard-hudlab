@@ -40,6 +40,8 @@ interface SaudeRow {
   pct_com_utm: number | null;
   com_match_meta: number;
   pct_match_meta: number | null;
+  com_ad_especifico: number;
+  pct_ad_especifico: number | null;
 }
 
 interface UtmSemMatchRow {
@@ -110,9 +112,11 @@ export function Saude() {
         <CardHeader>
           <CardTitle>Saúde da atribuição</CardTitle>
           <CardDescription>
-            % de contatos com utm_content por semana e % que dá match com um
-            ad_id conhecido do Meta. Abaixo de {LIMITE_ALERTA}% indica quebra na
-            atribuição.
+            % de contatos com utm_content por semana, % atribuído ao Meta (ad
+            específico ou tráfego de perfil/Bio do Instagram-Facebook, que já
+            entra no ROAS geral) e, dentro desse atribuído, % que identifica
+            um anúncio específico. Abaixo de {LIMITE_ALERTA}% de UTM indica
+            quebra na atribuição.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -155,9 +159,17 @@ export function Saude() {
                     <Line
                       type="monotone"
                       dataKey="pct_match_meta"
-                      name="% match com Meta"
+                      name="% atribuído ao Meta"
                       stroke="#8b5cf6"
                       strokeWidth={2}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="pct_ad_especifico"
+                      name="% identificado por anúncio"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
                     />
                   </LineChart>
                 </ResponsiveContainer>

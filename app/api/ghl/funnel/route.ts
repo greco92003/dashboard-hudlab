@@ -16,8 +16,10 @@ interface FunnelEventRow {
 }
 
 interface ContactJourney {
-  /** First time each stage was reached, considering events up to the end of the range */
-  stageFirstAt: Map<GhlFunnelStageSlug, number>;
+  /** Timestamp of each stage's event. GHL tags never fire twice for the same
+   * contact, so this is the one and only occurrence -- range filtering
+   * happens per-stage in buildFunnel, not here. */
+  stageAt: Map<GhlFunnelStageSlug, number>;
   withMockupAt: number | null;
   withoutMockupAt: number | null;
   /** Whether the contact had at least one event inside the selected range */
@@ -122,7 +124,7 @@ function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
     let journey = journeys.get(event.contact_id);
     if (!journey) {
       journey = {
-        stageFirstAt: new Map(),
+        stageAt: new Map(),
         withMockupAt: null,
         withoutMockupAt: null,
         hasEventInRange: range === null,
@@ -154,12 +156,11 @@ function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
       journey.withoutMockupAt = timestamp;
     }
 
-    // Stage counts only consider what happened up to the end of the range.
-    if (
-      (range === null || timestamp <= range.end) &&
-      !journey.stageFirstAt.has(event.stage_slug)
-    ) {
-      journey.stageFirstAt.set(event.stage_slug, timestamp);
+    // Each GHL tag fires at most once per contact -- record its real
+    // timestamp unconditionally. Whether it counts for a given range is
+    // decided per-stage in buildFunnel, not here.
+    if (!journey.stageAt.has(event.stage_slug)) {
+      journey.stageAt.set(event.stage_slug, timestamp);
     }
   }
 
@@ -181,22 +182,24 @@ function resolveVariant(journey: ContactJourney): GhlFunnelVariant | null {
 function buildFunnel(
   journeys: Map<string, ContactJourney>,
   variant: GhlFunnelVariant,
+  range: DateRangeMs | null,
 ) {
   const path = GHL_FUNNEL_PATHS[variant];
   const variantJourneys = Array.from(journeys.values()).filter(
-    (journey) =>
-      journey.hasEventInRange && resolveVariant(journey) === variant,
+    (journey) => resolveVariant(journey) === variant,
   );
 
-  return path.map((stage, index) => {
-    const requiredStages = path.slice(0, index + 1);
-    const value = variantJourneys.reduce(
-      (total, journey) =>
-        requiredStages.every((required) => journey.stageFirstAt.has(required))
-          ? total + 1
-          : total,
-      0,
-    );
+  return path.map((stage) => {
+    const value = variantJourneys.reduce((total, journey) => {
+      const at = journey.stageAt.get(stage);
+      if (at === undefined) return total;
+      // Each stage counts only if its own event happened inside the
+      // selected range -- a contact whose mockup request predates the
+      // range must not be re-surfaced just because they had unrelated
+      // activity (e.g. moving to negotiation) inside it.
+      if (range && (at < range.start || at > range.end)) return total;
+      return total + 1;
+    }, 0);
 
     return {
       slug: stage,
@@ -267,14 +270,14 @@ export async function GET(request: Request) {
           withMockup: {
             id: "with_mockup",
             title: "Com Mockup Automático",
-            stages: buildFunnel(journeys, "with_mockup"),
+            stages: buildFunnel(journeys, "with_mockup", range),
             active: withMockupActivity.active,
             lastEventAt: withMockupActivity.lastEventAt,
           },
           withoutMockup: {
             id: "without_mockup",
             title: "Sem Mockup Automático",
-            stages: buildFunnel(journeys, "without_mockup"),
+            stages: buildFunnel(journeys, "without_mockup", range),
             active: withoutMockupActivity.active,
             lastEventAt: withoutMockupActivity.lastEventAt,
           },
