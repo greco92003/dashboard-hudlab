@@ -8,7 +8,10 @@
  * opportunities/contacts (2021-07-28), and because the response shapes are
  * unrelated.
  */
-import { extractOpportunityFieldValue } from "@/lib/ghl/api";
+import {
+  extractOpportunityFieldValue,
+  fetchCustomFieldDefs,
+} from "@/lib/ghl/api";
 
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
@@ -222,32 +225,12 @@ async function fetchVendedorFieldId(): Promise<string | null> {
     return vendedorFieldIdCache.id;
   }
 
-  const { locationId } = requireGhlEnv();
   // Opportunity custom fields use the 2021-07-28 API version, not the
-  // Conversations one — reuse the default via ghlConversationsFetch is
-  // wrong here, so call fetch directly with the standard version.
-  const { token } = requireGhlEnv();
-  const url = new URL(
-    `/locations/${locationId}/customFields`,
-    GHL_BASE_URL,
-  );
-  url.searchParams.set("model", "opportunity");
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Version: "2021-07-28",
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    vendedorFieldIdCache = { id: null, fetchedAt: now };
-    return null;
-  }
-  const data = (await response.json()) as {
-    customFields: Array<{ id: string; name: string }>;
-  };
-  const field = (data.customFields || []).find(
+  // Conversations one — fetchCustomFieldDefs (lib/ghl/api.ts) already
+  // targets the right endpoint/version and retries once on 429, same
+  // policy as ghlConversationsFetch above.
+  const customFieldDefs = await fetchCustomFieldDefs("opportunity");
+  const field = customFieldDefs.find(
     (f) => (f.name || "").trim().toLowerCase() === "vendedor",
   );
   vendedorFieldIdCache = { id: field ? field.id : null, fetchedAt: now };

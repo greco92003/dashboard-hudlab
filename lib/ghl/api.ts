@@ -46,7 +46,7 @@ export interface GhlMappedDeal {
   [key: string]: string | number | null | undefined;
 }
 
-interface GhlCustomFieldDef {
+export interface GhlCustomFieldDef {
   id: string;
   name: string;
   fieldKey: string;
@@ -178,7 +178,7 @@ export function extractOpportunityFieldValue(
   return null;
 }
 
-async function fetchCustomFieldDefs(
+export async function fetchCustomFieldDefs(
   model: "opportunity" | "contact",
 ): Promise<GhlCustomFieldDef[]> {
   const { locationId } = requireEnv();
