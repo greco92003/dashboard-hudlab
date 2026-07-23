@@ -71,16 +71,10 @@ interface FunilRow {
   stage_name: string;
   stage_order: number;
   qtd: number;
+  custo_por_oportunidade: number | null;
   pct_primeira_etapa: number | null;
   pct_etapa_anterior: number | null;
-}
-
-interface CustoEtapaRow {
-  pipeline_id: string;
-  stage_name: string;
-  stage_order: number;
-  qtd: number;
-  custo_por_oportunidade: number | null;
+  variacao?: { qtd?: number; custo_por_oportunidade?: number };
 }
 
 interface FonteRow {
@@ -117,7 +111,14 @@ const CUSTO_KEYS = new Set([
   "cpc",
   "custo_por_par",
   "custo_por_mockup",
+  "custo_por_oportunidade",
 ]);
+
+// Mesma fórmula usada em anuncios.tsx pro comparativo com período anterior
+function calcVariacao(atual: number, anterior: number): number | undefined {
+  if (!anterior) return undefined;
+  return Math.round(((atual - anterior) / anterior) * 1000) / 10;
+}
 
 function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
   if (pct == null) return null;
@@ -139,7 +140,6 @@ function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
 export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [funil, setFunil] = useState<FunilRow[]>([]);
-  const [custoEtapa, setCustoEtapa] = useState<CustoEtapaRow[]>([]);
   const [fontes, setFontes] = useState<FonteRow[]>([]);
   const [topCampanhas, setTopCampanhas] = useState<CampanhaRow[]>([]);
   const [saudePct, setSaudePct] = useState<number | null>(null);
@@ -159,6 +159,11 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   const { inicio, fim } = periodoParaDatas(periodo);
   const realFim = diaAnterior(fim); // fim do período selecionado é sempre "hoje"; excluído
   const anterior = periodoAnterior(inicio, realFim);
+  // Comparativo do funil de etapas usa o mesmo critério de "período
+  // anterior" do resto do módulo (get_resumo_periodo/get_funnel_por_anuncio):
+  // fim original, sem excluir hoje -- diferente do `anterior` acima, que é
+  // só pro alinhamento do gráfico diário.
+  const anteriorFunil = periodoAnterior(inicio, fim);
 
   useEffect(() => {
     const supabase = createClient();
@@ -167,7 +172,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
     setErro(null);
 
     (async () => {
-      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, custoQ, fonteQ, funnelAds, saude, pipes] =
+      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, funilAntQ, fonteQ, funnelAds, saude, pipes] =
         await Promise.all([
           supabase.rpc("get_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
           supabase
@@ -190,8 +195,11 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
             .select("venda_em, monetary_value")
             .gte("venda_em", `${anterior.inicio}T00:00:00`)
             .lte("venda_em", `${anterior.fim}T23:59:59`),
-          supabase.from("v_funil_etapas").select("*"),
-          supabase.from("v_custo_por_etapa").select("*"),
+          supabase.rpc("get_funil_etapas", { p_inicio: inicio, p_fim: fim }),
+          supabase.rpc("get_funil_etapas", {
+            p_inicio: anteriorFunil.inicio,
+            p_fim: anteriorFunil.fim,
+          }),
           supabase.from("v_desempenho_fonte").select("*"),
           supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
           supabase
@@ -226,8 +234,24 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
           (pipes.data ?? []).map((p) => [p.pipeline_id as string, p.pipeline_name as string])
         )
       );
-      setFunil((funilQ.data as FunilRow[]) ?? []);
-      setCustoEtapa((custoQ.data as CustoEtapaRow[]) ?? []);
+
+      const porEtapaAnterior = new Map(
+        ((funilAntQ.data as FunilRow[]) ?? []).map((r) => [`${r.pipeline_id}:${r.stage_name}`, r])
+      );
+      const funilMerged = ((funilQ.data as FunilRow[]) ?? []).map((r) => {
+        const ant = porEtapaAnterior.get(`${r.pipeline_id}:${r.stage_name}`);
+        const variacao: FunilRow["variacao"] = {};
+        if (ant) {
+          const vq = calcVariacao(Number(r.qtd) || 0, Number(ant.qtd) || 0);
+          if (vq !== undefined) variacao.qtd = vq;
+          if (r.custo_por_oportunidade != null && ant.custo_por_oportunidade != null) {
+            const vc = calcVariacao(r.custo_por_oportunidade, ant.custo_por_oportunidade);
+            if (vc !== undefined) variacao.custo_por_oportunidade = vc;
+          }
+        }
+        return { ...r, variacao };
+      });
+      setFunil(funilMerged);
       setFontes((fonteQ.data as FonteRow[]) ?? []);
       setSaudePct(saude.data?.[0]?.pct_com_utm ?? null);
 
@@ -393,7 +417,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   });
 
   const maxFunil = Math.max(1, ...funil.map((f) => f.qtd));
-  const maxCusto = Math.max(1, ...custoEtapa.map((c) => c.custo_por_oportunidade ?? 0));
+  const maxCusto = Math.max(1, ...funil.map((c) => c.custo_por_oportunidade ?? 0));
   const totalFontes = fontes.reduce(
     (acc, f) => ({
       investimento: (acc.investimento ?? 0) + (f.investimento ?? 0),
@@ -459,8 +483,8 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
           <CardHeader>
             <CardTitle>Funil de vendas</CardTitle>
             <CardDescription>
-              Oportunidades que atingiram cada etapa (desde o início dos
-              snapshots diários), por pipeline
+              Oportunidades que atingiram cada etapa no período selecionado,
+              por pipeline. Variação vs período anterior de mesma duração.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -480,12 +504,13 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
                       .filter((f) => f.pipeline_id === pid)
                       .map((f) => (
                         <div key={f.stage_id ?? `${pid}-${f.stage_order}`}>
-                          <div className="flex justify-between text-xs mb-0.5">
+                          <div className="flex justify-between items-center text-xs mb-0.5">
                             <span className="font-medium truncate">{f.stage_name}</span>
-                            <span className="text-muted-foreground">
+                            <span className="flex items-center gap-1 text-muted-foreground">
                               {fmtNum(f.qtd)}
                               {f.pct_primeira_etapa != null &&
                                 ` · ${f.pct_primeira_etapa.toLocaleString("pt-BR")}%`}
+                              <Variacao metrica="qtd" pct={f.variacao?.qtd} />
                             </span>
                           </div>
                           <div className="h-5 rounded bg-muted overflow-hidden">
@@ -686,26 +711,28 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
           <CardHeader>
             <CardTitle>Custo por etapa do funil</CardTitle>
             <CardDescription>
-              Custo médio (investimento Meta acumulado) para levar uma
-              oportunidade até cada etapa
+              Custo médio (investimento Meta no período selecionado) para
+              levar uma oportunidade até cada etapa. Variação vs período
+              anterior de mesma duração.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {custoEtapa.length === 0 ? (
+            {funil.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem snapshots ainda — o custo por etapa nasce junto com o funil.
               </p>
             ) : (
               <div className="space-y-2">
-                {custoEtapa.map((c) => (
+                {funil.map((c) => (
                   <div key={c.stage_order + c.pipeline_id}>
-                    <div className="flex justify-between text-xs mb-0.5">
+                    <div className="flex justify-between items-center text-xs mb-0.5">
                       <span className="font-medium truncate">{c.stage_name}</span>
-                      <span className="text-muted-foreground">
+                      <span className="flex items-center gap-1 text-muted-foreground">
                         {c.custo_por_oportunidade == null
                           ? "—"
                           : fmtBrl(c.custo_por_oportunidade)}
                         {` · ${fmtNum(c.qtd)} opps`}
+                        <Variacao metrica="custo_por_oportunidade" pct={c.variacao?.custo_por_oportunidade} />
                       </span>
                     </div>
                     <div className="h-5 rounded bg-muted overflow-hidden">
