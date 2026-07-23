@@ -110,7 +110,14 @@ interface SeriePonto {
 }
 
 // Métricas em que aumento é ruim (custos): inverte a cor da variação
-const CUSTO_KEYS = new Set(["spend", "cpa_pedido", "cpl", "cpc", "custo_por_par"]);
+const CUSTO_KEYS = new Set([
+  "spend",
+  "cpa_pedido",
+  "cpl",
+  "cpc",
+  "custo_por_par",
+  "custo_por_mockup",
+]);
 
 function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
   if (pct == null) return null;
@@ -285,44 +292,61 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
 
   // CPA/CAC é sempre POR PEDIDO; custo por par é métrica separada
   // (a Hud Lab vende em lote — nunca misturar as duas)
-  const kpis: { key: keyof Kpis; label: string; valor: string; sub?: string }[] = [
+  // Cada métrica secundária (extras) também tem sua própria variação vs
+  // período anterior, igual a métrica principal do card.
+  const kpis: {
+    key: keyof Kpis;
+    label: string;
+    valor: string;
+    extras?: { key: keyof Kpis; label: string; valor: string }[];
+  }[] = [
     { key: "spend", label: "Investimento", valor: fmtBrl(a.spend) },
     { key: "impressoes", label: "Impressões", valor: fmtNum(a.impressoes) },
     {
       key: "cliques",
       label: "Cliques",
       valor: fmtNum(a.cliques),
-      sub: `CTR ${nd(a.ctr, (n) => `${n.toLocaleString("pt-BR")}%`)} · CPC ${nd(a.cpc, fmtBrl)}`,
+      extras: [
+        { key: "ctr", label: "CTR", valor: nd(a.ctr, (n) => `${n.toLocaleString("pt-BR")}%`) },
+        { key: "cpc", label: "CPC", valor: nd(a.cpc, fmtBrl) },
+      ],
     },
     {
       key: "leads",
       label: "Leads",
       valor: fmtNum(a.leads),
-      sub: `CPL ${nd(a.cpl, fmtBrl)}`,
+      extras: [{ key: "cpl", label: "CPL", valor: nd(a.cpl, fmtBrl) }],
     },
     {
       key: "mockups",
       label: "Solicitações de Mockup",
       valor: fmtNum(a.mockups),
-      sub: `Custo/mockup ${nd(a.custo_por_mockup, fmtBrl)}`,
+      extras: [
+        { key: "custo_por_mockup", label: "Custo/mockup", valor: nd(a.custo_por_mockup, fmtBrl) },
+      ],
     },
     {
       key: "faturamento",
       label: "Faturamento",
       valor: fmtBrl(a.faturamento),
-      sub: `ROAS ${nd(a.roas, (n) => `${n.toLocaleString("pt-BR")}x`)}`,
+      extras: [
+        { key: "roas", label: "ROAS", valor: nd(a.roas, (n) => `${n.toLocaleString("pt-BR")}x`) },
+      ],
     },
     {
       key: "vendas",
       label: "Vendas (pedidos)",
       valor: fmtNum(a.vendas),
-      sub: `CAC/pedido ${nd(a.cpa_pedido, fmtBrl)}`,
+      extras: [{ key: "cpa_pedido", label: "CAC/pedido", valor: nd(a.cpa_pedido, fmtBrl) }],
     },
     {
       key: "pares_vendidos",
       label: "Pares vendidos",
       valor: nd(a.pares_vendidos, fmtNum),
-      sub: `Custo/par ${nd(a.custo_por_par, fmtBrl)} · Ticket/par ${nd(a.ticket_medio_par, fmtBrl)}`,
+      extras: [
+        { key: "custo_por_par", label: "Custo/par", valor: nd(a.custo_por_par, fmtBrl) },
+        { key: "ticket_medio_par", label: "Ticket/par", valor: nd(a.ticket_medio_par, fmtBrl) },
+      ],
     },
   ];
 
@@ -409,10 +433,20 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
               <div className="min-h-4">
                 <Variacao metrica={k.key} pct={v[k.key]} />
               </div>
-              {k.sub && (
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  {k.sub}
-                </p>
+              {k.extras && (
+                <div className="space-y-0.5">
+                  {k.extras.map((e) => (
+                    <p
+                      key={e.key}
+                      className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1"
+                    >
+                      <span>
+                        {e.label} {e.valor}
+                      </span>
+                      <Variacao metrica={e.key} pct={v[e.key]} />
+                    </p>
+                  ))}
+                </div>
               )}
             </CardHeader>
           </Card>

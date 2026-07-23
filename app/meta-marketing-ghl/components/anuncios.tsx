@@ -23,19 +23,35 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import { fmtBrl, fmtNum, periodoAnterior, periodoParaDatas, type Periodo } from "../lib";
 
-// Métricas com comparativo vs período anterior (coluna de variação %
-// ao lado do valor). Investimento é a única onde subir é ruim.
+// Todas as métricas numéricas da tabela têm comparativo vs período
+// anterior — quantidade E valor/custo, não só contagem.
 const VAR_KEYS = [
   "spend_total",
   "leads_ghl",
+  "custo_por_lead",
   "orcamentos",
+  "valor_orcamentos",
+  "pares_orcamentos",
+  "custo_por_orcamento",
   "mockups",
+  "custo_por_mockup",
   "negociacoes",
+  "custo_por_negociacao",
   "vendas",
   "faturamento",
+  "cpa_venda",
+  "roas",
 ] as const;
 type VarKey = (typeof VAR_KEYS)[number];
-const VAR_CUSTO: Partial<Record<VarKey, boolean>> = { spend_total: true };
+// Métricas de custo: subir é ruim, inverte a cor do badge de variação.
+const VAR_CUSTO: Partial<Record<VarKey, boolean>> = {
+  spend_total: true,
+  custo_por_lead: true,
+  custo_por_orcamento: true,
+  custo_por_mockup: true,
+  custo_por_negociacao: true,
+  cpa_venda: true,
+};
 
 interface FunnelRow {
   ad_id: string;
@@ -303,27 +319,51 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
                           {fmtNum(r.leads_ghl)}
                         </Valor>
                       </TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.custo_por_lead)}</TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="custo_por_lead" variacao={r.variacao}>
+                          {fmtBrl(r.custo_por_lead)}
+                        </Valor>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Valor varKey="orcamentos" variacao={r.variacao}>
                           {fmtNum(r.orcamentos)}
                         </Valor>
                       </TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.valor_orcamentos)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(r.pares_orcamentos)}</TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.custo_por_orcamento)}</TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="valor_orcamentos" variacao={r.variacao}>
+                          {fmtBrl(r.valor_orcamentos)}
+                        </Valor>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="pares_orcamentos" variacao={r.variacao}>
+                          {fmtNum(r.pares_orcamentos)}
+                        </Valor>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="custo_por_orcamento" variacao={r.variacao}>
+                          {fmtBrl(r.custo_por_orcamento)}
+                        </Valor>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Valor varKey="mockups" variacao={r.variacao}>
                           {fmtNum(r.mockups)}
                         </Valor>
                       </TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.custo_por_mockup)}</TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="custo_por_mockup" variacao={r.variacao}>
+                          {fmtBrl(r.custo_por_mockup)}
+                        </Valor>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Valor varKey="negociacoes" variacao={r.variacao}>
                           {fmtNum(r.negociacoes)}
                         </Valor>
                       </TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.custo_por_negociacao)}</TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="custo_por_negociacao" variacao={r.variacao}>
+                          {fmtBrl(r.custo_por_negociacao)}
+                        </Valor>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Valor varKey="vendas" variacao={r.variacao}>
                           {fmtNum(r.vendas)}
@@ -334,9 +374,15 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
                           {fmtBrl(r.faturamento)}
                         </Valor>
                       </TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.cpa_venda)}</TableCell>
                       <TableCell className="text-right">
-                        {r.roas != null ? `${r.roas}x` : "—"}
+                        <Valor varKey="cpa_venda" variacao={r.variacao}>
+                          {fmtBrl(r.cpa_venda)}
+                        </Valor>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Valor varKey="roas" variacao={r.variacao}>
+                          {r.roas != null ? `${r.roas}x` : "—"}
+                        </Valor>
                       </TableCell>
                       <TableCell>
                         <DiagnosticoBadge valor={r.diagnostico} />
