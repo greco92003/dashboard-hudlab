@@ -165,7 +165,7 @@ export function normalizeGhlDateString(
 }
 
 /** Extract the value of an opportunity customFields entry (fieldValueString, fieldValueNumber, ...). */
-function extractOpportunityFieldValue(
+export function extractOpportunityFieldValue(
   entry: Record<string, unknown>,
 ): string | null {
   for (const [key, value] of Object.entries(entry)) {
