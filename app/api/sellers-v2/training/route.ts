@@ -112,11 +112,14 @@ export async function POST(request: NextRequest) {
       // Feb 2026. Deriving it from the authenticated user's own profile is
       // the correct source: it can't be forgotten/spoofed client-side, and
       // it's the exact same identity used everywhere else in the app.
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("user_profiles")
         .select("first_name, last_name")
         .eq("id", user.id)
         .single();
+      if (profileError) {
+        console.error("Failed to load profile for training seller name:", profileError);
+      }
       const resolvedSellerName =
         [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
         user.email ||
