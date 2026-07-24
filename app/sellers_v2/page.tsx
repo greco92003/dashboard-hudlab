@@ -70,6 +70,8 @@ interface TrainingRanking {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** When this message was actually sent/received (ISO). Feeds the same response-gap stats the real Auditor uses, so training pacing signals are real, not synthetic. */
+  timestamp: string;
 }
 
 interface AuditorReport {
@@ -186,17 +188,14 @@ export default function SellersV2Page() {
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(900);
   const [evaluating, setEvaluating] = useState(false);
+  // Same shape runAuditor produces for real negotiations (lib/ghl/sales-agent/agent.ts)
+  // — training reuses the exact same scoring function/criteria so the two
+  // notes are genuinely comparable, not just similarly-labeled.
   const [evaluation, setEvaluation] = useState<{
-    score: number;
-    feedback: string;
-    breakdown?: {
-      rapport: number;
-      objections: number;
-      techniques: number;
-      product: number;
-      closing: number;
-      professionalism: number;
-    };
+    report: AuditorReport & { naoAvaliavel?: boolean; motivoNaoAvaliavel?: string };
+    score: number | null;
+    classification: string | null;
+    hasCriticalError: boolean;
   } | null>(null);
 
   // Atendimentos Reais state
@@ -408,7 +407,9 @@ export default function SellersV2Page() {
         return;
       }
       if (data.success) {
-        setChatMessages([{ role: "assistant", content: data.response }]);
+        setChatMessages([
+          { role: "assistant", content: data.response, timestamp: new Date().toISOString() },
+        ]);
       }
     } catch (error) {
       console.error("Error starting session:", error);
@@ -421,7 +422,11 @@ export default function SellersV2Page() {
   // Send chat message
   const sendMessage = async () => {
     if (!chatInput.trim() || chatLoading || !sessionActive) return;
-    const userMsg: ChatMessage = { role: "user", content: chatInput.trim() };
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: chatInput.trim(),
+      timestamp: new Date().toISOString(),
+    };
     const updatedMessages = [...chatMessages, userMsg];
     setChatMessages(updatedMessages);
     setChatInput("");
@@ -445,7 +450,7 @@ export default function SellersV2Page() {
       if (data.success) {
         setChatMessages([
           ...updatedMessages,
-          { role: "assistant", content: data.response },
+          { role: "assistant", content: data.response, timestamp: new Date().toISOString() },
         ]);
       }
     } catch (error) {
@@ -455,6 +460,33 @@ export default function SellersV2Page() {
       setChatLoading(false);
     }
   };
+
+  // Client-side fallback shape for when there's nothing to actually score
+  // (too short, API error, network error) — mirrors the naoAvaliavel report
+  // shape the real runAuditor returns, so the UI branch handles both cases
+  // identically.
+  const buildNaoAvaliavelEvaluation = (motivo: string) => ({
+    report: {
+      naoAvaliavel: true,
+      motivoNaoAvaliavel: motivo,
+      resumo: "",
+      notasPorCriterio: {
+        precisaoInformacoes: 0,
+        entendimentoNecessidade: 0,
+        construcaoValor: 0,
+        conducaoProximoPasso: 0,
+        clarezaComunicacao: 0,
+      },
+      evidencias: [],
+      acertos: [],
+      falhas: [],
+      errosCriticos: [],
+      exemploRespostaMelhor: "",
+    },
+    score: null,
+    classification: null,
+    hasCriticalError: false,
+  });
 
   // End session and get evaluation
   const endSession = async () => {
@@ -468,11 +500,11 @@ export default function SellersV2Page() {
 
       // If conversation is too short, show a fallback evaluation instead of erroring
       if (!currentMessages || currentMessages.length < 2) {
-        setEvaluation({
-          score: 0,
-          feedback:
+        setEvaluation(
+          buildNaoAvaliavelEvaluation(
             "A sessão foi muito curta para avaliar. Inicie uma nova sessão e tente conversar mais com o cliente.",
-        });
+          ),
+        );
         return;
       }
 
@@ -491,19 +523,17 @@ export default function SellersV2Page() {
         fetchRankings();
       } else {
         // API returned an error — show a fallback so the UI doesn't get stuck
-        setEvaluation({
-          score: 0,
-          feedback:
-            data.error ||
-            "Não foi possível gerar a avaliação. Tente novamente.",
-        });
+        setEvaluation(
+          buildNaoAvaliavelEvaluation(
+            data.error || "Não foi possível gerar a avaliação. Tente novamente.",
+          ),
+        );
       }
     } catch (error) {
       console.error("Error evaluating:", error);
-      setEvaluation({
-        score: 0,
-        feedback: "Erro de conexão ao avaliar a sessão. Tente novamente.",
-      });
+      setEvaluation(
+        buildNaoAvaliavelEvaluation("Erro de conexão ao avaliar a sessão. Tente novamente."),
+      );
     } finally {
       setEvaluating(false);
     }
@@ -1055,118 +1085,141 @@ export default function SellersV2Page() {
 
                 {evaluation && (
                   <div className="flex flex-col flex-1 overflow-y-auto px-1 py-4 space-y-4">
-                    {/* Score header */}
-                    <div className="flex flex-col items-center gap-2">
-                      <div
-                        className={`text-5xl font-bold ${
-                          evaluation.score >= 80
-                            ? "text-green-500"
-                            : evaluation.score >= 60
-                              ? "text-yellow-500"
-                              : evaluation.score >= 40
-                                ? "text-orange-500"
-                                : "text-red-500"
-                        }`}
-                      >
-                        {evaluation.score}/100
+                    {evaluation.score == null ? (
+                      <div className="flex flex-col items-center gap-3 py-8 text-center">
+                        <AlertTriangle className="h-10 w-10 text-muted-foreground" />
+                        <p className="text-lg font-semibold">Conversa não avaliável</p>
+                        <p className="text-sm text-muted-foreground max-w-md">
+                          {evaluation.report.motivoNaoAvaliavel ||
+                            "Poucas trocas para avaliar com segurança — treine um pouco mais nessa sessão."}
+                        </p>
                       </div>
-                      <Badge
-                        variant={
-                          evaluation.score >= 70 ? "default" : "secondary"
-                        }
-                        className="text-sm"
-                      >
-                        {evaluation.score >= 80
-                          ? "Excelente! 🌟"
-                          : evaluation.score >= 60
-                            ? "Bom trabalho! 👍"
-                            : evaluation.score >= 40
-                              ? "Pode melhorar 💪"
-                              : "Precisa praticar mais 📚"}
-                      </Badge>
-                    </div>
-
-                    {/* Breakdown by criteria */}
-                    {evaluation.breakdown && (
-                      <div className="w-full space-y-2">
-                        {[
-                          {
-                            label: "Rapport e empatia",
-                            value: evaluation.breakdown.rapport,
-                            max: 15,
-                          },
-                          {
-                            label: "Tratamento de objeções",
-                            value: evaluation.breakdown.objections,
-                            max: 25,
-                          },
-                          {
-                            label: "Técnicas de venda",
-                            value: evaluation.breakdown.techniques,
-                            max: 20,
-                          },
-                          {
-                            label: "Conhecimento do produto",
-                            value: evaluation.breakdown.product,
-                            max: 15,
-                          },
-                          {
-                            label: "Fechamento",
-                            value: evaluation.breakdown.closing,
-                            max: 15,
-                          },
-                          {
-                            label: "Profissionalismo",
-                            value: evaluation.breakdown.professionalism,
-                            max: 10,
-                          },
-                        ].map(({ label, value, max }) => (
-                          <div key={label} className="space-y-1">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{label}</span>
-                              <span className="font-medium">
-                                {value}/{max}
-                              </span>
-                            </div>
-                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  value / max >= 0.8
-                                    ? "bg-green-500"
-                                    : value / max >= 0.5
-                                      ? "bg-yellow-500"
-                                      : "bg-red-500"
-                                }`}
-                                style={{ width: `${(value / max) * 100}%` }}
-                              />
-                            </div>
+                    ) : (
+                      <>
+                        {/* Score header — same anchors as the real Auditor (manual, seção 7.2) */}
+                        <div className="flex flex-col items-center gap-2">
+                          <div
+                            className={`text-5xl font-bold ${
+                              evaluation.score >= 90
+                                ? "text-green-500"
+                                : evaluation.score >= 80
+                                  ? "text-emerald-500"
+                                  : evaluation.score >= 70
+                                    ? "text-yellow-500"
+                                    : evaluation.score >= 60
+                                      ? "text-orange-500"
+                                      : "text-red-500"
+                            }`}
+                          >
+                            {evaluation.score}/100
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <Badge
+                            variant={evaluation.score >= 70 ? "default" : "secondary"}
+                            className="text-sm"
+                          >
+                            {evaluation.classification}
+                          </Badge>
+                          {evaluation.hasCriticalError && (
+                            <div className="flex items-center gap-1 text-xs text-destructive">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Erro crítico de política identificado (nota limitada a 69)
+                            </div>
+                          )}
+                        </div>
 
-                    {/* Feedback text — renders **bold** markdown */}
-                    <div className="text-sm text-muted-foreground leading-relaxed space-y-1">
-                      {evaluation.feedback.split("\n").map((line, i) => {
-                        const parts = line.split(/\*\*(.+?)\*\*/g);
-                        return (
-                          <p key={i}>
-                            {parts.map((part, j) =>
-                              j % 2 === 1 ? (
-                                <strong
-                                  key={j}
-                                  className="text-foreground font-semibold"
-                                >
-                                  {part}
-                                </strong>
-                              ) : (
-                                part
-                              ),
-                            )}
+                        {/* Breakdown by criteria — os 5 critérios reais do Manual Comercial (seção 7.1) */}
+                        <div className="w-full space-y-2">
+                          {[
+                            {
+                              label: "Precisão das informações",
+                              value: evaluation.report.notasPorCriterio.precisaoInformacoes,
+                              max: 25,
+                            },
+                            {
+                              label: "Entendimento da necessidade",
+                              value: evaluation.report.notasPorCriterio.entendimentoNecessidade,
+                              max: 20,
+                            },
+                            {
+                              label: "Construção de valor",
+                              value: evaluation.report.notasPorCriterio.construcaoValor,
+                              max: 20,
+                            },
+                            {
+                              label: "Condução para o próximo passo",
+                              value: evaluation.report.notasPorCriterio.conducaoProximoPasso,
+                              max: 20,
+                            },
+                            {
+                              label: "Clareza e comunicação",
+                              value: evaluation.report.notasPorCriterio.clarezaComunicacao,
+                              max: 15,
+                            },
+                          ].map(({ label, value, max }) => (
+                            <div key={label} className="space-y-1">
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>{label}</span>
+                                <span className="font-medium">
+                                  {value}/{max}
+                                </span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    value / max >= 0.8
+                                      ? "bg-green-500"
+                                      : value / max >= 0.5
+                                        ? "bg-yellow-500"
+                                        : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${(value / max) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {evaluation.report.resumo}
+                        </p>
+
+                        {evaluation.report.errosCriticos.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-destructive">Erros críticos</p>
+                            <ul className="list-disc list-inside text-sm text-muted-foreground">
+                              {evaluation.report.errosCriticos.map((e, i) => (
+                                <li key={i}>{e}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Acertos</p>
+                          <ul className="list-disc list-inside text-sm text-muted-foreground">
+                            {evaluation.report.acertos.map((a, i) => (
+                              <li key={i}>{a}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Falhas e oportunidades perdidas</p>
+                          <ul className="list-disc list-inside text-sm text-muted-foreground">
+                            {evaluation.report.falhas.map((f, i) => (
+                              <li key={i}>{f}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Exemplo de resposta melhor</p>
+                          <p className="text-sm text-muted-foreground">
+                            {evaluation.report.exemploRespostaMelhor}
                           </p>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      </>
+                    )}
 
                     <Button
                       onClick={() => {

@@ -265,8 +265,9 @@ export interface AuditorContext {
   etapaCrm: string | null;
   valorNegociacao: number | null;
   qtyPares: number | null;
-  outcome: "won" | "lost";
-  /** ISO timestamp of when this contact entered "Em Negociação" — the transcript now includes the full history, so the model needs this boundary to know which part of the conversation is actually under evaluation. */
+  /** Omit for a simulated training session — there's no real deal outcome to report. */
+  outcome?: "won" | "lost";
+  /** ISO timestamp marking where the scored portion of the conversation begins — for a real negotiation, when it entered "Em Negociação" (messages before it are context only); for a training session, the first message (the whole exercise is in scope). */
   negociacaoIniciadaEm: string;
 }
 
@@ -326,7 +327,12 @@ ${contextBlock({
   "Etapa atual do CRM": context.etapaCrm ?? "desconhecida",
   "Valor da negociação": context.valorNegociacao != null ? `R$ ${context.valorNegociacao.toFixed(2)}` : "não definido",
   "Quantidade de pares": context.qtyPares != null ? String(context.qtyPares) : "não definida",
-  Resultado: context.outcome === "won" ? "venda fechada (won)" : "negociação perdida (lost)",
+  Resultado:
+    context.outcome === "won"
+      ? "venda fechada (won)"
+      : context.outcome === "lost"
+        ? "negociação perdida (lost)"
+        : "não aplicável — sessão de treinamento simulado, sem resultado real",
   "Negociação iniciada em": context.negociacaoIniciadaEm,
 })}
 
