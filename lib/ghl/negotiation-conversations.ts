@@ -257,17 +257,24 @@ export function computeResponseGapStats(
 }
 
 /**
- * Scope decision from the design spec: no backfill. Only contacts whose
- * `ghl_funnel_events` row (stage_slug='emnegociacao') has `received_at` on
- * or after this date are ever picked up by either agent mode — this is
- * purely a "which contacts to process" gate (keeps the system light,
- * ignores clients who never reached negotiation). It does NOT trim which
- * messages get read once a contact qualifies — see getNegotiationTranscript,
- * which intentionally fetches the full history. Update this only if the
- * launch date actually changes; do not move it forward casually, it
- * defines what "no backfill" means operationally.
+ * Scope decision from the design spec: no backfill of CLOSED deals. Only
+ * contacts whose `ghl_funnel_events` row (stage_slug='emnegociacao') has
+ * `received_at` on or after this date are ever picked up by either agent
+ * mode — this is purely a "which contacts to process" gate (keeps the
+ * system light, ignores clients who never reached negotiation). It does
+ * NOT trim which messages get read once a contact qualifies — see
+ * getNegotiationTranscript, which intentionally fetches the full history.
+ *
+ * Set to 2026-07-16 (the day after the `emnegociacao` webhook itself went
+ * live) rather than this feature's own launch date: as of 2026-07-24 there
+ * were only 12 contacts with this tag ever, all still open (none resolved
+ * yet) — small enough, and all genuinely ongoing deals, that there's no
+ * "backfill of stale history" risk in covering every one of them instead
+ * of arbitrarily excluding the ~10 tagged before this feature shipped.
+ * Revisit this reasoning (not just the date) before moving it further
+ * back once real closed-deal volume exists.
  */
-export const NEGOTIATION_TRACKING_START_ISO = "2026-07-23T00:00:00.000Z";
+export const NEGOTIATION_TRACKING_START_ISO = "2026-07-16T00:00:00.000Z";
 
 let vendedorFieldIdCache: { id: string | null; fetchedAt: number } | null =
   null;
