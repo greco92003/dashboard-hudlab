@@ -46,7 +46,7 @@ export interface GhlMappedDeal {
   [key: string]: string | number | null | undefined;
 }
 
-interface GhlCustomFieldDef {
+export interface GhlCustomFieldDef {
   id: string;
   name: string;
   fieldKey: string;
@@ -165,7 +165,7 @@ export function normalizeGhlDateString(
 }
 
 /** Extract the value of an opportunity customFields entry (fieldValueString, fieldValueNumber, ...). */
-function extractOpportunityFieldValue(
+export function extractOpportunityFieldValue(
   entry: Record<string, unknown>,
 ): string | null {
   for (const [key, value] of Object.entries(entry)) {
@@ -178,7 +178,7 @@ function extractOpportunityFieldValue(
   return null;
 }
 
-async function fetchCustomFieldDefs(
+export async function fetchCustomFieldDefs(
   model: "opportunity" | "contact",
 ): Promise<GhlCustomFieldDef[]> {
   const { locationId } = requireEnv();

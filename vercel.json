@@ -19,9 +19,16 @@
     {
       "path": "/api/cron/sync-programacao",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/evaluate-negotiations",
+      "schedule": "40 9 * * *"
     }
   ],
   "functions": {
+    "app/api/cron/evaluate-negotiations/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/test/robust-deals-sync/route.ts": {
       "maxDuration": 300
     },

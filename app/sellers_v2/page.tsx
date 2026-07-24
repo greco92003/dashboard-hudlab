@@ -72,6 +72,60 @@ interface ChatMessage {
   content: string;
 }
 
+interface AuditorReport {
+  resumo: string;
+  notasPorCriterio: {
+    precisaoInformacoes: number;
+    entendimentoNecessidade: number;
+    construcaoValor: number;
+    conducaoProximoPasso: number;
+    clarezaComunicacao: number;
+  };
+  evidencias: string[];
+  acertos: string[];
+  falhas: string[];
+  errosCriticos: string[];
+  exemploRespostaMelhor: string;
+}
+
+interface CopilotoReport {
+  situacaoAtual: string;
+  objetivoProvavelCliente: string;
+  sinaisCompra: string[];
+  objecoesAbertas: string[];
+  informacoesNecessarias: string[];
+  proximaAcao: string;
+  mensagemSugerida: string;
+  evitar: string;
+}
+
+interface ActiveNegotiation {
+  opportunityId: string;
+  contactId: string;
+  contactName: string | null;
+  stageName: string | null;
+  negotiationStartedAt: string | null;
+  latestInsight: { report: CopilotoReport; createdAt: string } | null;
+}
+
+interface ClosedNegotiation {
+  opportunityId: string;
+  contactId: string;
+  vendedor: string | null;
+  outcome: "won" | "lost";
+  score: number | null;
+  classification: string | null;
+  hasCriticalError: boolean;
+  report: AuditorReport;
+  evaluatedAt: string;
+}
+
+interface VendedorRanking {
+  vendedor: string;
+  avgScore: number;
+  count: number;
+}
+
 const MONTH_NAMES = [
   "",
   "Janeiro",
@@ -144,6 +198,71 @@ export default function SellersV2Page() {
       professionalism: number;
     };
   } | null>(null);
+
+  // Atendimentos Reais state
+  const [activeNegotiations, setActiveNegotiations] = useState<ActiveNegotiation[]>([]);
+  const [closedNegotiations, setClosedNegotiations] = useState<ClosedNegotiation[]>([]);
+  const [negotiationRanking, setNegotiationRanking] = useState<VendedorRanking[]>([]);
+  const [loadingNegotiations, setLoadingNegotiations] = useState(true);
+  const [generatingInsightFor, setGeneratingInsightFor] = useState<string | null>(null);
+  const [negotiationError, setNegotiationError] = useState<string | null>(null);
+  const [expandedClosedId, setExpandedClosedId] = useState<string | null>(null);
+
+  const fetchNegotiations = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sellers-v2/negotiations?_t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("Failed to fetch negotiations");
+      const data = await res.json();
+      setActiveNegotiations(data.active || []);
+      setClosedNegotiations(
+        (data.closed || []).map((row: any) => ({
+          opportunityId: row.opportunity_id,
+          contactId: row.contact_id,
+          vendedor: row.vendedor,
+          outcome: row.outcome,
+          score: row.score,
+          classification: row.classification,
+          hasCriticalError: row.has_critical_error,
+          report: row.report,
+          evaluatedAt: row.evaluated_at,
+        })),
+      );
+      setNegotiationRanking(data.rankingByVendedor || []);
+    } catch (error) {
+      console.error("Error fetching negotiations:", error);
+    } finally {
+      setLoadingNegotiations(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNegotiations();
+  }, [fetchNegotiations]);
+
+  const generateInsight = async (opportunityId: string) => {
+    setGeneratingInsightFor(opportunityId);
+    setNegotiationError(null);
+    try {
+      const res = await fetch("/api/sellers-v2/negotiation-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNegotiationError(data.error || "Não foi possível gerar o insight.");
+        return;
+      }
+      await fetchNegotiations();
+    } catch (error) {
+      console.error("Error generating insight:", error);
+      setNegotiationError("Erro de conexão ao gerar insight.");
+    } finally {
+      setGeneratingInsightFor(null);
+    }
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -406,7 +525,7 @@ export default function SellersV2Page() {
         onValueChange={handleTabChange}
         className={hasMounted ? "w-full" : "invisible h-0 overflow-hidden"}
       >
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="rankings" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Rankings</span>
@@ -416,6 +535,11 @@ export default function SellersV2Page() {
             <Brain className="h-4 w-4" />
             <span className="hidden sm:inline">Treinamento IA</span>
             <span className="sm:hidden">Treino</span>
+          </TabsTrigger>
+          <TabsTrigger value="real" className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Atendimentos Reais</span>
+            <span className="sm:hidden">Reais</span>
           </TabsTrigger>
         </TabsList>
 
@@ -656,6 +780,60 @@ export default function SellersV2Page() {
                               seller.avgScore >= 70 ? "default" : "secondary"
                             }
                           >
+                            {seller.avgScore}/100
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Ranking 4: Atendimento Real */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-green-600" />
+                Ranking de Atendimento Real
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingNegotiations ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : negotiationRanking.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhuma negociação avaliada ainda
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead className="text-center hidden sm:table-cell">
+                        Negociações
+                      </TableHead>
+                      <TableHead className="text-right">Nota Média</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {negotiationRanking.map((seller, idx) => (
+                      <TableRow key={seller.vendedor} className={idx < 3 ? "bg-muted/30" : ""}>
+                        <TableCell className="font-bold">
+                          {idx < 3 ? medalIcons[idx] : idx + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">{seller.vendedor}</TableCell>
+                        <TableCell className="text-center hidden sm:table-cell">
+                          {seller.count}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={seller.avgScore >= 70 ? "default" : "secondary"}>
                             {seller.avgScore}/100
                           </Badge>
                         </TableCell>
@@ -1205,6 +1383,186 @@ export default function SellersV2Page() {
               </Card>
             </div>
           </div>
+        </TabsContent>
+
+        {/* ======== ATENDIMENTOS REAIS TAB ======== */}
+        <TabsContent value="real" className="space-y-6 mt-4">
+          {negotiationError && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+              <p className="text-sm font-medium text-destructive flex-1">{negotiationError}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setNegotiationError(null)}
+                className="text-destructive hover:text-destructive"
+              >
+                ✕
+              </Button>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                Em Negociação
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingNegotiations ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : activeNegotiations.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhuma negociação em andamento
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {activeNegotiations.map((neg) => (
+                    <div key={neg.opportunityId} className="rounded-lg border p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{neg.contactName || "Contato sem nome"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {neg.stageName || "Etapa desconhecida"}
+                            {neg.negotiationStartedAt &&
+                              ` · em negociação desde ${new Date(neg.negotiationStartedAt).toLocaleDateString("pt-BR")}`}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => generateInsight(neg.opportunityId)}
+                          disabled={generatingInsightFor === neg.opportunityId}
+                        >
+                          {generatingInsightFor === neg.opportunityId ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Gerar Insight"
+                          )}
+                        </Button>
+                      </div>
+                      {neg.latestInsight && (
+                        <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
+                          <p>
+                            <span className="font-medium">Situação:</span>{" "}
+                            {neg.latestInsight.report.situacaoAtual}
+                          </p>
+                          <p>
+                            <span className="font-medium">Próxima ação:</span>{" "}
+                            {neg.latestInsight.report.proximaAcao}
+                          </p>
+                          <p>
+                            <span className="font-medium">Mensagem sugerida:</span>{" "}
+                            {neg.latestInsight.report.mensagemSugerida}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Gerado em{" "}
+                            {new Date(neg.latestInsight.createdAt).toLocaleString("pt-BR")}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                Fechadas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingNegotiations ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : closedNegotiations.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Nenhuma negociação avaliada ainda
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {closedNegotiations.map((neg) => (
+                    <div key={neg.opportunityId} className="rounded-lg border p-4">
+                      <button
+                        className="flex w-full items-center justify-between text-left cursor-pointer"
+                        onClick={() =>
+                          setExpandedClosedId(
+                            expandedClosedId === neg.opportunityId ? null : neg.opportunityId,
+                          )
+                        }
+                      >
+                        <div>
+                          <p className="font-medium">{neg.vendedor || "Sem vendedor identificado"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {neg.outcome === "won" ? "Venda fechada" : "Negociação perdida"} ·{" "}
+                            {new Date(neg.evaluatedAt).toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {neg.hasCriticalError && (
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                          )}
+                          {neg.score != null ? (
+                            <Badge variant={neg.score >= 70 ? "default" : "secondary"}>
+                              {neg.score}/100 · {neg.classification}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Não avaliável</Badge>
+                          )}
+                        </div>
+                      </button>
+                      {expandedClosedId === neg.opportunityId && neg.score != null && (
+                        <div className="mt-4 space-y-3 text-sm border-t pt-3">
+                          <p className="text-muted-foreground">{neg.report.resumo}</p>
+                          {neg.report.errosCriticos.length > 0 && (
+                            <div>
+                              <p className="font-medium text-destructive">Erros críticos</p>
+                              <ul className="list-disc list-inside text-muted-foreground">
+                                {neg.report.errosCriticos.map((e, i) => (
+                                  <li key={i}>{e}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-medium">Acertos</p>
+                            <ul className="list-disc list-inside text-muted-foreground">
+                              {neg.report.acertos.map((a, i) => (
+                                <li key={i}>{a}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="font-medium">Falhas e oportunidades perdidas</p>
+                            <ul className="list-disc list-inside text-muted-foreground">
+                              {neg.report.falhas.map((f, i) => (
+                                <li key={i}>{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <p className="font-medium">Exemplo de resposta melhor</p>
+                            <p className="text-muted-foreground">{neg.report.exemploRespostaMelhor}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
