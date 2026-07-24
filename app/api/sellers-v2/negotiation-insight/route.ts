@@ -4,7 +4,7 @@ import { createClient, createSupabaseServerForSync } from "@/lib/supabase/server
 import {
   getNegotiationTranscript,
   getVendedorForOpportunity,
-  formatTranscriptForPrompt,
+  computeResponseGapStats,
   NEGOTIATION_TRACKING_START_ISO,
 } from "@/lib/ghl/negotiation-conversations";
 import { runCopiloto } from "@/lib/ghl/sales-agent/agent";
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     const [vendedor, transcript] = await Promise.all([
       getVendedorForOpportunity(opportunity.raw),
-      getNegotiationTranscript(opportunity.contact_id, negotiationEvent.received_at),
+      getNegotiationTranscript(opportunity.contact_id),
     ]);
 
     if (transcript.messages.length < MIN_MESSAGES_TO_EVALUATE) {
@@ -80,12 +80,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const report = await runCopiloto(formatTranscriptForPrompt(transcript.messages), {
-      vendedor,
-      etapaCrm: opportunity.stage_name,
-      valorNegociacao: opportunity.monetary_value,
-      qtyPares: opportunity.qty_pares,
-    });
+    const report = await runCopiloto(
+      transcript.messages,
+      computeResponseGapStats(transcript.messages),
+      {
+        vendedor,
+        etapaCrm: opportunity.stage_name,
+        valorNegociacao: opportunity.monetary_value,
+        qtyPares: opportunity.qty_pares,
+      },
+    );
 
     const serviceClient = await createSupabaseServerForSync();
     const { error: insertError } = await serviceClient

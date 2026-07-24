@@ -101,6 +101,7 @@ interface GhlRawMessage {
   body?: string;
   dateAdded: string;
   userId?: string;
+  attachments?: string[];
 }
 
 interface GhlMessagesPage {
@@ -146,6 +147,7 @@ export interface NegotiationMessage {
   body: string;
   dateAdded: string;
   userId: string | null;
+  attachments: string[];
 }
 
 export interface NegotiationTranscript {
@@ -154,27 +156,29 @@ export interface NegotiationTranscript {
 }
 
 /**
- * Full WhatsApp transcript of a negotiation from `sinceISO` onward, both
- * directions (client + seller), oldest first. Returns an empty message
- * array (not an error) when there's no conversation yet or nothing in the
- * window — callers decide how to handle "not enough data".
+ * Full WhatsApp history for a contact, both directions (client + seller),
+ * oldest first. Deliberately NOT filtered by negotiation-start date: the
+ * `emnegociacao` tag is only used upstream to decide WHICH contacts get
+ * processed at all (keeps the system light — see NEGOTIATION_TRACKING_START_ISO
+ * below), not to trim the conversation itself. Once a contact qualifies,
+ * the agent needs the real context that led to the negotiation (what was
+ * discussed, images/audio already exchanged), not just messages that
+ * happen to land after the tag fired — in practice the tag usually fires
+ * with no new message yet, which made the agent context-blind right when
+ * it mattered most. Returns an empty message array (not an error) when
+ * there's no conversation yet — callers decide how to handle "not enough
+ * data".
  */
 export async function getNegotiationTranscript(
   contactId: string,
-  sinceISO: string,
 ): Promise<NegotiationTranscript> {
   const conversationId = await findPhoneConversationId(contactId);
   if (!conversationId) return { conversationId: null, messages: [] };
 
   const rawMessages = await fetchAllMessages(conversationId);
-  const sinceMs = Date.parse(sinceISO);
 
   const messages = rawMessages
     .filter((m) => m.messageType === "TYPE_WHATSAPP")
-    .filter((m) => {
-      const t = Date.parse(m.dateAdded);
-      return Number.isFinite(t) && t >= sinceMs;
-    })
     .map(
       (m): NegotiationMessage => ({
         id: m.id,
@@ -182,6 +186,7 @@ export async function getNegotiationTranscript(
         body: m.body ?? "",
         dateAdded: m.dateAdded,
         userId: m.userId ? m.userId : null,
+        attachments: m.attachments ?? [],
       }),
     )
     // API returns newest-first; the agent needs a chronological transcript.
@@ -190,25 +195,77 @@ export async function getNegotiationTranscript(
   return { conversationId, messages };
 }
 
-export function formatTranscriptForPrompt(
-  messages: NegotiationMessage[],
-): string {
-  return messages
-    .map((m) => {
-      const who = m.direction === "outbound" ? "VENDEDOR" : "CLIENTE";
-      return `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto, ex.: anexo/imagem)"}`;
-    })
-    .join("\n");
+export interface ResponseGapStats {
+  /** Average minutes between a client message and the seller's next reply. Null if no pairs found. */
+  avgSellerResponseMinutes: number | null;
+  /** Longest single gap between a client message and the seller's next reply. */
+  longestSellerSilenceMinutes: number | null;
+  longestSellerSilenceAt: string | null;
+  /** How long ago the most recent message was sent, and who sent it — tells the agent whether it's currently waiting on the client or on the seller. */
+  minutesSinceLastMessage: number | null;
+  lastMessageDirection: "inbound" | "outbound" | null;
 }
 
 /**
- * Scope decision from the design spec: no backfill. Only negotiations that
- * entered "Em Negociação" from this date onward are tracked by either
- * agent mode — a ghl_funnel_events row with stage_slug='emnegociacao' and
- * received_at before this is invisible to both the Auditor batch job and
- * the Copiloto on-demand endpoint. Update this only if the launch date
- * actually changes; do not move it forward casually, it defines what "no
- * backfill" means operationally.
+ * Computes seller response-time signals from a chronological message list,
+ * so the agent can reason about pacing (e.g. suggest a follow-up instead of
+ * an immediate message when the client has gone quiet, or flag that the
+ * seller is sitting on an unanswered message) instead of only reading text.
+ */
+export function computeResponseGapStats(
+  messages: NegotiationMessage[],
+): ResponseGapStats {
+  const responseTimesMinutes: number[] = [];
+  let longestMinutes: number | null = null;
+  let longestAt: string | null = null;
+
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].direction !== "inbound") continue;
+    const clientAt = Date.parse(messages[i].dateAdded);
+    for (let j = i + 1; j < messages.length; j++) {
+      if (messages[j].direction === "outbound") {
+        const sellerAt = Date.parse(messages[j].dateAdded);
+        const minutes = (sellerAt - clientAt) / 60000;
+        responseTimesMinutes.push(minutes);
+        if (longestMinutes === null || minutes > longestMinutes) {
+          longestMinutes = minutes;
+          longestAt = messages[i].dateAdded;
+        }
+        break;
+      }
+    }
+  }
+
+  const avg =
+    responseTimesMinutes.length > 0
+      ? responseTimesMinutes.reduce((a, b) => a + b, 0) /
+        responseTimesMinutes.length
+      : null;
+
+  const last = messages[messages.length - 1] ?? null;
+  const minutesSinceLastMessage = last
+    ? (Date.now() - Date.parse(last.dateAdded)) / 60000
+    : null;
+
+  return {
+    avgSellerResponseMinutes: avg,
+    longestSellerSilenceMinutes: longestMinutes,
+    longestSellerSilenceAt: longestAt,
+    minutesSinceLastMessage,
+    lastMessageDirection: last ? last.direction : null,
+  };
+}
+
+/**
+ * Scope decision from the design spec: no backfill. Only contacts whose
+ * `ghl_funnel_events` row (stage_slug='emnegociacao') has `received_at` on
+ * or after this date are ever picked up by either agent mode — this is
+ * purely a "which contacts to process" gate (keeps the system light,
+ * ignores clients who never reached negotiation). It does NOT trim which
+ * messages get read once a contact qualifies — see getNegotiationTranscript,
+ * which intentionally fetches the full history. Update this only if the
+ * launch date actually changes; do not move it forward casually, it
+ * defines what "no backfill" means operationally.
  */
 export const NEGOTIATION_TRACKING_START_ISO = "2026-07-23T00:00:00.000Z";
 

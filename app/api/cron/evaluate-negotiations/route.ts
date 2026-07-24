@@ -11,7 +11,7 @@ import { requireCronSecret } from "@/lib/security/route-guards";
 import {
   getNegotiationTranscript,
   getVendedorForOpportunity,
-  formatTranscriptForPrompt,
+  computeResponseGapStats,
   NEGOTIATION_TRACKING_START_ISO,
 } from "@/lib/ghl/negotiation-conversations";
 import { runAuditor } from "@/lib/ghl/sales-agent/agent";
@@ -86,30 +86,39 @@ export async function GET(request: NextRequest) {
       const negotiationStartedAt = startedAtByContact.get(opportunity.contact_id)!;
       const [vendedor, transcript] = await Promise.all([
         getVendedorForOpportunity(opportunity.raw),
-        getNegotiationTranscript(opportunity.contact_id, negotiationStartedAt),
+        getNegotiationTranscript(opportunity.contact_id),
       ]);
 
       const outcome: "won" | "lost" = opportunity.status === "won" ? "won" : "lost";
 
-      // The opportunity is already resolved (won/lost), so its message
+      // The transcript now covers the full WhatsApp history (context for
+      // the agent), not just messages after the negotiation tag — so
+      // "enough to evaluate" has to be judged on messages from
+      // negotiationStartedAt onward specifically, not the whole array
+      // (which will almost always be non-trivial once there's any history
+      // at all). The opportunity is already resolved (won/lost), so this
       // count will never grow — if it's too short to evaluate now, it
       // never will be. Record it as "não avaliável" once instead of
-      // leaving it pending forever (which would make the cron re-fetch
-      // and re-check it on every run, indefinitely).
+      // leaving it pending forever.
+      const negotiationStartedAtMs = Date.parse(negotiationStartedAt);
+      const messagesDuringNegotiation = transcript.messages.filter(
+        (m) => Date.parse(m.dateAdded) >= negotiationStartedAtMs,
+      );
+
       let result: {
         score: number | null;
         classification: string | null;
         hasCriticalError: boolean;
         report: unknown;
       };
-      if (transcript.messages.length < MIN_MESSAGES_TO_EVALUATE) {
+      if (messagesDuringNegotiation.length < MIN_MESSAGES_TO_EVALUATE) {
         result = {
           score: null,
           classification: null,
           hasCriticalError: false,
           report: {
             naoAvaliavel: true,
-            motivoNaoAvaliavel: `Conversa com apenas ${transcript.messages.length} mensagem(ns) de WhatsApp após o início da negociação — sem dados suficientes.`,
+            motivoNaoAvaliavel: `Conversa com apenas ${messagesDuringNegotiation.length} mensagem(ns) de WhatsApp após o início da negociação — sem dados suficientes.`,
             resumo: "",
             notasPorCriterio: {
               precisaoInformacoes: 0,
@@ -133,13 +142,18 @@ export async function GET(request: NextRequest) {
           },
         };
       } else {
-        result = await runAuditor(formatTranscriptForPrompt(transcript.messages), {
-          vendedor,
-          etapaCrm: opportunity.stage_name,
-          valorNegociacao: opportunity.monetary_value,
-          qtyPares: opportunity.qty_pares,
-          outcome,
-        });
+        result = await runAuditor(
+          transcript.messages,
+          computeResponseGapStats(transcript.messages),
+          {
+            vendedor,
+            etapaCrm: opportunity.stage_name,
+            valorNegociacao: opportunity.monetary_value,
+            qtyPares: opportunity.qty_pares,
+            outcome,
+            negociacaoIniciadaEm: negotiationStartedAt,
+          },
+        );
       }
 
       const { error: insertError } = await supabase
@@ -154,7 +168,7 @@ export async function GET(request: NextRequest) {
           has_critical_error: result.hasCriticalError,
           report: result.report,
           manual_version: MANUAL_VERSION,
-          message_count: transcript.messages.length,
+          message_count: messagesDuringNegotiation.length,
           negotiation_started_at: negotiationStartedAt,
           resolved_at: opportunity.updated_at,
         });
