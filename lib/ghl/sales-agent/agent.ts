@@ -48,9 +48,13 @@ function formatResponseGapStats(stats: ResponseGapStats): string {
   if (stats.minutesSinceLastMessage != null && stats.lastMessageDirection) {
     const who = stats.lastMessageDirection === "outbound" ? "o vendedor" : "o cliente";
     lines.push(
-      `Última mensagem da conversa foi de ${who}, há ${Math.round(stats.minutesSinceLastMessage / 60)} h — use isso pra avaliar se faz mais sentido esperar, mandar um follow-up (D1/D3/D7 do manual) ou agir agora.`,
+      `Última mensagem da conversa foi de ${who}, há ${Math.round(stats.minutesSinceLastMessage / 60)} h.`,
     );
   }
+  // Left as plain facts here, not advice — how to interpret them (score vs.
+  // suggest a pause/follow-up) is mode-specific and lives in each mode's own
+  // instructions block below, since "agir agora" doesn't make sense once
+  // the Auditor is scoring an already-resolved deal.
   return lines.join("\n");
 }
 
@@ -89,57 +93,71 @@ interface AttachmentRef {
   url: string;
 }
 
-function collectRecentAttachmentRefs(
+/**
+ * Walks attachments newest-first and fetches them one at a time, keeping
+ * only successfully-downloaded, supported (image/audio) media, until
+ * MAX_ATTACHMENTS_PER_CALL real items are collected or attachments run out.
+ * Deliberately fetch-then-decide rather than cap-then-fetch: this
+ * conversation's real data regularly includes WhatsApp video clips
+ * (video/mp4, unsupported), and capping on raw URL order would let those
+ * occupy slots and silently crowd out older real images/audio without ever
+ * sending fewer than 10 items — walking backward until 10 *usable* items
+ * are found instead means the cap always reflects actual included media.
+ */
+async function selectIncludedAttachments(
   messages: NegotiationMessage[],
-): AttachmentRef[] {
-  const refs: AttachmentRef[] = [];
-  messages.forEach((m, messageIndex) => {
-    for (const url of m.attachments) refs.push({ messageIndex, url });
-  });
-  // Messages are already chronological, so the tail of this list is also
-  // the most recent attachments — no re-sort needed.
-  return refs.slice(-MAX_ATTACHMENTS_PER_CALL);
+): Promise<Map<number, Part[]>> {
+  const refsNewestFirst: AttachmentRef[] = [];
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    for (const url of messages[messageIndex].attachments) {
+      refsNewestFirst.push({ messageIndex, url });
+    }
+  }
+
+  const includedByMessage = new Map<number, Part[]>();
+  let includedCount = 0;
+  for (const ref of refsNewestFirst) {
+    if (includedCount >= MAX_ATTACHMENTS_PER_CALL) break;
+    const part = await fetchAttachmentPart(ref.url);
+    if (!part) continue; // unsupported type or fetch failure — doesn't consume a slot
+    const list = includedByMessage.get(ref.messageIndex) ?? [];
+    list.push(part);
+    includedByMessage.set(ref.messageIndex, list);
+    includedCount++;
+  }
+  return includedByMessage;
 }
 
 /**
  * Turns the transcript into Gemini `contents` parts: one text part per
- * message (chronological), with the actual image/audio bytes for the most
- * recent MAX_ATTACHMENTS_PER_CALL attachments inlined right after the
- * message that carries them. Older attachments beyond the cap are noted as
- * text only, not fetched.
+ * message (chronological), with the actual downloaded image/audio parts for
+ * the most recent MAX_ATTACHMENTS_PER_CALL usable attachments inlined right
+ * after the message that carries them. The per-message note is derived from
+ * what actually got included (not just which URLs were in range), so the
+ * model is never told media follows when it doesn't.
  */
 async function buildTranscriptParts(
   messages: NegotiationMessage[],
 ): Promise<Part[]> {
-  const includedRefs = collectRecentAttachmentRefs(messages);
-  const includedUrlsByMessage = new Map<number, string[]>();
-  for (const ref of includedRefs) {
-    const list = includedUrlsByMessage.get(ref.messageIndex) ?? [];
-    list.push(ref.url);
-    includedUrlsByMessage.set(ref.messageIndex, list);
-  }
+  const includedByMessage = await selectIncludedAttachments(messages);
 
   const parts: Part[] = [];
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const who = m.direction === "outbound" ? "VENDEDOR" : "CLIENTE";
-    const includedUrls = includedUrlsByMessage.get(i) ?? [];
-    const skipped = m.attachments.length - includedUrls.length;
+    const includedParts = includedByMessage.get(i) ?? [];
+    const skipped = m.attachments.length - includedParts.length;
     const attachmentNote =
       m.attachments.length === 0
         ? ""
-        : includedUrls.length > 0
-          ? ` [anexo incluído abaixo${skipped > 0 ? `; +${skipped} anexo(s) mais antigo(s) desta mensagem não incluído(s)` : ""}]`
-          : ` [${m.attachments.length} anexo(s) não incluído(s) — fora do limite de anexos recentes desta conversa]`;
+        : includedParts.length > 0
+          ? ` [anexo incluído abaixo${skipped > 0 ? `; +${skipped} anexo(s) desta mensagem não incluído(s)` : ""}]`
+          : ` [${m.attachments.length} anexo(s) não incluído(s) — não suportado(s) (ex.: vídeo) ou fora do limite de anexos recentes]`;
 
     parts.push({
       text: `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto)"}${attachmentNote}`,
     });
-
-    for (const url of includedUrls) {
-      const mediaPart = await fetchAttachmentPart(url);
-      if (mediaPart) parts.push(mediaPart);
-    }
+    parts.push(...includedParts);
   }
   return parts;
 }
@@ -162,7 +180,10 @@ Regras de justiça (manual, seção 7.4): não descontar pontos porque o
 cliente não respondeu; não descontar pontos só porque a venda não
 ocorreu (o outcome é contexto, não input da nota); avalie apenas o que
 estava sob controle do vendedor; cite evidência textual para toda perda
-relevante de pontos.
+relevante de pontos. O "tempo desde a última mensagem" do contexto é
+medido no momento desta avaliação (o negócio já está resolvido há um
+tempo) — não é um sinal de conduta do vendedor, ignore-o para fins de
+nota; os tempos de resposta durante a negociação, esses sim, importam.
 
 Liste em errosCriticos qualquer ocorrência da seção 7.3 do manual (ex.:
 desconto >10% sem autorização, pagamento pedido antes da Amostra

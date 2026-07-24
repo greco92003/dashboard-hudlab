@@ -144,7 +144,10 @@ export async function GET(request: NextRequest) {
       } else {
         result = await runAuditor(
           transcript.messages,
-          computeResponseGapStats(transcript.messages),
+          // Scoped to the negotiation window, not the full history: the
+          // Auditor scores conduct only from negotiationStartedAt onward,
+          // so a pre-negotiation silence gap shouldn't surface as a signal.
+          computeResponseGapStats(messagesDuringNegotiation),
           {
             vendedor,
             etapaCrm: opportunity.stage_name,
