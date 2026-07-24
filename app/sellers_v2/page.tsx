@@ -207,6 +207,19 @@ export default function SellersV2Page() {
   const [generatingInsightFor, setGeneratingInsightFor] = useState<string | null>(null);
   const [negotiationError, setNegotiationError] = useState<string | null>(null);
   const [expandedClosedId, setExpandedClosedId] = useState<string | null>(null);
+  // Purely visual per-card toggle — hides the insight block without deleting
+  // anything (history stays in the DB either way). Resets on page reload,
+  // same as expandedClosedId above.
+  const [hiddenInsightIds, setHiddenInsightIds] = useState<Set<string>>(new Set());
+
+  const toggleInsightVisibility = (opportunityId: string) => {
+    setHiddenInsightIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(opportunityId)) next.delete(opportunityId);
+      else next.add(opportunityId);
+      return next;
+    });
+  };
 
   const fetchNegotiations = useCallback(async () => {
     try {
@@ -1433,19 +1446,30 @@ export default function SellersV2Page() {
                               ` · em negociação desde ${new Date(neg.negotiationStartedAt).toLocaleDateString("pt-BR")}`}
                           </p>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => generateInsight(neg.opportunityId)}
-                          disabled={generatingInsightFor === neg.opportunityId}
-                        >
-                          {generatingInsightFor === neg.opportunityId ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            "Gerar Insight"
+                        <div className="flex items-center gap-2">
+                          {neg.latestInsight && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleInsightVisibility(neg.opportunityId)}
+                            >
+                              {hiddenInsightIds.has(neg.opportunityId) ? "Mostrar insight" : "Ocultar insight"}
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => generateInsight(neg.opportunityId)}
+                            disabled={generatingInsightFor === neg.opportunityId}
+                          >
+                            {generatingInsightFor === neg.opportunityId ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Gerar Insight"
+                            )}
+                          </Button>
+                        </div>
                       </div>
-                      {neg.latestInsight && (
+                      {neg.latestInsight && !hiddenInsightIds.has(neg.opportunityId) && (
                         <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
                           <p>
                             <span className="font-medium">Situação:</span>{" "}
