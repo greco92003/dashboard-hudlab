@@ -69,10 +69,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, messages, sellerName } = body as {
+    const { action, messages } = body as {
       action: string;
       messages: TrainingChatMessage[];
-      sellerName?: string;
     };
 
     if (action === "chat") {
@@ -107,6 +106,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // The frontend never actually sent `sellerName` (confirmed: it's not
+      // referenced anywhere in app/sellers_v2/page.tsx) — the only real data
+      // in seller_training_sessions is 6 rows from a single manual test in
+      // Feb 2026. Deriving it from the authenticated user's own profile is
+      // the correct source: it can't be forgotten/spoofed client-side, and
+      // it's the exact same identity used everywhere else in the app.
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("first_name, last_name")
+        .eq("id", user.id)
+        .single();
+      const resolvedSellerName =
+        [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
+        user.email ||
+        "Vendedor";
+
       // Reuses the exact same scoring function as real negotiations
       // (lib/ghl/sales-agent/agent.ts) so a training score and a real
       // Auditor score are genuinely comparable, not just similarly shaped.
@@ -125,7 +140,7 @@ export async function POST(request: NextRequest) {
         negotiationMessages,
         computeResponseGapStats(negotiationMessages),
         {
-          vendedor: sellerName || null,
+          vendedor: resolvedSellerName,
           etapaCrm: "Treinamento simulado",
           valorNegociacao: null,
           qtyPares: null,
@@ -139,7 +154,7 @@ export async function POST(request: NextRequest) {
       const { data: session, error: insertError } = await supabase
         .from("seller_training_sessions")
         .insert({
-          seller_name: sellerName,
+          seller_name: resolvedSellerName,
           started_at: negotiationMessages[0].dateAdded,
           ended_at: new Date().toISOString(),
           score: result.score,
