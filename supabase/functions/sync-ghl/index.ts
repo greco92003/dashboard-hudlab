@@ -190,6 +190,7 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
   const startedAt = new Date();
   let rows = 0;
   let errMsg: string | undefined;
+  const skipped: string[] = [];
   const offset = state.offset ?? 0;
   try {
     const fieldMap = await fetchFieldMap(token, locationId);
@@ -210,16 +211,31 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
       batch = [];
     };
 
+    // Um contato problemático (apagado no GHL, erro pontual da API, etc.)
+    // nunca deve travar a sincronização dos demais -- pula e segue,
+    // registrando o motivo, em vez de abortar o lote inteiro.
     for (; i < ids.length && Date.now() < deadline; i++) {
-      const res = await ghlGet(`${BASE}/contacts/${ids[i]}`, token);
+      let res: Response;
+      try {
+        res = await ghlGet(`${BASE}/contacts/${ids[i]}`, token);
+      } catch (fetchErr) {
+        skipped.push(`${ids[i]} (fetch: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)})`);
+        continue;
+      }
       if (res.status === 404) continue; // contato apagado no GHL
-      if (!res.ok) throw new Error(`GHL contact ${ids[i]} ${res.status}: ${await res.text()}`);
+      if (!res.ok) {
+        skipped.push(`${ids[i]} (${res.status}: ${(await res.text()).slice(0, 200)})`);
+        continue;
+      }
       const body = await res.json();
       const c = body.contact ?? body;
       if (c?.id) batch.push(mapContact(c, fieldMap));
       if (batch.length >= 25) await flush();
     }
     await flush();
+    if (skipped.length > 0) {
+      errMsg = `${skipped.length} contato(s) pulado(s): ${skipped.slice(0, 5).join("; ")}`;
+    }
     return { rows, next: i < ids.length ? { offset: i } : null };
   } catch (err) {
     errMsg = err instanceof Error ? err.message : String(err);
