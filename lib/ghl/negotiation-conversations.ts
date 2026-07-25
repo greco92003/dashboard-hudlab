@@ -318,3 +318,58 @@ export async function getVendedorForOpportunity(
   if (!entry) return null;
   return extractOpportunityFieldValue(entry);
 }
+
+let paresFieldIdsCache: { ids: Set<string>; fetchedAt: number } | null = null;
+
+async function fetchParesFieldIds(): Promise<Set<string>> {
+  const now = Date.now();
+  if (
+    paresFieldIdsCache &&
+    now - paresFieldIdsCache.fetchedAt < FIELD_ID_CACHE_TTL_MS
+  ) {
+    return paresFieldIdsCache.ids;
+  }
+
+  const customFieldDefs = await fetchCustomFieldDefs("opportunity");
+  const ids = new Set(
+    customFieldDefs
+      .filter((f) => {
+        const name = (f.name || "").toLowerCase();
+        return name.includes("pares") || name.includes("quantidade");
+      })
+      .map((f) => f.id),
+  );
+  paresFieldIdsCache = { ids, fetchedAt: now };
+  return ids;
+}
+
+/**
+ * Qty pares for an opportunity, matched by field id OR by name substring
+ * (mirrors extractQtyPares in supabase/functions/sync-ghl/index.ts, kept
+ * lenient because the "pares"/"quantidade" custom field's exact id has
+ * drifted before between GHL location setups).
+ */
+export async function getQtyParesForOpportunity(
+  raw: unknown,
+): Promise<number | null> {
+  const paresFieldIds = await fetchParesFieldIds();
+  const customFields = (
+    raw as {
+      customFields?: Array<
+        Record<string, unknown> & { id: string; key?: string; name?: string }
+      >;
+    }
+  )?.customFields;
+  if (!customFields) return null;
+
+  for (const cf of customFields) {
+    const byId = paresFieldIds.has(cf.id);
+    const key = String(cf.key ?? cf.name ?? "").toLowerCase();
+    const byName = key.includes("pares") || key.includes("quantidade");
+    if (!byId && !byName) continue;
+    const value = extractOpportunityFieldValue(cf);
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+  return null;
+}

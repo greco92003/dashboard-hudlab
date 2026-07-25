@@ -251,6 +251,30 @@ export default function SellersV2Page() {
 
   useEffect(() => {
     fetchNegotiations();
+
+    // Reacts to the "emnegociacao" webhook itself (app/api/webhooks/ghl/funnel/route.ts
+    // inserts into ghl_funnel_events) instead of polling — a new negotiation
+    // shows up the moment the tag fires in GHL, with zero requests in between.
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sellers_v2_negotiations_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "ghl_funnel_events",
+          filter: "stage_slug=eq.emnegociacao",
+        },
+        () => {
+          fetchNegotiations();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchNegotiations]);
 
   const generateInsight = async (opportunityId: string) => {

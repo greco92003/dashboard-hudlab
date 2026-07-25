@@ -1,9 +1,11 @@
 // app/api/sellers-v2/negotiation-insight/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createSupabaseServerForSync } from "@/lib/supabase/server";
+import { fetchOpportunityById } from "@/lib/ghl/api";
 import {
   getNegotiationTranscript,
   getVendedorForOpportunity,
+  getQtyParesForOpportunity,
   computeResponseGapStats,
   NEGOTIATION_TRACKING_START_ISO,
 } from "@/lib/ghl/negotiation-conversations";
@@ -65,8 +67,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [vendedor, transcript] = await Promise.all([
-      getVendedorForOpportunity(opportunity.raw),
+    // ghl_opportunities is only refreshed once a day (sync-ghl-daily cron),
+    // so stage/value/custom fields there can be stale by the time a seller
+    // clicks "Gerar Insight" — fetch the opportunity live from GHL here so
+    // the context handed to the LLM matches the current CRM state, not
+    // yesterday's snapshot. Falls back to the cached row if the live call
+    // fails (e.g. transient GHL error) rather than blocking the insight.
+    const [liveOpportunity, transcript] = await Promise.all([
+      fetchOpportunityById(opportunity.id).catch((err) => {
+        console.error(
+          "Failed to fetch live opportunity, falling back to cached data:",
+          err,
+        );
+        return null;
+      }),
       getNegotiationTranscript(opportunity.contact_id),
     ]);
 
@@ -80,14 +94,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const fieldsSource = liveOpportunity ?? opportunity.raw;
+    const [vendedor, qtyPares] = await Promise.all([
+      getVendedorForOpportunity(fieldsSource),
+      getQtyParesForOpportunity(fieldsSource),
+    ]);
+
+    let etapaCrm = opportunity.stage_name;
+    let valorNegociacao = opportunity.monetary_value;
+    if (liveOpportunity) {
+      valorNegociacao = liveOpportunity.monetaryValue ?? valorNegociacao;
+      if (liveOpportunity.pipelineStageId) {
+        const { data: stageRow } = await supabase
+          .from("dim_pipeline_stages")
+          .select("stage_name")
+          .eq("stage_id", liveOpportunity.pipelineStageId)
+          .maybeSingle();
+        if (stageRow?.stage_name) etapaCrm = stageRow.stage_name;
+      }
+    }
+
     const report = await runCopiloto(
       transcript.messages,
       computeResponseGapStats(transcript.messages),
       {
         vendedor,
-        etapaCrm: opportunity.stage_name,
-        valorNegociacao: opportunity.monetary_value,
-        qtyPares: opportunity.qty_pares,
+        etapaCrm,
+        valorNegociacao,
+        qtyPares,
       },
     );
 
