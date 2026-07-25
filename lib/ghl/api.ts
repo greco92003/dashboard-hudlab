@@ -54,7 +54,7 @@ export interface GhlCustomFieldDef {
   dataType: string;
 }
 
-interface GhlOpportunity {
+export interface GhlOpportunity {
   id: string;
   name: string;
   monetaryValue: number | null;
@@ -187,6 +187,20 @@ export async function fetchCustomFieldDefs(
     { model },
   );
   return data.customFields || [];
+}
+
+/**
+ * Live single-opportunity lookup (as opposed to the daily-synced
+ * `ghl_opportunities` table) — used where a request needs the current
+ * stage/value/custom fields at click-time rather than up to a day stale.
+ */
+export async function fetchOpportunityById(
+  opportunityId: string,
+): Promise<GhlOpportunity> {
+  const data = await ghlFetch<{ opportunity: GhlOpportunity }>(
+    `/opportunities/${opportunityId}`,
+  );
+  return data.opportunity;
 }
 
 async function fetchAllOpportunities(): Promise<GhlOpportunity[]> {
