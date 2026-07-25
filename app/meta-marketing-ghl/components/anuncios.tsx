@@ -199,17 +199,27 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
     };
   }, [periodo]);
 
+  // Linhas cujo ad_id nunca apareceu em meta_insights_daily (sem ad_name)
+  // costumam ser rastro de leads de anúncios anteriores ao início da
+  // coleta do Meta -- em vez de poluir a tabela com uma linha por ad_id
+  // numérico sem nome, agrupamos todas numa única linha "sem investimento
+  // conhecido" (some durante busca, já que não representa um anúncio
+  // específico pra procurar).
   const visiveis = useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const comNome = rows.filter((r) => r.ad_name != null);
+    const semNome = rows.filter((r) => r.ad_name == null);
+
     const filtradas = q
-      ? rows.filter(
+      ? comNome.filter(
           (r) =>
             (r.ad_name ?? "").toLowerCase().includes(q) ||
             (r.campaign_name ?? "").toLowerCase().includes(q) ||
             r.ad_id.includes(q)
         )
-      : rows;
-    return [...filtradas].sort((a, b) => {
+      : comNome;
+
+    const ordenadas = [...filtradas].sort((a, b) => {
       const va = a[sortKey];
       const vb = b[sortKey];
       const na = typeof va === "number" ? va : va == null ? -Infinity : NaN;
@@ -219,6 +229,41 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
       else cmp = String(va ?? "").localeCompare(String(vb ?? ""));
       return sortDesc ? -cmp : cmp;
     });
+
+    if (q || semNome.length === 0) return ordenadas;
+
+    const soma = (key: keyof FunnelRow) =>
+      semNome.reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
+    const leads = soma("leads_ghl");
+    const vendas = soma("vendas");
+    const agregado: FunnelRow = {
+      ad_id: "_sem_investimento",
+      ad_name: "Sem investimento conhecido",
+      campaign_name: `${semNome.length} anúncio(s) sem dado de investimento no Meta (provavelmente de antes do início da coleta)`,
+      spend_total: 0,
+      impressoes: null,
+      cliques: null,
+      leads_meta: null,
+      cpl_meta: null,
+      leads_ghl: leads,
+      orcamentos: soma("orcamentos"),
+      valor_orcamentos: soma("valor_orcamentos"),
+      pares_orcamentos: soma("pares_orcamentos"),
+      mockups: soma("mockups"),
+      negociacoes: soma("negociacoes"),
+      vendas,
+      faturamento: soma("faturamento"),
+      pares_vendidos: soma("pares_vendidos"),
+      custo_por_lead: null,
+      custo_por_orcamento: null,
+      custo_por_mockup: null,
+      custo_por_negociacao: null,
+      cpa_venda: null,
+      taxa_conversao_lead_venda: leads > 0 ? Math.round((10000 * vendas) / leads) / 100 : null,
+      roas: null,
+      diagnostico: "REVISAR",
+    };
+    return [...ordenadas, agregado];
   }, [rows, busca, sortKey, sortDesc]);
 
   const th = (key: SortKey, label: string, right = true) => (
@@ -385,7 +430,11 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
                         </Valor>
                       </TableCell>
                       <TableCell>
-                        <DiagnosticoBadge valor={r.diagnostico} />
+                        {r.ad_id === "_sem_investimento" ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <DiagnosticoBadge valor={r.diagnostico} />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
