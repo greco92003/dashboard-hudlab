@@ -81,6 +81,7 @@ export function ConditionalSidebar({
     "/states",
     "/meta-marketing",
     "/meta-marketing-ghl",
+    "/instagram-organico",
     "/partners",
     "/partners/home",
     "/partners/dashboard",

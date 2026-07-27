@@ -30,6 +30,7 @@ import {
   Wallet,
   Filter,
   Truck,
+  Instagram,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -147,6 +148,11 @@ const menuGroups: MenuGroup[] = [
         title: "Meta Marketing GHL",
         url: "/meta-marketing-ghl",
         icon: MetaIcon,
+      },
+      {
+        title: "Instagram Orgânico",
+        url: "/instagram-organico",
+        icon: Instagram,
       },
     ],
   },
