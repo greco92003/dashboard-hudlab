@@ -171,6 +171,9 @@ export function VisaoGeral() {
     setErro(null);
     (async () => {
       const { inicio, fim } = periodoParaDatas(periodo);
+      // periodoParaDatas tipa inicio como string | null pro caso "todos",
+      // mas essa aba só usa PERIODOS_COMPARAVEIS (7d/30d/90d) -- nunca null.
+      if (!inicio) return;
       const [resumoResp, serieResp] = await Promise.all([
         supabase.rpc("get_instagram_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
         supabase
