@@ -18,6 +18,16 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownRight, ArrowUpRight, Clapperboard, Images, CircleDot } from "lucide-react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { fmtNum, fmtPctFraction, periodoParaDatas, type Periodo } from "../lib";
 
 // Esta aba precisa de início/fim concretos pra comparar com o período
@@ -43,6 +53,61 @@ interface TipoResumo {
 interface Resumo {
   atual: Record<string, TipoResumo>;
   anterior: Record<string, TipoResumo>;
+}
+
+interface AtributoLite {
+  media_product_type: string;
+  timestamp: string;
+  views: number | null;
+  reach: number | null;
+}
+
+interface DiaSerie {
+  data: string;
+  dataIso: string;
+  reelsViews: number;
+  postsAlcance: number;
+  storiesViews: number;
+}
+
+// Timestamp (ISO, UTC) -> data no fuso America/Sao_Paulo (YYYY-MM-DD),
+// pra bater com o mesmo fuso usado em periodoParaDatas.
+function dataSaoPaulo(isoTimestamp: string): string {
+  const d = new Date(isoTimestamp);
+  const sp = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+  return `${sp.getFullYear()}-${String(sp.getMonth() + 1).padStart(2, "0")}-${String(sp.getDate()).padStart(2, "0")}`;
+}
+
+// Série por dia de publicação (nunca semanal, mesmo em 30/90 dias) --
+// cohort: soma o total ATUAL (visto na v_ig_atributos) do que foi
+// publicado em cada dia. Preenche todos os dias do intervalo com zero
+// pra linha não pular dia sem publicação.
+function construirSerieDiaria(rows: AtributoLite[], inicio: string, fim: string): DiaSerie[] {
+  const porDia = new Map<string, DiaSerie>();
+  const cursor = new Date(`${inicio}T12:00:00`);
+  const fimDate = new Date(`${fim}T12:00:00`);
+  while (cursor <= fimDate) {
+    const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(
+      cursor.getDate(),
+    ).padStart(2, "0")}`;
+    porDia.set(iso, {
+      data: `${String(cursor.getDate()).padStart(2, "0")}/${String(cursor.getMonth() + 1).padStart(2, "0")}`,
+      dataIso: iso,
+      reelsViews: 0,
+      postsAlcance: 0,
+      storiesViews: 0,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  for (const r of rows) {
+    const iso = dataSaoPaulo(r.timestamp);
+    const bucket = porDia.get(iso);
+    if (!bucket) continue;
+    if (r.media_product_type === "REELS") bucket.reelsViews += r.views ?? 0;
+    else if (r.media_product_type === "FEED") bucket.postsAlcance += r.reach ?? 0;
+    else if (r.media_product_type === "STORY") bucket.storiesViews += r.views ?? 0;
+  }
+  return Array.from(porDia.values()).sort((a, b) => a.dataIso.localeCompare(b.dataIso));
 }
 
 const TIPOS: { key: string; label: string; icon: typeof Clapperboard }[] = [
@@ -95,6 +160,7 @@ function MetricRow({
 export function VisaoGeral() {
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [resumo, setResumo] = useState<Resumo | null>(null);
+  const [serie, setSerie] = useState<DiaSerie[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -105,17 +171,27 @@ export function VisaoGeral() {
     setErro(null);
     (async () => {
       const { inicio, fim } = periodoParaDatas(periodo);
-      const { data, error } = await supabase.rpc("get_instagram_resumo_periodo", {
-        p_inicio: inicio,
-        p_fim: fim,
-      });
+      const [resumoResp, serieResp] = await Promise.all([
+        supabase.rpc("get_instagram_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
+        supabase
+          .from("v_ig_atributos")
+          .select("media_product_type, timestamp, views, reach")
+          .gte("timestamp", inicio)
+          .lte("timestamp", `${fim}T23:59:59`),
+      ]);
       if (cancel) return;
-      if (error) {
-        setErro(error.message);
+      if (resumoResp.error) {
+        setErro(resumoResp.error.message);
         setLoading(false);
         return;
       }
-      setResumo(data as Resumo);
+      if (serieResp.error) {
+        setErro(serieResp.error.message);
+        setLoading(false);
+        return;
+      }
+      setResumo(resumoResp.data as Resumo);
+      setSerie(construirSerieDiaria((serieResp.data as AtributoLite[]) ?? [], inicio, fim));
       setLoading(false);
     })();
     return () => {
@@ -204,6 +280,46 @@ export function VisaoGeral() {
           })}
         </div>
       ) : null}
+
+      {!loading && serie.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Evolução diária</CardTitle>
+            <CardDescription>
+              Views de Reels e Stories, alcance de Posts &amp; Carrosséis -- por dia de publicação, mesmo em
+              períodos de 30/90 dias (nunca agrupado por semana)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={serie} margin={{ top: 5, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <XAxis dataKey="data" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="reelsViews" name="Reels (views)" stroke="#8884d8" dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="postsAlcance"
+                    name="Posts (alcance)"
+                    stroke="#e11d48"
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="storiesViews"
+                    name="Stories (views)"
+                    stroke="#10b981"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
