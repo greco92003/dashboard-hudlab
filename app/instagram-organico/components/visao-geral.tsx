@@ -60,6 +60,7 @@ interface AtributoLite {
   timestamp: string;
   views: number | null;
   reach: number | null;
+  engagement_rate: number | null;
 }
 
 interface DiaSerie {
@@ -70,12 +71,26 @@ interface DiaSerie {
   storiesViews: number;
 }
 
+interface TendenciaDia {
+  data: string;
+  dataIso: string;
+  reelsEng: number | null;
+  postsEng: number | null;
+  storiesEng: number | null;
+}
+
 // Timestamp (ISO, UTC) -> data no fuso America/Sao_Paulo (YYYY-MM-DD),
 // pra bater com o mesmo fuso usado em periodoParaDatas.
 function dataSaoPaulo(isoTimestamp: string): string {
   const d = new Date(isoTimestamp);
   const sp = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   return `${sp.getFullYear()}-${String(sp.getMonth() + 1).padStart(2, "0")}-${String(sp.getDate()).padStart(2, "0")}`;
+}
+
+function subtrairDias(dataIso: string, n: number): string {
+  const d = new Date(`${dataIso}T12:00:00`);
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // Série por dia de publicação (nunca semanal, mesmo em 30/90 dias) --
@@ -108,6 +123,56 @@ function construirSerieDiaria(rows: AtributoLite[], inicio: string, fim: string)
     else if (r.media_product_type === "STORY") bucket.storiesViews += r.views ?? 0;
   }
   return Array.from(porDia.values()).sort((a, b) => a.dataIso.localeCompare(b.dataIso));
+}
+
+const JANELA_TENDENCIA_DIAS = 7;
+
+// Tendência de qualidade (engajamento), separada da tendência de volume
+// acima: soma de views mistura "quanto postamos" com "quão bem
+// performou" -- um dia com 3 reels sempre soma mais que um dia com 0,
+// mesmo que o conteúdo tenha ido pior. Aqui cada ponto é a média
+// (poolada, não "média das médias") da taxa de engajamento de TODOS os
+// posts publicados nos últimos `janela` dias corridos até aquele dia --
+// suaviza o ruído de um vídeo viral isolado e não some quando não há
+// post no dia (fica null = buraco na linha, não zero).
+function construirTendenciaEngajamento(
+  rows: AtributoLite[],
+  inicio: string,
+  fim: string,
+  janela = JANELA_TENDENCIA_DIAS,
+): TendenciaDia[] {
+  const porTipo: Record<string, { iso: string; valor: number }[]> = { REELS: [], FEED: [], STORY: [] };
+  for (const r of rows) {
+    if (r.engagement_rate == null || !porTipo[r.media_product_type]) continue;
+    porTipo[r.media_product_type].push({ iso: dataSaoPaulo(r.timestamp), valor: r.engagement_rate });
+  }
+
+  const mediaJanela = (tipo: string, diaIso: string): number | null => {
+    const inicioJanela = subtrairDias(diaIso, janela - 1);
+    const valores = porTipo[tipo]
+      .filter((v) => v.iso >= inicioJanela && v.iso <= diaIso)
+      .map((v) => v.valor);
+    if (valores.length === 0) return null;
+    return valores.reduce((s, v) => s + v, 0) / valores.length;
+  };
+
+  const out: TendenciaDia[] = [];
+  const cursor = new Date(`${inicio}T12:00:00`);
+  const fimDate = new Date(`${fim}T12:00:00`);
+  while (cursor <= fimDate) {
+    const iso = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(
+      cursor.getDate(),
+    ).padStart(2, "0")}`;
+    out.push({
+      data: `${String(cursor.getDate()).padStart(2, "0")}/${String(cursor.getMonth() + 1).padStart(2, "0")}`,
+      dataIso: iso,
+      reelsEng: mediaJanela("REELS", iso),
+      postsEng: mediaJanela("FEED", iso),
+      storiesEng: mediaJanela("STORY", iso),
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
 }
 
 const TIPOS: { key: string; label: string; icon: typeof Clapperboard }[] = [
@@ -161,6 +226,7 @@ export function VisaoGeral() {
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [serie, setSerie] = useState<DiaSerie[]>([]);
+  const [tendencia, setTendencia] = useState<TendenciaDia[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -174,12 +240,15 @@ export function VisaoGeral() {
       // periodoParaDatas tipa inicio como string | null pro caso "todos",
       // mas essa aba só usa PERIODOS_COMPARAVEIS (7d/30d/90d) -- nunca null.
       if (!inicio) return;
+      // Busca com folga de JANELA_TENDENCIA_DIAS antes do início pra média
+      // móvel já ter janela cheia no primeiro dia exibido, sem "partida fria".
+      const inicioBusca = subtrairDias(inicio, JANELA_TENDENCIA_DIAS - 1);
       const [resumoResp, serieResp] = await Promise.all([
         supabase.rpc("get_instagram_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
         supabase
           .from("v_ig_atributos")
-          .select("media_product_type, timestamp, views, reach")
-          .gte("timestamp", inicio)
+          .select("media_product_type, timestamp, views, reach, engagement_rate")
+          .gte("timestamp", inicioBusca)
           .lte("timestamp", `${fim}T23:59:59`),
       ]);
       if (cancel) return;
@@ -193,8 +262,10 @@ export function VisaoGeral() {
         setLoading(false);
         return;
       }
+      const linhas = (serieResp.data as AtributoLite[]) ?? [];
       setResumo(resumoResp.data as Resumo);
-      setSerie(construirSerieDiaria((serieResp.data as AtributoLite[]) ?? [], inicio, fim));
+      setSerie(construirSerieDiaria(linhas, inicio, fim));
+      setTendencia(construirTendenciaEngajamento(linhas, inicio, fim));
       setLoading(false);
     })();
     return () => {
@@ -316,6 +387,56 @@ export function VisaoGeral() {
                     name="Stories (views)"
                     stroke="#10b981"
                     dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && tendencia.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Tendência de engajamento</CardTitle>
+            <CardDescription>
+              Média móvel de {JANELA_TENDENCIA_DIAS} dias da taxa de engajamento -- ao contrário do gráfico de
+              volume acima, aqui um dia sem post não derruba a linha pra zero, e um vídeo viral isolado não
+              domina o gráfico. Buraco na linha = nenhum post daquele tipo na janela.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={tendencia} margin={{ top: 5, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <XAxis dataKey="data" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
+                  <Tooltip formatter={(v: number) => fmtPctFraction(v)} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="reelsEng"
+                    name="Reels (engajamento)"
+                    stroke="#8884d8"
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="postsEng"
+                    name="Posts (engajamento)"
+                    stroke="#e11d48"
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="storiesEng"
+                    name="Stories (engajamento)"
+                    stroke="#10b981"
+                    dot={false}
+                    connectNulls={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
