@@ -18,7 +18,7 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODELO = "claude-sonnet-5";
 const TRILHAS_VALIDAS = new Set([
-  "bastidores", "colab_cliente", "humor_meme", "cta_padrao", "tendencia", "outro",
+  "bastidores", "colab_cliente", "humor_meme", "cta_padrao", "tendencia", "ninguem_pediu", "outro",
 ]);
 // Só audita o que já maturou (7+ dias) e ainda é relevante pro ciclo
 // atual (últimos 90 dias) -- evita tanto avaliar cedo demais quanto
@@ -143,11 +143,11 @@ ${CONTEXTO_MARCA}
 Sua tarefa: avaliar UM post/reel com base na imagem fornecida (thumbnail pro Reels, imagem completa pro Post/Carrossel), na legenda e nas métricas reais -- comparando com a média histórica da própria conta (fornecida) pra dizer se performou acima ou abaixo do esperado.
 
 Atribua:
-- trilha: uma destas categorias -- "bastidores" (produção/rotina), "colab_cliente" (produzido para/colaboração), "humor_meme", "cta_padrao" (CTA recorrente tipo Amostra Digital), "tendencia" (gancho de atualidade), "outro".
+- trilha: uma destas categorias -- "bastidores" (produção/rotina), "colab_cliente" (produzido para/colaboração), "humor_meme", "cta_padrao" (CTA recorrente tipo Amostra Digital), "tendencia" (gancho de atualidade), "ninguem_pediu" (quadro-assinatura "Ninguém pediu, mas a gente fez" -- ver contexto de marca, tem prioridade sobre colab_cliente/humor_meme quando a fórmula bater), "outro".
 - nota: de 0 a 10, baseada em evidência (métrica real vs. média da conta), não em gosto pessoal.
 - resumo: 2-3 frases sobre o resultado.
 - pontos_fortes: o que funcionou, citando número ou elemento visual/legenda concreto.
-- pontos_fracos: o que não funcionou.
+- pontos_fracos: o que não funcionou. Atenção a um viés comum: se o post marca ou foi produzido para um colaborador/criador/cliente externo, não atribua automaticamente um pico de comentários/engajamento ao CTA do post -- o público do colaborador pode ser a causa real, independente de qualquer CTA. Quando não der pra isolar a causa com segurança, diga isso explicitamente em vez de forçar uma única explicação.
 - sugestao_correspondente: se este post claramente cumpre uma das "sugestões pendentes" listadas abaixo (mesmo tema/formato/trilha, mesmo que a execução tenha variado um pouco), retorne o "id" dela. Se não corresponder a nenhuma com segurança, retorne null -- não force correspondência.
 
 Responda APENAS com um objeto JSON válido, sem nenhum texto antes ou depois, exatamente neste formato:
@@ -162,7 +162,7 @@ Sua tarefa: propor o calendário de publicações da semana com base na performa
 Pra cada peça sugerida, retorne um item com:
 - dia_planejado (data YYYY-MM-DD dentro da semana)
 - media_product_type ("REELS" | "FEED" | "STORY")
-- trilha (mesma taxonomia do Auditor: bastidores | colab_cliente | humor_meme | cta_padrao | tendencia | outro)
+- trilha (mesma taxonomia do Auditor: bastidores | colab_cliente | humor_meme | cta_padrao | tendencia | ninguem_pediu | outro)
 - descricao_imagem (obrigatório se FEED: o que a imagem/composição deve mostrar)
 - legenda (texto sugerido)
 - cta

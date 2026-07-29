@@ -17,6 +17,7 @@ const TRILHA_LABELS: Record<string, string> = {
   humor_meme: "Humor/Meme",
   cta_padrao: "CTA padrão",
   tendencia: "Tendência",
+  ninguem_pediu: "Ninguém Pediu",
   outro: "Outro",
 };
 

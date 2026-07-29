@@ -50,6 +50,23 @@ export const CONTEXTO_MARCA = `
 - Produto de portfólio / novidade de categoria pra marcas e revenda
 - Campanha termina, o produto continua na rotina (memória de marca)
 
+## Quadro-assinatura: "Ninguém pediu, mas a gente fez"
+- É o quadro mais famoso e mais recorrente da conta -- não é um post
+  avulso de humor, é uma franquia própria com identidade e nome fixo.
+- Fórmula: humor + referência a uma personalidade, criador, torcida,
+  marca ou meme popular do momento + Chinelo Slide personalizado
+  surpreendente feito "sem ninguém pedir". CTA típico é marcar/chamar
+  a pessoa ou perfil referenciado nos comentários.
+- Sempre que um post/reel seguir essa fórmula (com ou sem colaboração
+  real confirmada com a pessoa/marca referenciada), classifique como
+  esse quadro -- não como "colab_cliente" genérico nem "humor_meme"
+  genérico. É a própria identidade do quadro que importa, não se a
+  referência é uma colaboração paga/autorizada ou só uma piada.
+- Cuidado redobrado de compliance aqui: por natureza esse quadro
+  referencia gente e marcas de fora sem contrato formal -- reforçar a
+  regra de "Nunca" sobre não sugerir afiliação oficial nem usar
+  logo/nome de terceiro de um jeito que pareça patrocínio real.
+
 ## Sempre
 - Nome completo de eventos, cidade, estado e data quando mencionados.
 - "Chinelo Slide" e linguagem brasileira natural.
