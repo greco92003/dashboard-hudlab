@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink, Info } from "lucide-react";
 import { fmtDataCurta, fmtDataPura } from "../lib";
 
@@ -96,6 +97,15 @@ interface CalendarioRow {
   status: string;
 }
 
+function DetalheItem({ titulo, texto, muted }: { titulo: string; texto: string; muted?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">{titulo}</p>
+      <p className={`whitespace-pre-line text-sm ${muted ? "text-muted-foreground" : ""}`}>{texto}</p>
+    </div>
+  );
+}
+
 function mediaDaAuditoria(row: AuditoriaRow): AuditoriaMedia | null {
   if (!row.ig_media) return null;
   return Array.isArray(row.ig_media) ? (row.ig_media[0] ?? null) : row.ig_media;
@@ -106,6 +116,7 @@ export function Estrategia() {
   const [calendario, setCalendario] = useState<CalendarioRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [selecionado, setSelecionado] = useState<CalendarioRow | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -184,6 +195,7 @@ export function Estrategia() {
           <CardDescription>
             Proposta do Estrategista por semana — status muda pra "Seguida" quando o Auditor reconhece um
             post publicado como correspondente, ou "Não seguida" se a sugestão expirar sem casar com nada.
+            Clique numa linha pra ver a sugestão completa.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -204,19 +216,23 @@ export function Estrategia() {
                 </TableHeader>
                 <TableBody>
                   {calendario.map((item) => (
-                    <TableRow key={item.id}>
+                    <TableRow
+                      key={item.id}
+                      className="cursor-pointer"
+                      onClick={() => setSelecionado(item)}
+                    >
                       <TableCell className="whitespace-nowrap">{fmtDataPura(item.dia_planejado)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary">{item.media_product_type}</Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{labelTrilha(item.trilha)}</TableCell>
-                      <TableCell className="max-w-sm">
+                      <TableCell className="max-w-sm whitespace-normal align-top">
                         <p className="line-clamp-2 text-sm">
                           {item.roteiro ?? item.descricao_imagem ?? item.legenda ?? "—"}
                         </p>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{item.justificativa}</p>
                       </TableCell>
-                      <TableCell className="max-w-[160px]">
+                      <TableCell className="max-w-[160px] whitespace-normal align-top">
                         <p className="line-clamp-2 text-sm">{item.cta ?? "—"}</p>
                       </TableCell>
                       <TableCell>
@@ -230,6 +246,34 @@ export function Estrategia() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selecionado} onOpenChange={(open) => !open && setSelecionado(null)}>
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+          {selecionado && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
+                  {fmtDataPura(selecionado.dia_planejado)}
+                  <Badge variant="secondary">{selecionado.media_product_type}</Badge>
+                  <Badge variant="secondary">{labelTrilha(selecionado.trilha)}</Badge>
+                  <BadgeStatus status={selecionado.status} />
+                </DialogTitle>
+                <DialogDescription className="text-left">
+                  Sugestão completa gerada pelo Estrategista pra essa data.
+                </DialogDescription>
+              </DialogHeader>
+
+              {selecionado.descricao_imagem && (
+                <DetalheItem titulo="Descrição da imagem" texto={selecionado.descricao_imagem} />
+              )}
+              {selecionado.legenda && <DetalheItem titulo="Legenda" texto={selecionado.legenda} />}
+              {selecionado.cta && <DetalheItem titulo="CTA" texto={selecionado.cta} />}
+              {selecionado.roteiro && <DetalheItem titulo="Roteiro" texto={selecionado.roteiro} />}
+              <DetalheItem titulo="Justificativa" texto={selecionado.justificativa} muted />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="pb-2">
