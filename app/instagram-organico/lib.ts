@@ -16,12 +16,22 @@ export function fmtWatchTime(ms: number | null | undefined) {
   return ms == null ? "—" : `${(ms / 1000).toFixed(1)}s`;
 }
 
-// timestamp ISO -> "dd/mm/aaaa" (nunca mm/dd)
+// timestamp ISO (com hora/timezone) -> "dd/mm/aaaa" (nunca mm/dd)
 export function fmtDataCurta(iso: string) {
   const d = new Date(iso);
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   return `${dia}/${mes}/${d.getFullYear()}`;
+}
+
+// coluna `date` pura do Postgres ("YYYY-MM-DD", sem hora) -> "dd/mm/aaaa".
+// new Date("YYYY-MM-DD") interpreta a string como UTC meia-noite -- em
+// fuso negativo (Brasília, UTC-3) os getters locais (getDate/getMonth)
+// voltam um dia. Formatar direto da string evita essa conversão de fuso
+// que não faz sentido pra uma data sem hora.
+export function fmtDataPura(dataIso: string) {
+  const [ano, mes, dia] = dataIso.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
 export type Periodo = "7d" | "30d" | "90d" | "todos";

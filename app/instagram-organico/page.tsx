@@ -9,8 +9,9 @@ import { Reels } from "./components/reels";
 import { Posts } from "./components/posts";
 import { Stories } from "./components/stories";
 import { Insights } from "./components/insights";
+import { Estrategia } from "./components/estrategia";
 
-const ABAS = ["visao-geral", "reels", "posts", "stories", "insights"] as const;
+const ABAS = ["visao-geral", "reels", "posts", "stories", "insights", "estrategia"] as const;
 
 function InstagramOrganicoContent() {
   const router = useRouter();
@@ -44,6 +45,7 @@ function InstagramOrganicoContent() {
           <TabsTrigger value="posts">Posts &amp; Carrosséis</TabsTrigger>
           <TabsTrigger value="stories">Stories</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
+          <TabsTrigger value="estrategia">Estratégia</TabsTrigger>
         </TabsList>
         <TabsContent value="visao-geral" className="mt-4">
           <VisaoGeral />
@@ -59,6 +61,9 @@ function InstagramOrganicoContent() {
         </TabsContent>
         <TabsContent value="insights" className="mt-4">
           <Insights />
+        </TabsContent>
+        <TabsContent value="estrategia" className="mt-4">
+          <Estrategia />
         </TabsContent>
       </Tabs>
     </div>
