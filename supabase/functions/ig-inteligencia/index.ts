@@ -122,8 +122,17 @@ async function callClaude(apiKey: string, system: string, content: any[], maxTok
 
 function extractJson(text: string): unknown {
   let t = text.trim();
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) t = fence[1].trim();
+  // Cerca markdown fechada: pega o miolo. Cerca ABERTA sem fechamento
+  // acontece quando a resposta é cortada por max_tokens no meio do
+  // JSON -- aí só remove a abertura, pra mensagem de erro abaixo
+  // mostrar o conteúdo truncado de verdade em vez de reclamar da crase
+  // e esconder a causa real.
+  const cercaFechada = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (cercaFechada) {
+    t = cercaFechada[1].trim();
+  } else {
+    t = t.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "").trim();
+  }
   try {
     return JSON.parse(t);
   } catch (err) {
@@ -167,9 +176,11 @@ Pra cada peça sugerida, retorne um item com:
 - legenda (texto sugerido)
 - cta
 - roteiro (obrigatório se REELS: roteiro com direção de cena, detalhado o suficiente pra equipe filmar)
-- justificativa (a evidência de dado -- trilha, nota, taxa -- que embasa essa sugestão)
+- justificativa (a evidência de dado -- trilha, nota, taxa -- que embasa essa sugestão, em no máximo 2 frases)
 
-Responda APENAS com um objeto JSON válido, sem nenhum texto antes ou depois, exatamente neste formato:
+Proponha no máximo 10 peças na semana. Detalhe o roteiro dos Reels (é o que a equipe usa pra filmar), mas mantenha legenda, CTA e justificativa enxutos -- resposta longa demais é cortada no meio e se perde inteira.
+
+Responda APENAS com um objeto JSON válido, sem cerca de markdown (nada de crases), sem nenhum texto antes ou depois, exatamente neste formato:
 {"itens": [{"dia_planejado": "...", "media_product_type": "...", "trilha": "...", "descricao_imagem": "...", "legenda": "...", "cta": "...", "roteiro": "...", "justificativa": "..."}]}`;
 
 // deno-lint-ignore no-explicit-any
@@ -341,11 +352,15 @@ async function runEstrategista(supabase: any, apiKey: string) {
     auditorias_recentes: auditoriasRecentes ?? [],
   };
 
+  // 8000 já estourou na prática (resposta cortada no meio do JSON, o
+  // lote inteiro se perde). Roteiro detalhado de Reels é caro em
+  // token e o contexto só cresce conforme entram mais auditorias --
+  // folga generosa aqui é mais barata que perder a rodada da semana.
   const respostaTexto = await callClaude(
     apiKey,
     ESTRATEGISTA_INSTRUCOES,
     [{ type: "text", text: JSON.stringify(contexto, null, 2) }],
-    8000,
+    16000,
   );
   // deno-lint-ignore no-explicit-any
   const json = extractJson(respostaTexto) as any;
