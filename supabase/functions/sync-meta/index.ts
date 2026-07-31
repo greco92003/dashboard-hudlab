@@ -32,6 +32,13 @@ interface InsightRow {
   actions?: { action_type: string; value: string }[];
 }
 
+interface AdAttributesRow {
+  id: string;
+  effective_status?: string;
+  campaign?: { objective?: string };
+  adset?: { optimization_goal?: string; destination_type?: string };
+}
+
 // Extrai leads do array actions. O Meta pode reportar "lead" (agregado) e/ou
 // "onsite_conversion.lead_grouped". Preferimos "lead"; se ausente, usamos o
 // grouped — nunca somamos os dois para não contar em dobro.
@@ -178,9 +185,69 @@ Deno.serve(async (req: Request) => {
     }
 
     await log("success", totalRows);
+
+    // Fase 2: atributos do anúncio (status atual, objetivo da campanha,
+    // meta de otimização, destino do conjunto) -- dimensão separada da
+    // série temporal acima, sem filtro de data (snapshot do estado
+    // atual). Usada pelo meta-ghl-insights pra não sugerir pausar
+    // anúncio já pausado e pra distinguir anúncios de tráfego/perfil
+    // (BIO) dos de geração de lead direta.
+    const attrStartedAt = new Date();
+    let attrRows = 0;
+    let attrErr: string | undefined;
+    try {
+      const attrFields = [
+        "id", "effective_status", "campaign{objective}",
+        "adset{optimization_goal,destination_type}",
+      ].join(",");
+      let attrUrl: string | null =
+        `${GRAPH}/${accountId}/ads?fields=${attrFields}&limit=500&access_token=${token}`;
+
+      while (attrUrl) {
+        const res = await fetchWithRetry(attrUrl);
+        if (!res.ok) throw new Error(`Meta API (ads) ${res.status}: ${await res.text()}`);
+        const page = await res.json();
+        const rows = (page.data as AdAttributesRow[] | undefined) ?? [];
+
+        const mapped = rows
+          .filter((r) => r.id)
+          .map((r) => ({
+            ad_id: r.id,
+            effective_status: r.effective_status ?? null,
+            campaign_objective: r.campaign?.objective ?? null,
+            adset_optimization_goal: r.adset?.optimization_goal ?? null,
+            adset_destination_type: r.adset?.destination_type ?? null,
+            synced_at: new Date().toISOString(),
+          }));
+
+        if (mapped.length > 0) {
+          const { error } = await supabase
+            .from("meta_ad_attributes")
+            .upsert(mapped, { onConflict: "ad_id" });
+          if (error) throw new Error(`Upsert meta_ad_attributes: ${error.message}`);
+          attrRows += mapped.length;
+        }
+
+        attrUrl = page.paging?.next ?? null;
+      }
+    } catch (err) {
+      attrErr = err instanceof Error ? err.message : String(err);
+    }
+
+    await supabase.from("sync_log").insert({
+      source: "meta_ad_attributes",
+      started_at: attrStartedAt.toISOString(),
+      finished_at: new Date().toISOString(),
+      rows_upserted: attrRows,
+      status: attrErr ? "error" : "success",
+      error: attrErr ?? null,
+    });
+
     return new Response(
       JSON.stringify({
         rows: totalRows,
+        ad_attributes_rows: attrRows,
+        ad_attributes_error: attrErr ?? null,
         date_range: { since, until },
         duration_ms: Date.now() - startedAt.getTime(),
       }),

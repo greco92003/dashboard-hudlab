@@ -15,9 +15,10 @@ import { VisaoGeral } from "./components/visao-geral";
 import { Anuncios } from "./components/anuncios";
 import { Regioes } from "./components/regioes";
 import { Saude } from "./components/saude";
+import { Insights } from "./components/insights";
 import { PERIODOS, type Periodo } from "./lib";
 
-const ABAS = ["visao-geral", "anuncios", "regioes", "saude"] as const;
+const ABAS = ["visao-geral", "anuncios", "regioes", "saude", "insights"] as const;
 
 function MetaMarketingGhlContent() {
   const router = useRouter();
@@ -76,6 +77,7 @@ function MetaMarketingGhlContent() {
           <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
           <TabsTrigger value="regioes">Regiões</TabsTrigger>
           <TabsTrigger value="saude">Saúde da Atribuição</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
         <TabsContent value="visao-geral" className="mt-4">
           <VisaoGeral periodo={periodo} />
@@ -88,6 +90,9 @@ function MetaMarketingGhlContent() {
         </TabsContent>
         <TabsContent value="saude" className="mt-4">
           <Saude />
+        </TabsContent>
+        <TabsContent value="insights" className="mt-4">
+          <Insights />
         </TabsContent>
       </Tabs>
     </div>
