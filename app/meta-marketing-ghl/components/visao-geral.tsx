@@ -35,8 +35,10 @@ import {
   fmtDataCurta,
   addDias,
   diaAnterior,
+  hojeSaoPaulo,
   periodoAnterior,
   type Periodo,
+  type RangeCustom,
   periodoParaDatas,
 } from "../lib";
 
@@ -137,7 +139,13 @@ function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
   );
 }
 
-export function VisaoGeral({ periodo }: { periodo: Periodo }) {
+export function VisaoGeral({
+  periodo,
+  customRange,
+}: {
+  periodo: Periodo;
+  customRange?: RangeCustom;
+}) {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [funil, setFunil] = useState<FunilRow[]>([]);
   const [fontes, setFontes] = useState<FonteRow[]>([]);
@@ -156,8 +164,10 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
   // Gráfico Investimento vs Faturamento: sempre diário, respeita o
   // período selecionado, exclui hoje (sempre parcial) e compara com o
   // período imediatamente anterior de mesma duração (mesmo nº de dias).
-  const { inicio, fim } = periodoParaDatas(periodo);
-  const realFim = diaAnterior(fim); // fim do período selecionado é sempre "hoje"; excluído
+  const { inicio, fim } = periodoParaDatas(periodo, customRange);
+  // Só exclui o último dia quando ele é "hoje" (sempre parcial) -- um
+  // período personalizado terminando num dia passado já é dado completo.
+  const realFim = fim === hojeSaoPaulo() ? diaAnterior(fim) : fim;
   const anterior = periodoAnterior(inicio, realFim);
   // Comparativo do funil de etapas usa o mesmo critério de "período
   // anterior" do resto do módulo (get_resumo_periodo/get_funnel_por_anuncio):
@@ -281,7 +291,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
     return () => {
       cancel = true;
     };
-  }, [periodo]);
+  }, [periodo, customRange?.inicio, customRange?.fim]);
 
   if (loading) {
     return (

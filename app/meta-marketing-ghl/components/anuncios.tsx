@@ -28,7 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight } from "lucide-react";
-import { fmtBrl, fmtNum, periodoAnterior, periodoParaDatas, type Periodo } from "../lib";
+import {
+  fmtBrl,
+  fmtNum,
+  periodoAnterior,
+  periodoParaDatas,
+  type Periodo,
+  type RangeCustom,
+} from "../lib";
 
 // Todas as métricas numéricas da tabela têm comparativo vs período
 // anterior — quantidade E valor/custo, não só contagem.
@@ -281,7 +288,13 @@ function DiagnosticoBadge({ valor }: { valor: string }) {
   return <Badge variant="secondary">REVISAR</Badge>;
 }
 
-export function Anuncios({ periodo }: { periodo: Periodo }) {
+export function Anuncios({
+  periodo,
+  customRange,
+}: {
+  periodo: Periodo;
+  customRange?: RangeCustom;
+}) {
   const [rawAtual, setRawAtual] = useState<FunnelRow[]>([]);
   const [rawAnterior, setRawAnterior] = useState<FunnelRow[]>([]);
   const [frios, setFrios] = useState<LeadFrioRow[]>([]);
@@ -293,7 +306,7 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
 
   useEffect(() => {
     const supabase = createClient();
-    const { inicio, fim } = periodoParaDatas(periodo);
+    const { inicio, fim } = periodoParaDatas(periodo, customRange);
     const anterior = periodoAnterior(inicio, fim);
     let cancel = false;
     setLoading(true);
@@ -316,7 +329,7 @@ export function Anuncios({ periodo }: { periodo: Periodo }) {
     return () => {
       cancel = true;
     };
-  }, [periodo]);
+  }, [periodo, customRange?.inicio, customRange?.fim]);
 
   // Agrupamento é 100% client-side a partir do nível de anúncio já
   // buscado -- trocar o seletor de nível não refaz a busca no banco, só
