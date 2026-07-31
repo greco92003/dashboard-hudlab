@@ -25,6 +25,7 @@ interface FunnelRow {
   ad_id: string;
   ad_name: string | null;
   campaign_name: string | null;
+  adset_id: string | null;
   spend_total: number;
   leads_ghl: number;
   orcamentos: number;
@@ -104,6 +105,20 @@ Regras de negócio importantes pra avaliar os anúncios corretamente:
 - "Leads" já é a coorte de contatos GHL atribuídos a esse anúncio
   específico no período; "Orçamentos"/"Mockups"/"Negociações" são
   marcos alcançados por essa mesma coorte.
+- Quando o anúncio tem "irmaos_no_mesmo_conjunto" (outros anúncios
+  ativos no MESMO conjunto de anúncios, dividindo orçamento e leilão),
+  considere o risco de portfólio antes de sugerir "PAUSAR": o Meta
+  aloca verba entre os anúncios de um mesmo conjunto com base em valor
+  previsto em tempo real, mas mantém uma fatia de exploração pra manter
+  calibração e variar criativo pro mesmo usuário (evitar fadiga de
+  frequência). Pausar um anúncio fraco isolado nesse conjunto pode
+  forçar todo o conjunto a recalibrar e prejudicar temporariamente os
+  outros criativos, inclusive os fortes. Se pelo menos um irmão tem bom
+  desempenho (ROAS >= 2, custo_por_negociacao baixo ou vendas > 0) e
+  ainda não está pausado, prefira "REVISAR" a "PAUSAR" pro anúncio
+  fraco, e explique esse motivo na justificativa. Se todos os irmãos
+  também têm desempenho ruim ou já estão pausados, aí sim "PAUSAR" é
+  seguro.
 
 Sua tarefa: pra cada anúncio da lista fornecida, decida um veredito e
 escreva uma justificativa curta (2-3 frases, cite os números que
@@ -247,6 +262,20 @@ Deno.serve(async (req: Request) => {
       (r) => !STATUS_PAUSADO.has(atributosPorAdId.get(r.ad_id)?.effective_status ?? ""),
     );
 
+    const pausadoAdIds = new Set(pausados.map((r) => r.ad_id));
+
+    // Agrupa por conjunto de anúncios (adset_id) pra dar visibilidade
+    // de risco de portfólio ao Claude -- anúncios que dividem
+    // orçamento/leilão com irmãos fortes não devem ser pausados de
+    // forma isolada (ver regra "irmaos_no_mesmo_conjunto" no prompt).
+    const anunciosPorAdsetId = new Map<string, FunnelRow[]>();
+    for (const r of anuncios) {
+      if (!r.adset_id) continue;
+      const lista = anunciosPorAdsetId.get(r.adset_id) ?? [];
+      lista.push(r);
+      anunciosPorAdsetId.set(r.adset_id, lista);
+    }
+
     const linhasPausadas = pausados.map((r) => {
       const status = atributosPorAdId.get(r.ad_id)?.effective_status ?? "PAUSED";
       return {
@@ -283,6 +312,16 @@ Deno.serve(async (req: Request) => {
             r.pares_orcamentos > 0
               ? Math.round((r.spend_total / r.pares_orcamentos) * 100) / 100
               : null;
+          const irmaos = (r.adset_id ? anunciosPorAdsetId.get(r.adset_id) : undefined)
+            ?.filter((s) => s.ad_id !== r.ad_id)
+            .map((s) => ({
+              ad_name: s.ad_name,
+              ja_pausado: pausadoAdIds.has(s.ad_id),
+              custo_por_lead: s.custo_por_lead,
+              custo_por_negociacao: s.custo_por_negociacao,
+              roas: s.roas,
+              vendas: s.vendas,
+            })) ?? [];
           return {
             ad_id: r.ad_id,
             ad_name: r.ad_name,
@@ -305,6 +344,7 @@ Deno.serve(async (req: Request) => {
             roas: r.roas,
             diagnostico_atual: r.diagnostico,
             trafego_perfil: ehTrafegoPerfil(attr),
+            irmaos_no_mesmo_conjunto: irmaos,
           };
         }),
       };
