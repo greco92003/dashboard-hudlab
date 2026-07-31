@@ -296,12 +296,12 @@ export function VisaoGeral({
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           <Skeleton className="h-72" />
           <Skeleton className="h-72" />
         </div>
@@ -458,7 +458,7 @@ export function VisaoGeral({
       )}
 
       {/* KPIs com variação vs período anterior */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-8">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         {kpis.map((k) => (
           <Card key={k.key}>
             <CardHeader className="pb-2 px-4 pt-4">
@@ -487,7 +487,7 @@ export function VisaoGeral({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         {/* Funil de vendas */}
         <Card>
           <CardHeader>
@@ -627,44 +627,46 @@ export function VisaoGeral({
                 Sem leads sincronizados ainda.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fonte</TableHead>
-                    <TableHead className="text-right">Invest.</TableHead>
-                    <TableHead className="text-right">Leads</TableHead>
-                    <TableHead className="text-right">CPL</TableHead>
-                    <TableHead className="text-right">Faturamento</TableHead>
-                    <TableHead className="text-right">ROAS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {fontes.map((f) => (
-                    <TableRow key={f.fonte}>
-                      <TableCell className="font-medium">{f.fonte}</TableCell>
-                      <TableCell className="text-right">
-                        {f.investimento == null ? "N/D" : fmtBrl(f.investimento)}
-                      </TableCell>
-                      <TableCell className="text-right">{fmtNum(f.leads)}</TableCell>
-                      <TableCell className="text-right">
-                        {f.cpl == null ? "N/D" : fmtBrl(f.cpl)}
-                      </TableCell>
-                      <TableCell className="text-right">{fmtBrl(f.faturamento)}</TableCell>
-                      <TableCell className="text-right">
-                        {f.roas == null ? "N/D" : `${f.roas.toLocaleString("pt-BR")}x`}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fonte</TableHead>
+                      <TableHead className="text-right">Invest.</TableHead>
+                      <TableHead className="text-right">Leads</TableHead>
+                      <TableHead className="text-right">CPL</TableHead>
+                      <TableHead className="text-right">Faturamento</TableHead>
+                      <TableHead className="text-right">ROAS</TableHead>
                     </TableRow>
-                  ))}
-                  <TableRow className="font-medium">
-                    <TableCell>Total</TableCell>
-                    <TableCell className="text-right">{fmtBrl(totalFontes.investimento)}</TableCell>
-                    <TableCell className="text-right">{fmtNum(totalFontes.leads)}</TableCell>
-                    <TableCell className="text-right">—</TableCell>
-                    <TableCell className="text-right">{fmtBrl(totalFontes.faturamento)}</TableCell>
-                    <TableCell className="text-right">—</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {fontes.map((f) => (
+                      <TableRow key={f.fonte}>
+                        <TableCell className="font-medium">{f.fonte}</TableCell>
+                        <TableCell className="text-right">
+                          {f.investimento == null ? "N/D" : fmtBrl(f.investimento)}
+                        </TableCell>
+                        <TableCell className="text-right">{fmtNum(f.leads)}</TableCell>
+                        <TableCell className="text-right">
+                          {f.cpl == null ? "N/D" : fmtBrl(f.cpl)}
+                        </TableCell>
+                        <TableCell className="text-right">{fmtBrl(f.faturamento)}</TableCell>
+                        <TableCell className="text-right">
+                          {f.roas == null ? "N/D" : `${f.roas.toLocaleString("pt-BR")}x`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="font-medium">
+                      <TableCell>Total</TableCell>
+                      <TableCell className="text-right">{fmtBrl(totalFontes.investimento)}</TableCell>
+                      <TableCell className="text-right">{fmtNum(totalFontes.leads)}</TableCell>
+                      <TableCell className="text-right">—</TableCell>
+                      <TableCell className="text-right">{fmtBrl(totalFontes.faturamento)}</TableCell>
+                      <TableCell className="text-right">—</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -684,34 +686,36 @@ export function VisaoGeral({
                 Sem campanhas sincronizadas ainda.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Campanha</TableHead>
-                    <TableHead className="text-right">Invest.</TableHead>
-                    <TableHead className="text-right">Vendas</TableHead>
-                    <TableHead className="text-right">Faturamento</TableHead>
-                    <TableHead className="text-right">ROAS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topCampanhas.map((c) => (
-                    <TableRow key={c.campaign_name}>
-                      <TableCell className="max-w-52">
-                        <span className="truncate block font-medium" title={c.campaign_name}>
-                          {c.campaign_name}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">{fmtBrl(c.spend)}</TableCell>
-                      <TableCell className="text-right">{fmtNum(c.vendas)}</TableCell>
-                      <TableCell className="text-right">{fmtBrl(c.faturamento)}</TableCell>
-                      <TableCell className="text-right">
-                        {c.roas == null ? "—" : `${c.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}x`}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campanha</TableHead>
+                      <TableHead className="text-right">Invest.</TableHead>
+                      <TableHead className="text-right">Vendas</TableHead>
+                      <TableHead className="text-right">Faturamento</TableHead>
+                      <TableHead className="text-right">ROAS</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {topCampanhas.map((c) => (
+                      <TableRow key={c.campaign_name}>
+                        <TableCell className="max-w-52">
+                          <span className="truncate block font-medium" title={c.campaign_name}>
+                            {c.campaign_name}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">{fmtBrl(c.spend)}</TableCell>
+                        <TableCell className="text-right">{fmtNum(c.vendas)}</TableCell>
+                        <TableCell className="text-right">{fmtBrl(c.faturamento)}</TableCell>
+                        <TableCell className="text-right">
+                          {c.roas == null ? "—" : `${c.roas.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}x`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>

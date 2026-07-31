@@ -122,7 +122,7 @@ export function Regioes() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:justify-between gap-4 space-y-0">
           <div>
             <CardTitle>Desempenho por estado e mês</CardTitle>
             <CardDescription>
@@ -240,7 +240,7 @@ export function Regioes() {
             Sem dados suficientes ainda.
           </p>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
             {ORDEM_ESTACOES.filter((e) =>
               sazonalidade.some((s) => s.estacao === e)
             ).map((estacao) => (

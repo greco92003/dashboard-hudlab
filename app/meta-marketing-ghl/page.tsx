@@ -116,13 +116,15 @@ function MetaMarketingGhlContent() {
       </div>
 
       <Tabs value={aba} onValueChange={(v) => setParam("aba", v)}>
-        <TabsList>
-          <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-          <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
-          <TabsTrigger value="regioes">Regiões</TabsTrigger>
-          <TabsTrigger value="saude">Saúde da Atribuição</TabsTrigger>
-          <TabsTrigger value="insights">Insights</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList>
+            <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
+            <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
+            <TabsTrigger value="regioes">Regiões</TabsTrigger>
+            <TabsTrigger value="saude">Saúde da Atribuição</TabsTrigger>
+            <TabsTrigger value="insights">Insights</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="visao-geral" className="mt-4">
           <VisaoGeral periodo={periodo} customRange={customRange} />
         </TabsContent>
