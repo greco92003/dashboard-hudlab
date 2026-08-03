@@ -47,7 +47,7 @@ const ORDEM_ESTACOES = ["verão", "outono", "inverno", "primavera"];
 
 type Metrica = "roas" | "spend" | "custo_mockup";
 
-export function Regioes() {
+export function Regioes({ refreshKey }: { refreshKey?: number }) {
   const [rows, setRows] = useState<UfMesRow[]>([]);
   const [sazonalidade, setSazonalidade] = useState<SazonalidadeRow[]>([]);
   const [metrica, setMetrica] = useState<Metrica>("roas");
@@ -56,6 +56,7 @@ export function Regioes() {
   useEffect(() => {
     const supabase = createClient();
     let cancel = false;
+    setLoading(true);
     (async () => {
       const [ufMes, saz] = await Promise.all([
         supabase.from("v_desempenho_uf_mes").select("*"),
@@ -69,7 +70,7 @@ export function Regioes() {
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const { meses, porUf, maxValor } = useMemo(() => {
     const meses = [...new Set(rows.map((r) => r.mes))].sort();

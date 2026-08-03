@@ -54,7 +54,7 @@ interface UtmSemMatchRow {
 
 const LIMITE_ALERTA = 80;
 
-export function Saude() {
+export function Saude({ refreshKey }: { refreshKey?: number }) {
   const [rows, setRows] = useState<SaudeRow[]>([]);
   const [semMatch, setSemMatch] = useState<UtmSemMatchRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +62,7 @@ export function Saude() {
   useEffect(() => {
     const supabase = createClient();
     let cancel = false;
+    setLoading(true);
     (async () => {
       const [saude, utms] = await Promise.all([
         supabase.from("v_atribuicao_saude").select("*"),
@@ -79,7 +80,7 @@ export function Saude() {
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   if (loading) return <Skeleton className="h-96" />;
 

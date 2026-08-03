@@ -291,9 +291,11 @@ function DiagnosticoBadge({ valor }: { valor: string }) {
 export function Anuncios({
   periodo,
   customRange,
+  refreshKey,
 }: {
   periodo: Periodo;
   customRange?: RangeCustom;
+  refreshKey?: number;
 }) {
   const [rawAtual, setRawAtual] = useState<FunnelRow[]>([]);
   const [rawAnterior, setRawAnterior] = useState<FunnelRow[]>([]);
@@ -329,7 +331,7 @@ export function Anuncios({
     return () => {
       cancel = true;
     };
-  }, [periodo, customRange?.inicio, customRange?.fim]);
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
   // Agrupamento é 100% client-side a partir do nível de anúncio já
   // buscado -- trocar o seletor de nível não refaz a busca no banco, só

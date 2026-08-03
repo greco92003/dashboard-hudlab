@@ -1,9 +1,12 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { DateRange } from "react-day-picker";
+import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -26,6 +29,8 @@ function MetaMarketingGhlContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const abaParam = searchParams.get("aba");
   const aba = (ABAS as readonly string[]).includes(abaParam ?? "")
@@ -85,6 +90,29 @@ function MetaMarketingGhlContent() {
         }
       : undefined;
 
+  // Dispara sync-meta + sync-ghl sob demanda (normalmente só rodam 1x/dia
+  // via cron) e força os componentes a rebuscar depois de uma folga --
+  // sync-ghl processa em fases encadeadas em segundo plano, não termina
+  // instantaneamente com a resposta desse POST.
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch("/api/meta-ghl/refresh", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        toast.error("Falha ao sincronizar. Tente de novo em instantes.");
+        return;
+      }
+      toast.success("Sincronização iniciada — os dados atualizam em alguns segundos.");
+      await new Promise((r) => setTimeout(r, 8000));
+      setRefreshKey((k) => k + 1);
+    } catch {
+      toast.error("Falha ao sincronizar. Tente de novo em instantes.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -96,23 +124,34 @@ function MetaMarketingGhlContent() {
             Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
           </p>
         </div>
-        {(aba === "visao-geral" || aba === "anuncios") && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={periodo === "custom" ? "" : periodo} onValueChange={handlePeriodoPreset}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Selecionar" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIODOS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Calendar23 value={calendarValue} onChange={handleCalendarChange} hideLabel />
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Atualizando..." : "Atualizar"}
+          </Button>
+          {(aba === "visao-geral" || aba === "anuncios") && (
+            <>
+              <Select value={periodo === "custom" ? "" : periodo} onValueChange={handlePeriodoPreset}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Selecionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERIODOS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Calendar23 value={calendarValue} onChange={handleCalendarChange} hideLabel />
+            </>
+          )}
+        </div>
       </div>
 
       <Tabs value={aba} onValueChange={(v) => setParam("aba", v)}>
@@ -126,16 +165,16 @@ function MetaMarketingGhlContent() {
           </TabsList>
         </div>
         <TabsContent value="visao-geral" className="mt-4">
-          <VisaoGeral periodo={periodo} customRange={customRange} />
+          <VisaoGeral periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="anuncios" className="mt-4">
-          <Anuncios periodo={periodo} customRange={customRange} />
+          <Anuncios periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="regioes" className="mt-4">
-          <Regioes />
+          <Regioes refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="saude" className="mt-4">
-          <Saude />
+          <Saude refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="insights" className="mt-4">
           <Insights />

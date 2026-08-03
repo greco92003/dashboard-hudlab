@@ -142,9 +142,11 @@ function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
 export function VisaoGeral({
   periodo,
   customRange,
+  refreshKey,
 }: {
   periodo: Periodo;
   customRange?: RangeCustom;
+  refreshKey?: number;
 }) {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [funil, setFunil] = useState<FunilRow[]>([]);
@@ -291,7 +293,7 @@ export function VisaoGeral({
     return () => {
       cancel = true;
     };
-  }, [periodo, customRange?.inicio, customRange?.fim]);
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
   if (loading) {
     return (
