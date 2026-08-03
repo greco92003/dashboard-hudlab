@@ -4,10 +4,10 @@ import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar";
 import {
   Select,
   SelectContent,
@@ -32,6 +32,8 @@ function MetaMarketingGhlContent() {
   const searchParams = useSearchParams();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { state: sidebarState, toggleSidebar } = useSidebar();
+  const sidebarAberta = sidebarState === "expanded";
 
   const abaParam = searchParams.get("aba");
   const aba = (ABAS as readonly string[]).includes(abaParam ?? "")
@@ -118,17 +120,26 @@ function MetaMarketingGhlContent() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <SidebarTrigger />
-            <h1 className="text-3xl font-bold tracking-tight">
-              Meta Marketing GHL
-            </h1>
-          </div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Meta Marketing GHL
+          </h1>
           <p className="text-muted-foreground">
             Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={toggleSidebar}
+            className="flex items-center gap-2"
+          >
+            {sidebarAberta ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeftOpen className="h-4 w-4" />
+            )}
+            {sidebarAberta ? "Ocultar menu" : "Mostrar menu"}
+          </Button>
           <Button
             variant="outline"
             onClick={handleRefresh}
