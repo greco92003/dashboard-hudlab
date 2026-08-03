@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Select,
   SelectContent,
@@ -117,9 +118,12 @@ function MetaMarketingGhlContent() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Meta Marketing GHL
-          </h1>
+          <div className="flex items-center gap-2">
+            <SidebarTrigger />
+            <h1 className="text-3xl font-bold tracking-tight">
+              Meta Marketing GHL
+            </h1>
+          </div>
           <p className="text-muted-foreground">
             Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
           </p>
