@@ -69,9 +69,54 @@ function ehTrafegoPerfil(attr: AdAttributesRow | undefined): boolean {
   );
 }
 
-const CONTEXTO_NEGOCIO = `Você é um analista de performance de tráfego pago pra Hud Lab, empresa
-de Chinelo Slide personalizado (venda B2B/em lote pra marcas, empresas,
+const CONTEXTO_NEGOCIO = `Você é um especialista sênior em tráfego pago no Meta Ads (Facebook/
+Instagram), com conhecimento profundo de como o algoritmo de entrega e
+otimização de orçamento da plataforma funciona na prática -- não só um
+analista que lê números, mas alguém que entende o "porquê" por trás
+deles. Você atua como analista de performance pra Hud Lab, empresa de
+Chinelo Slide personalizado (venda B2B/em lote pra marcas, empresas,
 times e eventos -- não é venda unitária pro consumidor final).
+
+Conhecimento de plataforma que você deve aplicar (não é regra de
+negócio, é mecânica real do Meta Ads):
+- CBO (Campaign Budget Optimization) / Advantage Campaign Budget aloca
+  verba em tempo real entre os anúncios de um mesmo conjunto/campanha
+  com base no valor previsto pelo próprio algoritmo do Meta. Se
+  "investimento_diario" mostra queda de investimento nos dias mais
+  recentes depois de ter sido alto no início da janela, isso geralmente
+  significa que o PRÓPRIO META já detectou desempenho fraco e reduziu a
+  entrega sozinho -- é o problema já sendo corrigido automaticamente
+  pela plataforma, não motivo pra reforçar com "PAUSAR" manual (seria
+  redundante). Isso é especialmente relevante quando o anúncio tem
+  "irmaos_no_mesmo_conjunto" -- o Meta está literalmente redirecionando
+  a verba pra eles.
+- Fase de aprendizado (learning phase): um anúncio novo ou recém-
+  editado precisa acumular um volume mínimo de eventos de otimização
+  pra sair da fase de aprendizado (referência do próprio Meta: ~50 por
+  semana no conjunto de anúncios). Durante essa fase, custo e entrega
+  são naturalmente instáveis/piores -- não penalize um anúncio com
+  poucos dias de veiculação ou volume baixo como se já tivesse
+  maturidade de entrega.
+- Fadiga de criativo: desempenho ruim CONSISTENTE ao longo de várias
+  semanas seguidas em "funil_semanal" (não só uma semana isolada) é
+  sinal bem mais forte de fadiga real do que uma variação pontual.
+
+Como ler os dados de tendência fornecidos (evite julgar só pelo total
+flat da janela de 30 dias -- use a curva real):
+- "investimento_diario": investimento dia a dia, toda a janela,
+  incluindo dias com R$0 se o anúncio não rodou. Distinga: (a) alto no
+  início e caindo nos dias recentes = Meta já corrigindo sozinho (ver
+  acima), não é motivo extra pra pausar; (b) alto e ruim o período
+  inteiro sem queda = problema real, sem sinal de autocorreção; (c)
+  subindo agora nos dias mais recentes = sinal recente, ainda é cedo
+  pra julgar com confiança.
+- "funil_semanal": leads/orçamentos/mockups/negociações/vendas
+  agrupados por semana dentro da janela, da mais antiga pra mais
+  recente. Distinga funil genuinamente estagnado (achatado ou caindo em
+  TODAS as semanas) de funil ainda amadurecendo (leads/orçamentos/
+  mockups subindo nas últimas semanas -- ainda não deu tempo de virar
+  negociação/venda dado o ciclo de ~35 dias, isso é maturação, não
+  anúncio ruim).
 
 Regras de negócio importantes pra avaliar os anúncios corretamente:
 - CAC/CPA é sempre medido POR PEDIDO fechado, nunca por par individual
@@ -81,16 +126,16 @@ Regras de negócio importantes pra avaliar os anúncios corretamente:
   critério PRINCIPAL de avaliação -- é o sinal mais maduro e confiável
   que temos hoje. Trate ROAS e vendas como sinal SECUNDÁRIO, ainda em
   maturação: o ciclo de venda é longo (~35 dias do lead até o
-  fechamento), então um pico recente de leads/orçamentos/mockups ainda
-  não teve tempo de virar negociação ou venda. Não julgue "PAUSAR" nem
-  penalize um anúncio só por ROAS baixo ou vendas=0 se as etapas
-  anteriores do funil estão custando bem e em volume saudável -- isso é
-  maturação do funil, não anúncio ruim. Com mais janelas de dados no
-  futuro o ROAS/vendas ganha mais peso; por enquanto avalie por partes,
-  etapa por etapa.
+  fechamento). Não julgue "PAUSAR" nem penalize um anúncio só por ROAS
+  baixo ou vendas=0 se as etapas anteriores do funil estão custando bem
+  e em volume saudável, e "funil_semanal" mostra crescimento recente --
+  isso é maturação do funil, não anúncio ruim. Com mais janelas de
+  dados no futuro o ROAS/vendas ganha mais peso; por enquanto avalie
+  por partes, etapa por etapa, sempre cruzando com a tendência.
 - ROAS >= 2x é considerado bom pro negócio quando já há maturidade
-  suficiente de dado (funil rodando há tempo, sem pico recente de
-  topo). Abaixo disso, olhe o resto do funil antes de decidir.
+  suficiente de dado (funil rodando há tempo, sem pico recente de topo
+  em "funil_semanal"). Abaixo disso, olhe o resto do funil antes de
+  decidir.
 - Anúncios com "trafego_perfil": true pertencem a campanhas com
   objetivo de tráfego/visita ao perfil do Instagram (BIO), não geração
   de lead direta -- o próprio Meta os otimiza pra isso, não pra
@@ -126,16 +171,19 @@ embasam a decisão).
 
 Vereditos possíveis:
 - "ESCALAR": custo por etapa do funil consistentemente bom (lead,
-  orçamento, par orçado, negociação) e/ou ROAS alto já com dado maduro,
-  vale aumentar verba.
+  orçamento, par orçado, negociação) em "funil_semanal", e/ou ROAS alto
+  já com dado maduro, vale aumentar verba.
 - "MANTER": custo por etapa ok/consistente, ou anúncio de
-  tráfego/perfil com custo de alcance razoável -- não há motivo pra
-  mudar agora.
+  tráfego/perfil com custo de alcance razoável, ou anúncio ainda em
+  fase de aprendizado/maturação com sinal recente positivo -- não há
+  motivo pra mudar agora.
 - "REVISAR": sinal misto ou dado insuficiente pra decidir com
   confiança -- precisa de atenção humana, mas não é claramente ruim.
-- "PAUSAR": custo por etapa do funil comprovadamente ruim (gasto
-  relevante, funil não avança em nenhuma etapa, sem sinal de
-  maturação), vale cortar.
+- "PAUSAR": custo por etapa do funil comprovadamente ruim em TODAS as
+  semanas de "funil_semanal" (gasto relevante, funil não avança em
+  nenhuma etapa, sem sinal de maturação) E "investimento_diario" não
+  mostra o Meta já reduzindo a entrega sozinho -- se o Meta já está
+  corrigindo automaticamente (ver acima), prefira "REVISAR".
 
 Responda APENAS com um objeto JSON válido, sem cerca de markdown (nada
 de crases), sem nenhum texto antes ou depois, exatamente neste formato:
@@ -149,6 +197,40 @@ function dataIsoSaoPaulo(offsetDias = 0): string {
   return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(
     agora.getDate(),
   ).padStart(2, "0")}`;
+}
+
+// Soma (ou subtrai, com n negativo) dias a uma data YYYY-MM-DD.
+function addDiasIso(dataIso: string, n: number): string {
+  const d = new Date(`${dataIso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function todasDatasEntre(inicio: string, fim: string): string[] {
+  const total = Math.round(
+    (new Date(`${fim}T12:00:00`).getTime() - new Date(`${inicio}T12:00:00`).getTime()) / 86400000,
+  );
+  return Array.from({ length: total + 1 }, (_, i) => addDiasIso(inicio, i));
+}
+
+// Divide a janela de análise em N baldes semanais contíguos (mais
+// antigo -> mais recente), pra dar visão de tendência ao Claude sem
+// depender de um corte arbitrário fixo (7x23, 15x15 etc.) -- ver
+// CONTEXTO_NEGOCIO.
+const NUM_BALDES_SEMANAIS = 4;
+function baldesSemanais(pInicio: string, pFim: string, n: number): { inicio: string; fim: string }[] {
+  const totalDias = Math.round(
+    (new Date(`${pFim}T12:00:00`).getTime() - new Date(`${pInicio}T12:00:00`).getTime()) / 86400000,
+  );
+  const baldes: { inicio: string; fim: string }[] = [];
+  for (let i = 0; i < n; i++) {
+    const offsetInicio = Math.floor((totalDias * i) / n);
+    const offsetFim = i === n - 1 ? totalDias : Math.floor((totalDias * (i + 1)) / n) - 1;
+    baldes.push({ inicio: addDiasIso(pInicio, offsetInicio), fim: addDiasIso(pInicio, offsetFim) });
+  }
+  return baldes;
 }
 
 // deno-lint-ignore no-explicit-any
@@ -264,6 +346,55 @@ Deno.serve(async (req: Request) => {
 
     const pausadoAdIds = new Set(pausados.map((r) => r.ad_id));
 
+    // Tendência dentro da janela -- em vez de um corte fixo arbitrário
+    // (7x23, 15x15), dá pro Claude a curva diária de investimento real
+    // (já sincronizada, sem custo extra de API do Meta) e o funil
+    // agrupado por semana, pra ele mesmo julgar se um anúncio já está
+    // sendo corrigido pelo próprio Meta ou se o funil ainda está
+    // amadurecendo (ver CONTEXTO_NEGOCIO).
+    const adIdsParaAvaliar = paraAvaliar.map((r) => r.ad_id);
+
+    const { data: diarioData, error: diarioError } = await supabase
+      .from("meta_insights_daily")
+      .select("ad_id, date, spend")
+      .gte("date", pInicio)
+      .lte("date", pFim)
+      .in("ad_id", adIdsParaAvaliar);
+    if (diarioError) throw new Error(`meta_insights_daily: ${diarioError.message}`);
+
+    const investimentoDiarioPorAdId = new Map<string, Map<string, number>>();
+    for (const row of (diarioData ?? []) as { ad_id: string; date: string; spend: number }[]) {
+      if (!investimentoDiarioPorAdId.has(row.ad_id)) investimentoDiarioPorAdId.set(row.ad_id, new Map());
+      const porData = investimentoDiarioPorAdId.get(row.ad_id)!;
+      porData.set(row.date, (porData.get(row.date) ?? 0) + (Number(row.spend) || 0));
+    }
+    const todasDatas = todasDatasEntre(pInicio, pFim);
+
+    const baldes = baldesSemanais(pInicio, pFim, NUM_BALDES_SEMANAIS);
+    const resultadosSemanais = await Promise.all(
+      baldes.map((b) => supabase.rpc("get_funnel_por_anuncio", { p_inicio: b.inicio, p_fim: b.fim })),
+    );
+    const funilSemanalPorAdId = new Map<
+      string,
+      { semana_inicio: string; semana_fim: string; leads: number; orcamentos: number; mockups: number; negociacoes: number; vendas: number }[]
+    >();
+    for (let i = 0; i < resultadosSemanais.length; i++) {
+      const { data: bd, error: be } = resultadosSemanais[i];
+      if (be) throw new Error(`get_funnel_por_anuncio (semana ${baldes[i].inicio}): ${be.message}`);
+      for (const row of (bd ?? []) as FunnelRow[]) {
+        if (!funilSemanalPorAdId.has(row.ad_id)) funilSemanalPorAdId.set(row.ad_id, []);
+        funilSemanalPorAdId.get(row.ad_id)!.push({
+          semana_inicio: baldes[i].inicio,
+          semana_fim: baldes[i].fim,
+          leads: row.leads_ghl,
+          orcamentos: row.orcamentos,
+          mockups: row.mockups,
+          negociacoes: row.negociacoes,
+          vendas: row.vendas,
+        });
+      }
+    }
+
     // Agrupa por conjunto de anúncios (adset_id) pra dar visibilidade
     // de risco de portfólio ao Claude -- anúncios que dividem
     // orçamento/leilão com irmãos fortes não devem ser pausados de
@@ -322,6 +453,12 @@ Deno.serve(async (req: Request) => {
               roas: s.roas,
               vendas: s.vendas,
             })) ?? [];
+          const diarioMap = investimentoDiarioPorAdId.get(r.ad_id);
+          const investimentoDiario = todasDatas.map((data) => ({
+            data,
+            investimento: Math.round((diarioMap?.get(data) ?? 0) * 100) / 100,
+          }));
+          const funilSemanal = funilSemanalPorAdId.get(r.ad_id) ?? [];
           return {
             ad_id: r.ad_id,
             ad_name: r.ad_name,
@@ -345,6 +482,8 @@ Deno.serve(async (req: Request) => {
             diagnostico_atual: r.diagnostico,
             trafego_perfil: ehTrafegoPerfil(attr),
             irmaos_no_mesmo_conjunto: irmaos,
+            investimento_diario: investimentoDiario,
+            funil_semanal: funilSemanal,
           };
         }),
       };
