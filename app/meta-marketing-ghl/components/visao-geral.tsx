@@ -57,6 +57,7 @@ interface Kpis {
   pares_vendidos: number | null;
   ticket_medio_par: number | null;
   custo_por_par: number | null;
+  vendas_sem_pares: number | null;
   mockups: number;
   custo_por_mockup: number | null;
 }
@@ -95,6 +96,15 @@ interface CampanhaRow {
   faturamento: number;
   vendas: number;
   roas: number | null;
+}
+
+interface VendaSemParesRow {
+  opportunity_id: string;
+  contact_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  monetary_value: number;
+  venda_em: string;
 }
 
 interface SeriePonto {
@@ -160,6 +170,7 @@ export function VisaoGeral({
     { venda_em: string; monetary_value: number }[]
   >([]);
   const [pipelineNomes, setPipelineNomes] = useState<Map<string, string>>(new Map());
+  const [vendasSemPares, setVendasSemPares] = useState<VendaSemParesRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -184,7 +195,7 @@ export function VisaoGeral({
     setErro(null);
 
     (async () => {
-      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, funilAntQ, fonteQ, funnelAds, saude, pipes] =
+      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, funilAntQ, fonteQ, funnelAds, saude, pipes, semPares] =
         await Promise.all([
           supabase.rpc("get_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
           supabase
@@ -224,6 +235,11 @@ export function VisaoGeral({
             .select("pipeline_id, pipeline_name")
             .not("pipeline_name", "is", null)
             .limit(500),
+          supabase
+            .from("v_vendas_sem_pares")
+            .select("*")
+            .gte("venda_em", `${inicio}T00:00:00`)
+            .lte("venda_em", `${realFim}T23:59:59`),
         ]);
       if (cancel) return;
 
@@ -246,6 +262,7 @@ export function VisaoGeral({
           (pipes.data ?? []).map((p) => [p.pipeline_id as string, p.pipeline_name as string])
         )
       );
+      setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);
 
       const porEtapaAnterior = new Map(
         ((funilAntQ.data as FunilRow[]) ?? []).map((r) => [`${r.pipeline_id}:${r.stage_name}`, r])
@@ -386,6 +403,13 @@ export function VisaoGeral({
     },
   ];
 
+  // Ticket/par e Custo/par só são confiáveis na medida em que as vendas
+  // tenham a "Quantidade de Pares" preenchida no GHL -- em vez de tentar
+  // estimar/assumir um valor pra quem não tem, mostramos quantas faltam
+  // e quais são, pra equipe corrigir na origem (ver Card "Negócios sem
+  // quantidade de pares" abaixo).
+  const temVendasSemPares = (a.vendas_sem_pares ?? 0) > 0;
+
   // Série diária investimento vs faturamento, alinhada por posição
   // (dia 0, 1, 2...) entre o período selecionado (excluindo hoje,
   // sempre parcial) e o período anterior de mesma duração — permite
@@ -483,6 +507,12 @@ export function VisaoGeral({
                     </p>
                   ))}
                 </div>
+              )}
+              {k.key === "pares_vendidos" && temVendasSemPares && (
+                <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
+                  {fmtNum(a.vendas_sem_pares)} venda(s) sem qtd. de pares —
+                  custo/ticket por par abaixo não as considera
+                </p>
               )}
             </CardHeader>
           </Card>
@@ -721,6 +751,49 @@ export function VisaoGeral({
             )}
           </CardContent>
         </Card>
+
+        {/* Negócios sem quantidade de pares -- aponta o dado faltante em
+            vez de assumir/estimar um ticket médio a partir de amostra
+            parcial (viés de seleção real: só uma parte das vendas tem
+            esse campo preenchido no GHL) */}
+        {temVendasSemPares && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Negócios sem quantidade de pares</CardTitle>
+              <CardDescription>
+                Essas vendas não entram no cálculo de Custo/Ticket por par
+                acima — preencha &quot;Número Quantidade de Pares&quot; no
+                negócio correspondente no GHL pra corrigir.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Contato</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Data</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {vendasSemPares.map((r) => (
+                      <TableRow key={r.opportunity_id}>
+                        <TableCell className="font-medium">
+                          {[r.first_name, r.last_name].filter(Boolean).join(" ") || r.contact_id}
+                        </TableCell>
+                        <TableCell className="text-right">{fmtBrl(r.monetary_value)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {new Date(r.venda_em).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Custo por etapa */}
         <Card className="lg:col-span-2">

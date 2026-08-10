@@ -141,17 +141,28 @@ function extractUtms(contact: any, fieldMap: Map<string, string>) {
 }
 
 // qty_pares: custom field da oportunidade cujo id/nome contém
-// "pares" ou "quantidade" (nomes resolvidos via /locations/{id}/customFields)
+// "pares" ou "quantidade" (nomes resolvidos via /locations/{id}/customFields).
+// IMPORTANTE: o payload de /opportunities/search usa campos TIPADOS
+// (fieldValueNumber/fieldValueString/fieldValueFiles), não "fieldValue"
+// genérico -- confirmado 2026-08-10 direto na API. Sem checar
+// fieldValueNumber, o valor nunca era lido mesmo quando o id batia.
 // deno-lint-ignore no-explicit-any
 function extractQtyPares(opp: any, paresFieldIds: Set<string>): number | null {
-  const cfs: { id?: string; fieldValue?: unknown; value?: unknown; key?: string; name?: string }[] =
-    opp.customFields ?? [];
+  const cfs: {
+    id?: string;
+    fieldValue?: unknown;
+    fieldValueNumber?: unknown;
+    fieldValueString?: unknown;
+    value?: unknown;
+    key?: string;
+    name?: string;
+  }[] = opp.customFields ?? [];
   for (const cf of cfs) {
     const byId = cf.id && paresFieldIds.has(cf.id);
     const key = (cf.key ?? cf.name ?? "").toLowerCase();
     const byName = key.includes("pares") || key.includes("quantidade");
     if (!byId && !byName) continue;
-    const raw = cf.fieldValue ?? cf.value;
+    const raw = cf.fieldValueNumber ?? cf.fieldValueString ?? cf.fieldValue ?? cf.value;
     const n = Number(raw);
     if (Number.isFinite(n) && n > 0) return Math.round(n);
   }
@@ -318,9 +329,18 @@ async function syncPipelines(supabase: any, token: string, locationId: string) {
   return { pipelineNames, stageNames, targetPipelineId };
 }
 
+// IMPORTANTE: sem "?model=all", esse endpoint só devolve campos de
+// CONTATO (confirmado 2026-08-10) -- o campo real de pares em cada
+// negócio ("Número Quantidade de Pares", id TFp4L5VxK9mHBaAMXyo7) é de
+// nível OPORTUNIDADE e nunca aparecia na lista, então extractQtyPares
+// nunca conseguia casar por id (e o payload de customFields da própria
+// oportunidade não traz "key"/"name", só "id"+"fieldValue", então o
+// casamento por nome também nunca funcionava) -- qty_pares ficava
+// sempre null pra toda oportunidade, mascarado só quando o CONTATO
+// (campo separado "Qntd Pares") tinha valor por coincidência.
 async function fetchParesFieldIds(token: string, locationId: string): Promise<Set<string>> {
   const ids = new Set<string>();
-  const res = await ghlGet(`${BASE}/locations/${locationId}/customFields`, token);
+  const res = await ghlGet(`${BASE}/locations/${locationId}/customFields?model=all`, token);
   if (!res.ok) return ids;
   const data = await res.json();
   for (const f of data.customFields ?? []) {
