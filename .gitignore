@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/backfill-reports/
 
 # next.js
 /.next/
