@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
+  validateOptionalWebhookTimestamp,
   verifyHmacWebhook,
 } from "../lib/security/webhook-verification.ts";
 import {
@@ -59,6 +60,30 @@ test("rejects a stale signed webhook", () => {
     nowMs: now + 11 * 60 * 1000,
   });
   assert.deepEqual(result, { ok: false, error: "stale_timestamp" });
+});
+
+test("accepts a GHL funnel webhook without timestamp during migration", () => {
+  assert.deepEqual(validateOptionalWebhookTimestamp(undefined), {
+    ok: true,
+    timestamp: null,
+  });
+});
+
+test("validates a GHL funnel timestamp when supplied", () => {
+  const nowMs = Date.parse("2026-08-12T12:00:00.000Z");
+  const valid = validateOptionalWebhookTimestamp(
+    "2026-08-12T11:59:00.000Z",
+    nowMs,
+  );
+  assert.equal(valid.ok, true);
+  assert.deepEqual(validateOptionalWebhookTimestamp("not-a-date", nowMs), {
+    ok: false,
+    error: "invalid_timestamp",
+  });
+  assert.deepEqual(
+    validateOptionalWebhookTimestamp("2026-08-12T10:00:00.000Z", nowMs),
+    { ok: false, error: "stale_timestamp" },
+  );
 });
 
 test("binds Tiny OAuth state to user, nonce and expiration", () => {

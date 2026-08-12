@@ -74,6 +74,23 @@ export function parseWebhookTimestamp(value: unknown): Date | null {
   return Number.isNaN(milliseconds) ? null : new Date(milliseconds);
 }
 
+export function validateOptionalWebhookTimestamp(
+  value: unknown,
+  nowMs = Date.now(),
+  maxAgeMs = WEBHOOK_MAX_AGE_MS,
+):
+  | { ok: true; timestamp: Date | null }
+  | { ok: false; error: "invalid_timestamp" | "stale_timestamp" } {
+  if (value == null) return { ok: true, timestamp: null };
+
+  const timestamp = parseWebhookTimestamp(value);
+  if (!timestamp) return { ok: false, error: "invalid_timestamp" };
+  if (Math.abs(nowMs - timestamp.getTime()) > maxAgeMs) {
+    return { ok: false, error: "stale_timestamp" };
+  }
+  return { ok: true, timestamp };
+}
+
 export function verifyHmacWebhook(input: {
   rawBody: string;
   signature: string | null;

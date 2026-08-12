@@ -7,10 +7,9 @@ import {
   normalizeGhlFunnelStage,
 } from "@/lib/ghl/funnel";
 import {
-  parseWebhookTimestamp,
   sha256Hex,
-  WEBHOOK_MAX_AGE_MS,
   WEBHOOK_MAX_BODY_BYTES,
+  validateOptionalWebhookTimestamp,
 } from "@/lib/security/webhook-verification";
 import {
   buildWebhookIdempotencyKey,
@@ -128,23 +127,22 @@ export async function POST(request: NextRequest) {
   const customData = asRecord(payload.customData);
   const location = asRecord(payload.location);
   const workflow = asRecord(payload.workflow);
-  const requestTimestamp = parseWebhookTimestamp(
-    customData.timestamp ??
-      payload.timestamp ??
-      payload.event_timestamp,
-  );
-  if (!requestTimestamp) {
+  const suppliedTimestamp =
+    customData.timestamp ?? payload.timestamp ?? payload.event_timestamp;
+  const timestampValidation = validateOptionalWebhookTimestamp(suppliedTimestamp);
+  if (!timestampValidation.ok) {
     return NextResponse.json(
-      { received: false, error: "Missing or invalid timestamp" },
-      { status: 401 },
+      {
+        received: false,
+        error:
+          timestampValidation.error === "stale_timestamp"
+            ? "Stale webhook rejected"
+            : "Invalid timestamp",
+      },
+      { status: timestampValidation.error === "stale_timestamp" ? 409 : 400 },
     );
   }
-  if (Math.abs(Date.now() - requestTimestamp.getTime()) > WEBHOOK_MAX_AGE_MS) {
-    return NextResponse.json(
-      { received: false, error: "Stale webhook rejected" },
-      { status: 409 },
-    );
-  }
+  const requestTimestamp = timestampValidation.timestamp;
   const rawStage = firstString(
     customData.stage_slug,
     customData.stage,
