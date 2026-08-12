@@ -155,6 +155,7 @@ function inferTimestamp({ contact, opportunities, stage, cutoffMs, endMs }) {
 
 async function main() {
   const applyRequested = process.argv.includes("--apply");
+  const includeEstimated = process.argv.includes("--include-estimated");
   const cutoff = argValue("cutoff", DEFAULT_CUTOFF);
   const end = argValue("end", new Date().toISOString());
   const cutoffMs = Date.parse(cutoff);
@@ -310,9 +311,15 @@ async function main() {
   const eligibleCandidates = candidates.filter(
     (candidate) => candidate.eligible_for_automatic_backfill,
   );
+  const selectedCandidates = candidates.filter(
+    (candidate) =>
+      candidate.eligible_for_automatic_backfill ||
+      (includeEstimated && candidate.confidence === "estimated"),
+  );
   const runId = `ghl-funnel-${new Date().toISOString()}`;
   const application = {
     requested: applyRequested,
+    include_estimated: includeEstimated,
     run_id: runId,
     inserted: [],
     skipped_after_recheck: [],
@@ -320,15 +327,16 @@ async function main() {
 
   if (applyRequested) {
     const confirmation = Number.parseInt(argValue("confirm", ""), 10);
-    if (confirmation !== eligibleCandidates.length) {
+    if (confirmation !== selectedCandidates.length) {
       throw new Error(
-        `Confirmação inválida: há ${eligibleCandidates.length} candidatos elegíveis. ` +
-          `Execute novamente com --apply --confirm=${eligibleCandidates.length}.`,
+        `Confirmação inválida: há ${selectedCandidates.length} candidatos selecionados. ` +
+          `Execute novamente com --apply${includeEstimated ? " --include-estimated" : ""} ` +
+          `--confirm=${selectedCandidates.length}.`,
       );
     }
 
     const contactsById = new Map(contacts.map((contact) => [contact.id, contact]));
-    for (const candidate of eligibleCandidates) {
+    for (const candidate of selectedCandidates) {
       const { data: duplicate, error: duplicateError } = await db
         .from("ghl_funnel_events")
         .select("id")
@@ -405,6 +413,7 @@ async function main() {
       duplicate_rule: "contact_id + stage_slug já existente é ignorado.",
       import_rule: "Contatos classificados por public.v_contatos_importados são excluídos.",
       automatic_rule: "Somente confiança exact/strong é elegível para gravação automática após revisão.",
+      estimated_rule: "Confiança estimated só é aplicada com --include-estimated e confirmação explícita da contagem.",
     },
     summary: {
       contacts_scanned: contacts.length,
@@ -415,6 +424,7 @@ async function main() {
       excluded_imported_contacts: excludedImported.length,
       candidates: candidates.length,
       eligible_for_automatic_backfill: eligibleCandidates.length,
+      selected_for_application: applyRequested ? selectedCandidates.length : 0,
       inserted: application.inserted.length,
       skipped_after_recheck: application.skipped_after_recheck.length,
       by_confidence: confidenceCounts,
