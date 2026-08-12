@@ -384,7 +384,7 @@ async function runOpportunities(supabase: any, token: string, locationId: string
   let startAfterId = state.startAfterId;
   let startAfter = state.startAfter;
   try {
-    const { pipelineNames, stageNames, targetPipelineId } =
+    const { pipelineNames, stageNames } =
       await syncPipelines(supabase, token, locationId);
     const paresFieldIds = await fetchParesFieldIds(token, locationId);
 
@@ -400,11 +400,22 @@ async function runOpportunities(supabase: any, token: string, locationId: string
       const allOpps = body.opportunities ?? [];
       if (allOpps.length === 0) return { rows, next: null };
 
-      // Escopo: só pipeline Atendimento, criadas a partir de 01/07/2026,
-      // excluindo oportunidades de teste conhecidas
+      // Escopo: criadas a partir de 01/07/2026, excluindo oportunidades de
+      // teste conhecidas.
+      //
+      // IMPORTANTE (2026-08-12): NÃO filtra mais por pipeline. Descoberto que
+      // negócios GANHOS saem do pipeline Atendimento (etapa "Criar Arquivos
+      // Serigrafia") e vão pra "Fábrica de Mockups" pra produção (arquivo de
+      // serigrafia -> mockup pronto), voltando depois pro Atendimento em
+      // "Impressão de Fotolitos". Filtrar por pipeline=Atendimento fazia
+      // sync-ghl parar de atualizar (ou nunca capturar) o negócio inteiro
+      // tempo que ele passava fora do Atendimento -- Faturamento/Vendas
+      // ficavam represados até a produção terminar e o negócio voltar.
+      // Nenhuma view/função consumidora filtra por pipeline_id/pipeline_name
+      // (só usa pra exibição), então sincronizar todas as pipelines é seguro
+      // -- só adiciona visibilidade, não muda nenhum resultado existente.
       // deno-lint-ignore no-explicit-any
       const opps = allOpps.filter((o: any) =>
-        (!targetPipelineId || o.pipelineId === targetPipelineId) &&
         (!o.createdAt || Date.parse(o.createdAt) >= MIN_OPP_CREATED_MS) &&
         !EXCLUDED_OPPORTUNITY_IDS.has(o.id)
       );
