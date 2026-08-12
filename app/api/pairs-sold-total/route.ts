@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
     const { data: deals, error } = await supabase
       .from("deals_cache")
       .select('"quantidade-de-pares"')
+      .eq("source_system", "ghl")
       .eq("sync_status", "synced")
       .in("status", ["won", "1"])
       .not("closing_date", "is", null)

@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Meta Marketing | Dashboard HUDLAB',
-  description: 'Visualização de dados de marketing do Meta (Facebook/Instagram)',
+  description: 'Cruzamento de dados do Meta Ads com leads e vendas do GoHighLevel',
 }
 
 export default function MetaMarketingLayout({

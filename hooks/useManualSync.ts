@@ -123,10 +123,8 @@ export function useManualSync() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes timeout
 
-      // Use robust-deals-sync-parallel endpoint for manual sync button
-      // This endpoint syncs all deals from ActiveCampaign AND logs to deals_sync_log
-      // This allows SyncChecker to monitor the sync progress and show success/error alerts
-      const syncEndpoint = "/api/test/robust-deals-sync-parallel?allDeals=true";
+      // Canonical manual sync: GHL API -> unified deals_cache.
+      const syncEndpoint = "/api/ghl/sync-deals";
 
       const isLocalhost =
         typeof window !== "undefined" &&
@@ -147,7 +145,7 @@ export function useManualSync() {
       );
 
       const response = await fetch(syncEndpoint, {
-        method: "GET",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -188,7 +186,8 @@ export function useManualSync() {
       const result = await response.json();
       console.log("✅ Sync completed successfully:", result);
 
-      // Validate won deals against ActiveCampaign right after the sync.
+      // Legacy validation remains unreachable during the cutover.
+      if (process.env.NEXT_PUBLIC_ENABLE_LEGACY_AC_VALIDATION === "true") {
       // The full sync only upserts what AC returns and never prunes, so stale
       // "won" rows (webhook races, deals deleted in AC) survive it — the
       // validator corrects them to AC's live state. Non-fatal on error.
@@ -215,6 +214,8 @@ export function useManualSync() {
           "⚠️ Won-deals validation error (non-fatal):",
           validationError
         );
+      }
+
       }
 
       // Refresh the data after successful sync

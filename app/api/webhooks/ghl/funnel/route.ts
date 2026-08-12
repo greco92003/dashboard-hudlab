@@ -6,6 +6,16 @@ import {
   GHL_FUNNEL_STAGES,
   normalizeGhlFunnelStage,
 } from "@/lib/ghl/funnel";
+import {
+  parseWebhookTimestamp,
+  sha256Hex,
+  WEBHOOK_MAX_AGE_MS,
+  WEBHOOK_MAX_BODY_BYTES,
+} from "@/lib/security/webhook-verification";
+import {
+  buildWebhookIdempotencyKey,
+  claimWebhookEvent,
+} from "@/lib/security/webhook-idempotency";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -91,9 +101,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const rawBody = await request.text();
+  if (!rawBody) {
+    return NextResponse.json(
+      { received: false, error: "Empty payload" },
+      { status: 400 },
+    );
+  }
+  if (Buffer.byteLength(rawBody, "utf8") > WEBHOOK_MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { received: false, error: "Payload too large" },
+      { status: 413 },
+    );
+  }
+
   let payload: JsonRecord;
   try {
-    payload = asRecord(await request.json());
+    payload = asRecord(JSON.parse(rawBody));
   } catch {
     return NextResponse.json(
       { received: false, error: "Invalid JSON payload" },
@@ -104,6 +128,23 @@ export async function POST(request: NextRequest) {
   const customData = asRecord(payload.customData);
   const location = asRecord(payload.location);
   const workflow = asRecord(payload.workflow);
+  const requestTimestamp = parseWebhookTimestamp(
+    customData.timestamp ??
+      payload.timestamp ??
+      payload.event_timestamp,
+  );
+  if (!requestTimestamp) {
+    return NextResponse.json(
+      { received: false, error: "Missing or invalid timestamp" },
+      { status: 401 },
+    );
+  }
+  if (Math.abs(Date.now() - requestTimestamp.getTime()) > WEBHOOK_MAX_AGE_MS) {
+    return NextResponse.json(
+      { received: false, error: "Stale webhook rejected" },
+      { status: 409 },
+    );
+  }
   const rawStage = firstString(
     customData.stage_slug,
     customData.stage,
@@ -129,6 +170,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = getSupabaseSecretKey();
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[GHL Funnel] Supabase persistence is not configured");
+    return NextResponse.json(
+      { received: false, error: "Persistence is not configured" },
+      { status: 503 },
+    );
+  }
+
+  const explicitEventId = firstString(
+    payload.webhookId,
+    payload.eventId,
+    customData.webhook_id,
+    customData.event_id,
+  );
+  const claim = await claimWebhookEvent({
+    provider: "ghl",
+    idempotencyKey: buildWebhookIdempotencyKey(
+      "ghl",
+      explicitEventId,
+      rawBody,
+    ),
+    payloadSha256: sha256Hex(rawBody),
+    requestTimestamp,
+  });
+  if (!claim.claimed) {
+    return NextResponse.json(
+      { received: false, error: "Replay rejected" },
+      { status: 409 },
+    );
+  }
+
   const firstName = firstString(payload.first_name);
   const lastName = firstString(payload.last_name);
   const fallbackName = [firstName, lastName].filter(Boolean).join(" ") || null;
@@ -145,16 +219,6 @@ export async function POST(request: NextRequest) {
       payload["Qntd Pares"] ??
       payload.quantidade_pares,
   );
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = getSupabaseSecretKey();
-  if (!supabaseUrl || !serviceRoleKey) {
-    console.error("[GHL Funnel] Supabase service credentials are missing");
-    return NextResponse.json(
-      { received: false, error: "Persistence is not configured" },
-      { status: 503 },
-    );
-  }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },

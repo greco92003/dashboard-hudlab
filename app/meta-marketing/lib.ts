@@ -1,4 +1,4 @@
-// Helpers compartilhados do módulo Meta Marketing GHL
+// Helpers compartilhados do módulo Meta Marketing
 
 export const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",

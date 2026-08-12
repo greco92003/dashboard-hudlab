@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireAdminOrCron } from "@/lib/security/route-guards";
 
 // Rate limiting e retry logic
 const RATE_LIMIT_DELAY = 1000; // 1 segundo entre requests
@@ -52,8 +52,8 @@ function setCachedData(cacheKey: string, data: any) {
 
 export async function GET(request: NextRequest) {
   try {
-    const access = await requireAdmin();
-    if (!access.ok) return access.response;
+    const accessError = await requireAdminOrCron(request);
+    if (accessError) return accessError;
 
     const { searchParams } = new URL(request.url);
     const spreadsheetId = searchParams.get("spreadsheetId");
@@ -210,8 +210,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await requireAdmin();
-    if (!access.ok) return access.response;
+    const accessError = await requireAdminOrCron(request);
+    if (accessError) return accessError;
 
     const body = await request.json();
     const { spreadsheetId, range, includeHeaders = true } = body;

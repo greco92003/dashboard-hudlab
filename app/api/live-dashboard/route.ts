@@ -29,6 +29,7 @@ export async function GET() {
     const { data: wonDeals, error: wonError } = await supabase
       .from("deals_cache")
       .select("deal_id, value, status, closing_date")
+      .eq("source_system", "ghl")
       .eq("sync_status", "synced")
       .in("status", ["1", "won"])
       .not("closing_date", "is", null)
@@ -44,9 +45,12 @@ export async function GET() {
     const { data: openDeals, error: openError } = await supabase
       .from("deals_cache")
       .select("deal_id, value, status, last_synced_at")
+      .eq("source_system", "ghl")
       .eq("sync_status", "synced")
-      .eq("status", "0")
+      .eq("status", "open")
       .gt("value", 0)
+      // Exclude clearly invalid CRM input (e.g. a Unix timestamp entered as BRL).
+      .lt("value", 1_000_000_000)
       .not("last_synced_at", "is", null)
       .gte("last_synced_at", "2026-01-01")
       .lte("last_synced_at", endDate + "T23:59:59");

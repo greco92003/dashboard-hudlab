@@ -39,7 +39,7 @@ interface UseGlobalDateRangeReturn {
 
 /**
  * Hook para gerenciar o estado global da data entre todas as páginas
- * Sincroniza automaticamente entre dashboard, deals e pairs-sold
+ * Sincroniza automaticamente entre dashboard e deals.
  */
 export function useGlobalDateRange(): UseGlobalDateRangeReturn {
   const [dateRange, setDateRangeState] = useState<DateRange | undefined>();

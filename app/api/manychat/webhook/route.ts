@@ -1,8 +1,15 @@
-import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
-import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
+import {
+  firstHeader,
+  verifyHmacWebhook,
+} from "@/lib/security/webhook-verification";
+import {
+  buildWebhookIdempotencyKey,
+  claimWebhookEvent,
+} from "@/lib/security/webhook-idempotency";
 
-// Valid stage slugs mapped to display names
 const STAGE_SLUGS: Record<string, string> = {
   lead: "Lead",
   emailcoletado: "Email Coletado",
@@ -16,38 +23,27 @@ const STAGE_SLUGS: Record<string, string> = {
   negociofechado: "Negócio Fechado",
 };
 
-/**
- * Normaliza uma string removendo acentos e mantendo apenas letras a-z.
- * Ex: "SolicitouOrçamento" → "solicitouorcamento"
- */
 function normalizeSlug(raw: string): string {
   return raw
     .toLowerCase()
-    .normalize("NFD") // decompõe caracteres acentuados (ç → c + cedilha)
-    .replace(/[\u0300-\u036f]/g, "") // remove os diacríticos (acentos, cedilha)
-    .replace(/[^a-z]/g, ""); // mantém apenas letras a-z sem acento
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/g, "");
 }
 
-/**
- * Extrai o subscriber_id do payload do ManyChat.
- * O ManyChat pode enviar o ID em vários campos e como número ou string.
- */
-function extractSubscriberId(payload: Record<string, unknown>): string {
+function extractSubscriberId(payload: Record<string, unknown>): string | null {
   const candidates = [
-    payload?.subscriber_id,
-    payload?.id,
-    payload?.user_id,
-    payload?.contact_id,
+    payload.subscriber_id,
+    payload.id,
+    payload.user_id,
+    payload.contact_id,
   ];
-
   for (const candidate of candidates) {
     if (candidate !== undefined && candidate !== null && candidate !== "") {
       return String(candidate);
     }
   }
-
-  // Fallback com timestamp para garantir unicidade mesmo sem ID
-  return `unknown_${Date.now()}`;
+  return null;
 }
 
 interface ContactFields {
@@ -57,147 +53,172 @@ interface ContactFields {
   quantidade_pares: number | null;
 }
 
-/**
- * Extrai campos de contato do payload do ManyChat.
- */
 function extractContactFields(payload: Record<string, unknown>): ContactFields {
-  const raw = (key: string) => payload?.[key];
+  const raw = (key: string) => payload[key];
   const str = (key: string): string | null => {
-    const v = raw(key);
-    if (v === undefined || v === null || v === "") return null;
-    return String(v);
+    const value = raw(key);
+    if (value === undefined || value === null || value === "") return null;
+    return String(value);
   };
 
-  // Nome: tenta campo único ou combina first_name + last_name
   const nome =
     str("nome") ||
     str("name") ||
     str("full_name") ||
-    (() => {
-      const first = str("first_name");
-      const last = str("last_name");
-      if (first || last) return [first, last].filter(Boolean).join(" ");
-      return null;
-    })();
-
-  // Telefone
+    [str("first_name"), str("last_name")].filter(Boolean).join(" ") ||
+    null;
   const telefone =
     str("telefone") || str("phone") || str("phone_number") || str("whatsapp");
-
-  // Email
   const email = str("email") || str("email_address");
-
-  // Quantidade de pares
-  const rawQtd =
+  const rawQuantity =
     raw("quantidade_pares") ?? raw("pares") ?? raw("quantity") ?? raw("qtd");
-  const quantidade_pares =
-    rawQtd !== undefined && rawQtd !== null && rawQtd !== ""
-      ? Number(rawQtd) || null
-      : null;
+  const parsedQuantity = Number(rawQuantity);
 
-  return { nome, telefone, email, quantidade_pares };
+  return {
+    nome,
+    telefone,
+    email,
+    quantidade_pares:
+      rawQuantity !== undefined &&
+      rawQuantity !== null &&
+      rawQuantity !== "" &&
+      Number.isFinite(parsedQuantity)
+        ? parsedQuantity
+        : null,
+  };
+}
+
+function verificationFailureStatus(error: string): number {
+  if (error === "missing_secret") return 503;
+  if (error === "body_too_large") return 413;
+  if (error === "stale_timestamp") return 409;
+  return 401;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse body first — ManyChat may send stage inside the body
-    let payload: Record<string, unknown> = {};
-    try {
-      payload = await request.json();
-    } catch {
-      // ManyChat may send empty body on some webhook types
+    const rawBody = await request.text();
+    if (!rawBody) {
+      return NextResponse.json({ error: "Empty payload" }, { status: 400 });
     }
 
-    // Resolve stage: body field takes priority, then URL param
+    let payload: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(rawBody);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Invalid object");
+      }
+      payload = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    }
+
+    const verification = verifyHmacWebhook({
+      rawBody,
+      signature: firstHeader(request.headers, [
+        "x-manychat-signature",
+        "x-webhook-signature",
+      ]),
+      secret: process.env.MANYCHAT_WEBHOOK_SECRET,
+      timestamp:
+        firstHeader(request.headers, [
+          "x-manychat-timestamp",
+          "x-webhook-timestamp",
+        ]) ??
+        payload.timestamp ??
+        payload.event_timestamp ??
+        payload.occurred_at ??
+        payload.created_at,
+    });
+    if (!verification.ok) {
+      return NextResponse.json(
+        { error: "Webhook verification failed" },
+        { status: verificationFailureStatus(verification.error) },
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const rawStage =
-      (payload?.stage as string) ||
-      (payload?.tag as string) ||
+      (typeof payload.stage === "string" ? payload.stage : null) ||
+      (typeof payload.tag === "string" ? payload.tag : null) ||
       searchParams.get("stage") ||
       "";
-
-    // Normaliza slug removendo acentos/cedilha antes de comparar
     const stageParam = normalizeSlug(rawStage);
-
     if (!stageParam || !STAGE_SLUGS[stageParam]) {
-      console.warn(
-        "[ManyChat Webhook] Unknown stage:",
-        JSON.stringify({
-          rawStage,
-          stageParam,
-          payloadKeys: Object.keys(payload),
-        }),
-      );
-      // Always 200 so ManyChat doesn't retry
-      return NextResponse.json({
-        received: true,
-        warning: "Unknown stage",
-        raw: rawStage,
-        normalized: stageParam,
-      });
+      return NextResponse.json({ error: "Unknown stage" }, { status: 422 });
     }
 
-    const stageName = STAGE_SLUGS[stageParam];
     const subscriberId = extractSubscriberId(payload);
-    const contactFields = extractContactFields(payload);
-
-    console.log(
-      `[ManyChat Webhook] Stage="${stageName}" subscriber_id="${subscriberId}" contact=${JSON.stringify(contactFields)} payload_keys=${JSON.stringify(Object.keys(payload))}`,
-    );
-
-    // Persist to Supabase if configured
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = getSupabaseSecretKey();
-
-    if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      const { error } = await supabase.from("manychat_tag_events").insert({
-        stage_slug: stageParam,
-        stage_name: stageName,
-        subscriber_id: subscriberId,
-        nome: contactFields.nome,
-        telefone: contactFields.telefone,
-        email: contactFields.email,
-        quantidade_pares: contactFields.quantidade_pares,
-        payload: payload,
-        occurred_at: new Date().toISOString(),
-      });
-
-      if (error) {
-        // Log the full error — ManyChat must still receive 200
-        console.error(
-          "[ManyChat Webhook] Supabase insert error:",
-          JSON.stringify({
-            message: error.message,
-            code: error.code,
-            details: error.details,
-          }),
-        );
-      } else {
-        console.log(
-          `[ManyChat Webhook] Inserted OK: stage="${stageName}" subscriber="${subscriberId}"`,
-        );
-      }
-    } else {
-      console.warn(
-        "[ManyChat Webhook] Supabase not configured — event not persisted",
+    if (!subscriberId) {
+      return NextResponse.json(
+        { error: "Missing subscriber identifier" },
+        { status: 422 },
       );
     }
 
-    return NextResponse.json({
-      received: true,
-      stage: stageName,
-      subscriber_id: subscriberId,
+    const explicitIdempotencyKey =
+      firstHeader(request.headers, [
+        "x-manychat-event-id",
+        "x-idempotency-key",
+      ]) ??
+      (typeof payload.event_id === "string" ? payload.event_id : null);
+    const claim = await claimWebhookEvent({
+      provider: "manychat",
+      idempotencyKey: buildWebhookIdempotencyKey(
+        "manychat",
+        explicitIdempotencyKey,
+        rawBody,
+      ),
+      payloadSha256: verification.payloadSha256,
+      requestTimestamp: verification.timestamp,
     });
-  } catch (error) {
-    console.error("[ManyChat Webhook] Unexpected error:", error);
-    // Always 200 to avoid ManyChat retries flooding the server
-    return NextResponse.json({ received: true, error: "internal" });
+    if (!claim.claimed) {
+      return NextResponse.json({ error: "Replay rejected" }, { status: 409 });
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      return NextResponse.json(
+        { error: "Persistence is not configured" },
+        { status: 503 },
+      );
+    }
+    const supabase = createClient(supabaseUrl, getSupabaseSecretKey(), {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const stageName = STAGE_SLUGS[stageParam];
+    const contactFields = extractContactFields(payload);
+    const { error } = await supabase.from("manychat_tag_events").insert({
+      stage_slug: stageParam,
+      stage_name: stageName,
+      subscriber_id: subscriberId,
+      nome: contactFields.nome,
+      telefone: contactFields.telefone,
+      email: contactFields.email,
+      quantidade_pares: contactFields.quantidade_pares,
+      payload,
+      occurred_at: verification.timestamp?.toISOString(),
+    });
+
+    if (error) {
+      console.error("[ManyChat Webhook] Persistence failed", {
+        code: error.code,
+      });
+      return NextResponse.json({ error: "Persistence failed" }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      { received: true, stage: stageName },
+      { status: 201 },
+    );
+  } catch {
+    console.error("[ManyChat Webhook] Unexpected failure");
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
-// ManyChat may send a GET to verify the endpoint — return 200
 export async function GET() {
-  return NextResponse.json({ status: "ok", service: "manychat-webhook" });
+  return NextResponse.json({ status: "ok" });
 }
+
+export const runtime = "nodejs";

@@ -10,7 +10,6 @@ import {
   Percent,
   Rocket,
   Settings,
-  ShoppingBag,
   Shuffle,
   Package,
   ShoppingCart,
@@ -100,11 +99,6 @@ const menuGroups: MenuGroup[] = [
         icon: LayoutDashboard,
       },
       {
-        title: "Dashboard GHL",
-        url: "/dashboard-ghl",
-        icon: LayoutDashboard,
-      },
-      {
         title: "Funil",
         url: "/funil",
         icon: Filter,
@@ -113,11 +107,6 @@ const menuGroups: MenuGroup[] = [
         title: "Negócios",
         url: "/deals",
         icon: DollarSign,
-      },
-      {
-        title: "Pares Vendidos",
-        url: "/pairs-sold",
-        icon: ShoppingBag,
       },
       {
         title: "Programação",
@@ -142,11 +131,6 @@ const menuGroups: MenuGroup[] = [
       {
         title: "Meta Marketing",
         url: "/meta-marketing",
-        icon: MetaIcon,
-      },
-      {
-        title: "Meta Marketing GHL",
-        url: "/meta-marketing-ghl",
         icon: MetaIcon,
       },
       {

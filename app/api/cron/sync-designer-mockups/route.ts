@@ -7,27 +7,10 @@ export async function GET(request: NextRequest) {
     const authError = requireCronSecret(request);
     if (authError) return authError;
 
-    // Verificar se a requisição tem o secret correto
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-
-    if (!cronSecret) {
-      console.error("❌ CRON_SECRET not configured");
-      return NextResponse.json(
-        { error: "Cron secret not configured" },
-        { status: 500 }
-      );
-    }
-
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      console.error("❌ Invalid cron secret");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     console.log("🕐 CRON - Starting designer mockups sync...");
 
     // Chamar a API de sincronização
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const baseUrl = request.nextUrl.origin;
     const syncResponse = await fetch(`${baseUrl}/api/designer-mockups-cache`, {
       method: "POST",
       headers: {
@@ -105,7 +88,7 @@ export async function POST(request: NextRequest) {
     const { designers = getAllDesigners(), startDate, endDate } = body;
 
     // Chamar a API de sincronização
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const baseUrl = request.nextUrl.origin;
     const syncUrl = `${baseUrl}/api/designer-mockups-cache`;
     const requestBody = {
       designers,

@@ -1,11 +1,8 @@
 import "server-only";
 
-/** Server-only elevated key; legacy service_role is a temporary fallback. */
+/** Server-only elevated key. Legacy JWT service_role keys are not accepted. */
 export function getSupabaseSecretKey(): string {
-  const key =
-    process.env.DASHBOARD_SECRET ||
-    process.env.SUPABASE_SECRET_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.DASHBOARD_SECRET;
 
   if (!key) {
     throw new Error(

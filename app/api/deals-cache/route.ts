@@ -89,13 +89,15 @@ export async function GET(request: NextRequest) {
       .select(
         `
         id, deal_id, title, value, currency, status, stage_id,
+        pipeline_id, stage_title, source_system, source_id,
         closing_date, created_date, custom_field_value, custom_field_id,
         estado, "quantidade-de-pares", vendedor, designer,
-        "utm-source", "utm-medium", custom_field_54,
+        "utm-source", "utm-medium", custom_field_54, data_embarque,
         contact_id, organization_id, api_updated_at, last_synced_at,
         segmento_de_negocio, intencao_de_compra
       `,
       )
+      .eq("source_system", "ghl")
       .eq("sync_status", "synced")
       .not("closing_date", "is", null)
       .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
@@ -113,13 +115,14 @@ export async function GET(request: NextRequest) {
     // Return deals in the new flat format (no transformation needed)
     const transformedDeals = deals || [];
 
-    // Get last sync info
-    const { data: lastSync } = await supabase
-      .from("deals_sync_log")
-      .select("sync_completed_at, sync_status, deals_processed")
-      .order("sync_started_at", { ascending: false })
+    const { data: lastSync, count: totalCachedDeals } = await supabase
+      .from("deals_cache")
+      .select("last_synced_at", { count: "exact" })
+      .eq("source_system", "ghl")
+      .eq("sync_status", "synced")
+      .order("last_synced_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     return NextResponse.json(
       {
@@ -130,11 +133,11 @@ export async function GET(request: NextRequest) {
           startDateParam && endDateParam
             ? { startDate: startDateParam, endDate: endDateParam }
             : null,
-        lastSync: lastSync?.sync_completed_at || null,
-        syncStatus: lastSync?.sync_status || "unknown",
-        totalDealsInLastSync: lastSync?.deals_processed || 0,
+        lastSync: lastSync?.last_synced_at || null,
+        syncStatus: lastSync ? "synced" : "unknown",
+        totalDealsInLastSync: totalCachedDeals || 0,
         cacheInfo: {
-          source: "static_cache",
+          source: "ghl_deals_cache",
           fetchedAt: new Date().toISOString(),
           periodDays: startDateParam && endDateParam ? null : period,
           dateRange: {
@@ -146,7 +149,7 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-          "X-Data-Source": "static-cache",
+          "X-Data-Source": "ghl-deals-cache",
         },
       },
     );
@@ -190,9 +193,12 @@ export async function POST() {
     const syncResponse = await fetch(
       `${
         process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-      }/api/test/robust-deals-sync`,
+      }/api/ghl/sync-deals`,
       {
-        method: "GET",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
+        },
       },
     );
 
@@ -217,4 +223,4 @@ export async function POST() {
 }
 
 // Set timeout for this API route
-export const maxDuration = 30; // 30 seconds
+export const maxDuration = 300;

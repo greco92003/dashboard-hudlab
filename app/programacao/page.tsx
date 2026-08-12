@@ -264,17 +264,22 @@ export default function ProgramacaoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Supabase Realtime: refresh silently when the ActiveCampaign webhook (or a
-  // manual sync) touches programacao_cache. Debounced because syncs upsert
+  // Supabase Realtime: refresh silently when the GHL webhook (or a
+  // manual sync) touches deals_cache. Debounced because syncs upsert
   // hundreds of rows in bursts.
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const channel = supabase
-      .channel("programacao_cache_changes")
+      .channel("deals_cache_ghl_changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "programacao_cache" },
+        {
+          event: "*",
+          schema: "public",
+          table: "deals_cache",
+          filter: "source_system=eq.ghl",
+        },
         () => {
           if (debounceTimer) clearTimeout(debounceTimer);
           debounceTimer = setTimeout(() => {
@@ -463,7 +468,7 @@ export default function ProgramacaoPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    // Call the sync endpoint to fetch fresh data from ActiveCampaign
+    // Refresh the unified cache from GHL.
     try {
       const syncResponse = await fetch("/api/programacao/sync", {
         method: "POST",

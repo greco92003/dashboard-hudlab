@@ -121,7 +121,10 @@ export function hasClientCredentials(): boolean {
  * After authorization Tiny will redirect to TINY_REDIRECT_URI with ?code=...
  * Requests offline_access so the refresh token survives idle periods.
  */
-export function buildOAuthAuthorizationUrl(): string {
+export function buildOAuthAuthorizationUrl(input: {
+  state: string;
+  codeChallenge: string;
+}): string {
   const clientId = process.env.TINY_CLIENT_ID;
   const redirectUri = process.env.TINY_REDIRECT_URI;
 
@@ -136,6 +139,9 @@ export function buildOAuthAuthorizationUrl(): string {
     client_id: clientId,
     redirect_uri: redirectUri,
     scope: "openid offline_access",
+    state: input.state,
+    code_challenge: input.codeChallenge,
+    code_challenge_method: "S256",
   });
 
   return `${TINY_OAUTH_BASE}/auth?${params.toString()}`;
@@ -145,7 +151,10 @@ export function buildOAuthAuthorizationUrl(): string {
  * Exchanges an authorization code for access + refresh tokens.
  * Call this in the OAuth callback route.
  */
-export async function exchangeCodeForTokens(code: string): Promise<{
+export async function exchangeCodeForTokens(
+  code: string,
+  codeVerifier: string,
+): Promise<{
   access_token: string;
   refresh_token: string;
   expires_in: number;
@@ -160,6 +169,7 @@ export async function exchangeCodeForTokens(code: string): Promise<{
     client_id: clientId,
     client_secret: clientSecret,
     redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
   });
 
   const res = await fetch(`${TINY_OAUTH_BASE}/token`, {

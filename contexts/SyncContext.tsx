@@ -142,7 +142,7 @@ class DataRefreshManager {
 
   // Trigger refresh for specific pages
   refreshBusinessDataPages() {
-    const businessDataPages = ["dashboard", "deals", "pairs-sold"];
+    const businessDataPages = ["dashboard", "deals"];
     businessDataPages.forEach((page) => {
       const callback = this.refreshCallbacks.get(page);
       if (callback) {

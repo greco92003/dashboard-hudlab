@@ -1,6 +1,14 @@
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  firstHeader,
+  verifyHmacWebhook,
+} from "@/lib/security/webhook-verification";
+import {
+  buildWebhookIdempotencyKey,
+  claimWebhookEvent,
+} from "@/lib/security/webhook-idempotency";
 
 const BASE_URL = process.env.NEXT_PUBLIC_AC_BASE_URL;
 const API_TOKEN = process.env.AC_API_TOKEN;
@@ -95,38 +103,94 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
 
   try {
-    // Optional secret token validation via query param
-    const { searchParams } = new URL(request.url);
-    const token = searchParams.get("token");
-    if (WEBHOOK_SECRET && token !== WEBHOOK_SECRET) {
-      console.warn("❌ ActiveCampaign webhook: invalid secret token");
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!WEBHOOK_SECRET) {
+      return NextResponse.json(
+        { error: "Webhook receiver is not configured" },
+        { status: 503 },
+      );
     }
 
     if (!BASE_URL || !API_TOKEN) {
       return NextResponse.json(
         { error: "Missing ActiveCampaign environment variables" },
-        { status: 500 },
+        { status: 503 },
       );
     }
 
-    // ActiveCampaign sends URL-encoded form data
+    const rawBody = await request.text();
+    if (!rawBody) {
+      return NextResponse.json({ error: "Empty payload" }, { status: 400 });
+    }
+
+    // ActiveCampaign signs the exact URL-encoded or JSON body. Parse only
+    // after preserving that original representation for HMAC verification.
     const contentType = request.headers.get("content-type") || "";
     let dealId: string | null = null;
+    let eventTimestamp: unknown = null;
 
     if (contentType.includes("application/x-www-form-urlencoded")) {
-      const text = await request.text();
-      const params = new URLSearchParams(text);
+      const params = new URLSearchParams(rawBody);
       dealId = params.get("deal[id]");
+      eventTimestamp = params.get("date_time");
     } else {
-      // Fallback: try JSON
-      const body = await request.json().catch(() => null);
+      let body: Record<string, any>;
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Invalid JSON object");
+        }
+        body = parsed as Record<string, any>;
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid JSON payload" },
+          { status: 400 },
+        );
+      }
       dealId = body?.deal?.id?.toString() ?? body?.dealId?.toString() ?? null;
+      eventTimestamp = body?.date_time ?? body?.timestamp ?? body?.created_at;
+    }
+
+    const verification = verifyHmacWebhook({
+      rawBody,
+      signature: firstHeader(request.headers, [
+        "x-activecampaign-signature",
+        "x-webhook-signature",
+      ]),
+      secret: WEBHOOK_SECRET,
+      timestamp: eventTimestamp,
+    });
+    if (!verification.ok) {
+      const status =
+        verification.error === "body_too_large"
+          ? 413
+          : verification.error === "stale_timestamp"
+            ? 409
+            : 401;
+      return NextResponse.json(
+        { error: "Webhook verification failed" },
+        { status },
+      );
     }
 
     if (!dealId) {
-      console.error("❌ ActiveCampaign webhook: missing deal[id] in payload");
       return NextResponse.json({ error: "Missing deal[id]" }, { status: 400 });
+    }
+
+    const claim = await claimWebhookEvent({
+      provider: "activecampaign",
+      idempotencyKey: buildWebhookIdempotencyKey(
+        "activecampaign",
+        firstHeader(request.headers, [
+          "x-activecampaign-event-id",
+          "x-idempotency-key",
+        ]),
+        rawBody,
+      ),
+      payloadSha256: verification.payloadSha256,
+      requestTimestamp: verification.timestamp,
+    });
+    if (!claim.claimed) {
+      return NextResponse.json({ error: "Replay rejected" }, { status: 409 });
     }
 
     console.log(
@@ -185,9 +249,7 @@ export async function POST(request: NextRequest) {
         const matchesField = TARGET_CUSTOM_FIELD_IDS.includes(itemFieldId);
 
         if (matchesDeal && matchesField) {
-          console.log(
-            `✅ Found deal field ${itemFieldId} for deal ${dealId}: ${item.fieldValue || "(empty)"}`,
-          );
+          console.log(`Found configured deal field ${itemFieldId}`);
         }
 
         return matchesDeal && matchesField;
@@ -214,15 +276,11 @@ export async function POST(request: NextRequest) {
           return fieldId === 7 || fieldId === 50; // Segmento de Negócio and Intenção de Compra
         })
         .forEach((item: any) => {
-          console.log(
-            `✅ Found contact field ${item.field}: ${item.value || "(empty)"}`,
-          );
+          console.log(`Found configured contact field ${item.field}`);
           contactFieldsMap.set(parseInt(item.field), item.value || "");
         });
     }
-    console.log(
-      `📊 Contact fields map size: ${contactFieldsMap.size}, Field 7: ${contactFieldsMap.get(7) || "null"}, Field 50: ${contactFieldsMap.get(50) || "null"}`,
-    );
+    console.log(`Contact fields map size: ${contactFieldsMap.size}`);
 
     // Transform deal using the same mapping as the sync route
     const closingDate = customFieldsMap.get(5) || null;
@@ -362,19 +420,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    const message = error instanceof Error ? error.message : "Unknown error";
     console.error(
       JSON.stringify({
         level: "error",
         event: "active_campaign_deal_webhook_failed",
         route: "/api/webhooks/active-campaign",
         requestId,
-        error: message,
+        error: "webhook_processing_failed",
         durationMs: totalTime,
       }),
     );
     return NextResponse.json(
-      { success: false, error: message, processing_time_ms: totalTime },
+      { success: false, error: "Webhook processing failed" },
       { status: 500 },
     );
   }

@@ -48,7 +48,7 @@
       "maxDuration": 300
     },
     "app/api/deals-cache/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 300
     },
     "app/api/google-sheets/read/route.ts": {
       "maxDuration": 30

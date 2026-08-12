@@ -1,10 +1,7 @@
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  requireAdminOrCron,
-  requireCronSecret,
-} from "@/lib/security/route-guards";
+import { requireCronSecret } from "@/lib/security/route-guards";
 
 // Validates every "won" deal in deals_cache against ActiveCampaign
 // live data. Deals marked won in the cache but not won in AC get corrected to
@@ -244,11 +241,6 @@ export async function GET(request: NextRequest) {
     const authError = requireCronSecret(request);
     if (authError) return authError;
 
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const requestId = request.headers.get("x-vercel-id") || crypto.randomUUID();
     const summary = await validateWonDeals(false, requestId);
     return NextResponse.json(summary);
@@ -261,11 +253,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Manual trigger (same pattern as /api/cron/sync-deals). Use ?dryRun=1 to
-// preview what would be corrected without writing anything.
+// Manual invocations use the same exclusive CRON_SECRET as Vercel Cron.
 export async function POST(request: NextRequest) {
   try {
-    const authError = await requireAdminOrCron(request);
+    const authError = requireCronSecret(request);
     if (authError) return authError;
 
     const { searchParams } = new URL(request.url);

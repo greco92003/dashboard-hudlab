@@ -23,18 +23,10 @@ export async function POST(request: NextRequest) {
     const security = await secureWebhookMiddleware(request);
     
     if (!security.isValid) {
-      console.error("❌ Security validation failed:", security.error);
-      
-      if (security.shouldBlock) {
-        return NextResponse.json(
-          { error: "Forbidden", message: security.error },
-          { status: 403 }
-        );
-      }
-      
+      console.warn("[Nuvemshop webhook] Request rejected");
       return NextResponse.json(
-        { error: "Bad Request", message: security.error },
-        { status: 400 }
+        { error: "Webhook rejected" },
+        { status: security.status }
       );
     }
 

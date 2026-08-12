@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
 
-// GET endpoint to fetch deals from programacao_cache organized by shipping date
+// GET GHL deals from the unified deals_cache organized by shipping date.
 export async function GET(request: NextRequest) {
   const access = await requireApprovedUser();
   if (!access.ok) return access.response;
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch deals from programacao_cache
     const { data: deals, error: dealsError } = await supabase
-      .from("programacao_cache")
+      .from("deals_cache")
       .select(
         `
         deal_id,
@@ -47,11 +47,13 @@ export async function GET(request: NextRequest) {
         data_embarque,
         created_date,
         estado,
-        quantidade_pares,
+        "quantidade-de-pares",
         vendedor,
         designer
       `
       )
+      .eq("source_system", "ghl")
+      .eq("status", "won")
       .eq("sync_status", "synced")
       .order("data_embarque", { ascending: true, nullsFirst: false });
 
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
         value: deal.value,
         currency: deal.currency,
         stageTitle: deal.stage_title,
-        quantidadePares: deal.quantidade_pares,
+        quantidadePares: deal["quantidade-de-pares"],
         vendedor: deal.vendedor,
         designer: deal.designer,
         customField54: deal.data_embarque,

@@ -255,6 +255,12 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(request.headers.get("authorization")
+            ? { Authorization: request.headers.get("authorization")! }
+            : {}),
+          ...(request.headers.get("cookie")
+            ? { Cookie: request.headers.get("cookie")! }
+            : {}),
         },
         body: JSON.stringify({
           spreadsheetId:
@@ -284,6 +290,12 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(request.headers.get("authorization")
+            ? { Authorization: request.headers.get("authorization")! }
+            : {}),
+          ...(request.headers.get("cookie")
+            ? { Cookie: request.headers.get("cookie")! }
+            : {}),
         },
         body: JSON.stringify({
           spreadsheetId:

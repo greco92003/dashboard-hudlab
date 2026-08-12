@@ -1,82 +1,69 @@
-/**
- * OAuth2 callback – Tiny/Olist
- *
- * Tiny redirects here after the user authorizes the app:
- *   GET /api/financial-dashboard/callback?code=...
- *
- * The route exchanges the code for tokens and renders a page with the
- * refresh_token so the developer can copy it to .env.local as TINY_REFRESH_TOKEN.
- */
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   exchangeCodeForTokens,
   saveRefreshTokenToSupabase,
 } from "@/lib/tiny/auth";
+import { verifyTinyOAuthState } from "@/lib/tiny/oauth-security";
 import { requireAdmin } from "@/lib/security/route-guards";
 
-export async function GET(req: NextRequest) {
+function finish(response: NextResponse): NextResponse {
+  const expiredCookie = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/api/financial-dashboard/callback",
+    maxAge: 0,
+  };
+  response.cookies.set("tiny_oauth_nonce", "", expiredCookie);
+  response.cookies.set("tiny_oauth_code_verifier", "", expiredCookie);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
+function dashboardRedirect(request: NextRequest, status: string): NextResponse {
+  const target = new URL("/financial-dashboard", request.url);
+  target.searchParams.set("tiny_oauth", status);
+  return finish(NextResponse.redirect(target));
+}
+
+export async function GET(request: NextRequest) {
   const access = await requireAdmin();
   if (!access.ok) return access.response;
 
-  const { searchParams } = req.nextUrl;
-  const code = searchParams.get("code");
-  const error = searchParams.get("error");
-
-  if (error) {
-    return new NextResponse(
-      html(`
-        <h2 style="color:#ef4444">Autorização negada</h2>
-        <p>O Tiny retornou o erro: <code>${error}</code></p>
-        <p>${searchParams.get("error_description") ?? ""}</p>
-        <a href="/financial-dashboard">← Voltar</a>
-      `),
-      { headers: { "Content-Type": "text/html" } },
+  const stateValid = verifyTinyOAuthState({
+    state: request.nextUrl.searchParams.get("state"),
+    expectedUserId: access.user.id,
+    expectedNonce: request.cookies.get("tiny_oauth_nonce")?.value,
+  });
+  const codeVerifier = request.cookies.get("tiny_oauth_code_verifier")?.value;
+  if (!stateValid || !codeVerifier) {
+    return finish(
+      NextResponse.json(
+        { error: "Invalid OAuth state" },
+        { status: 400 },
+      ),
     );
   }
 
+  if (request.nextUrl.searchParams.has("error")) {
+    return dashboardRedirect(request, "denied");
+  }
+
+  const code = request.nextUrl.searchParams.get("code");
   if (!code) {
-    return NextResponse.json(
-      { error: "code ausente na query string" },
-      { status: 400 },
+    return finish(
+      NextResponse.json({ error: "Missing authorization code" }, { status: 400 }),
     );
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
-
-    // Persist immediately so the app works without env var changes
+    const tokens = await exchangeCodeForTokens(code, codeVerifier);
     await saveRefreshTokenToSupabase(tokens.refresh_token);
-
-    return new NextResponse(
-      html(`
-        <h2 style="color:#22c55e">✅ Autorização concluída!</h2>
-        <p>O token foi salvo automaticamente no Supabase. O dashboard já está pronto para uso.</p>
-        <p><a href="/financial-dashboard" style="font-weight:bold">→ Abrir Dashboard Financeiro</a></p>
-        <hr/>
-        <details>
-          <summary style="cursor:pointer;color:#94a3b8;font-size:13px">Backup: refresh_token (para .env.local)</summary>
-          <pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;font-size:11px">TINY_REFRESH_TOKEN=${tokens.refresh_token}</pre>
-        </details>
-      `),
-      { headers: { "Content-Type": "text/html" } },
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return new NextResponse(
-      html(`
-        <h2 style="color:#ef4444">Erro ao trocar o código</h2>
-        <pre style="color:#ef4444">${msg}</pre>
-        <p>Verifique se a <strong>URL de Redirecionamento</strong> no app Tiny é exatamente igual à <code>TINY_REDIRECT_URI</code> no .env.local.</p>
-        <a href="/financial-dashboard">← Voltar</a>
-      `),
-      { headers: { "Content-Type": "text/html" } },
-    );
+    return dashboardRedirect(request, "connected");
+  } catch {
+    console.error("[Tiny OAuth] Authorization code exchange failed");
+    return dashboardRedirect(request, "failed");
   }
 }
 
-function html(body: string): string {
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Tiny OAuth</title>
-  <style>*{font-family:system-ui,sans-serif;line-height:1.6}body{max-width:720px;margin:48px auto;padding:0 24px}pre{font-family:monospace}</style>
-  </head><body>${body}</body></html>`;
-}
+export const runtime = "nodejs";

@@ -5,12 +5,10 @@ function requireKey(value: string | undefined, name: string): string {
   return value;
 }
 
-/** Browser-safe key; the legacy anon key is a temporary migration fallback. */
+/** Browser-safe key. Legacy JWT anon keys are not accepted. */
 export function getSupabasePublishableKey(): string {
   return requireKey(
-    process.env.NEXT_PUBLIC_DASHBOARD_PUBLISHABLE ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    process.env.NEXT_PUBLIC_DASHBOARD_PUBLISHABLE,
     "DASHBOARD_PUBLISHABLE",
   );
 }

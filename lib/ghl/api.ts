@@ -1,5 +1,5 @@
 /**
- * GoHighLevel (GHL) API client for the provisional /dashboard-ghl page.
+ * GoHighLevel (GHL) API client for the canonical deals cache.
  *
  * Fetches opportunities from the GHL API 2.0 (services.leadconnectorhq.com)
  * and maps them to the same flat "Deal" shape served by /api/deals-cache
@@ -28,6 +28,7 @@ export interface GhlMappedDeal {
   status: string | null;
   stage_id: string | null;
   pipeline_id: string | null;
+  stage_title: string | null;
   closing_date: string | null;
   created_date: string | null;
   custom_field_value: string | null;
@@ -41,6 +42,8 @@ export interface GhlMappedDeal {
   api_updated_at: string | null;
   segmento_de_negocio: string | null;
   intencao_de_compra: string | null;
+  data_embarque: string | null;
+  assigned_to: string | null;
   "utm-source": string | null;
   "utm-medium": string | null;
   [key: string]: string | number | null | undefined;
@@ -67,6 +70,7 @@ export interface GhlOpportunity {
   createdAt: string | null;
   updatedAt: string | null;
   contactId: string | null;
+  assignedTo?: string | null;
   customFields?: Array<Record<string, unknown> & { id: string }>;
   contact?: { id: string; name: string | null };
 }
@@ -203,26 +207,61 @@ export async function fetchOpportunityById(
   return data.opportunity;
 }
 
+async function fetchStageTitles(): Promise<Map<string, string>> {
+  const { locationId } = requireEnv();
+  const result = await ghlFetch<{
+    pipelines?: Array<{
+      id: string;
+      stages?: Array<{ id: string; name: string }>;
+    }>;
+  }>("/opportunities/pipelines", { locationId });
+  const titles = new Map<string, string>();
+  for (const pipeline of result.pipelines || []) {
+    for (const stage of pipeline.stages || []) titles.set(stage.id, stage.name);
+  }
+  return titles;
+}
+
 async function fetchAllOpportunities(): Promise<GhlOpportunity[]> {
   const { locationId } = requireEnv();
   const all: GhlOpportunity[] = [];
   const limit = 100;
-  const maxPages = 50;
+  const maxRequests = 2000;
+  let page = 1;
+  let startAfter: string | null = null;
+  let startAfterId: string | null = null;
 
-  for (let page = 1; page <= maxPages; page++) {
-    const data = await ghlFetch<{
+  for (let requestNumber = 1; requestNumber <= maxRequests; requestNumber++) {
+    const data: {
       opportunities: GhlOpportunity[];
       meta?: { total?: number; nextPageUrl?: string | null };
-    }>("/opportunities/search", {
+    } = await ghlFetch("/opportunities/search", {
       location_id: locationId,
       limit: String(limit),
-      page: String(page),
+      ...(startAfter && startAfterId
+        ? { startAfter, startAfterId }
+        : { page: String(page) }),
     });
 
     const batch = data.opportunities || [];
     all.push(...batch);
 
     if (batch.length < limit) break;
+
+    if (all.length >= 10_000 && data.meta?.nextPageUrl) {
+      const nextPage: URL = new URL(data.meta.nextPageUrl);
+      startAfter = nextPage.searchParams.get("startAfter");
+      startAfterId = nextPage.searchParams.get("startAfterId");
+      if (!startAfter || !startAfterId) {
+        throw new Error("GHL cursor pagination metadata is incomplete");
+      }
+    } else {
+      page += 1;
+    }
+
+    if (requestNumber === maxRequests) {
+      throw new Error("GHL opportunity pagination safety limit reached");
+    }
   }
 
   return all;
@@ -245,10 +284,13 @@ async function fetchContactCustomFields(
 const OPPORTUNITY_FIELD_MAP: Record<string, keyof GhlMappedDeal> = {
   data_de_fechamento: "custom_field_value", // AC field 5 "Data Fechamento"
   estado: "estado", // AC field 25
-  quantidade_de_pares: "quantidade-de-pares", // AC field 39
+  nmero_quantidade_de_pares: "quantidade-de-pares", // AC field 39
+  quantidade_de_pares: "quantidade-de-pares",
   vendedor: "vendedor", // AC field 45
   designer_responsvel: "designer", // AC field 47
   segmento_do_negcio: "segmento_de_negocio",
+  inteno_de_compra_negcio: "intencao_de_compra",
+  data_de_embarque: "data_embarque",
   utm_source_negcio: "utm-source",
   utm_medium_negcio: "utm-medium",
 };
@@ -266,9 +308,10 @@ function stripModelPrefix(fieldKey: string): string {
   return dotIndex >= 0 ? fieldKey.slice(dotIndex + 1) : fieldKey;
 }
 
-function mapOpportunity(
+export function mapOpportunity(
   opp: GhlOpportunity,
   oppFieldDefsById: Map<string, GhlCustomFieldDef>,
+  stageTitlesById: Map<string, string> = new Map(),
 ): GhlMappedDeal {
   const deal: GhlMappedDeal = {
     deal_id: opp.id,
@@ -279,6 +322,9 @@ function mapOpportunity(
     status: opp.status || null,
     stage_id: opp.pipelineStageId || null,
     pipeline_id: opp.pipelineId || null,
+    stage_title: opp.pipelineStageId
+      ? stageTitlesById.get(opp.pipelineStageId) || null
+      : null,
     closing_date: null,
     created_date: opp.createdAt || null,
     custom_field_value: null,
@@ -292,6 +338,8 @@ function mapOpportunity(
     api_updated_at: opp.updatedAt || null,
     segmento_de_negocio: null,
     intencao_de_compra: null,
+    data_embarque: null,
+    assigned_to: opp.assignedTo || null,
     "utm-source": null,
     "utm-medium": null,
     ghl_source: opp.source || null,
@@ -401,24 +449,37 @@ let inflightFetch: Promise<GhlDealsResult> | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function fetchAndMapAllDeals(): Promise<GhlDealsResult> {
-  const [oppDefs, contactDefs, opportunities] = await Promise.all([
+  const [oppDefs, opportunities, stageTitlesById] = await Promise.all([
     fetchCustomFieldDefs("opportunity"),
-    fetchCustomFieldDefs("contact"),
     fetchAllOpportunities(),
+    fetchStageTitles(),
   ]);
 
   const oppDefsById = new Map(oppDefs.map((d) => [d.id, d]));
-  const contactDefsById = new Map(contactDefs.map((d) => [d.id, d]));
 
-  const deals = opportunities.map((opp) => mapOpportunity(opp, oppDefsById));
-
-  await enrichWithContactFields(deals, contactDefsById);
+  const deals = opportunities.map((opp) =>
+    mapOpportunity(opp, oppDefsById, stageTitlesById),
+  );
 
   return {
     deals,
     fetchedAt: new Date().toISOString(),
     totalOpportunities: opportunities.length,
   };
+}
+
+export async function getGhlDeal(dealId: string): Promise<GhlMappedDeal> {
+  const [result, definitions, stageTitles] = await Promise.all([
+    ghlFetch<{ opportunity?: GhlOpportunity }>(`/opportunities/${dealId}`),
+    fetchCustomFieldDefs("opportunity"),
+    fetchStageTitles(),
+  ]);
+  if (!result.opportunity) throw new Error(`GHL opportunity ${dealId} not found`);
+  return mapOpportunity(
+    result.opportunity,
+    new Map(definitions.map((definition) => [definition.id, definition])),
+    stageTitles,
+  );
 }
 
 /**

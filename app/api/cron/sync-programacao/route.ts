@@ -56,12 +56,6 @@ export async function GET(request: NextRequest) {
     const authError = requireCronSecret(request);
     if (authError) return authError;
 
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      console.log("Unauthorized cron request (sync-programacao)");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     console.log(
       "🚀 Cron sync-programacao iniciado (mesmo sync do botão Atualizar)..."
     );
@@ -82,7 +76,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Trigger manual para teste (mesma lógica do GET, sem exigir CRON_SECRET).
+// Manual invocations use the same exclusive CRON_SECRET as Vercel Cron.
 export async function POST(request: NextRequest) {
   try {
     const authError = requireCronSecret(request);

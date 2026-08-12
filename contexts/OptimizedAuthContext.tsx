@@ -16,7 +16,6 @@ import { storage } from "@/lib/storage";
 const PROTECTED_ROUTES = [
   "/dashboard",
   "/live-dashboard",
-  "/pairs-sold",
   "/direct-costs",
   "/taxes",
   "/fixed-costs",
