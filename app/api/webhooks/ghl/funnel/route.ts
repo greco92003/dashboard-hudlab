@@ -83,6 +83,30 @@ function parseDate(value: unknown): string | null {
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
+// Faturamento/Vendas (Visão Geral) vêm 100% do dado VIVO da oportunidade
+// via sync-ghl, nunca do payload congelado do webhook (ver lição de
+// 2026-07-23: valor pode ser corrigido depois do webhook original) --
+// então o webhook sozinho não pode atualizar o número. Mas sync-ghl só
+// roda 1x/dia via cron + quando alguém clica "Atualizar", então um
+// negócio marcado como ganho no meio do dia só aparecia no dashboard
+// no dia seguinte (ou se alguém lembrasse de clicar). Fix pedido pelo
+// usuário em 2026-08-12: usar o próprio webhook de "negócio fechado"
+// como GATILHO de um sync imediato -- dispara sem esperar a resposta
+// (não pode atrasar o 201 que devolvemos pro GHL) e não falha o
+// webhook se o sync falhar (é só uma tentativa de atualização mais
+// rápida, o cron diário continua sendo a rede de segurança).
+function dispararSyncGhl() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return;
+  fetch(`${supabaseUrl}/functions/v1/sync-ghl`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  }).catch((err) => {
+    console.error("[GHL Funnel] Falha ao disparar sync-ghl após negociofechado", err);
+  });
+}
+
 export async function POST(request: NextRequest) {
   if (!process.env.GHL_WEBHOOK_SECRET) {
     console.error("[GHL Funnel] GHL_WEBHOOK_SECRET is not configured");
@@ -257,6 +281,10 @@ export async function POST(request: NextRequest) {
       { received: false, error: "Failed to persist webhook" },
       { status: 500 },
     );
+  }
+
+  if (stage === "negociofechado") {
+    dispararSyncGhl();
   }
 
   return NextResponse.json(
