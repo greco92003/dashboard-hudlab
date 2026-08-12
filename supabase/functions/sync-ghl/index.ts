@@ -196,6 +196,18 @@ function mapContact(c: any, fieldMap: Map<string, string>) {
 // Fase contacts (padrão): busca APENAS os contatos vinculados a
 // oportunidades, um a um via GET /contacts/{id} (o detalhe traz
 // customFields completos). Cursor = offset na lista ordenada de ids.
+//
+// IMPORTANTE (bug achado em 2026-08-12): a lista de ids usava .sort()
+// alfabético, e o cursor `offset` reinicia do zero a cada disparo do
+// cron diário (chain novo, sem persistir onde parou no dia anterior).
+// Com o universo de contact_id agora incluindo o lote de 12k+
+// oportunidades importadas (a maioria órfã -- contato nunca existiu
+// no GHL, GET sempre 404), a ordem alfabética podia enterrar leads
+// novos atrás de milhares de IDs mortos, atrasando a sincronização
+// de contato/UTM de leads reais em vários dias. Fix: ordenar pela
+// oportunidade mais recente de cada contato (created_at desc), assim
+// todo dia o cursor (que sempre reinicia em offset=0) ataca primeiro
+// os contatos mais novos, independente do tamanho da fila de órfãos.
 // deno-lint-ignore no-explicit-any
 async function runLinkedContacts(supabase: any, token: string, locationId: string, state: ChainState, deadline: number) {
   const startedAt = new Date();
@@ -207,10 +219,22 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
     const fieldMap = await fetchFieldMap(token, locationId);
     const { data, error } = await supabase
       .from("ghl_opportunities")
-      .select("contact_id")
-      .not("contact_id", "is", null);
+      .select("contact_id, created_at")
+      .not("contact_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(20000);
     if (error) throw new Error(`Lista de contact_ids: ${error.message}`);
-    const ids = [...new Set((data as { contact_id: string }[]).map((r) => r.contact_id))].sort();
+    // Primeira ocorrência de cada contact_id, já em ordem created_at desc
+    // (a query trouxe as linhas mais recentes primeiro) = prioriza contatos
+    // ligados à oportunidade mais nova.
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const r of data as { contact_id: string; created_at: string }[]) {
+      if (!seen.has(r.contact_id)) {
+        seen.add(r.contact_id);
+        ids.push(r.contact_id);
+      }
+    }
 
     let i = offset;
     let batch: ReturnType<typeof mapContact>[] = [];
