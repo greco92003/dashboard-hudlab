@@ -174,14 +174,23 @@ Regras de negócio importantes pra avaliar os anúncios corretamente:
     lead. Mesma lógica do trafego_perfil (não penalize por leads
     baixos/zero), mas julgue pelo custo por clique (investimento /
     cliques) em vez de custo de alcance -- um anúncio assim com CPC
-    muito acima da média dos outros anúncios da conta é sinal real de
+    muito acima de "benchmark_conta.cpc_medio" é sinal real de
     problema, mesmo sem nenhum lead esperado.
   - "engajamento": otimizado pra visualização/engajamento de vídeo
     (THRUPLAY), sem relação nenhuma com clique ou lead -- é mídia de
     reconhecimento de marca pura. Não penalize por cliques, leads ou
     orçamentos baixos/zero; julgue só pelo CPM implícito (investimento
-    / impressões) comparado aos outros anúncios da conta -- alto
-    demais é o único motivo válido pra "REVISAR"/"PAUSAR" aqui.
+    / impressões) contra "benchmark_conta.cpm_medio" -- muito acima
+    disso é o único motivo válido pra "REVISAR"/"PAUSAR" aqui.
+  IMPORTANTE sobre "razoável"/"bom"/"alto demais" nas 3 categorias
+  acima: SEMPRE compare contra "benchmark_conta" (fornecido no payload,
+  calculado da própria conta nos últimos 30 dias) -- NUNCA contra
+  benchmark de mercado genérico do seu conhecimento geral (CPC/CPM
+  "típico" de mercado varia demais por país/nicho/público pra ser
+  confiável aqui, e pode estar desatualizado). Cite o número real da
+  conta na justificativa (ex.: "CPC de R$0,21 vs. média da conta de
+  R$0,60 -- 65% mais barato"), nunca uma afirmação vaga tipo "custo
+  razoável" sem o número de comparação.
 - "Leads" já é a coorte de contatos GHL atribuídos a esse anúncio
   específico no período; "Orçamentos"/"Mockups"/"Negociações" são
   marcos alcançados por essa mesma coorte.
@@ -407,6 +416,32 @@ Deno.serve(async (req: Request) => {
     }
     const todasDatas = todasDatasEntre(pInicio, pFim);
 
+    // Benchmark real da PRÓPRIA conta (2026-08-13, achado pelo usuário:
+    // o prompt pedia comparação contra "média da conta"/"razoável" sem
+    // nunca calcular e entregar esse número -- o Claude ficava usando
+    // conhecimento genérico de mercado, que não bate com o público/
+    // nicho real daqui). CPC/CPM médios de TODOS os anúncios da conta
+    // no período (não só os "trafego_link"/"engajamento" avaliados),
+    // pra ter uma base estatística maior que os 1-2 anúncios de cada
+    // categoria costumam ter isoladamente.
+    const { data: contaData, error: contaError } = await supabase
+      .from("meta_insights_daily")
+      .select("spend, clicks, impressions")
+      .gte("date", pInicio)
+      .lte("date", pFim);
+    if (contaError) throw new Error(`meta_insights_daily (benchmark): ${contaError.message}`);
+    let spendConta = 0, cliquesConta = 0, impressoesConta = 0;
+    for (const row of (contaData ?? []) as { spend: number; clicks: number; impressions: number }[]) {
+      spendConta += Number(row.spend) || 0;
+      cliquesConta += Number(row.clicks) || 0;
+      impressoesConta += Number(row.impressions) || 0;
+    }
+    const benchmarkConta = {
+      cpc_medio: cliquesConta > 0 ? Math.round((spendConta / cliquesConta) * 100) / 100 : null,
+      cpm_medio: impressoesConta > 0 ? Math.round((spendConta / impressoesConta) * 1000 * 100) / 100 : null,
+      periodo_dias: JANELA_DIAS,
+    };
+
     const baldes = baldesSemanais(pInicio, pFim, NUM_BALDES_SEMANAIS);
     const resultadosSemanais = await Promise.all(
       baldes.map((b) => supabase.rpc("get_funnel_por_anuncio", { p_inicio: b.inicio, p_fim: b.fim })),
@@ -474,6 +509,7 @@ Deno.serve(async (req: Request) => {
     if (paraAvaliar.length > 0) {
       const contexto = {
         periodo: { inicio: pInicio, fim: pFim },
+        benchmark_conta: benchmarkConta,
         anuncios: paraAvaliar.map((r) => {
           const attr = atributosPorAdId.get(r.ad_id);
           const custoPorParOrcado =
@@ -535,7 +571,7 @@ Deno.serve(async (req: Request) => {
         apiKey,
         CONTEXTO_NEGOCIO,
         JSON.stringify(contexto, null, 2),
-        8000,
+        16000,
       );
       // deno-lint-ignore no-explicit-any
       const json = extractJson(respostaTexto) as any;
