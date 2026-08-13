@@ -22,9 +22,10 @@ import { Anuncios } from "./components/anuncios";
 import { Regioes } from "./components/regioes";
 import { Saude } from "./components/saude";
 import { Insights } from "./components/insights";
+import { Criativos } from "./components/criativos";
 import { PERIODOS, dateParaIso, type Periodo, type RangeCustom } from "./lib";
 
-const ABAS = ["visao-geral", "anuncios", "regioes", "saude", "insights"] as const;
+const ABAS = ["visao-geral", "anuncios", "regioes", "saude", "insights", "criativos"] as const;
 
 function MetaMarketingContent() {
   const router = useRouter();
@@ -171,6 +172,7 @@ function MetaMarketingContent() {
             <TabsTrigger value="regioes">Regiões</TabsTrigger>
             <TabsTrigger value="saude">Saúde da Atribuição</TabsTrigger>
             <TabsTrigger value="insights">Insights</TabsTrigger>
+            <TabsTrigger value="criativos">Criativos</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="visao-geral" className="mt-4">
@@ -187,6 +189,9 @@ function MetaMarketingContent() {
         </TabsContent>
         <TabsContent value="insights" className="mt-4">
           <Insights />
+        </TabsContent>
+        <TabsContent value="criativos" className="mt-4">
+          <Criativos />
         </TabsContent>
       </Tabs>
     </div>
