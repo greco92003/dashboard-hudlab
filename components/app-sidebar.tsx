@@ -30,6 +30,7 @@ import {
   Filter,
   Truck,
   Instagram,
+  Database,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -112,6 +113,16 @@ const menuGroups: MenuGroup[] = [
         title: "Programação",
         url: "/programacao",
         icon: Clock,
+      },
+    ],
+  },
+  {
+    label: "ERP",
+    items: [
+      {
+        title: "Cadastro ERP",
+        url: "/cadastro-erp",
+        icon: Database,
       },
     ],
   },
@@ -324,10 +335,10 @@ export function AppSidebar() {
     // Filter NCT group - partners-media cannot see it (already handled above)
     // NCT is available to all non-partners-media users, including team-leaders
 
-    // Only owners and admins can see the "Custos" group
+    // Only owners and admins can access financial costs and ERP operations.
     if (!isOwner && !isAdmin) {
       filteredGroups = filteredGroups.filter(
-        (group) => group.label !== "Custos",
+        (group) => group.label !== "Custos" && group.label !== "ERP",
       );
     }
 

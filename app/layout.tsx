@@ -10,6 +10,7 @@ import { PWAWrapper } from "@/components/PWAWrapper";
 import { CacheRecoveryProvider } from "@/components/CacheRecoveryProvider";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { VersionChecker } from "@/components/VersionChecker";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 
 export const metadata: Metadata = {
   title: "Dashboard Hud Lab",
@@ -271,19 +272,21 @@ export default async function Layout({
           <PWAWrapper>
             <OptimizedAuthProvider>
               <SyncProvider>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="dark"
-                  enableSystem
-                  disableTransitionOnChange
-                >
-                  <ConditionalSidebar defaultSidebarOpen={defaultSidebarOpen}>
-                    {children}
-                  </ConditionalSidebar>
-                  <Toaster />
-                  <SyncChecker />
-                  <VersionChecker />
-                </ThemeProvider>
+                <NuqsAdapter>
+                  <ThemeProvider
+                    attribute="class"
+                    defaultTheme="dark"
+                    enableSystem
+                    disableTransitionOnChange
+                  >
+                    <ConditionalSidebar defaultSidebarOpen={defaultSidebarOpen}>
+                      {children}
+                    </ConditionalSidebar>
+                    <Toaster />
+                    <SyncChecker />
+                    <VersionChecker />
+                  </ThemeProvider>
+                </NuqsAdapter>
               </SyncProvider>
             </OptimizedAuthProvider>
           </PWAWrapper>
