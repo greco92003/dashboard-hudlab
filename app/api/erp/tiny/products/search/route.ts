@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { searchTinyExistingProducts } from "@/lib/erp/tiny-existing-product-v2";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(request: Request) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
   const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
   if (query.length < 2) {

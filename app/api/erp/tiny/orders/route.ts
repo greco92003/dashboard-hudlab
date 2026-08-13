@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createTinySalesOrder } from "@/lib/erp/tiny-order-v2";
 import { extractGhlOrderSource, FREE_SAMPLE_NATURE, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
@@ -37,7 +37,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

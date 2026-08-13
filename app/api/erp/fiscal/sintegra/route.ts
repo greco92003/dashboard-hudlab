@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { onlyDigits } from "@/lib/erp/contact-rules";
 import { getTinyContactFiscalData } from "@/lib/erp/tiny-contact-v2";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 const schema = z.object({
   cnpj: z.string().min(1),
@@ -11,7 +11,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success || onlyDigits(parsed.data.cnpj).length !== 14) {

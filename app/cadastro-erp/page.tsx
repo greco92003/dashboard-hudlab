@@ -769,9 +769,9 @@ export default function CadastroErpPage() {
                     {creationResults.map((result) => (
                       <div key={`${result.modelNumber}-${result.sku}`} className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                         <span>Modelo {result.modelNumber} · {result.sku}</span>
-                        <span className={result.status === "failed" ? "text-destructive" : result.status === "created" ? "text-emerald-600" : "text-amber-600"}>
+                        <span className={result.status === "failed" ? "text-destructive" : "text-emerald-600"}>
                           {result.status === "created" && `Cadastrado · ID ${result.tinyProductId}`}
-                          {result.status === "existing" && `Já existia · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}`}
+                          {result.status === "existing" && `Produto adicionado · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}`}
                           {result.status === "failed" && (result.error || "Falhou")}
                         </span>
                       </div>

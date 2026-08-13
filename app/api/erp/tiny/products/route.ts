@@ -9,7 +9,7 @@ import {
 } from "@/lib/erp/tiny-product-cloner";
 import { buildVariationSku } from "@/lib/erp/product-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import { artworkThumbnailUrl } from "@/lib/erp/artwork-url";
 
@@ -153,7 +153,7 @@ async function ensureProductArtwork(productId: number, sourceUrl: string | null)
 }
 
 export async function POST(request: Request) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

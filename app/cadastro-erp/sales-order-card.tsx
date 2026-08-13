@@ -50,7 +50,7 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
   const initialContributor = contact.contributor !== "0" ? contact.contributor : contact.personType === "F" ? "9" : "0";
   const [items, setItems] = useState(initialItems);
   const [contributor, setContributor] = useState(initialContributor);
-  const [nature, setNature] = useState(natureName(contact.state));
+  const [nature, setNature] = useState(natureName(contact.state, initialContributor));
   const [orderDate, setOrderDate] = useState(today());
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [freight, setFreight] = useState(preview.order.customerFreight ?? 0);
@@ -91,6 +91,10 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
     setBankAccount(value === "Cartão de Crédito" ? "Sicredi - PJ" : "Sicredi");
     if (value === "Pix") setDueDate("");
   };
+  const updateContributor = (value: ErpContactDraft["contributor"]) => {
+    setContributor(value);
+    setNature(natureName(contact.state, value));
+  };
   const submit = async () => {
     if (problems.length || saving || (!isFreeSample && expectedPairs === null)) return;
     setSaving(true);
@@ -114,9 +118,9 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Field label="Contribuinte"><Select value={contributor} onValueChange={setContributor}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">Confirmar situação</SelectItem><SelectItem value="1">1 - Contribuinte ICMS</SelectItem><SelectItem value="2">2 - Contribuinte isento</SelectItem><SelectItem value="9">9 - Não contribuinte</SelectItem></SelectContent></Select></Field>
+          <Field label="Contribuinte"><Select value={contributor} onValueChange={(value) => updateContributor(value as ErpContactDraft["contributor"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">Confirmar situação</SelectItem><SelectItem value="1">1 - Contribuinte ICMS</SelectItem><SelectItem value="2">2 - Contribuinte isento</SelectItem><SelectItem value="9">9 - Não contribuinte</SelectItem></SelectContent></Select></Field>
           <Field label="UF do cliente"><Input value={contact.state} readOnly /></Field>
-          <Field label="Natureza da operação" className="md:col-span-2"><Select value={nature} onValueChange={(value) => setNature(value as (typeof TINY_NATURE_OPTIONS)[number])}><SelectTrigger><SelectValue placeholder="Selecione uma natureza cadastrada" /></SelectTrigger><SelectContent>{TINY_NATURE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select></Field>
+          <Field label="Natureza da operação" className="md:col-span-2"><Select value={nature} onValueChange={(value) => setNature(value as (typeof TINY_NATURE_OPTIONS)[number])}><SelectTrigger><SelectValue placeholder="Selecione uma natureza cadastrada" /></SelectTrigger><SelectContent className="max-h-80">{TINY_NATURE_OPTIONS.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">A opção sugerida considera a UF e o tipo de contribuinte. Todas as naturezas disponíveis permanecem acessíveis.</p></Field>
           <Field label="Data do pedido"><Input type="date" value={orderDate} onChange={(event) => setOrderDate(event.target.value)} /></Field>
           <Field label="Data prevista de entrega"><Input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} /></Field>
           <Field label="Frete pago pelo cliente"><Input type="number" min="0" step="0.01" value={freight} onChange={(event) => setFreight(Number(event.target.value))} /></Field>

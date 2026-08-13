@@ -3,13 +3,13 @@ import { mapGhlContactToErpDraft } from "@/lib/erp/contact-rules";
 import { findTinyContactByDocument, getTinyContactById } from "@/lib/erp/tiny-contact-v2";
 import type { ErpContactPreview } from "@/lib/erp/types";
 import { fetchCustomFieldDefs, fetchGhlContactById } from "@/lib/ghl/api";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   const { id } = await context.params;

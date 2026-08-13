@@ -73,6 +73,9 @@ export function extractGhlOrderSource(
 }
 
 export const TINY_NATURE_OPTIONS = [
+  "Venda de mercadorias - Rio grande do Sul",
+  "Venda de Mercadorias - (PA,AC,AM,BA,GO)",
+  "Venda de mercadorias - Outros estados",
   "Venda de mercadorias - Consumidor final - Rio grande do Sul",
   "Venda de Mercadorias - Consumidor final - (PA,AC,AM,BA,GO)",
   "Venda de mercadorias - Consumidor final - Outros estados",
@@ -83,9 +86,14 @@ export const FREE_SAMPLE_NATURE = "Remessa de Amostra Grátis" as const;
 
 const GROUPED_STATES = new Set(["PA", "AC", "AM", "BA", "GO"]);
 
-export function natureName(state: string): (typeof TINY_NATURE_OPTIONS)[number] {
+export function natureName(
+  state: string,
+  contributor: "0" | "1" | "2" | "9" = "9",
+): (typeof TINY_NATURE_OPTIONS)[number] {
   const normalizedState = state.trim().toUpperCase();
-  if (normalizedState === "RS") return TINY_NATURE_OPTIONS[0];
-  if (GROUPED_STATES.has(normalizedState)) return TINY_NATURE_OPTIONS[1];
-  return TINY_NATURE_OPTIONS[2];
+  const isContributor = contributor === "1" || contributor === "2";
+  const offset = isContributor ? 0 : 3;
+  if (normalizedState === "RS") return TINY_NATURE_OPTIONS[offset];
+  if (GROUPED_STATES.has(normalizedState)) return TINY_NATURE_OPTIONS[offset + 1];
+  return TINY_NATURE_OPTIONS[offset + 2];
 }

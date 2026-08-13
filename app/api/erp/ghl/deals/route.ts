@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchGhlOpportunitiesByContact } from "@/lib/ghl/api";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import type { ErpDeal } from "@/lib/erp/types";
 
 export async function GET(request: NextRequest) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   const contactId = request.nextUrl.searchParams.get("contactId")?.trim();

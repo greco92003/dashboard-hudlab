@@ -3,13 +3,13 @@ import { extractGhlProductModels } from "@/lib/erp/ghl-product-models";
 import { extractGhlOrderSource } from "@/lib/erp/order-rules";
 import type { ErpDealProductPreview } from "@/lib/erp/types";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   const { id } = await context.params;

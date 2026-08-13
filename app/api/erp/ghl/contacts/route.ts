@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchGhlContacts } from "@/lib/ghl/api";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import type { ErpContact } from "@/lib/erp/types";
 
 export async function GET(request: NextRequest) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";

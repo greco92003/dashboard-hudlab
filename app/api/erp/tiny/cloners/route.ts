@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { TinyCloner } from "@/lib/erp/types";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 
 type TinyProductListItem = {
@@ -87,7 +87,7 @@ async function loadCloners() {
 }
 
 export async function GET() {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   try {

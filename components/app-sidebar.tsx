@@ -319,8 +319,10 @@ export function AppSidebar() {
   // Filter menu groups based on user role
   const getFilteredMenuGroups = (): MenuGroup[] => {
     if (isPartnersMedia) {
-      // Partners-media users can only see the "Parceiros" group
-      return menuGroups.filter((group) => group.label === "Parceiros");
+      // ERP is intentionally available to every approved role.
+      return menuGroups.filter(
+        (group) => group.label === "Parceiros" || group.label === "ERP",
+      );
     }
 
     let filteredGroups: MenuGroup[] = menuGroups;
@@ -335,10 +337,11 @@ export function AppSidebar() {
     // Filter NCT group - partners-media cannot see it (already handled above)
     // NCT is available to all non-partners-media users, including team-leaders
 
-    // Only owners and admins can access financial costs and ERP operations.
+    // Only owners and admins can access financial costs. ERP is available to
+    // every approved application user.
     if (!isOwner && !isAdmin) {
       filteredGroups = filteredGroups.filter(
-        (group) => group.label !== "Custos" && group.label !== "ERP",
+        (group) => group.label !== "Custos",
       );
     }
 

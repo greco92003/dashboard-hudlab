@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getTinyExistingProduct } from "@/lib/erp/tiny-existing-product-v2";
-import { requireAdmin } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const access = await requireAdmin();
+  const access = await requireApprovedUser();
   if (!access.ok) return access.response;
   const id = Number((await context.params).id);
   if (!Number.isInteger(id) || id <= 0) {
