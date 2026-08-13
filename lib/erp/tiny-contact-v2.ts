@@ -1,5 +1,5 @@
 import { getTinyV2Token } from "@/lib/tiny/auth";
-import { onlyDigits, type ErpContactDraft } from "./contact-rules";
+import { normalizeCountryName, onlyDigits, type ErpContactDraft } from "./contact-rules";
 
 const BASE_URL = process.env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2";
 
@@ -164,7 +164,7 @@ export async function getTinyContactById(
     postalCode: contact.cep?.trim() ?? "",
     city: contact.cidade?.trim() ?? "",
     state: contact.uf?.trim().toUpperCase() ?? "",
-    country: contact.pais?.trim() || "Brasil",
+    country: normalizeCountryName(contact.pais),
     phone: contact.celular?.trim() || contact.fone?.trim() || "",
     email,
     emailNfe: contact.email_nfe?.trim() || email,
@@ -211,7 +211,7 @@ function toTinyPayload(draft: ErpContactDraft, tinyId?: number) {
     cep: draft.postalCode.trim(),
     cidade: draft.city.trim(),
     uf: draft.state.trim().toUpperCase(),
-    pais: draft.country.trim(),
+    pais: normalizeCountryName(draft.country),
     fone: draft.phone.trim(),
     email: draft.email.trim(),
     email_nfe: draft.emailNfe.trim(),

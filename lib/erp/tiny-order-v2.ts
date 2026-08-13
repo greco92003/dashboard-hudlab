@@ -1,5 +1,5 @@
 import { getTinyV2Token } from "@/lib/tiny/auth";
-import type { ErpContactDraft } from "./contact-rules";
+import { normalizeCountryName, type ErpContactDraft } from "./contact-rules";
 import { FREE_SAMPLE_NATURE } from "./order-rules";
 import { getTinyContactById } from "./tiny-contact-v2";
 
@@ -71,7 +71,7 @@ function tinyCustomer(contact: ErpContactDraft) {
     cep: contact.postalCode,
     cidade: contact.city,
     uf: contact.state,
-    pais: contact.country,
+    pais: normalizeCountryName(contact.country),
     fone: contact.phone,
     email: contact.email,
     atualizar_cliente: "N",

@@ -76,6 +76,8 @@ type ProductCreationResult = {
   title: string;
   status: "created" | "existing" | "failed";
   tinyProductId?: number;
+  variationSkus?: Record<string, string>;
+  addedSizes?: string[];
   error?: string;
 };
 
@@ -384,8 +386,6 @@ export default function CadastroErpPage() {
       }
       if (mapping.mode === "existing") {
         if (!mapping.existingProductId) problems.push(`Modelo ${model.modelNumber}: escolha um produto existente.`);
-        const missingSizes = model.grades.map((grade) => grade.size).filter((size) => !mapping.variationSkus[size]);
-        if (missingSizes.length) problems.push(`Modelo ${model.modelNumber}: o produto existente não possui SKU para ${missingSizes.join(", ")}.`);
       } else if (!mapping.clonerId) {
         problems.push(`Modelo ${model.modelNumber}: escolha um cloner.`);
       }
@@ -404,18 +404,6 @@ export default function CadastroErpPage() {
       if (mapping.mode === "clone" && mapping.baseSku && !/^[A-Za-z0-9_-]+$/.test(mapping.baseSku.trim())) {
         problems.push(`Modelo ${model.modelNumber}: o SKU possui caracteres inválidos.`);
       }
-      if (mapping.mode === "clone" && mapping.clonerId) {
-        const cloner = cloners.find((item) => String(item.id) === mapping.clonerId);
-        const supportedSizes = new Set(cloner?.variationSizes ?? []);
-        const missingSizes = model.grades
-          .map((grade) => grade.size)
-          .filter((size) => supportedSizes.size > 0 && !supportedSizes.has(size));
-        if (missingSizes.length > 0) {
-          problems.push(
-            `Modelo ${model.modelNumber}: o cloner não possui ${missingSizes.join(", ")}.`,
-          );
-        }
-      }
       if (mapping.mode === "clone" && mapping.baseSku) {
         const key = mapping.baseSku.trim().toUpperCase();
         skus.set(key, [...(skus.get(key) ?? []), model.modelNumber]);
@@ -427,7 +415,7 @@ export default function CadastroErpPage() {
       }
     }
     return problems;
-  }, [preview, mappings, cloners, productBaseName]);
+  }, [preview, mappings, productBaseName]);
 
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -460,6 +448,17 @@ export default function CadastroErpPage() {
           }),
         },
       );
+      setMappings((current) => {
+        const next = { ...current };
+        for (const result of response.results) {
+          if (!result.variationSkus) continue;
+          next[result.modelNumber] = {
+            ...current[result.modelNumber],
+            variationSkus: result.variationSkus,
+          };
+        }
+        return next;
+      });
       setCreationResults(response.results);
       const created = response.results.filter((item) => item.status === "created").length;
       const existing = response.results.filter((item) => item.status === "existing").length;
@@ -718,12 +717,12 @@ export default function CadastroErpPage() {
                             placeholder="Gerado ao escolher o cloner"
                           />
                         </div>
-                        {mapping?.baseSku && (
+                        {mapping?.baseSku && cloner && (
                           <div className="rounded-lg bg-muted/40 p-3 md:col-span-2">
-                            <p className="mb-2 text-xs font-medium">SKUs das variações</p>
+                            <p className="mb-2 text-xs font-medium">Todas as variações que serão copiadas do cloner</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {model.grades.map((grade) => (
-                                <code key={grade.size} className="rounded bg-background px-2 py-1 text-[11px]">{buildVariationSku(mapping.baseSku, grade.size)}</code>
+                              {cloner.variationSizes.map((size) => (
+                                <code key={size} className="rounded bg-background px-2 py-1 text-[11px]">{size}: {buildVariationSku(mapping.baseSku, size)}</code>
                               ))}
                             </div>
                           </div>
@@ -738,7 +737,7 @@ export default function CadastroErpPage() {
                                 <div><p className="text-sm font-medium">{mapping.title}</p><p className="text-xs text-muted-foreground">Tiny ID {mapping.existingProductId} · SKU {mapping.baseSku}</p></div>
                                 <Button type="button" size="sm" variant="outline" onClick={() => updateMapping(model.modelNumber, { existingProductId: "", title: "", baseSku: "", variationSkus: {} })}>Trocar produto</Button>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5">{model.grades.map((grade) => <code key={grade.size} className="rounded bg-background px-2 py-1 text-[11px]">{grade.size}: {mapping.variationSkus[grade.size] || "SKU ausente"}</code>)}</div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">{model.grades.map((grade) => <code key={grade.size} className="rounded bg-background px-2 py-1 text-[11px]">{grade.size}: {mapping.variationSkus[grade.size] || "será adicionada ao preparar"}</code>)}</div>
                             </div>
                           )}
                         </div>}
@@ -772,7 +771,7 @@ export default function CadastroErpPage() {
                         <span>Modelo {result.modelNumber} · {result.sku}</span>
                         <span className={result.status === "failed" ? "text-destructive" : result.status === "created" ? "text-emerald-600" : "text-amber-600"}>
                           {result.status === "created" && `Cadastrado · ID ${result.tinyProductId}`}
-                          {result.status === "existing" && `Já existia · ID ${result.tinyProductId}`}
+                          {result.status === "existing" && `Já existia · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}`}
                           {result.status === "failed" && (result.error || "Falhou")}
                         </span>
                       </div>
@@ -802,15 +801,17 @@ export default function CadastroErpPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar cadastro no Tiny?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão enviados {preview?.models.length ?? 0} produto(s) com suas variações. Esta ação cria dados reais no Tiny. SKUs que já existirem serão ignorados.{tinyContactId ? ` Cliente vinculado: Tiny ID ${tinyContactId}.` : ""}
+              Serão preparados {preview?.models.length ?? 0} produto(s). Produtos novos copiarão toda a grade do cloner; produtos antigos incompletos poderão receber as numerações necessárias ao pedido. Esta ação cria dados reais no Tiny.{tinyContactId ? ` Cliente vinculado: Tiny ID ${tinyContactId}.` : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg bg-muted/40 p-3 text-xs">
-            {preview?.models.map((model) => (
-              <p key={model.modelNumber}>
-                Modelo {model.modelNumber}: {mappings[model.modelNumber]?.title} · {model.grades.length} variações
-              </p>
-            ))}
+            {preview?.models.map((model) => {
+              const mapping = mappings[model.modelNumber];
+              const variationCount = mapping?.mode === "clone"
+                ? cloners.find((item) => String(item.id) === mapping.clonerId)?.variationCount ?? 0
+                : Object.keys(mapping?.variationSkus ?? {}).length;
+              return <p key={model.modelNumber}>Modelo {model.modelNumber}: {mapping?.title} · {variationCount} variações no cadastro</p>;
+            })}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar e revisar</AlertDialogCancel>

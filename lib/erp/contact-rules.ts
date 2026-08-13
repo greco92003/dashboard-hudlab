@@ -29,6 +29,18 @@ export function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
+export function normalizeCountryName(value: string | null | undefined) {
+  const country = value?.trim() ?? "";
+  const normalized = country
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  if (!normalized || ["BR", "BRA", "BRASIL", "BRAZIL"].includes(normalized)) {
+    return "Brasil";
+  }
+  return country;
+}
+
 function normalizeKey(value: string) {
   return value
     .normalize("NFD")
@@ -95,7 +107,7 @@ export function mapGhlContactToErpDraft(
     postalCode: contact.postalCode?.trim() || get("cep", "cep favor verificar no google se esta apontando para o endereco correto"),
     city: contact.city?.trim() || get("cidade"),
     state: (contact.state?.trim() || get("estado", "uf")).toUpperCase(),
-    country: contact.country?.trim() || get("pais") || "Brasil",
+    country: normalizeCountryName(contact.country || get("pais")),
     phone: contact.phone?.trim() || "",
     email,
     emailNfe: email,

@@ -1,4 +1,4 @@
-import { buildVariationSku, type ErpGradeItem } from "./product-rules";
+import { buildVariationSku } from "./product-rules";
 
 type TinyGrade = { chave?: string | null; valor?: string | null };
 
@@ -84,19 +84,60 @@ function compact(value: unknown): any {
   return value;
 }
 
-function variationForSize(cloner: TinyClonerDetail, size: string) {
-  return cloner.variacoes?.find((variation) =>
-    variation.grade?.some((grade) => grade.valor?.trim() === size),
+type TinyVariation = NonNullable<TinyClonerDetail["variacoes"]>[number];
+
+export function tinyVariationSize(variation: TinyVariation): string | null {
+  const grades = variation.grade ?? [];
+  const preferred = grades.find((grade) =>
+    /tamanho|numera|grade/i.test(grade.chave?.trim() ?? ""),
   );
+  const numeric = grades.find((grade) => /^\d{2}\s*\/\s*\d{2}$/.test(grade.valor?.trim() ?? ""));
+  return (preferred?.valor ?? numeric?.valor ?? grades[0]?.valor)?.trim() || null;
+}
+
+export function buildTinyVariationsFromCloner(input: {
+  cloner: TinyClonerDetail;
+  baseSku: string;
+}) {
+  const variations = input.cloner.variacoes ?? [];
+  if (variations.length === 0) {
+    throw new Error("O cloner não possui variações cadastradas no Tiny.");
+  }
+
+  const skus = new Set<string>();
+  return variations.map((source) => {
+    const size = tinyVariationSize(source);
+    if (!size) {
+      throw new Error("Uma variação do cloner não possui numeração na grade.");
+    }
+    const sku = buildVariationSku(input.baseSku, size);
+    if (skus.has(sku)) {
+      throw new Error(`O cloner possui mais de uma variação para a numeração ${size}.`);
+    }
+    skus.add(sku);
+
+    return compact({
+      sku,
+      // GTIN is intentionally not cloned: it must remain unique per product.
+      precos: source.precos ?? {
+        preco: input.cloner.precos?.preco,
+        precoPromocional: input.cloner.precos?.precoPromocional,
+      },
+      estoque: { inicial: 0 },
+      grade: (source.grade ?? []).map((item) => ({
+        chave: item.chave,
+        valor: item.valor,
+      })),
+    });
+  });
 }
 
 export function buildTinyProductFromCloner(input: {
   cloner: TinyClonerDetail;
   title: string;
   baseSku: string;
-  grades: ErpGradeItem[];
 }) {
-  const { cloner, title, baseSku, grades } = input;
+  const { cloner, title, baseSku } = input;
   const gradeKeys = Array.from(
     new Set(
       (cloner.variacoes ?? [])
@@ -180,22 +221,6 @@ export function buildTinyProductFromCloner(input: {
         ? [{ produto: { id: item.produto.id }, quantidade: item.quantidade }]
         : [],
     ),
-    variacoes: grades.map((grade) => {
-      const source = variationForSize(cloner, grade.size);
-      const sourceGrade = source?.grade ?? [];
-      return compact({
-        sku: buildVariationSku(baseSku, grade.size),
-        // GTIN is intentionally not cloned: it must remain unique per product.
-        precos: source?.precos ?? {
-          preco: cloner.precos?.preco,
-          precoPromocional: cloner.precos?.precoPromocional,
-        },
-        estoque: { inicial: 0 },
-        grade: sourceGrade.map((item) => ({
-          chave: item.chave,
-          valor: item.valor,
-        })),
-      });
-    }),
+    variacoes: buildTinyVariationsFromCloner({ cloner, baseSku }),
   });
 }

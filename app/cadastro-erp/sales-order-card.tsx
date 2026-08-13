@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { ErpContactDraft } from "@/lib/erp/contact-rules";
 import { FREE_SAMPLE_NATURE, natureName, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
-import { buildVariationSku } from "@/lib/erp/product-rules";
 import type { ErpDealProductPreview } from "@/lib/erp/types";
 
 type Mapping = { title: string; baseSku: string; variationSkus?: Record<string, string> };
@@ -40,7 +39,9 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
   const initialItems = useMemo<Item[]>(() => preview.models.flatMap((model) => {
     const mapping = mappings[model.modelNumber];
     return model.grades.map((grade) => ({
-      sku: mapping.variationSkus?.[grade.size] || buildVariationSku(mapping.baseSku, grade.size),
+      // The order may use only sizes filled in the GHL, but each SKU must have
+      // been confirmed by Tiny. Never invent a variation SKU at order time.
+      sku: mapping.variationSkus?.[grade.size] ?? "",
       description: `${mapping.title} - ${grade.size}`.slice(0, 120),
       quantity: grade.quantity,
       unitPrice: preview.order.unitPrice ?? 0,
@@ -68,14 +69,16 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
   const pairsMatch = expectedPairs !== null && Math.abs(itemPairs - expectedPairs) < 0.001;
   const isFreeSample = nature === FREE_SAMPLE_NATURE;
   const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) + freight;
+  const itemsWithoutSku = items.filter((item) => !item.sku.trim());
   const problems = [
     contributor === "0" ? "Confirme se o cliente é contribuinte." : "",
     !nature.trim() ? "Informe a natureza da operação." : "",
     !expectedDeliveryDate ? "Informe a data prevista de entrega." : "",
     !isFreeSample && expectedPairs === null ? "Quantidade de pares não encontrada no GHL." : !isFreeSample && !pairsMatch ? `A grade soma ${itemPairs}, mas o GHL informa ${expectedPairs}.` : "",
+    itemsWithoutSku.length > 0 ? `O Tiny não possui SKU confirmado para: ${itemsWithoutSku.map((item) => item.description).join(", ")}.` : "",
     !isFreeSample && !paymentForm.trim() ? "Forma de recebimento não encontrada." : "",
     !isFreeSample && paymentForm && !dueDate ? paymentForm === "Pix" ? "Informe manualmente o vencimento do Pix." : "Informe o vencimento do cartão." : "",
-    items.some((item) => !item.sku.trim() || !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0 || (!isFreeSample && item.unitPrice <= 0)) ? isFreeSample ? "Revise os itens; a quantidade deve ser positiva e o valor não pode ser negativo." : "Revise os itens e confirme que todos possuem preço unitário." : "",
+    items.some((item) => !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0 || (!isFreeSample && item.unitPrice <= 0)) ? isFreeSample ? "Revise os itens; a quantidade deve ser positiva e o valor não pode ser negativo." : "Revise os itens e confirme que todos possuem preço unitário." : "",
   ].filter(Boolean);
   const warnings = isFreeSample && !pairsMatch
     ? [expectedPairs === null ? "A quantidade do GHL não foi encontrada. Para amostra grátis, isso não impede a criação." : `A grade soma ${itemPairs}, mas o GHL informa ${expectedPairs}. Em amostra grátis, a divergência é permitida porque o envio pode conter apenas um pé.`]
