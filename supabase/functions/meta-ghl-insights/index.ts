@@ -27,6 +27,8 @@ interface FunnelRow {
   campaign_name: string | null;
   adset_id: string | null;
   spend_total: number;
+  impressoes: number;
+  cliques: number;
   leads_ghl: number;
   orcamentos: number;
   valor_orcamentos: number;
@@ -57,16 +59,30 @@ interface AdAttributesRow {
 // de novo pra esses.
 const STATUS_PAUSADO = new Set(["PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED"]);
 
-// Anúncios de campanha de tráfego com destino "visita ao perfil do
-// Instagram" (BIO) não geram lead direto atribuível a esse ad_id --
-// avaliados de forma diferente no prompt (ver CONTEXTO_NEGOCIO).
-function ehTrafegoPerfil(attr: AdAttributesRow | undefined): boolean {
-  if (!attr) return false;
-  return (
+// Nem todo anúncio ativo é otimizado pra gerar lead direto -- julgar
+// todos pelo mesmo CPL/orçamento penaliza injustamente quem o Meta
+// nunca tentou converter em primeiro lugar. Achado em 2026-08-13
+// (usuário notou 2 anúncios reais, "WEBSITE"/LINK_CLICKS, gastando
+// dinheiro com 0 leads sem nenhuma flag de exceção): a categoria
+// binária antiga só cobria "tráfego de perfil" -- ampliada pra cobrir
+// os objetivos reais observados na conta.
+type CategoriaObjetivo = "lead_direto" | "trafego_perfil" | "trafego_link" | "engajamento";
+
+function classificarObjetivo(attr: AdAttributesRow | undefined): CategoriaObjetivo {
+  if (!attr) return "lead_direto";
+  if (
     attr.adset_destination_type === "INSTAGRAM_PROFILE" ||
-    (attr.campaign_objective === "OUTCOME_TRAFFIC" &&
-      attr.adset_optimization_goal === "PROFILE_VISIT")
-  );
+    (attr.campaign_objective === "OUTCOME_TRAFFIC" && attr.adset_optimization_goal === "PROFILE_VISIT")
+  ) {
+    return "trafego_perfil";
+  }
+  if (attr.campaign_objective === "OUTCOME_ENGAGEMENT") {
+    return "engajamento";
+  }
+  if (attr.adset_optimization_goal === "LINK_CLICKS") {
+    return "trafego_link";
+  }
+  return "lead_direto";
 }
 
 const CONTEXTO_NEGOCIO = `Você é um especialista sênior em tráfego pago no Meta Ads (Facebook/
@@ -136,17 +152,36 @@ Regras de negócio importantes pra avaliar os anúncios corretamente:
   suficiente de dado (funil rodando há tempo, sem pico recente de topo
   em "funil_semanal"). Abaixo disso, olhe o resto do funil antes de
   decidir.
-- Anúncios com "trafego_perfil": true pertencem a campanhas com
-  objetivo de tráfego/visita ao perfil do Instagram (BIO), não geração
-  de lead direta -- o próprio Meta os otimiza pra isso, não pra
-  conversão. NÃO avalie esses pelo número de leads/orçamentos
-  atribuídos diretamente a esse ad_id: quem entra pela bio e depois
-  vira lead orgânico não fica atribuído a esse anúncio específico no
-  nosso rastreamento (é uma limitação de atribuição conhecida, não um
-  sinal de mau desempenho). Avalie esses pelo custo de alcance/cliques
-  (o investimento total e o CPM implícito) como canal de topo de
-  funil/marca, e considere "MANTER" mesmo com leads/orçamentos diretos
-  baixos ou zero, contanto que o custo não esteja desproporcional.
+- "categoria_objetivo" diz pra que o Meta está OTIMIZANDO cada
+  anúncio -- julgue cada categoria pelo critério certo, nunca todas
+  pelo mesmo CPL/custo_por_orcamento:
+  - "lead_direto": objetivo é geração de lead/conversão -- é o padrão,
+    julgue normalmente por todas as etapas do funil como já descrito
+    acima.
+  - "trafego_perfil": campanha de tráfego com destino "visita ao
+    perfil do Instagram" (BIO), não geração de lead direta -- o
+    próprio Meta otimiza pra isso, não pra conversão. NÃO avalie pelo
+    número de leads/orçamentos atribuídos diretamente a esse ad_id:
+    quem entra pela bio e depois vira lead orgânico não fica atribuído
+    a esse anúncio específico no nosso rastreamento (limitação de
+    atribuição conhecida, não sinal de mau desempenho). Avalie pelo
+    custo de alcance/cliques ("impressoes"/"cliques" no payload, CPM e
+    CPC implícitos) como canal de topo de funil/marca, e considere
+    "MANTER" mesmo com leads/orçamentos diretos baixos ou zero,
+    contanto que o custo de alcance não esteja desproporcional.
+  - "trafego_link": otimizado pra CLIQUE NO LINK, não pra conversão --
+    o Meta entrega pra quem tem mais chance de clicar, não de virar
+    lead. Mesma lógica do trafego_perfil (não penalize por leads
+    baixos/zero), mas julgue pelo custo por clique (investimento /
+    cliques) em vez de custo de alcance -- um anúncio assim com CPC
+    muito acima da média dos outros anúncios da conta é sinal real de
+    problema, mesmo sem nenhum lead esperado.
+  - "engajamento": otimizado pra visualização/engajamento de vídeo
+    (THRUPLAY), sem relação nenhuma com clique ou lead -- é mídia de
+    reconhecimento de marca pura. Não penalize por cliques, leads ou
+    orçamentos baixos/zero; julgue só pelo CPM implícito (investimento
+    / impressões) comparado aos outros anúncios da conta -- alto
+    demais é o único motivo válido pra "REVISAR"/"PAUSAR" aqui.
 - "Leads" já é a coorte de contatos GHL atribuídos a esse anúncio
   específico no período; "Orçamentos"/"Mockups"/"Negociações" são
   marcos alcançados por essa mesma coorte.
@@ -173,10 +208,12 @@ Vereditos possíveis:
 - "ESCALAR": custo por etapa do funil consistentemente bom (lead,
   orçamento, par orçado, negociação) em "funil_semanal", e/ou ROAS alto
   já com dado maduro, vale aumentar verba.
-- "MANTER": custo por etapa ok/consistente, ou anúncio de
-  tráfego/perfil com custo de alcance razoável, ou anúncio ainda em
-  fase de aprendizado/maturação com sinal recente positivo -- não há
-  motivo pra mudar agora.
+- "MANTER": custo por etapa ok/consistente (pra "lead_direto"), ou
+  anúncio de "trafego_perfil"/"trafego_link"/"engajamento" com o custo
+  certo pra categoria dele (alcance, clique ou CPM, respectivamente)
+  dentro do razoável, ou anúncio ainda em fase de aprendizado/
+  maturação com sinal recente positivo -- não há motivo pra mudar
+  agora.
 - "REVISAR": sinal misto ou dado insuficiente pra decidir com
   confiança -- precisa de atenção humana, mas não é claramente ruim.
 - "PAUSAR": custo por etapa do funil comprovadamente ruim em TODAS as
@@ -459,11 +496,18 @@ Deno.serve(async (req: Request) => {
             investimento: Math.round((diarioMap?.get(data) ?? 0) * 100) / 100,
           }));
           const funilSemanal = funilSemanalPorAdId.get(r.ad_id) ?? [];
+          const cpcImplicito = r.cliques > 0 ? Math.round((r.spend_total / r.cliques) * 100) / 100 : null;
+          const cpmImplicito = r.impressoes > 0 ? Math.round((r.spend_total / r.impressoes) * 1000 * 100) / 100 : null;
           return {
             ad_id: r.ad_id,
             ad_name: r.ad_name,
             campaign_name: r.campaign_name,
+            categoria_objetivo: classificarObjetivo(attr),
             investimento: r.spend_total,
+            impressoes: r.impressoes,
+            cliques: r.cliques,
+            cpc_implicito: cpcImplicito,
+            cpm_implicito: cpmImplicito,
             leads: r.leads_ghl,
             orcamentos: r.orcamentos,
             valor_orcamentos: r.valor_orcamentos,
@@ -480,7 +524,6 @@ Deno.serve(async (req: Request) => {
             cpa_venda: r.cpa_venda,
             roas: r.roas,
             diagnostico_atual: r.diagnostico,
-            trafego_perfil: ehTrafegoPerfil(attr),
             irmaos_no_mesmo_conjunto: irmaos,
             investimento_diario: investimentoDiario,
             funil_semanal: funilSemanal,
