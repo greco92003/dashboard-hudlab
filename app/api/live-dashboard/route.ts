@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { getLiveDashboardPeriod } from "@/lib/live-dashboard-period";
+import { hasOfficialMockupTag } from "@/lib/live-dashboard-forecast";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,10 +44,10 @@ export async function GET() {
       return NextResponse.json({ error: wonError.message }, { status: 500 });
     }
 
-    // Fetch open deals (status=0) with value > 0, desde 01/01/2026
+    // Forecast candidates: only open GHL deals with value > 0.
     const { data: openDeals, error: openError } = await supabase
       .from("deals_cache")
-      .select("deal_id, value, status, last_synced_at")
+      .select("deal_id, contact_id, value, status, last_synced_at")
       .eq("source_system", "ghl")
       .eq("sync_status", "synced")
       .eq("status", "open")
@@ -61,6 +62,41 @@ export async function GET() {
       console.error("❌ Error fetching open deals:", openError);
       return NextResponse.json({ error: openError.message }, { status: 500 });
     }
+
+    // A deal only belongs to the forecast while its current GHL contact has
+    // the "Solicitou Mockup Oficial" tag. Read the synchronized raw contact
+    // payload in chunks to avoid oversized `in` query strings.
+    const contactIds = Array.from(
+      new Set(
+        (openDeals || [])
+          .map((deal) => deal.contact_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const taggedContactIds = new Set<string>();
+
+    for (let index = 0; index < contactIds.length; index += 500) {
+      const { data: contacts, error: contactsError } = await supabase
+        .from("ghl_contacts")
+        .select("id, raw")
+        .in("id", contactIds.slice(index, index + 500));
+
+      if (contactsError) {
+        console.error("Error fetching GHL contact tags:", contactsError);
+        return NextResponse.json(
+          { error: contactsError.message },
+          { status: 500 },
+        );
+      }
+
+      (contacts || []).forEach((contact) => {
+        if (hasOfficialMockupTag(contact.raw)) taggedContactIds.add(contact.id);
+      });
+    }
+
+    const forecastDeals = (openDeals || []).filter(
+      (deal) => deal.contact_id && taggedContactIds.has(deal.contact_id),
+    );
 
     // Fetch monthly target from ote_monthly_targets
     const { data: targetData } = await supabase
@@ -98,7 +134,7 @@ export async function GET() {
     });
 
     // Forecast: open deals accumulated by last_synced_at day (UTC-3)
-    (openDeals || []).forEach((deal) => {
+    forecastDeals.forEach((deal) => {
       const syncDate = new Date(deal.last_synced_at);
       // Adjust to UTC-3
       const syncDateUTC3 = new Date(syncDate.getTime() - 3 * 60 * 60 * 1000);
