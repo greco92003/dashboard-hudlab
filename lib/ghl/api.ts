@@ -11,6 +11,11 @@
  * locations/customFields.readonly.
  */
 
+import {
+  buildContactSearchProbes,
+  includesPtBrSearch,
+} from "@/lib/search/pt-br";
+
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = process.env.GHL_API_VERSION || "2021-07-28";
@@ -55,6 +60,32 @@ export interface GhlCustomFieldDef {
   fieldKey: string;
   model: string;
   dataType: string;
+  picklistOptions?: Array<{
+    id: string;
+    label: string;
+    prefillValue?: string;
+  }>;
+}
+
+export interface GhlContactSummary {
+  id: string;
+  contactName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  companyName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  dateAdded?: string | null;
+  dateUpdated?: string | null;
+}
+
+export interface GhlContactDetail extends GhlContactSummary {
+  address1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  customFields?: Array<{ id: string; value: unknown }>;
 }
 
 export interface GhlOpportunity {
@@ -205,6 +236,83 @@ export async function fetchOpportunityById(
     `/opportunities/${opportunityId}`,
   );
   return data.opportunity;
+}
+
+export async function fetchGhlContactById(
+  contactId: string,
+): Promise<GhlContactDetail> {
+  const data = await ghlFetch<{ contact: GhlContactDetail }>(
+    `/contacts/${contactId}`,
+  );
+  return data.contact;
+}
+
+export async function searchGhlContacts(
+  query: string,
+  limit = 20,
+): Promise<GhlContactSummary[]> {
+  const { locationId } = requireEnv();
+  const maximum = Math.min(Math.max(limit, 1), 100);
+  const probes = buildContactSearchProbes(query);
+  const searchProbe = (probe: string, probeLimit: number) =>
+    ghlFetch<{ contacts?: GhlContactSummary[] }>("/contacts/", {
+        locationId,
+        query: probe,
+        limit: String(probeLimit),
+      });
+
+  const direct = await searchProbe(probes[0], maximum);
+  const directContacts = direct.contacts ?? [];
+
+  const matchesQuery = (contact: GhlContactSummary) => {
+    const searchable = [
+      contact.contactName,
+      contact.firstName,
+      contact.lastName,
+      contact.companyName,
+      contact.email,
+      contact.phone,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return includesPtBrSearch(searchable, query);
+  };
+
+  // Correctly accented searches remain a single GHL request. Only use the
+  // broader probes when the direct result has no normalized match.
+  const queryHasDiacritics = query.normalize("NFD") !== query;
+  const fallbackResponses = directContacts.some(matchesQuery) && queryHasDiacritics
+    ? []
+    : await Promise.all(probes.slice(1).map((probe) => searchProbe(probe, 100)));
+  const responses = [direct, ...fallbackResponses];
+
+  const unique = new Map<string, GhlContactSummary>();
+  for (const contact of responses.flatMap((response) => response.contacts ?? [])) {
+    if (matchesQuery(contact)) unique.set(contact.id, contact);
+  }
+
+  return Array.from(unique.values())
+    .sort((a, b) => {
+      const aName = a.contactName || `${a.firstName ?? ""} ${a.lastName ?? ""}`;
+      const bName = b.contactName || `${b.firstName ?? ""} ${b.lastName ?? ""}`;
+      return aName.localeCompare(bName, "pt-BR", { sensitivity: "base" });
+    })
+    .slice(0, maximum);
+}
+
+export async function searchGhlOpportunitiesByContact(
+  contactId: string,
+): Promise<GhlOpportunity[]> {
+  const { locationId } = requireEnv();
+  const data = await ghlFetch<{ opportunities?: GhlOpportunity[] }>(
+    "/opportunities/search",
+    {
+      location_id: locationId,
+      contact_id: contactId,
+      limit: "100",
+    },
+  );
+  return data.opportunities ?? [];
 }
 
 async function fetchStageTitles(): Promise<Map<string, string>> {
