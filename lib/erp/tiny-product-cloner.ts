@@ -56,15 +56,28 @@ export type TinyClonerDetail = {
   } | null;
   anexos?: Array<{ url?: string | null; externo?: boolean | null }>;
   producao?: {
-    produtos?: Array<{ produto?: { id?: number }; quantidade?: number | null }>;
+    produtos?: Array<{
+      produto?: { id?: number; sku?: string | null; descricao?: string | null };
+      quantidade?: number | null;
+    }>;
     etapas?: string[];
   } | null;
   kit?: Array<{ produto?: { id?: number }; quantidade?: number | null }>;
   variacoes?: Array<{
+    id?: number;
+    descricao?: string | null;
+    tipo?: string | null;
     sku?: string | null;
     gtin?: string | null;
     precos?: { preco?: number | null; precoPromocional?: number | null } | null;
     grade?: TinyGrade[];
+    producao?: {
+      produtos?: Array<{
+        produto?: { id?: number; sku?: string | null; descricao?: string | null };
+        quantidade?: number | null;
+      }>;
+      etapas?: string[];
+    } | null;
   }>;
 };
 

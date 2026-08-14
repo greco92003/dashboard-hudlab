@@ -78,6 +78,7 @@ type ProductCreationResult = {
   tinyProductId?: number;
   variationSkus?: Record<string, string>;
   addedSizes?: string[];
+  manufacturedSizes?: string[];
   error?: string;
 };
 
@@ -770,8 +771,8 @@ export default function CadastroErpPage() {
                       <div key={`${result.modelNumber}-${result.sku}`} className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                         <span>Modelo {result.modelNumber} · {result.sku}</span>
                         <span className={result.status === "failed" ? "text-destructive" : "text-emerald-600"}>
-                          {result.status === "created" && `Cadastrado · ID ${result.tinyProductId}`}
-                          {result.status === "existing" && `Produto adicionado · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}`}
+                          {result.status === "created" && `Cadastrado · ID ${result.tinyProductId}${result.manufacturedSizes?.length ? ` · fabricado: ${result.manufacturedSizes.join(", ")}` : ""}`}
+                          {result.status === "existing" && `Produto adicionado · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}${result.manufacturedSizes?.length ? ` · convertido para fabricado: ${result.manufacturedSizes.join(", ")}` : ""}`}
                           {result.status === "failed" && (result.error || "Falhou")}
                         </span>
                       </div>

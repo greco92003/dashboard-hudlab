@@ -10,6 +10,7 @@ import {
 import { buildVariationSku } from "@/lib/erp/product-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
 import { requireApprovedUser } from "@/lib/security/route-guards";
+import { getTinyV2Token } from "@/lib/tiny/auth";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import { artworkThumbnailUrl } from "@/lib/erp/artwork-url";
 
@@ -43,7 +44,26 @@ type ProductResult = {
   tinyProductId?: number;
   variationSkus?: Record<string, string>;
   addedSizes?: string[];
+  manufacturedSizes?: string[];
   error?: string;
+};
+
+type TinyV2AlterResponse = {
+  retorno?: {
+    status?: string;
+    erros?: Array<{ erro?: string }>;
+    registros?: Array<{
+      registro?: {
+        status?: string;
+        erros?: Array<{ erro?: string }>;
+      };
+    }> | {
+      registro?: {
+        status?: string;
+        erros?: Array<{ erro?: string }>;
+      };
+    };
+  };
 };
 
 function variationSkuMap(product: TinyClonerDetail) {
@@ -121,6 +141,129 @@ async function addMissingVariationsFromCloner(
   }
 
   return { variationSkus, addedSizes };
+}
+
+function hasProduction(production: TinyClonerDetail["producao"]) {
+  return Boolean(production?.produtos?.length || production?.etapas?.length);
+}
+
+async function hydrateClonerManufacturing(cloner: TinyClonerDetail) {
+  const variations: NonNullable<TinyClonerDetail["variacoes"]> = [];
+  for (const variation of cloner.variacoes ?? []) {
+    if (!variation.id) {
+      throw new Error("Uma variação do cloner não retornou seu identificador no Tiny.");
+    }
+    const detail = await tinyV3Request<TinyClonerDetail>(`/produtos/${variation.id}`);
+    let production = detail.producao;
+    if (detail.tipo === "F" && !hasProduction(production)) {
+      production = await tinyV3Request<NonNullable<TinyClonerDetail["producao"]>>(
+        `/produtos/${variation.id}/fabricado`,
+      );
+    }
+    variations.push({
+      ...variation,
+      descricao: detail.descricao,
+      tipo: detail.tipo,
+      producao: production,
+    });
+  }
+  return { ...cloner, variacoes: variations };
+}
+
+async function setVariationAsManufactured(
+  target: TinyClonerDetail,
+  source: NonNullable<TinyClonerDetail["variacoes"]>[number],
+) {
+  if (!target.id || !target.descricao?.trim()) {
+    throw new Error("O Tiny não retornou os dados necessários da variação criada.");
+  }
+  if (!hasProduction(source.producao)) {
+    throw new Error(
+      `A variação ${source.sku ?? source.id ?? "do cloner"} está marcada como fabricada, mas não possui estrutura ou etapa de produção.`,
+    );
+  }
+
+  const product = {
+    sequencia: 1,
+    id: target.id,
+    nome: target.descricao.trim(),
+    unidade: target.unidade?.trim() || "PR",
+    preco: target.precos?.preco ?? 0,
+    ncm: target.ncm?.trim() ?? "",
+    origem: String(target.origem ?? 0),
+    situacao: "A",
+    tipo: "P",
+    classe_produto: "F",
+    estrutura: (source.producao?.produtos ?? []).flatMap((item) =>
+      item.produto?.id && item.quantidade != null
+        ? [{ item: {
+            id_produto: item.produto.id,
+            descricao: item.produto.descricao?.trim() || item.produto.sku?.trim() || "Componente",
+            quantidade: item.quantidade,
+          } }]
+        : [],
+    ),
+    etapas: (source.producao?.etapas ?? []).map((name) => ({ etapa: { nome: name } })),
+  };
+  const response = await fetch(
+    `${process.env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2"}/produto.alterar.php`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: new URLSearchParams({
+        token: getTinyV2Token(),
+        formato: "JSON",
+        produto: JSON.stringify({ produtos: [{ produto: product }] }),
+      }),
+      cache: "no-store",
+    },
+  );
+  const responseText = await response.text();
+  let data: TinyV2AlterResponse;
+  try {
+    data = JSON.parse(responseText) as TinyV2AlterResponse;
+  } catch {
+    throw new Error(
+      `O Tiny devolveu uma resposta inválida ao converter ${target.sku ?? target.id} para Fabricado.`,
+    );
+  }
+  const records = data.retorno?.registros;
+  const record = (Array.isArray(records) ? records[0] : records)?.registro;
+  if (!response.ok || data.retorno?.status !== "OK" || record?.status !== "OK") {
+    const errors = [
+      ...(data.retorno?.erros ?? []),
+      ...(record?.erros ?? []),
+    ].map((item) => item.erro).filter(Boolean).join("; ");
+    throw new Error(errors || `O Tiny não converteu a variação ${target.sku ?? target.id} para Fabricado.`);
+  }
+}
+
+async function ensureManufacturedVariations(
+  product: TinyClonerDetail,
+  cloner: TinyClonerDetail,
+) {
+  const targetBySize = new Map(
+    (product.variacoes ?? []).flatMap((variation) => {
+      const size = tinyVariationSize(variation);
+      return size ? [[size, variation] as const] : [];
+    }),
+  );
+  const manufacturedSizes: string[] = [];
+
+  for (const source of cloner.variacoes ?? []) {
+    if (source.tipo !== "F") continue;
+    const size = tinyVariationSize(source);
+    const targetVariation = size ? targetBySize.get(size) : undefined;
+    if (!size || !targetVariation?.id) {
+      throw new Error(`Não foi possível relacionar a variação fabricada ${size ?? source.sku ?? "do cloner"}.`);
+    }
+    const target = await tinyV3Request<TinyClonerDetail>(`/produtos/${targetVariation.id}`);
+    if (target.tipo === "F") continue;
+    await setVariationAsManufactured(target, source);
+    manufacturedSizes.push(size);
+  }
+
+  return manufacturedSizes;
 }
 
 async function findProductBySku(sku: string) {
@@ -212,12 +355,13 @@ export async function POST(request: Request) {
           continue;
         }
 
-        const cloner = await tinyV3Request<TinyClonerDetail>(
+        const clonerParent = await tinyV3Request<TinyClonerDetail>(
           `/produtos/${requested.clonerId}`,
         );
-        if (cloner.tipo !== "V" || cloner.produtoPai?.id || !/cloner/i.test(cloner.descricao ?? "")) {
+        if (clonerParent.tipo !== "V" || clonerParent.produtoPai?.id || !/cloner/i.test(clonerParent.descricao ?? "")) {
           throw new Error("O produto selecionado não é um cloner pai válido.");
         }
+        const cloner = await hydrateClonerManufacturing(clonerParent);
 
         const existing = await findProductBySku(requested.baseSku);
         if (existing) {
@@ -227,6 +371,13 @@ export async function POST(request: Request) {
             cloner,
             requested.baseSku,
           );
+          if (completed.addedSizes.length > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          const preparedProduct = completed.addedSizes.length > 0
+            ? await tinyV3Request<TinyClonerDetail>(`/produtos/${existing.id}`)
+            : existingProduct;
+          const manufacturedSizes = await ensureManufacturedVariations(preparedProduct, cloner);
           await ensureProductArtwork(existing.id, model.artUrl);
           results.push({
             modelNumber: requested.modelNumber,
@@ -236,6 +387,7 @@ export async function POST(request: Request) {
             tinyProductId: existing.id,
             variationSkus: completed.variationSkus,
             addedSizes: completed.addedSizes,
+            manufacturedSizes,
           });
           continue;
         }
@@ -252,6 +404,8 @@ export async function POST(request: Request) {
         // The attachment endpoint can be called only after the new parent is
         // available throughout Tiny's product service.
         await new Promise((resolve) => setTimeout(resolve, 750));
+        const createdProduct = await tinyV3Request<TinyClonerDetail>(`/produtos/${created.id}`);
+        const manufacturedSizes = await ensureManufacturedVariations(createdProduct, cloner);
         await ensureProductArtwork(created.id, model.artUrl);
         results.push({
           modelNumber: requested.modelNumber,
@@ -260,6 +414,7 @@ export async function POST(request: Request) {
           status: "created",
           tinyProductId: created.id,
           variationSkus: variationSkuMap({ id: created.id, variacoes: payload.variacoes }),
+          manufacturedSizes,
         });
       } catch (error) {
         results.push({
