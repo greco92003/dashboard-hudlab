@@ -25,6 +25,11 @@ const MAX_HOPS = 30; // trava de segurança contra encadeamento infinito
 // e apenas oportunidades criadas a partir de 01/07/2026, quando os
 // campos passaram a ser bem preenchidos.
 const TARGET_PIPELINE_NAME = "Atendimento";
+const MOCKUP_FACTORY_PIPELINE_ID = "ShSCF8BTLIdKHAjq491X";
+const MOCKUP_FACTORY_WON_STAGE_IDS = new Set([
+  "49a81bf5-6148-4074-87d1-bc0aaed13a00",
+  "7fb18489-0d66-4591-be25-5146e669b4e8",
+]);
 const MIN_OPP_CREATED_MS = Date.parse("2026-07-01T00:00:00-03:00");
 
 // Oportunidades de teste identificadas manualmente — nunca sincronizar.
@@ -422,7 +427,14 @@ async function runOpportunities(supabase: any, token: string, locationId: string
 
       // deno-lint-ignore no-explicit-any
       const mapped = opps.map((o: any) => {
-        const status = (o.status ?? "").toLowerCase();
+        const providerStatus = (o.status ?? "").toLowerCase();
+        // Moving a completed sale into the operational Mockup Factory resets
+        // its provider status to open. BI must preserve it as a won deal.
+        const status =
+          o.pipelineId === MOCKUP_FACTORY_PIPELINE_ID &&
+          MOCKUP_FACTORY_WON_STAGE_IDS.has(o.pipelineStageId)
+            ? "won"
+            : providerStatus;
         return {
           id: o.id,
           contact_id: o.contactId ?? o.contact?.id ?? null,

@@ -8,11 +8,21 @@ import {
   type GhlFunnelStageSlug,
   type GhlFunnelVariant,
 } from "@/lib/ghl/funnel";
+import {
+  GHL_MOCKUP_FACTORY_PIPELINE_ID,
+  GHL_MOCKUP_FACTORY_WON_STAGE_IDS,
+} from "@/lib/ghl/pipelines";
 
 interface FunnelEventRow {
   contact_id: string;
   stage_slug: GhlFunnelStageSlug;
   received_at: string;
+}
+
+interface FactoryDealRow {
+  contact_id: string | null;
+  closing_date: string | null;
+  provider_payload: Record<string, unknown> | null;
 }
 
 interface ContactJourney {
@@ -114,6 +124,84 @@ async function fetchAllEvents(): Promise<FunnelEventRow[]> {
   }
 
   return rows;
+}
+
+async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = getSupabaseSecretKey();
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase service credentials are missing");
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const rows: FactoryDealRow[] = [];
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await supabase
+      .from("deals_cache")
+      .select("contact_id, closing_date, provider_payload")
+      .eq("source_system", "ghl")
+      .eq("sync_status", "synced")
+      .eq("pipeline_id", GHL_MOCKUP_FACTORY_PIPELINE_ID)
+      .in("stage_id", Array.from(GHL_MOCKUP_FACTORY_WON_STAGE_IDS))
+      .not("contact_id", "is", null)
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+
+    const batch = (data ?? []) as FactoryDealRow[];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+  }
+
+  const firstSaleByContact = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.contact_id) continue;
+
+    const statusChangedAt = row.provider_payload?.ghl_last_status_change_at;
+    const receivedAt =
+      row.closing_date !== null
+        ? new Date(`${row.closing_date}T12:00:00.000-03:00`).toISOString()
+        : typeof statusChangedAt === "string"
+          ? statusChangedAt
+          : null;
+    if (!receivedAt || Number.isNaN(Date.parse(receivedAt))) continue;
+
+    const current = firstSaleByContact.get(row.contact_id);
+    if (!current || Date.parse(receivedAt) < Date.parse(current)) {
+      firstSaleByContact.set(row.contact_id, receivedAt);
+    }
+  }
+
+  return Array.from(firstSaleByContact, ([contact_id, received_at]) => ({
+    contact_id,
+    stage_slug: "negociofechado",
+    received_at,
+  }));
+}
+
+function mergeFactorySales(
+  webhookEvents: FunnelEventRow[],
+  factorySales: FunnelEventRow[],
+): FunnelEventRow[] {
+  const contactsWithClosedEvent = new Set(
+    webhookEvents
+      .filter((event) => event.stage_slug === "negociofechado")
+      .map((event) => event.contact_id),
+  );
+
+  return [
+    ...webhookEvents,
+    ...factorySales.filter(
+      (event) => !contactsWithClosedEvent.has(event.contact_id),
+    ),
+  ].sort(
+    (left, right) =>
+      Date.parse(left.received_at) - Date.parse(right.received_at),
+  );
 }
 
 function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
@@ -242,7 +330,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const range = parseRange(searchParams);
 
-    const events = await fetchAllEvents();
+    const [webhookEvents, factorySales] = await Promise.all([
+      fetchAllEvents(),
+      fetchMockupFactorySales(),
+    ]);
+    const events = mergeFactorySales(webhookEvents, factorySales);
     const journeys = buildJourneys(events, range);
     const journeyList = Array.from(journeys.values());
     const inRangeJourneys = journeyList.filter(

@@ -2,6 +2,7 @@ import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireApprovedUser } from "@/lib/security/route-guards";
+import { getLiveDashboardPeriod } from "@/lib/live-dashboard-period";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,16 +14,17 @@ export async function GET() {
     const access = await requireApprovedUser();
     if (!access.ok) return access.response;
 
-    // Current month boundaries in UTC-3
-    const now = new Date();
-    const utcMinus3 = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const year = utcMinus3.getUTCFullYear();
-    const month = utcMinus3.getUTCMonth(); // 0-indexed
-    const todayDay = utcMinus3.getUTCDate();
-    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-    const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(totalDaysInMonth).padStart(2, "0")}`;
+    const {
+      year,
+      monthIndex: month,
+      todayDay,
+      startDay,
+      totalDaysInMonth,
+      countedDays,
+      elapsedDays,
+      startDate,
+      endDate,
+    } = getLiveDashboardPeriod();
 
     // Fetch won deals (status "1" or "won") with closing_date in current month
     // Source: deals_cache (same as /dashboard) for consistency
@@ -70,13 +72,12 @@ export async function GET() {
 
     const monthlyTarget = parseFloat(targetData?.target_amount) || 0;
     // Daily meta: linear progression to reach monthlyTarget on last day
-    const dailyMetaIncrement =
-      totalDaysInMonth > 0 ? monthlyTarget / totalDaysInMonth : 0;
+    const dailyMetaIncrement = countedDays > 0 ? monthlyTarget / countedDays : 0;
 
     // Build daily aggregations
     const dailyRevenue: Record<number, number> = {};
     const dailyForecast: Record<number, number> = {};
-    for (let d = 1; d <= totalDaysInMonth; d++) {
+    for (let d = startDay; d <= totalDaysInMonth; d++) {
       dailyRevenue[d] = 0;
       dailyForecast[d] = 0;
     }
@@ -91,7 +92,7 @@ export async function GET() {
 
       // Only count deals from the current month
       if (dealYear !== year || dealMonth !== month + 1) return;
-      if (day < 1 || day > totalDaysInMonth) return;
+      if (day < startDay || day > totalDaysInMonth) return;
       // AC stores values in centavos, divide by 100
       dailyRevenue[day] += (parseFloat(deal.value) || 0) / 100;
     });
@@ -107,7 +108,7 @@ export async function GET() {
 
       // Only count deals from the current month
       if (dealYear !== year || dealMonth !== month) return;
-      if (day < 1 || day > totalDaysInMonth) return;
+      if (day < startDay || day > totalDaysInMonth) return;
       // AC stores values in centavos, divide by 100
       dailyForecast[day] += (parseFloat(deal.value) || 0) / 100;
     });
@@ -117,20 +118,22 @@ export async function GET() {
     let cumulativeForecast = 0;
     const chartData = [];
 
-    for (let d = 1; d <= totalDaysInMonth; d++) {
+    for (let d = startDay; d <= totalDaysInMonth; d++) {
       cumulativeRevenue += dailyRevenue[d];
       // Forecast accumulates up to today, then stays flat
       if (d <= todayDay) {
         cumulativeForecast += dailyForecast[d];
       }
 
+      const elapsedThroughDay = d - startDay + 1;
       const pace =
-        d > 0 && d <= todayDay
-          ? (cumulativeRevenue / d) * totalDaysInMonth
+        d <= todayDay
+          ? (cumulativeRevenue / elapsedThroughDay) * countedDays
           : null;
 
       // Meta: linear growth — day d reaches monthlyTarget on last day
-      const metaForDay = Math.round(dailyMetaIncrement * d * 100) / 100;
+      const metaForDay =
+        Math.round(dailyMetaIncrement * elapsedThroughDay * 100) / 100;
 
       const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
@@ -153,7 +156,10 @@ export async function GET() {
       month: month + 1,
       year,
       todayDay,
+      startDay,
       totalDaysInMonth,
+      countedDays,
+      elapsedDays,
       monthlyTarget,
       totalRevenue: Math.round(cumulativeRevenue * 100) / 100,
       totalForecast: finalForecast,
