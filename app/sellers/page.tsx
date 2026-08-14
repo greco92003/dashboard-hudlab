@@ -24,6 +24,8 @@ interface Deal {
   currency: string;
   status: string | null;
   stage_id: string | null;
+  pipeline_id: string | null;
+  stage_title: string | null;
   closing_date: string | null;
   created_date: string | null;
   custom_field_value: string | null;
@@ -255,7 +257,10 @@ export default function SellersPage() {
     async (selectedPeriod?: number, customDateRange?: DateRange) => {
       setLoading(true);
       try {
-        let url = "/api/deals-cache";
+        // Sellers uses the same unified GHL cache/shape as /deals, but only
+        // requests completed sales. The API also recognizes completed sales
+        // currently in the operational Mockup Factory pipeline as `won`.
+        const params = new URLSearchParams({ status: "won" });
 
         if (customDateRange?.from && customDateRange?.to) {
           // Use custom date range - format as local date to avoid timezone issues
@@ -267,17 +272,16 @@ export default function SellersPage() {
             formattedStart: startDate,
             formattedEnd: endDate,
           });
-          url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
+          params.set("startDate", startDate);
+          params.set("endDate", endDate);
         } else if (selectedPeriod) {
           // Use period-based filtering
-          url = `/api/deals-cache?period=${selectedPeriod}`;
+          params.set("period", String(selectedPeriod));
         }
 
         // Force fresh data - bypass all caches (Service Worker, HTTP cache, etc.)
-        const cacheBuster = `_t=${Date.now()}`;
-        const urlWithCacheBuster = url.includes("?")
-          ? `${url}&${cacheBuster}`
-          : `${url}?${cacheBuster}`;
+        params.set("_t", String(Date.now()));
+        const urlWithCacheBuster = `/api/deals-cache?${params.toString()}`;
 
         const response = await fetch(urlWithCacheBuster, {
           cache: "no-store",
@@ -295,11 +299,10 @@ export default function SellersPage() {
         const data = await response.json();
 
         if (data.deals) {
-          // Filtrar apenas deals ganhos (won) que têm vendedor
+          // The API already returns only won GHL deals. Keep the seller check
+          // here because this dashboard cannot rank a sale without an owner.
           const dealsWithSellers = data.deals.filter((deal: Deal) => {
-            const status = deal.status?.toLowerCase();
-            const isWon = status === "won" || status === "1";
-            return isWon && deal.vendedor && deal.vendedor.trim() !== "";
+            return deal.vendedor && deal.vendedor.trim() !== "";
           });
           setDeals(dealsWithSellers);
 

@@ -8,6 +8,7 @@ import {
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
+import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     const period = parseInt(searchParams.get("period") || "30");
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
+    const statusParam = searchParams.get("status")?.toLowerCase() || null;
 
     let startDate: Date;
     let endDate: Date;
@@ -112,8 +114,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Return deals in the new flat format (no transformation needed)
-    const transformedDeals = deals || [];
+    // Keep every dashboard aligned with the GHL business rule. Moving an
+    // already completed sale to the Mockup Factory resets its provider status
+    // to `open`, so normalize it again at read time as a safety net for rows
+    // created before the cache migration/backfill ran.
+    const normalizedDeals = (deals || []).map((deal) => ({
+      ...deal,
+      status: normalizeGhlDealStatus(
+        deal.pipeline_id,
+        deal.stage_id,
+        deal.status,
+      ),
+    }));
+    const transformedDeals = statusParam
+      ? normalizedDeals.filter(
+          (deal) => deal.status?.toLowerCase() === statusParam,
+        )
+      : normalizedDeals;
 
     const { data: lastSync, count: totalCachedDeals } = await supabase
       .from("deals_cache")
@@ -133,6 +150,7 @@ export async function GET(request: NextRequest) {
           startDateParam && endDateParam
             ? { startDate: startDateParam, endDate: endDateParam }
             : null,
+        status: statusParam,
         lastSync: lastSync?.last_synced_at || null,
         syncStatus: lastSync ? "synced" : "unknown",
         totalDealsInLastSync: totalCachedDeals || 0,
