@@ -162,9 +162,17 @@ async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
     if (!row.contact_id) continue;
 
     const statusChangedAt = row.provider_payload?.ghl_last_status_change_at;
+    // closing_date é timestamp with time zone (não uma data pura) --
+    // vem do Supabase já como ISO completo (ex.: "2026-08-14T18:26:41+00:00").
+    // Colar "T12:00:00.000-03:00" no final (tratando como se fosse
+    // YYYY-MM-DD) gerava uma string inválida e quebrava o Date() --
+    // achado em 2026-08-17, RangeError: Invalid time value derrubando
+    // /api/ghl/funnel toda vez que havia negócio com closing_date
+    // preenchido (ex.: os da Fábrica de Mockups, migration
+    // 20260814120000_count_mockup_factory_sales).
     const receivedAt =
       row.closing_date !== null
-        ? new Date(`${row.closing_date}T12:00:00.000-03:00`).toISOString()
+        ? new Date(row.closing_date).toISOString()
         : typeof statusChangedAt === "string"
           ? statusChangedAt
           : null;
