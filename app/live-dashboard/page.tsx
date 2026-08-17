@@ -36,7 +36,10 @@ interface DashboardData {
   month: number;
   year: number;
   todayDay: number;
+  startDay: number;
   totalDaysInMonth: number;
+  countedDays: number;
+  elapsedDays: number;
   monthlyTarget: number;
   totalRevenue: number;
   totalForecast: number;
@@ -142,8 +145,8 @@ export default function LiveDashboardPage() {
   };
 
   const currentPace = data
-    ? data.todayDay > 0
-      ? (data.totalRevenue / data.todayDay) * data.totalDaysInMonth
+    ? data.elapsedDays > 0
+      ? (data.totalRevenue / data.elapsedDays) * data.countedDays
       : 0
     : 0;
 

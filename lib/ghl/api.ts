@@ -15,6 +15,7 @@ import {
   buildContactSearchProbes,
   includesPtBrSearch,
 } from "@/lib/search/pt-br";
+import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
 
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
@@ -346,6 +347,7 @@ async function fetchAllOpportunities(): Promise<GhlOpportunity[]> {
     } = await ghlFetch("/opportunities/search", {
       location_id: locationId,
       limit: String(limit),
+      status: "all",
       ...(startAfter && startAfterId
         ? { startAfter, startAfterId }
         : { page: String(page) }),
@@ -427,7 +429,11 @@ export function mapOpportunity(
     // Frontend divides by 100 (AC stores cents), so multiply here
     value: Math.round((opp.monetaryValue || 0) * 100),
     currency: "BRL",
-    status: opp.status || null,
+    status: normalizeGhlDealStatus(
+      opp.pipelineId,
+      opp.pipelineStageId,
+      opp.status,
+    ),
     stage_id: opp.pipelineStageId || null,
     pipeline_id: opp.pipelineId || null,
     stage_title: opp.pipelineStageId
@@ -476,7 +482,12 @@ export function mapOpportunity(
     deal.custom_field_value as string | null,
   );
   const closingFromStatus =
-    opp.status === "won" && opp.lastStatusChangeAt
+    normalizeGhlDealStatus(
+      opp.pipelineId,
+      opp.pipelineStageId,
+      opp.status,
+    ) === "won" &&
+    opp.lastStatusChangeAt
       ? toBrazilDateString(opp.lastStatusChangeAt)
       : null;
 
