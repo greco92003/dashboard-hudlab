@@ -64,7 +64,7 @@ const [ghlSnapshot, cachedWon, recentOpportunities] = await Promise.all([
   fetchAllSupabase((from, to) =>
     supabase
       .from("deals_cache")
-      .select("deal_id,value,status,closing_date,last_synced_at")
+      .select("deal_id,value,status,closing_date,last_synced_at,last_change_source")
       .eq("source_system", "ghl")
       .eq("sync_status", "synced")
       .eq("status", "won")
@@ -110,6 +110,12 @@ const report = {
   cacheWon: {
     count: cachedWon.length,
     valueBrl: Math.round(cachedWon.reduce((sum, row) => sum + money(row.value) / 100, 0) * 100) / 100,
+    latestSync: cachedWon.map((row) => row.last_synced_at).filter(Boolean).sort().at(-1) || null,
+    latestSource:
+      cachedWon
+        .filter((row) => row.last_synced_at)
+        .sort((a, b) => a.last_synced_at.localeCompare(b.last_synced_at))
+        .at(-1)?.last_change_source || null,
   },
   sinceAugust4: {
     sourceWon: recentOpportunities.length,
