@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { getLiveDashboardPeriod } from "@/lib/live-dashboard-period";
 import { hasOfficialMockupTag } from "@/lib/live-dashboard-forecast";
+import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,12 +30,11 @@ export async function GET() {
 
     // Fetch won deals (status "1" or "won") with closing_date in current month
     // Source: deals_cache (same as /dashboard) for consistency
-    const { data: wonDeals, error: wonError } = await supabase
+    const { data: monthlyDeals, error: wonError } = await supabase
       .from("deals_cache")
-      .select("deal_id, value, status, closing_date")
+      .select("deal_id, value, status, pipeline_id, stage_id, closing_date")
       .eq("source_system", "ghl")
       .eq("sync_status", "synced")
-      .in("status", ["1", "won"])
       .not("closing_date", "is", null)
       .gte("closing_date", startDate)
       .lte("closing_date", endDate);
@@ -43,6 +43,14 @@ export async function GET() {
       console.error("❌ Error fetching won deals:", wonError);
       return NextResponse.json({ error: wonError.message }, { status: 500 });
     }
+
+    // Match /dashboard: GHL may reset a completed sale to `open` when it is
+    // moved into the operational Mockup Factory pipeline.
+    const wonDeals = (monthlyDeals || []).filter(
+      (deal) =>
+        normalizeGhlDealStatus(deal.pipeline_id, deal.stage_id, deal.status) ===
+        "won",
+    );
 
     // Forecast candidates: only open GHL deals with value > 0.
     const { data: openDeals, error: openError } = await supabase

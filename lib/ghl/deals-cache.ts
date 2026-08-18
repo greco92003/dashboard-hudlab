@@ -1,7 +1,11 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
-import { getGhlDeals, type GhlMappedDeal } from "@/lib/ghl/api";
+import {
+  getGhlDeals,
+  getGhlWonDeals,
+  type GhlMappedDeal,
+} from "@/lib/ghl/api";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 
 const UPSERT_BATCH_SIZE = 500;
@@ -98,6 +102,21 @@ async function removeStaleGhlDeals(liveDeals: GhlMappedDeal[]) {
 
   const liveIds = new Set(liveDeals.map((deal) => deal.deal_id));
   const staleIds = cachedIds.filter((dealId) => !liveIds.has(dealId));
+  const staleRatio = cachedIds.length > 0 ? staleIds.length / cachedIds.length : 0;
+  const largeDeleteApproved = process.env.GHL_ALLOW_LARGE_STALE_DELETE === "true";
+
+  // A complete snapshot is required by the caller. This second circuit
+  // breaker protects production if the provider ever reports a plausible but
+  // catastrophically smaller total. Large cleanup must be explicitly opted in.
+  if (
+    !largeDeleteApproved &&
+    staleIds.length > 100 &&
+    staleRatio > 0.1
+  ) {
+    throw new Error(
+      `GHL stale cleanup blocked: would delete ${staleIds.length}/${cachedIds.length} cached opportunities`,
+    );
+  }
   for (let index = 0; index < staleIds.length; index += 100) {
     const { error } = await supabase
       .from("deals_cache")
@@ -117,6 +136,9 @@ export async function syncAllGhlDeals(options?: {
   const source = options?.source || "manual";
   const requestId = options?.requestId || crypto.randomUUID();
   const result = await getGhlDeals(true);
+  if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
+    throw new Error("Refusing to reconcile an incomplete GHL snapshot");
+  }
   const upserted = await upsertGhlDeals(result.deals, source, requestId);
   const removed = await removeStaleGhlDeals(result.deals);
 
@@ -131,10 +153,46 @@ export async function syncAllGhlDeals(options?: {
     source,
     fetchedAt: result.fetchedAt,
     totalOpportunities: result.totalOpportunities,
+    pages: result.pages,
+    duplicates: result.duplicates,
+    snapshotComplete: result.snapshotComplete,
     upserted,
     removed,
     wonDeals: wonDeals.length,
     wonValue: Math.round(wonValue * 100) / 100,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * Frequent, non-destructive reconciliation for sales. It never removes rows;
+ * the daily complete sync remains responsible for verified stale cleanup.
+ */
+export async function syncWonGhlDeals(options?: {
+  source?: Exclude<GhlSyncSource, "webhook">;
+  requestId?: string;
+}) {
+  const startedAt = Date.now();
+  const source = options?.source || "cron";
+  const requestId = options?.requestId || crypto.randomUUID();
+  const result = await getGhlWonDeals();
+  if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
+    throw new Error("Refusing to upsert an incomplete GHL won snapshot");
+  }
+  const upserted = await upsertGhlDeals(result.deals, source, requestId);
+  const wonValue =
+    result.deals.reduce((sum, deal) => sum + Number(deal.value || 0), 0) / 100;
+  return {
+    requestId,
+    source,
+    fetchedAt: result.fetchedAt,
+    wonDeals: result.totalOpportunities,
+    wonValue: Math.round(wonValue * 100) / 100,
+    upserted,
+    removed: 0,
+    pages: result.pages,
+    duplicates: result.duplicates,
+    snapshotComplete: result.snapshotComplete,
     durationMs: Date.now() - startedAt,
   };
 }
