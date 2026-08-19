@@ -17,12 +17,16 @@ const schema = z.object({
   paymentForm: z.enum(["", "Pix", "Cartão de Crédito"]),
   paymentMedium: z.string().trim().max(100),
   bankAccount: z.string().trim().max(100),
+  cardBrand: z.enum(["", "Visa", "Mastercard", "American Express", "Sorocred", "Diners Club", "Elo", "Hipercard", "Aura", "Cabal", "Outros"]),
+  paymentCondition: z.enum(["", "parcelado em 1x", "parcelado em 2x", "parcelado em 3x", "parcelado em 4x", "parcelado em 5x", "parcelado em 6x", "parcelado em 7x", "parcelado em 8x", "parcelado em 9x", "parcelado em 10x", "parcelado em 11x", "parcelado em 12x"]),
   category: z.string().trim().max(50),
   dueDate: z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]),
   notes: z.string().max(500),
   items: z.array(z.object({
-    sku: z.string().trim().min(1).max(50),
+    productId: z.number().int().positive().optional(),
+    sku: z.string().trim().min(1).max(60),
     description: z.string().trim().min(1).max(120),
+    unit: z.string().trim().min(1).max(3),
     quantity: z.number().positive(),
     unitPrice: z.number().min(0),
   })).min(1).max(100),
@@ -32,6 +36,8 @@ const schema = z.object({
   if (!data.paymentForm) context.addIssue({ code: z.ZodIssueCode.custom, path: ["paymentForm"], message: "Forma obrigatória." });
   if (!data.paymentMedium) context.addIssue({ code: z.ZodIssueCode.custom, path: ["paymentMedium"], message: "Meio obrigatório." });
   if (!data.bankAccount) context.addIssue({ code: z.ZodIssueCode.custom, path: ["bankAccount"], message: "Conta obrigatória." });
+  if (data.paymentForm === "Cartão de Crédito" && !data.cardBrand) context.addIssue({ code: z.ZodIssueCode.custom, path: ["cardBrand"], message: "Bandeira obrigatória." });
+  if (data.paymentForm === "Cartão de Crédito" && !data.paymentCondition) context.addIssue({ code: z.ZodIssueCode.custom, path: ["paymentCondition"], message: "Condição de pagamento obrigatória." });
   if (!data.dueDate) context.addIssue({ code: z.ZodIssueCode.custom, path: ["dueDate"], message: "Vencimento obrigatório." });
   if (data.items.some((item) => item.unitPrice <= 0)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["items"], message: "Preço obrigatório." });
 });
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
     if (!isFreeSample && source.expectedPairs === null) {
       return NextResponse.json({ error: "A quantidade de pares não está preenchida no GHL." }, { status: 409 });
     }
-    const totalPairs = parsed.data.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalPairs = parsed.data.items.filter((item) => !item.productId).reduce((sum, item) => sum + item.quantity, 0);
     if (!isFreeSample && source.expectedPairs !== null && parsed.data.expectedPairs !== null && (Math.abs(totalPairs - source.expectedPairs) > 0.001 || Math.abs(parsed.data.expectedPairs - source.expectedPairs) > 0.001)) {
       return NextResponse.json({ error: `A soma dos itens (${totalPairs}) não confere com a quantidade atual do GHL (${source.expectedPairs}).` }, { status: 409 });
     }

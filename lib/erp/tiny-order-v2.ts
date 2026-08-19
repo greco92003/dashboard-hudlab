@@ -38,6 +38,20 @@ function brDate(value: string): string {
   return `${day}/${month}/${year}`;
 }
 
+function addMonths(value: string, months: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return brDate(target.toISOString().slice(0, 10));
+}
+
+function installmentValues(total: number, count: number): number[] {
+  const totalCents = Math.round(total * 100);
+  const baseCents = Math.floor(totalCents / count);
+  return Array.from({ length: count }, (_, index) => (baseCents + (index < totalCents % count ? 1 : 0)) / 100);
+}
+
 function firstOrderRecord(registros: TinyReturn["registros"]): TinyOrderRecord | undefined {
   if (Array.isArray(registros)) return registros[0]?.registro;
   return registros?.registro;
@@ -88,10 +102,12 @@ export type TinySalesOrderInput = {
   paymentForm: string;
   paymentMedium: string;
   bankAccount: string;
+  cardBrand: string;
+  paymentCondition: string;
   category: string;
   dueDate: string;
   notes: string;
-  items: Array<{ sku: string; description: string; quantity: number; unitPrice: number }>;
+  items: Array<{ productId?: number; sku: string; description: string; unit: string; quantity: number; unitPrice: number }>;
 };
 
 export async function createTinySalesOrder(input: TinySalesOrderInput) {
@@ -105,25 +121,35 @@ export async function createTinySalesOrder(input: TinySalesOrderInput) {
   const total = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) + input.freight;
   const account = input.bankAccount.trim() || input.paymentMedium.trim();
   const isFreeSample = input.natureName === FREE_SAMPLE_NATURE;
+  const installmentCount = input.paymentForm === "Cartão de Crédito"
+    ? Number(input.paymentCondition.match(/(\d+)x$/)?.[1] ?? 1)
+    : 1;
+  const paymentDetails = [
+    input.category ? `Categoria: ${input.category}` : "",
+    input.cardBrand ? `Bandeira: ${input.cardBrand}` : "",
+    input.paymentCondition ? `Condição: ${input.paymentCondition}` : "",
+  ].filter(Boolean).join("; ");
+  const installments = isFreeSample ? [] : installmentValues(total, installmentCount).map((value, index) => ({ parcela: {
+    data: addMonths(input.dueDate, index),
+    valor: value.toFixed(2),
+    destino: "Contas a Receber",
+    forma_pagamento: input.paymentForm,
+    meio_pagamento: account,
+    obs: `${paymentDetails}${installmentCount > 1 ? `; Parcela ${index + 1}/${installmentCount}` : ""}`.slice(0, 100),
+  } }));
   const order = {
     data_pedido: brDate(input.orderDate),
     data_prevista: brDate(input.expectedDeliveryDate),
     cliente: tinyCustomer(contact),
     itens: input.items.map((item) => ({ item: {
+      ...(item.productId ? { id_produto: item.productId } : {}),
       codigo: item.sku,
       descricao: item.description,
-      unidade: "PR",
+      unidade: item.unit,
       quantidade: item.quantity.toFixed(2),
       valor_unitario: item.unitPrice.toFixed(2),
     } })),
-    ...(!isFreeSample ? { forma_pagamento: input.paymentForm, meio_pagamento: account, parcelas: [{ parcela: {
-      data: brDate(input.dueDate),
-      valor: total.toFixed(2),
-      destino: "Contas a Receber",
-      forma_pagamento: input.paymentForm,
-      meio_pagamento: account,
-      obs: input.category ? `Categoria: ${input.category}`.slice(0, 100) : "",
-    } }] } : {}),
+    ...(!isFreeSample ? { forma_pagamento: input.paymentForm, meio_pagamento: account, parcelas: installments } : {}),
     nome_natureza_operacao: input.natureName,
     ...(input.freight > 0 ? { frete_por_conta: "R" } : {}),
     valor_frete: input.freight.toFixed(2),

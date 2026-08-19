@@ -42,10 +42,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type {
   ErpContact,
   ErpDeal,
   ErpDealProductPreview,
+  ErpProductModel,
   TinyCloner,
   TinyExistingProduct,
 } from "@/lib/erp/types";
@@ -72,6 +79,7 @@ type ProductMapping = {
 
 type ProductCreationResult = {
   modelNumber: number;
+  audience: "adulto" | "infantil";
   sku: string;
   title: string;
   status: "created" | "existing" | "failed";
@@ -81,6 +89,23 @@ type ProductCreationResult = {
   manufacturedSizes?: string[];
   error?: string;
 };
+
+type ProductAudience = ErpProductModel["audience"];
+
+function productModelKey(model: Pick<ErpProductModel, "modelNumber" | "audience">) {
+  return `${model.modelNumber}:${model.audience}`;
+}
+
+function productModelLabel(model: Pick<ErpProductModel, "modelNumber" | "audience">) {
+  return `Modelo ${model.modelNumber} ${model.audience}`;
+}
+function clonerMatchesAudience(cloner: TinyCloner, audience: ProductAudience) {
+  const isInfantCloner = /infantil/i.test(cloner.description);
+  return audience === "infantil" ? isInfantCloner : !isInfantCloner;
+}
+
+
+const PRODUCT_PREPARATION_TIMEOUT_MS = 295_000;
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
@@ -200,7 +225,7 @@ export default function CadastroErpPage() {
   const [deals, setDeals] = useState<ErpDeal[]>([]);
   const [preview, setPreview] = useState<ErpDealProductPreview | null>(null);
   const [cloners, setCloners] = useState<TinyCloner[]>([]);
-  const [mappings, setMappings] = useState<Record<number, ProductMapping>>({});
+  const [mappings, setMappings] = useState<Record<string, ProductMapping>>({});
   const [productBaseName, setProductBaseName] = useState("");
   const [contactsLoading, setContactsLoading] = useState(false);
   const [dealsLoading, setDealsLoading] = useState(false);
@@ -260,7 +285,7 @@ export default function CadastroErpPage() {
         if (!active) return;
         setPreview(data);
         setProductBaseName(data.deal.name);
-        setMappings(Object.fromEntries(data.models.map((model) => [model.modelNumber, {
+        setMappings(Object.fromEntries(data.models.map((model) => [productModelKey(model), {
           mode: "clone" as const,
           clonerId: "",
           existingProductId: "",
@@ -294,10 +319,11 @@ export default function CadastroErpPage() {
   const selectedContact = contacts.find((contact) => contact.id === query.contact);
   const selectedDeal = deals.find((deal) => deal.id === query.deal);
 
-  const updateMapping = (modelNumber: number, patch: Partial<ProductMapping>) => {
+  const updateMapping = (model: Pick<ErpProductModel, "modelNumber" | "audience">, patch: Partial<ProductMapping>) => {
+    const key = productModelKey(model);
     setCreationResults([]);
     setMappings((current) => {
-      const previous = current[modelNumber] ?? {
+      const previous = current[key] ?? {
         mode: "clone" as const,
         clonerId: "",
         existingProductId: "",
@@ -308,7 +334,7 @@ export default function CadastroErpPage() {
       };
       return {
         ...current,
-        [modelNumber]: {
+        [key]: {
           ...previous,
           ...patch,
         },
@@ -316,26 +342,26 @@ export default function CadastroErpPage() {
     });
   };
 
-  const chooseCloner = (modelNumber: number, clonerId: string) => {
+  const chooseCloner = (model: Pick<ErpProductModel, "modelNumber" | "audience">, clonerId: string) => {
     const cloner = cloners.find((item) => String(item.id) === clonerId);
     const color = cloner ? inferUpperColorFromCloner(cloner.description) : "";
     const date = new Date(preview?.deal.createdAt ?? Date.now());
     const opportunityName = productBaseName;
-    updateMapping(modelNumber, {
+    updateMapping(model, {
       mode: "clone",
       clonerId,
       existingProductId: "",
       variationSkus: {},
       color,
       title: color
-        ? buildProductTitle({ opportunityName, color, modelNumber, date })
+        ? buildProductTitle({ opportunityName, color, modelNumber: model.modelNumber, audience: model.audience, date })
         : "",
-      baseSku: color ? buildBaseSku(opportunityName, color) : "",
+      baseSku: color ? buildBaseSku(opportunityName, color, model.audience) : "",
     });
   };
 
-  const chooseExistingProduct = (modelNumber: number, product: TinyExistingProduct) => {
-    updateMapping(modelNumber, {
+  const chooseExistingProduct = (model: Pick<ErpProductModel, "modelNumber" | "audience">, product: TinyExistingProduct) => {
+    updateMapping(model, {
       mode: "existing",
       clonerId: "",
       existingProductId: String(product.id),
@@ -354,17 +380,19 @@ export default function CadastroErpPage() {
     setMappings((current) => {
       const next = { ...current };
       for (const model of preview.models) {
-        const mapping = current[model.modelNumber];
+        const key = productModelKey(model);
+        const mapping = current[key];
         if (!mapping?.color || mapping.mode === "existing") continue;
-        next[model.modelNumber] = {
+        next[key] = {
           ...mapping,
           title: buildProductTitle({
             opportunityName: value,
             color: mapping.color,
             modelNumber: model.modelNumber,
             date,
+            audience: model.audience,
           }),
-          baseSku: buildBaseSku(value, mapping.color),
+          baseSku: buildBaseSku(value, mapping.color, model.audience),
         };
       }
       return next;
@@ -374,45 +402,46 @@ export default function CadastroErpPage() {
   const validations = useMemo(() => {
     if (!preview) return [];
     const problems: string[] = [];
-    const hasNewProducts = preview.models.some((model) => mappings[model.modelNumber]?.mode !== "existing");
+    const hasNewProducts = preview.models.some((model) => mappings[productModelKey(model)]?.mode !== "existing");
     if (hasNewProducts && !productBaseName.trim()) {
       problems.push("Informe o nome-base dos produtos.");
     }
-    const skus = new Map<string, number[]>();
+    const skus = new Map<string, string[]>();
     for (const model of preview.models) {
-      const mapping = mappings[model.modelNumber];
+      const mapping = mappings[productModelKey(model)];
+      const label = productModelLabel(model);
       if (!mapping) {
-        problems.push(`Modelo ${model.modelNumber}: escolha criar um produto ou usar um existente.`);
+        problems.push(`${label}: escolha criar um produto ou usar um existente.`);
         continue;
       }
       if (mapping.mode === "existing") {
-        if (!mapping.existingProductId) problems.push(`Modelo ${model.modelNumber}: escolha um produto existente.`);
+        if (!mapping.existingProductId) problems.push(`${label}: escolha um produto existente.`);
       } else if (!mapping.clonerId) {
-        problems.push(`Modelo ${model.modelNumber}: escolha um cloner.`);
+        problems.push(`${label}: escolha um cloner.`);
       }
       if (mapping.mode === "clone" && mapping.clonerId && !mapping.color) {
-        problems.push(`Modelo ${model.modelNumber}: informe a cor da gáspea.`);
+        problems.push(`${label}: informe a cor da gáspea.`);
       }
       if (mapping.mode === "clone" && mapping.clonerId && (!mapping.title.trim() || !mapping.baseSku.trim())) {
-        problems.push(`Modelo ${model.modelNumber}: título e SKU são obrigatórios.`);
+        problems.push(`${label}: título e SKU são obrigatórios.`);
       }
       if (mapping.mode === "clone" && mapping.title && mapping.title.trim().length > 120) {
-        problems.push(`Modelo ${model.modelNumber}: o nome deve ter no máximo 120 caracteres.`);
+        problems.push(`${label}: o nome deve ter no máximo 120 caracteres.`);
       }
       if (mapping.mode === "clone" && mapping.baseSku && mapping.baseSku.trim().length > 50) {
-        problems.push(`Modelo ${model.modelNumber}: o SKU deve ter no máximo 50 caracteres.`);
+        problems.push(`${label}: o SKU deve ter no máximo 50 caracteres.`);
       }
       if (mapping.mode === "clone" && mapping.baseSku && !/^[A-Za-z0-9_-]+$/.test(mapping.baseSku.trim())) {
-        problems.push(`Modelo ${model.modelNumber}: o SKU possui caracteres inválidos.`);
+        problems.push(`${label}: o SKU possui caracteres inválidos.`);
       }
       if (mapping.mode === "clone" && mapping.baseSku) {
         const key = mapping.baseSku.trim().toUpperCase();
-        skus.set(key, [...(skus.get(key) ?? []), model.modelNumber]);
+        skus.set(key, [...(skus.get(key) ?? []), label]);
       }
     }
-    for (const [sku, modelNumbers] of skus) {
-      if (modelNumbers.length > 1) {
-        problems.push(`SKU duplicado ${sku} nos modelos ${modelNumbers.join(", ")}.`);
+    for (const [sku, modelLabels] of skus) {
+      if (modelLabels.length > 1) {
+        problems.push(`SKU duplicado ${sku} em ${modelLabels.join(", ")}.`);
       }
     }
     return problems;
@@ -438,13 +467,14 @@ export default function CadastroErpPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(PRODUCT_PREPARATION_TIMEOUT_MS),
           body: JSON.stringify({
             dealId: preview.deal.id,
             products: preview.models.map((model) => {
-              const mapping = mappings[model.modelNumber];
+              const mapping = mappings[productModelKey(model)];
               return mapping.mode === "existing"
-                ? { mode: "existing", modelNumber: model.modelNumber, existingProductId: Number(mapping.existingProductId) }
-                : { mode: "clone", modelNumber: model.modelNumber, clonerId: Number(mapping.clonerId), title: mapping.title.trim(), baseSku: mapping.baseSku.trim() };
+                ? { mode: "existing", modelNumber: model.modelNumber, audience: model.audience, existingProductId: Number(mapping.existingProductId) }
+                : { mode: "clone", modelNumber: model.modelNumber, audience: model.audience, clonerId: Number(mapping.clonerId), title: mapping.title.trim(), baseSku: mapping.baseSku.trim() };
             }),
           }),
         },
@@ -453,8 +483,9 @@ export default function CadastroErpPage() {
         const next = { ...current };
         for (const result of response.results) {
           if (!result.variationSkus) continue;
-          next[result.modelNumber] = {
-            ...current[result.modelNumber],
+          const key = productModelKey(result);
+          next[key] = {
+            ...current[key],
             variationSkus: result.variationSkus,
           };
         }
@@ -472,7 +503,13 @@ export default function CadastroErpPage() {
         );
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao cadastrar produtos.");
+      const timedOut = error instanceof Error
+        && (error.name === "AbortError" || error.name === "TimeoutError");
+      toast.error(
+        timedOut
+          ? "A preparação demorou além do limite. Confira os produtos no Tiny antes de tentar novamente."
+          : error instanceof Error ? error.message : "Falha ao cadastrar produtos.",
+      );
     } finally {
       setCreatingProducts(false);
     }
@@ -502,15 +539,15 @@ export default function CadastroErpPage() {
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">1</span>
               Contato do GHL
             </CardTitle>
-            <CardDescription>Pesquise por nome, empresa, e-mail ou telefone.</CardDescription>
+            <CardDescription>Pesquise por contato, empresa, e-mail, telefone ou nome do deal.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <form className="flex gap-2" onSubmit={submitSearch}>
               <Input
                 value={searchDraft}
                 onChange={(event) => setSearchDraft(event.target.value)}
-                placeholder="Ex.: Metanoia ou contato@empresa.com"
-                aria-label="Pesquisar contato"
+                placeholder="Ex.: José, Metanoia ou contato@empresa.com"
+                aria-label="Pesquisar contato ou deal"
               />
               <Button type="submit" disabled={contactsLoading}>
                 {contactsLoading ? <Loader2 className="animate-spin" /> : <Search />}
@@ -523,7 +560,8 @@ export default function CadastroErpPage() {
                 <p className="text-xs text-muted-foreground">
                   {contacts.length} contato(s) encontrado(s) · role para ver mais
                 </p>
-                <div className="max-h-80 space-y-2 overflow-y-scroll overscroll-contain pr-2 [scrollbar-color:hsl(var(--muted-foreground))_transparent] [scrollbar-width:thin]">
+                <TooltipProvider delayDuration={200}>
+                  <div className="max-h-80 space-y-2 overflow-y-scroll overscroll-contain pr-2 [scrollbar-color:hsl(var(--muted-foreground))_transparent] [scrollbar-width:thin]">
                 {contacts.map((contact) => {
                   const selected = contact.id === query.contact;
                   return (
@@ -543,10 +581,28 @@ export default function CadastroErpPage() {
                         </span>
                       </span>
                       {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="cursor-help">
+                            Deals: {contact.deals.length}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-h-72 max-w-sm overflow-y-auto p-3">
+                          <p className="font-semibold">Deals vinculados</p>
+                          {contact.deals.length > 0 ? (
+                            <ul className="mt-1 space-y-1">
+                              {contact.deals.map((deal) => <li key={deal.id}>• {deal.name}</li>)}
+                            </ul>
+                          ) : (
+                            <p className="mt-1 opacity-80">Nenhum deal vinculado.</p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
                     </button>
                   );
                 })}
-                </div>
+                  </div>
+                </TooltipProvider>
               </div>
             )}
             {query.contact && !selectedContact && (
@@ -629,7 +685,7 @@ export default function CadastroErpPage() {
               <div className="flex h-48 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 animate-spin" /> Lendo grades e artes…</div>
             ) : preview && preview.models.length > 0 ? (
               <div className="space-y-5">
-                {preview.models.some((model) => (mappings[model.modelNumber]?.mode ?? "clone") === "clone") && <div className="rounded-xl border bg-muted/20 p-4">
+                {preview.models.some((model) => (mappings[productModelKey(model)]?.mode ?? "clone") === "clone") && <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                     <div className="space-y-2">
                       <Label htmlFor="product-base-name">Nome-base dos produtos novos</Label>
@@ -643,18 +699,18 @@ export default function CadastroErpPage() {
                         Aplicado somente aos modelos que serão criados a partir de um cloner.
                       </p>
                     </div>
-                    <Badge variant="outline">Aplicado a {preview.models.filter((model) => (mappings[model.modelNumber]?.mode ?? "clone") === "clone").length} produto(s)</Badge>
+                    <Badge variant="outline">Aplicado a {preview.models.filter((model) => (mappings[productModelKey(model)]?.mode ?? "clone") === "clone").length} produto(s)</Badge>
                   </div>
                 </div>}
 
                 {preview.models.map((model) => {
-                  const mapping = mappings[model.modelNumber];
+                  const mapping = mappings[productModelKey(model)];
                   const cloner = cloners.find((item) => String(item.id) === mapping?.clonerId);
                   return (
-                    <div key={model.modelNumber} className="grid gap-5 rounded-xl border p-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                    <div key={productModelKey(model)} className="grid gap-5 rounded-xl border p-4 lg:grid-cols-[180px_minmax(0,1fr)]">
                       <div className="space-y-3">
                         <div>
-                          <p className="font-semibold">Modelo {model.modelNumber}</p>
+                          <p className="font-semibold">{productModelLabel(model)}</p>
                           <p className="text-xs text-muted-foreground">{model.totalPairs} pares · {model.grades.length} numerações</p>
                         </div>
                         <ArtworkPreview url={model.artUrl} modelNumber={model.modelNumber} />
@@ -670,17 +726,17 @@ export default function CadastroErpPage() {
                       <div className="grid content-start gap-4 md:grid-cols-2">
                         <div className="space-y-2 md:col-span-2">
                           <Label>Como usar este modelo?</Label>
-                          <Select value={mapping?.mode ?? "clone"} onValueChange={(value: "clone" | "existing") => updateMapping(model.modelNumber, value === "existing" ? { mode: "existing", clonerId: "", existingProductId: "", color: "", title: "", baseSku: "", variationSkus: {} } : { mode: "clone", existingProductId: "", variationSkus: {} })}>
+                          <Select value={mapping?.mode ?? "clone"} onValueChange={(value: "clone" | "existing") => updateMapping(model, value === "existing" ? { mode: "existing", clonerId: "", existingProductId: "", color: "", title: "", baseSku: "", variationSkus: {} } : { mode: "clone", existingProductId: "", variationSkus: {} })}>
                             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="clone">Criar produto novo a partir de um cloner</SelectItem><SelectItem value="existing">Usar produto já cadastrado no Tiny</SelectItem></SelectContent>
                           </Select>
                         </div>
                         {(mapping?.mode ?? "clone") === "clone" ? <>
                         <div className="space-y-2 md:col-span-2">
                           <Label>Produto-cloner do Tiny</Label>
-                          <Select value={mapping?.clonerId ?? ""} onValueChange={(value) => chooseCloner(model.modelNumber, value)}>
+                          <Select value={mapping?.clonerId ?? ""} onValueChange={(value) => chooseCloner(model, value)}>
                             <SelectTrigger className="w-full"><SelectValue placeholder={clonersLoading ? "Carregando cloners…" : "Escolha o cloner correspondente"} /></SelectTrigger>
                             <SelectContent>
-                              {cloners.map((item) => (
+                              {cloners.filter((item) => clonerMatchesAudience(item, model.audience)).map((item) => (
                                 <SelectItem key={item.id} value={String(item.id)}>
                                   {item.description} · {item.variationCount} variações
                                 </SelectItem>
@@ -692,29 +748,29 @@ export default function CadastroErpPage() {
                           )}
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor={`color-${model.modelNumber}`}>Cor da gáspea</Label>
+                          <Label htmlFor={`color-${model.modelNumber}-${model.audience}`}>Cor da gáspea</Label>
                           <Input
-                            id={`color-${model.modelNumber}`}
+                            id={`color-${model.modelNumber}-${model.audience}`}
                             value={mapping?.color ?? ""}
-                            onChange={(event) => updateMapping(model.modelNumber, { color: event.target.value })}
+                            onChange={(event) => updateMapping(model, { color: event.target.value })}
                             placeholder="Ex.: Preto"
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor={`sku-${model.modelNumber}`}>SKU do produto</Label>
+                          <Label htmlFor={`sku-${model.modelNumber}-${model.audience}`}>SKU do produto</Label>
                           <Input
-                            id={`sku-${model.modelNumber}`}
+                            id={`sku-${model.modelNumber}-${model.audience}`}
                             value={mapping?.baseSku ?? ""}
-                            onChange={(event) => updateMapping(model.modelNumber, { baseSku: event.target.value })}
+                            onChange={(event) => updateMapping(model, { baseSku: event.target.value })}
                             placeholder="CH-SL-NOME-PRT"
                           />
                         </div>
                         <div className="space-y-2 md:col-span-2">
-                          <Label htmlFor={`title-${model.modelNumber}`}>Nome do produto</Label>
+                          <Label htmlFor={`title-${model.modelNumber}-${model.audience}`}>Nome do produto</Label>
                           <Input
-                            id={`title-${model.modelNumber}`}
+                            id={`title-${model.modelNumber}-${model.audience}`}
                             value={mapping?.title ?? ""}
-                            onChange={(event) => updateMapping(model.modelNumber, { title: event.target.value })}
+                            onChange={(event) => updateMapping(model, { title: event.target.value })}
                             placeholder="Gerado ao escolher o cloner"
                           />
                         </div>
@@ -731,12 +787,12 @@ export default function CadastroErpPage() {
                         </> : <div className="space-y-3 md:col-span-2">
                           <Label>Buscar produto já cadastrado</Label>
                           {!mapping?.existingProductId ? (
-                            <ExistingProductPicker onSelect={(product) => chooseExistingProduct(model.modelNumber, product)} />
+                            <ExistingProductPicker onSelect={(product) => chooseExistingProduct(model, product)} />
                           ) : (
                             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div><p className="text-sm font-medium">{mapping.title}</p><p className="text-xs text-muted-foreground">Tiny ID {mapping.existingProductId} · SKU {mapping.baseSku}</p></div>
-                                <Button type="button" size="sm" variant="outline" onClick={() => updateMapping(model.modelNumber, { existingProductId: "", title: "", baseSku: "", variationSkus: {} })}>Trocar produto</Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => updateMapping(model, { existingProductId: "", title: "", baseSku: "", variationSkus: {} })}>Trocar produto</Button>
                               </div>
                               <div className="mt-2 flex flex-wrap gap-1.5">{model.grades.map((grade) => <code key={grade.size} className="rounded bg-background px-2 py-1 text-[11px]">{grade.size}: {mapping.variationSkus[grade.size] || "será adicionada ao preparar"}</code>)}</div>
                             </div>
@@ -768,8 +824,8 @@ export default function CadastroErpPage() {
                   <div className="space-y-2 rounded-xl border p-4">
                     <p className="text-sm font-medium">Resultado do cadastro</p>
                     {creationResults.map((result) => (
-                      <div key={`${result.modelNumber}-${result.sku}`} className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                        <span>Modelo {result.modelNumber} · {result.sku}</span>
+                      <div key={`${result.modelNumber}-${result.audience}-${result.sku}`} className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <span>{productModelLabel(result)} · {result.sku}</span>
                         <span className={result.status === "failed" ? "text-destructive" : "text-emerald-600"}>
                           {result.status === "created" && `Cadastrado · ID ${result.tinyProductId}${result.manufacturedSizes?.length ? ` · fabricado: ${result.manufacturedSizes.join(", ")}` : ""}`}
                           {result.status === "existing" && `Produto adicionado · ID ${result.tinyProductId}${result.addedSizes?.length ? ` · grade completada: ${result.addedSizes.join(", ")}` : ""}${result.manufacturedSizes?.length ? ` · convertido para fabricado: ${result.manufacturedSizes.join(", ")}` : ""}`}
@@ -807,11 +863,11 @@ export default function CadastroErpPage() {
           </AlertDialogHeader>
           <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg bg-muted/40 p-3 text-xs">
             {preview?.models.map((model) => {
-              const mapping = mappings[model.modelNumber];
+              const mapping = mappings[productModelKey(model)];
               const variationCount = mapping?.mode === "clone"
                 ? cloners.find((item) => String(item.id) === mapping.clonerId)?.variationCount ?? 0
                 : Object.keys(mapping?.variationSkus ?? {}).length;
-              return <p key={model.modelNumber}>Modelo {model.modelNumber}: {mapping?.title} · {variationCount} variações no cadastro</p>;
+              return <p key={productModelKey(model)}>{productModelLabel(model)}: {mapping?.title} · {variationCount} variações no cadastro</p>;
             })}
           </div>
           <AlertDialogFooter>

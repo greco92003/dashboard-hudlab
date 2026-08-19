@@ -273,7 +273,6 @@ export async function searchGhlContacts(
       });
 
   const direct = await searchProbe(probes[0], maximum);
-  const directContacts = direct.contacts ?? [];
 
   const matchesQuery = (contact: GhlContactSummary) => {
     const searchable = [
@@ -289,12 +288,11 @@ export async function searchGhlContacts(
     return includesPtBrSearch(searchable, query);
   };
 
-  // Correctly accented searches remain a single GHL request. Only use the
-  // broader probes when the direct result has no normalized match.
-  const queryHasDiacritics = query.normalize("NFD") !== query;
-  const fallbackResponses = directContacts.some(matchesQuery) && queryHasDiacritics
-    ? []
-    : await Promise.all(probes.slice(1).map((probe) => searchProbe(probe, 100)));
+  // Always run every normalized/accented probe. The GHL endpoint is accent-
+  // sensitive in both directions: "jose" and "josé" return different sets.
+  const fallbackResponses = await Promise.all(
+    probes.slice(1).map((probe) => searchProbe(probe, 100)),
+  );
   const responses = [direct, ...fallbackResponses];
 
   const unique = new Map<string, GhlContactSummary>();
@@ -308,6 +306,38 @@ export async function searchGhlContacts(
       const bName = b.contactName || `${b.firstName ?? ""} ${b.lastName ?? ""}`;
       return aName.localeCompare(bName, "pt-BR", { sensitivity: "base" });
     })
+    .slice(0, maximum);
+}
+
+export async function searchGhlOpportunitiesByName(
+  query: string,
+  limit = 20,
+): Promise<GhlOpportunity[]> {
+  const { locationId } = requireEnv();
+  const maximum = Math.min(Math.max(limit, 1), 100);
+  const probes = buildContactSearchProbes(query);
+  const responses = await Promise.all(
+    probes.map((probe) =>
+      ghlFetch<{ opportunities?: GhlOpportunity[] }>("/opportunities/search", {
+        location_id: locationId,
+        q: probe,
+        status: "all",
+        limit: "100",
+      }),
+    ),
+  );
+
+  const unique = new Map<string, GhlOpportunity>();
+  for (const opportunity of responses.flatMap(
+    (response) => response.opportunities ?? [],
+  )) {
+    if (includesPtBrSearch(opportunity.name ?? "", query)) {
+      unique.set(opportunity.id, opportunity);
+    }
+  }
+
+  return Array.from(unique.values())
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
     .slice(0, maximum);
 }
 

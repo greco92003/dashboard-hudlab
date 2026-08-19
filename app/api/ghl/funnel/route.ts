@@ -12,6 +12,10 @@ import {
   GHL_MOCKUP_FACTORY_PIPELINE_ID,
   GHL_MOCKUP_FACTORY_WON_STAGE_IDS,
 } from "@/lib/ghl/pipelines";
+import {
+  parseGhlFunnelTimestamp,
+  toGhlFunnelIso,
+} from "@/lib/ghl/funnel-dates";
 
 interface FunnelEventRow {
   contact_id: string;
@@ -162,21 +166,12 @@ async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
     if (!row.contact_id) continue;
 
     const statusChangedAt = row.provider_payload?.ghl_last_status_change_at;
-    // closing_date é timestamp with time zone (não uma data pura) --
-    // vem do Supabase já como ISO completo (ex.: "2026-08-14T18:26:41+00:00").
-    // Colar "T12:00:00.000-03:00" no final (tratando como se fosse
-    // YYYY-MM-DD) gerava uma string inválida e quebrava o Date() --
-    // achado em 2026-08-17, RangeError: Invalid time value derrubando
-    // /api/ghl/funnel toda vez que havia negócio com closing_date
-    // preenchido (ex.: os da Fábrica de Mockups, migration
-    // 20260814120000_count_mockup_factory_sales).
+    // Prefer the canonical closing date, but tolerate legacy/partial cache
+    // rows and fall back to GHL's status-change timestamp. Conversion happens
+    // only after validation so malformed values can never throw RangeError.
     const receivedAt =
-      row.closing_date !== null
-        ? new Date(row.closing_date).toISOString()
-        : typeof statusChangedAt === "string"
-          ? statusChangedAt
-          : null;
-    if (!receivedAt || Number.isNaN(Date.parse(receivedAt))) continue;
+      toGhlFunnelIso(row.closing_date) ?? toGhlFunnelIso(statusChangedAt);
+    if (!receivedAt) continue;
 
     const current = firstSaleByContact.get(row.contact_id);
     if (!current || Date.parse(receivedAt) < Date.parse(current)) {
@@ -195,20 +190,29 @@ function mergeFactorySales(
   webhookEvents: FunnelEventRow[],
   factorySales: FunnelEventRow[],
 ): FunnelEventRow[] {
+  // `received_at` is a database-generated TIMESTAMPTZ, but ignoring a bad
+  // legacy/imported row keeps one record from taking the whole page down.
+  const validWebhookEvents = webhookEvents.filter(
+    (event) => parseGhlFunnelTimestamp(event.received_at) !== null,
+  );
+  const validFactorySales = factorySales.filter(
+    (event) => parseGhlFunnelTimestamp(event.received_at) !== null,
+  );
   const contactsWithClosedEvent = new Set(
-    webhookEvents
+    validWebhookEvents
       .filter((event) => event.stage_slug === "negociofechado")
       .map((event) => event.contact_id),
   );
 
   return [
-    ...webhookEvents,
-    ...factorySales.filter(
+    ...validWebhookEvents,
+    ...validFactorySales.filter(
       (event) => !contactsWithClosedEvent.has(event.contact_id),
     ),
   ].sort(
     (left, right) =>
-      Date.parse(left.received_at) - Date.parse(right.received_at),
+      (parseGhlFunnelTimestamp(left.received_at) ?? 0) -
+      (parseGhlFunnelTimestamp(right.received_at) ?? 0),
   );
 }
 
@@ -216,7 +220,8 @@ function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
   const journeys = new Map<string, ContactJourney>();
 
   for (const event of events) {
-    const timestamp = Date.parse(event.received_at);
+    const timestamp = parseGhlFunnelTimestamp(event.received_at);
+    if (timestamp === null) continue;
     let journey = journeys.get(event.contact_id);
     if (!journey) {
       journey = {
@@ -352,8 +357,12 @@ export async function GET(request: Request) {
 
     const eventsInRange = range
       ? events.filter((event) => {
-          const timestamp = Date.parse(event.received_at);
-          return timestamp >= range.start && timestamp <= range.end;
+          const timestamp = parseGhlFunnelTimestamp(event.received_at);
+          return (
+            timestamp !== null &&
+            timestamp >= range.start &&
+            timestamp <= range.end
+          );
         }).length
       : events.length;
 

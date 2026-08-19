@@ -7,12 +7,18 @@ import {
   tinyVariationSize,
   type TinyClonerDetail,
 } from "@/lib/erp/tiny-product-cloner";
+import {
+  mergeTinyCreatedProductResponse,
+  type TinyCreatedProductResponse,
+} from "@/lib/erp/tiny-created-product";
 import { buildVariationSku } from "@/lib/erp/product-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
 import { requireApprovedUser } from "@/lib/security/route-guards";
-import { getTinyV2Token } from "@/lib/tiny/auth";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
-import { artworkThumbnailUrl } from "@/lib/erp/artwork-url";
+import { artworkImportUrl } from "@/lib/erp/artwork-proxy";
+import { setTinyVariationsAsManufactured } from "@/lib/erp/tiny-manufacturing-v2";
+
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   dealId: z.string().min(1),
@@ -20,6 +26,7 @@ const requestSchema = z.object({
     z.object({
       mode: z.literal("clone"),
       modelNumber: z.number().int().positive(),
+      audience: z.enum(["adulto", "infantil"]),
       clonerId: z.number().int().positive(),
       title: z.string().trim().min(1).max(120),
       baseSku: z.string().trim().min(1).max(50).regex(/^[A-Za-z0-9_-]+$/),
@@ -27,17 +34,19 @@ const requestSchema = z.object({
     z.object({
       mode: z.literal("existing"),
       modelNumber: z.number().int().positive(),
+      audience: z.enum(["adulto", "infantil"]),
       existingProductId: z.number().int().positive(),
     }),
   ])).min(1).max(10),
 });
 
 type TinyListResponse = {
-  itens?: Array<{ id: number; sku?: string | null }>;
+  itens?: Array<{ id: number; sku?: string | null; descricao?: string | null }>;
 };
 
 type ProductResult = {
   modelNumber: number;
+  audience: "adulto" | "infantil";
   sku: string;
   title: string;
   status: "created" | "existing" | "failed";
@@ -46,24 +55,6 @@ type ProductResult = {
   addedSizes?: string[];
   manufacturedSizes?: string[];
   error?: string;
-};
-
-type TinyV2AlterResponse = {
-  retorno?: {
-    status?: string;
-    erros?: Array<{ erro?: string }>;
-    registros?: Array<{
-      registro?: {
-        status?: string;
-        erros?: Array<{ erro?: string }>;
-      };
-    }> | {
-      registro?: {
-        status?: string;
-        erros?: Array<{ erro?: string }>;
-      };
-    };
-  };
 };
 
 function variationSkuMap(product: TinyClonerDetail) {
@@ -103,9 +94,9 @@ async function addMissingVariationsFromProduct(
       method: "POST",
       body: {
         sku,
-        precos: template.precos ?? {
-          preco: product.precos?.preco,
-          precoPromocional: product.precos?.precoPromocional,
+        precos: {
+          preco: template.precos?.preco ?? product.precos?.preco ?? 0,
+          precoPromocional: template.precos?.precoPromocional ?? product.precos?.precoPromocional,
         },
         estoque: { inicial: 0 },
         grade: (template.grade ?? []).map((grade, index) => ({
@@ -120,33 +111,68 @@ async function addMissingVariationsFromProduct(
   return { variationSkus, addedSizes: missingSizes };
 }
 
-async function addMissingVariationsFromCloner(
+
+async function resolveClonerVariations(
   product: TinyClonerDetail,
   cloner: TinyClonerDetail,
   baseSku: string,
 ) {
-  const variationSkus = variationSkuMap(product);
   const desired = buildTinyVariationsFromCloner({ cloner, baseSku });
-  const addedSizes: string[] = [];
+  const resolved = [...(product.variacoes ?? [])];
+  const variationSkus: Record<string, string> = {};
+  const missingVariations: string[] = [];
 
   for (const variation of desired) {
     const size = tinyVariationSize(variation);
-    if (!size || variationSkus[size]) continue;
-    await tinyV3Request(`/produtos/${product.id}/variacoes`, {
-      method: "POST",
-      body: variation,
-    });
-    variationSkus[size] = variation.sku;
-    addedSizes.push(size);
+    const sku = variation.sku?.trim();
+    if (!size || !sku) continue;
+
+    let target = resolved.find(
+      (item) => item.sku?.trim().toUpperCase() === sku.toUpperCase(),
+    ) ?? resolved.find((item) => tinyVariationSize(item) === size);
+
+    if (!target?.id) {
+      const catalogItem = await findProductBySku(sku);
+      if (catalogItem) {
+        target = {
+          ...variation,
+          id: catalogItem.id,
+          descricao: catalogItem.descricao,
+        };
+      }
+    }
+
+
+    if (!target?.id) {
+      missingVariations.push(`${size} (${sku})`);
+      continue;
+    }
+
+    const existingIndex = resolved.findIndex(
+      (item) => item.id === target?.id
+        || item.sku?.trim().toUpperCase() === sku.toUpperCase()
+        || tinyVariationSize(item) === size,
+    );
+    if (existingIndex >= 0) resolved[existingIndex] = target;
+    else resolved.push(target);
+    variationSkus[size] = target.sku?.trim() || sku;
   }
 
-  return { variationSkus, addedSizes };
+  if (missingVariations.length > 0) {
+    throw new Error(
+      `O produto pai ${baseSku} está incompleto no Tiny. Faltam as variações ${missingVariations.join(", ")}. Ele precisa ser recriado em um único cadastro.`,
+    );
+  }
+
+  return {
+    variationSkus,
+    product: { ...product, variacoes: resolved },
+  };
 }
 
 function hasProduction(production: TinyClonerDetail["producao"]) {
   return Boolean(production?.produtos?.length || production?.etapas?.length);
 }
-
 async function hydrateClonerManufacturing(cloner: TinyClonerDetail) {
   const variations: NonNullable<TinyClonerDetail["variacoes"]> = [];
   for (const variation of cloner.variacoes ?? []) {
@@ -164,78 +190,14 @@ async function hydrateClonerManufacturing(cloner: TinyClonerDetail) {
       ...variation,
       descricao: detail.descricao,
       tipo: detail.tipo,
+      precos: {
+        preco: detail.precos?.preco ?? variation.precos?.preco,
+        precoPromocional: detail.precos?.precoPromocional ?? variation.precos?.precoPromocional,
+      },
       producao: production,
     });
   }
   return { ...cloner, variacoes: variations };
-}
-
-async function setVariationAsManufactured(
-  target: TinyClonerDetail,
-  source: NonNullable<TinyClonerDetail["variacoes"]>[number],
-) {
-  if (!target.id || !target.descricao?.trim()) {
-    throw new Error("O Tiny não retornou os dados necessários da variação criada.");
-  }
-  if (!hasProduction(source.producao)) {
-    throw new Error(
-      `A variação ${source.sku ?? source.id ?? "do cloner"} está marcada como fabricada, mas não possui estrutura ou etapa de produção.`,
-    );
-  }
-
-  const product = {
-    sequencia: 1,
-    id: target.id,
-    nome: target.descricao.trim(),
-    unidade: target.unidade?.trim() || "PR",
-    preco: target.precos?.preco ?? 0,
-    ncm: target.ncm?.trim() ?? "",
-    origem: String(target.origem ?? 0),
-    situacao: "A",
-    tipo: "P",
-    classe_produto: "F",
-    estrutura: (source.producao?.produtos ?? []).flatMap((item) =>
-      item.produto?.id && item.quantidade != null
-        ? [{ item: {
-            id_produto: item.produto.id,
-            descricao: item.produto.descricao?.trim() || item.produto.sku?.trim() || "Componente",
-            quantidade: item.quantidade,
-          } }]
-        : [],
-    ),
-    etapas: (source.producao?.etapas ?? []).map((name) => ({ etapa: { nome: name } })),
-  };
-  const response = await fetch(
-    `${process.env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2"}/produto.alterar.php`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-      body: new URLSearchParams({
-        token: getTinyV2Token(),
-        formato: "JSON",
-        produto: JSON.stringify({ produtos: [{ produto: product }] }),
-      }),
-      cache: "no-store",
-    },
-  );
-  const responseText = await response.text();
-  let data: TinyV2AlterResponse;
-  try {
-    data = JSON.parse(responseText) as TinyV2AlterResponse;
-  } catch {
-    throw new Error(
-      `O Tiny devolveu uma resposta inválida ao converter ${target.sku ?? target.id} para Fabricado.`,
-    );
-  }
-  const records = data.retorno?.registros;
-  const record = (Array.isArray(records) ? records[0] : records)?.registro;
-  if (!response.ok || data.retorno?.status !== "OK" || record?.status !== "OK") {
-    const errors = [
-      ...(data.retorno?.erros ?? []),
-      ...(record?.erros ?? []),
-    ].map((item) => item.erro).filter(Boolean).join("; ");
-    throw new Error(errors || `O Tiny não converteu a variação ${target.sku ?? target.id} para Fabricado.`);
-  }
 }
 
 async function ensureManufacturedVariations(
@@ -249,6 +211,11 @@ async function ensureManufacturedVariations(
     }),
   );
   const manufacturedSizes: string[] = [];
+  const pending: Array<{
+    target: TinyClonerDetail;
+    source: NonNullable<TinyClonerDetail["variacoes"]>[number];
+    size: string;
+  }> = [];
 
   for (const source of cloner.variacoes ?? []) {
     if (source.tipo !== "F") continue;
@@ -259,40 +226,77 @@ async function ensureManufacturedVariations(
     }
     const target = await tinyV3Request<TinyClonerDetail>(`/produtos/${targetVariation.id}`);
     if (target.tipo === "F") continue;
-    await setVariationAsManufactured(target, source);
-    manufacturedSizes.push(size);
+    pending.push({ target, source, size });
+  }
+
+  await setTinyVariationsAsManufactured(
+    pending.map(({ target, source }) => ({ target, source })),
+  );
+
+  for (const item of pending) {
+    let confirmed = false;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await tinyV3Request<TinyClonerDetail>(`/produtos/${item.target.id}`);
+      if (current.tipo === "F") {
+        confirmed = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+    if (!confirmed) {
+      throw new Error(
+        `O Tiny não confirmou ${item.source.sku ?? item.target.sku ?? item.target.id} como produto Fabricado.`,
+      );
+    }
+    manufacturedSizes.push(item.size);
   }
 
   return manufacturedSizes;
 }
-
 async function findProductBySku(sku: string) {
   const response = await tinyV3Request<TinyListResponse>("/produtos", {
-    params: { codigo: sku, limit: "10" },
+    params: { codigo: sku, situacao: "A", limit: "10" },
   });
   return response.itens?.find(
     (item) => item.sku?.trim().toUpperCase() === sku.trim().toUpperCase(),
   );
 }
 
-async function ensureProductArtwork(productId: number, sourceUrl: string | null) {
+type TinyAttachment = { id?: number; url?: string | null; externo?: boolean | null };
+
+function hasImportedImage(attachments: TinyAttachment[]) {
+  return attachments.some(
+    (attachment) => attachment.externo === false && Boolean(attachment.id || attachment.url),
+  );
+}
+
+async function ensureProductArtwork(
+  productId: number,
+  sourceUrl: string | null,
+  publicOrigin: string,
+) {
   if (!sourceUrl) return;
-  const imageUrl = artworkThumbnailUrl(sourceUrl);
+  const imageUrl = artworkImportUrl(sourceUrl, publicOrigin);
   if (!imageUrl) throw new Error("A arte aprovada não possui uma URL de imagem compatível.");
-  const attachments = await tinyV3Request<Array<{ id?: number; url?: string | null }>>(
+  const attachments = await tinyV3Request<TinyAttachment[]>(
     `/produtos/${productId}/anexos`,
   );
-  // Tiny imports an external URL into its own S3, so the saved URL no longer
-  // equals the source URL. Any existing attachment means this step was already
-  // completed and prevents duplicate images on a repeated validation.
-  if (attachments.length > 0) return;
-  const created = await tinyV3Request<Array<{ id?: number; url?: string | null }>>(`/produtos/${productId}/anexos`, {
+  // An imported image is stored inside Tiny. Old external links do not count,
+  // because they are exactly what caused the artwork to disappear from the UI.
+  if (hasImportedImage(attachments)) return;
+  const created = await tinyV3Request<TinyAttachment[]>(`/produtos/${productId}/anexos`, {
     method: "POST",
-    body: [{ url: imageUrl, externo: true }],
+    body: [{ url: imageUrl, externo: false }],
   });
-  if (!created.some((attachment) => attachment.id || attachment.url)) {
-    throw new Error("O Tiny não confirmou a inclusão da imagem do produto.");
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = attempt === 0
+      ? created
+      : await tinyV3Request<TinyAttachment[]>(`/produtos/${productId}/anexos`);
+    if (hasImportedImage(current)) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  throw new Error("O Tiny não confirmou a importação da imagem do produto.");
 }
 
 export async function POST(request: Request) {
@@ -313,119 +317,123 @@ export async function POST(request: Request) {
       fetchCustomFieldDefs("opportunity"),
     ]);
     const models = extractGhlProductModels(opportunity, definitions);
-    const modelByNumber = new Map(models.map((model) => [model.modelNumber, model]));
-    const results: ProductResult[] = [];
-
-    // Sequential writes make the result of each model explicit and avoid Tiny's
-    // rate-limit. A failed model does not hide products already created.
-    for (const requested of parsed.data.products) {
-      const model = modelByNumber.get(requested.modelNumber);
-      if (!model) {
-        results.push({
-          modelNumber: requested.modelNumber,
-          sku: requested.mode === "clone" ? requested.baseSku : "",
-          title: requested.mode === "clone" ? requested.title : "Produto existente",
-          status: "failed",
-          error: "Modelo sem grade preenchida na ficha atual do GHL.",
-        });
-        continue;
-      }
-
-      try {
-        if (requested.mode === "existing") {
-          const product = await tinyV3Request<TinyClonerDetail>(`/produtos/${requested.existingProductId}`);
-          if (product.tipo !== "V" || product.produtoPai?.id || /cloner/i.test(product.descricao ?? "")) {
-            throw new Error("O item selecionado não é um produto pai com variações válido.");
-          }
-          // Compatibility for products created by the old flow, which limited
-          // the catalog grade to the quantities filled in the GHL order.
-          const completed = await addMissingVariationsFromProduct(
-            product,
-            model.grades.map((grade) => grade.size),
-          );
-          results.push({
+    const modelByKey = new Map(
+      models.map((model) => [`${model.modelNumber}:${model.audience}`, model]),
+    );
+    const publicOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim()
+      || new URL(request.url).origin;
+    // Each model is independent. Preparing them concurrently prevents a slow
+    // cloner from blocking every product that follows it.
+    const results = await Promise.all(
+      parsed.data.products.map(async (requested): Promise<ProductResult> => {
+        const model = modelByKey.get(`${requested.modelNumber}:${requested.audience}`);
+        if (!model) {
+          return {
             modelNumber: requested.modelNumber,
-            sku: product.sku?.trim() ?? "",
-            title: product.descricao?.trim() ?? "Produto existente",
-            status: "existing",
-            tinyProductId: product.id,
-            variationSkus: completed.variationSkus,
-            addedSizes: completed.addedSizes,
+            audience: requested.audience,
+            sku: requested.mode === "clone" ? requested.baseSku : "",
+            title: requested.mode === "clone" ? requested.title : "Produto existente",
+            status: "failed",
+            error: "Modelo sem grade preenchida na ficha atual do GHL.",
+          };
+        }
+
+        try {
+          if (requested.mode === "existing") {
+            const product = await tinyV3Request<TinyClonerDetail>(`/produtos/${requested.existingProductId}`);
+            if (product.tipo !== "V" || product.produtoPai?.id || /cloner/i.test(product.descricao ?? "")) {
+              throw new Error("O item selecionado não é um produto pai com variações válido.");
+            }
+            // Compatibility for products created by the old flow, which limited
+            // the catalog grade to the quantities filled in the GHL order.
+            const completed = await addMissingVariationsFromProduct(
+              product,
+              model.grades.map((grade) => grade.size),
+            );
+            return {
+              modelNumber: requested.modelNumber,
+              audience: requested.audience,
+              sku: product.sku?.trim() ?? "",
+              title: product.descricao?.trim() ?? "Produto existente",
+              status: "existing",
+              tinyProductId: product.id,
+              variationSkus: completed.variationSkus,
+            };
+          }
+
+          const clonerParent = await tinyV3Request<TinyClonerDetail>(
+            `/produtos/${requested.clonerId}`,
+          );
+          if (clonerParent.tipo !== "V" || clonerParent.produtoPai?.id || !/cloner/i.test(clonerParent.descricao ?? "")) {
+            throw new Error("O produto selecionado não é um cloner pai válido.");
+          }
+          const cloner = await hydrateClonerManufacturing(clonerParent);
+          const clonerIsInfant = /infantil/i.test(clonerParent.descricao ?? "");
+          if ((requested.audience === "infantil") !== clonerIsInfant) {
+            throw new Error(`Escolha um cloner ${requested.audience} para esta grade.`);
+          }
+
+          const existing = await findProductBySku(requested.baseSku);
+          if (existing) {
+            const existingProduct = await tinyV3Request<TinyClonerDetail>(`/produtos/${existing.id}`);
+            const completed = await resolveClonerVariations(
+              existingProduct,
+              cloner,
+              requested.baseSku,
+            );
+            const manufacturedSizes = await ensureManufacturedVariations(completed.product, cloner);
+            await ensureProductArtwork(existing.id, model.artUrl, publicOrigin);
+            return {
+              modelNumber: requested.modelNumber,
+              audience: requested.audience,
+              sku: requested.baseSku,
+              title: requested.title,
+              status: "existing",
+              tinyProductId: existing.id,
+              variationSkus: completed.variationSkus,
+              manufacturedSizes,
+            };
+          }
+
+          const payload = buildTinyProductFromCloner({
+            cloner,
+            title: requested.title,
+            baseSku: requested.baseSku,
           });
-          continue;
-        }
-
-        const clonerParent = await tinyV3Request<TinyClonerDetail>(
-          `/produtos/${requested.clonerId}`,
-        );
-        if (clonerParent.tipo !== "V" || clonerParent.produtoPai?.id || !/cloner/i.test(clonerParent.descricao ?? "")) {
-          throw new Error("O produto selecionado não é um cloner pai válido.");
-        }
-        const cloner = await hydrateClonerManufacturing(clonerParent);
-
-        const existing = await findProductBySku(requested.baseSku);
-        if (existing) {
-          const existingProduct = await tinyV3Request<TinyClonerDetail>(`/produtos/${existing.id}`);
-          const completed = await addMissingVariationsFromCloner(
-            existingProduct,
+          const created = await tinyV3Request<TinyCreatedProductResponse>("/produtos", {
+            method: "POST",
+            body: payload,
+          });
+          const createdProduct = mergeTinyCreatedProductResponse(payload, created);
+          const completed = await resolveClonerVariations(
+            createdProduct,
             cloner,
             requested.baseSku,
           );
-          if (completed.addedSizes.length > 0) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-          const preparedProduct = completed.addedSizes.length > 0
-            ? await tinyV3Request<TinyClonerDetail>(`/produtos/${existing.id}`)
-            : existingProduct;
-          const manufacturedSizes = await ensureManufacturedVariations(preparedProduct, cloner);
-          await ensureProductArtwork(existing.id, model.artUrl);
-          results.push({
+          const manufacturedSizes = await ensureManufacturedVariations(completed.product, cloner);
+          await ensureProductArtwork(created.id, model.artUrl, publicOrigin);
+          return {
             modelNumber: requested.modelNumber,
+            audience: requested.audience,
             sku: requested.baseSku,
             title: requested.title,
-            status: "existing",
-            tinyProductId: existing.id,
+            status: "created",
+            tinyProductId: created.id,
             variationSkus: completed.variationSkus,
-            addedSizes: completed.addedSizes,
             manufacturedSizes,
-          });
-          continue;
+          };
+        } catch (error) {
+          return {
+            modelNumber: requested.modelNumber,
+            audience: requested.audience,
+            sku: requested.mode === "clone" ? requested.baseSku : "",
+            title: requested.mode === "clone" ? requested.title : "Produto existente",
+            status: "failed",
+            error: error instanceof Error ? error.message : "Falha inesperada no Tiny.",
+          };
         }
-
-        const payload = buildTinyProductFromCloner({
-          cloner,
-          title: requested.title,
-          baseSku: requested.baseSku,
-        });
-        const created = await tinyV3Request<{ id: number }>("/produtos", {
-          method: "POST",
-          body: payload,
-        });
-        // The attachment endpoint can be called only after the new parent is
-        // available throughout Tiny's product service.
-        await new Promise((resolve) => setTimeout(resolve, 750));
-        const createdProduct = await tinyV3Request<TinyClonerDetail>(`/produtos/${created.id}`);
-        const manufacturedSizes = await ensureManufacturedVariations(createdProduct, cloner);
-        await ensureProductArtwork(created.id, model.artUrl);
-        results.push({
-          modelNumber: requested.modelNumber,
-          sku: requested.baseSku,
-          title: requested.title,
-          status: "created",
-          tinyProductId: created.id,
-          variationSkus: variationSkuMap({ id: created.id, variacoes: payload.variacoes }),
-          manufacturedSizes,
-        });
-      } catch (error) {
-        results.push({
-          modelNumber: requested.modelNumber,
-          sku: requested.mode === "clone" ? requested.baseSku : "",
-          title: requested.mode === "clone" ? requested.title : "Produto existente",
-          status: "failed",
-          error: error instanceof Error ? error.message : "Falha inesperada no Tiny.",
-        });
-      }
-    }
+    }),
+    );
 
     return NextResponse.json({ results });
   } catch (error) {

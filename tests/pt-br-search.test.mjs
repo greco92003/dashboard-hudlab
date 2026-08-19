@@ -15,6 +15,7 @@ test("encontra nomes com ou sem acentuação", () => {
   assert.equal(includesPtBrSearch("Angélica Leal", "angelica leal"), true);
   assert.equal(includesPtBrSearch("JOÃO ANTÔNIO", "joao antonio"), true);
   assert.equal(includesPtBrSearch("Mariana Leal", "angelica leal"), false);
+  assert.equal(includesPtBrSearch("Jose da Silva", "José"), true);
 });
 
 test("cria sondagens estreitas para recuperar candidatos do GHL", () => {
@@ -23,4 +24,9 @@ test("cria sondagens estreitas para recuperar candidatos do GHL", () => {
   assert.ok(probes.includes("angélica"));
   assert.ok(probes.includes("ang"));
   assert.ok(probes.includes("ica"));
+
+  const accentedProbes = buildContactSearchProbes("josé");
+  assert.ok(accentedProbes.includes("jose"));
+  assert.ok(buildContactSearchProbes("jose").includes("josé"));
+  assert.equal(new Set(accentedProbes).size, accentedProbes.length);
 });

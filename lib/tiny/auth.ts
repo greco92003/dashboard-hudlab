@@ -24,6 +24,7 @@ export const TINY_OAUTH_BASE =
   "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect";
 
 const SUPABASE_TOKEN_KEY = "tiny_refresh_token";
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // In-memory access-token cache (per server process)
@@ -66,6 +67,7 @@ export async function saveRefreshTokenToSupabase(
         description:
           "Tiny ERP OAuth2 refresh token (auto-renovado pelo sistema)",
       }),
+      signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
     });
   } catch {
     // Non-fatal – log only
@@ -87,6 +89,7 @@ async function loadRefreshTokenFromSupabase(): Promise<string | null> {
           apikey: serviceKey,
         },
         cache: "no-store",
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       },
     );
 
@@ -176,6 +179,7 @@ export async function exchangeCodeForTokens(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
 
   const data = await res.json();
@@ -254,6 +258,7 @@ async function _doRefreshToken(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
 
   const data = await res.json();
