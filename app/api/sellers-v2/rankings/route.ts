@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,40 +62,40 @@ export async function GET(request: NextRequest) {
     ).toISOString();
 
     // Fetch current month won deals
-    const { data: currentMonthDeals, error: monthError } = await supabase
-      .from("deals_cache")
-      .select("vendedor, value")
-      .gte("closing_date", firstDayOfMonth)
-      .lte("closing_date", lastDayOfMonth)
-      .in("status", ["won", "1"])
-      .not("vendedor", "is", null)
-      .neq("vendedor", "");
-
-    if (monthError) {
-      console.error("Error fetching month deals:", monthError);
-      return NextResponse.json(
-        { error: "Erro ao buscar dados" },
-        { status: 500 },
-      );
-    }
+    const currentMonthDeals = await fetchAllSupabaseRows<any>(
+      (from, to) =>
+        supabase
+          .from("deals_cache")
+          .select("vendedor, value")
+          .gte("closing_date", firstDayOfMonth)
+          .eq("source_system", "ghl")
+          .eq("sync_status", "synced")
+          .lte("closing_date", lastDayOfMonth)
+          .in("status", ["won", "1"])
+          .not("vendedor", "is", null)
+          .neq("vendedor", "")
+          .order("deal_id", { ascending: true })
+          .range(from, to),
+      "Current month seller ranking read failed",
+    );
 
     // Fetch all year won deals (for record ranking)
-    const { data: yearDeals, error: yearError } = await supabase
-      .from("deals_cache")
-      .select("vendedor, value, closing_date")
-      .gte("closing_date", firstDayOfYear)
-      .lte("closing_date", lastDayOfYear)
-      .in("status", ["won", "1"])
-      .not("vendedor", "is", null)
-      .neq("vendedor", "");
-
-    if (yearError) {
-      console.error("Error fetching year deals:", yearError);
-      return NextResponse.json(
-        { error: "Erro ao buscar dados" },
-        { status: 500 },
-      );
-    }
+    const yearDeals = await fetchAllSupabaseRows<any>(
+      (from, to) =>
+        supabase
+          .from("deals_cache")
+          .select("vendedor, value, closing_date")
+          .gte("closing_date", firstDayOfYear)
+          .lte("closing_date", lastDayOfYear)
+          .eq("source_system", "ghl")
+          .eq("sync_status", "synced")
+          .in("status", ["won", "1"])
+          .not("vendedor", "is", null)
+          .neq("vendedor", "")
+          .order("deal_id", { ascending: true })
+          .range(from, to),
+      "Year seller ranking read failed",
+    );
 
     // Fetch user profiles for avatar mapping
     const { data: profiles } = await supabase
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
 
     // Ranking 1: Current month sales by seller
     const monthSalesMap: Record<string, number> = {};
-    currentMonthDeals?.forEach((deal) => {
+    currentMonthDeals.forEach((deal) => {
       const name = normalizeName(deal.vendedor || "");
       if (!name) return;
       monthSalesMap[name] =
@@ -129,11 +130,10 @@ export async function GET(request: NextRequest) {
 
     // Ranking 2: Best single-month record per seller in current year
     const monthlyTotals: Record<string, Record<string, number>> = {};
-    yearDeals?.forEach((deal) => {
+    yearDeals.forEach((deal) => {
       const name = normalizeName(deal.vendedor || "");
       if (!name) return;
-      const closingDate = new Date(deal.closing_date);
-      const monthKey = `${closingDate.getFullYear()}-${String(closingDate.getMonth() + 1).padStart(2, "0")}`;
+      const monthKey = String(deal.closing_date).slice(0, 7);
       if (!monthlyTotals[name]) monthlyTotals[name] = {};
       monthlyTotals[name][monthKey] =
         (monthlyTotals[name][monthKey] || 0) + (Number(deal.value) || 0) / 100;

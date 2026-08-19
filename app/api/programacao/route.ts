@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 // GET GHL deals from the unified deals_cache organized by shipping date.
 export async function GET(request: NextRequest) {
@@ -31,13 +32,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not approved" }, { status: 403 });
     }
 
-    console.log("📦 Fetching deals from programacao_cache...");
+    console.log("📦 Fetching all won GHL deals from deals_cache...");
 
-    // Fetch deals from programacao_cache
-    const { data: deals, error: dealsError } = await supabase
-      .from("deals_cache")
-      .select(
-        `
+    // Supabase projects commonly cap each response at 1,000 rows.
+    const deals = await fetchAllSupabaseRows<any>(
+      (from, to) =>
+        supabase
+          .from("deals_cache")
+          .select(
+            `
         deal_id,
         title,
         value,
@@ -50,27 +53,23 @@ export async function GET(request: NextRequest) {
         "quantidade-de-pares",
         vendedor,
         designer
-      `
-      )
-      .eq("source_system", "ghl")
-      .eq("status", "won")
-      .eq("sync_status", "synced")
-      .order("data_embarque", { ascending: true, nullsFirst: false });
+      `,
+          )
+          .eq("source_system", "ghl")
+          .eq("status", "won")
+          .eq("sync_status", "synced")
+          .order("data_embarque", { ascending: true, nullsFirst: false })
+          .order("deal_id", { ascending: true })
+          .range(from, to),
+      "Programacao deals read failed",
+    );
 
-    if (dealsError) {
-      console.error("❌ Error fetching deals:", dealsError);
-      return NextResponse.json(
-        { error: "Failed to fetch deals", details: dealsError.message },
-        { status: 500 }
-      );
-    }
-
-    console.log(`✅ Found ${deals?.length || 0} deals`);
+    console.log(`✅ Found ${deals.length} deals`);
 
     // Group deals by data_embarque (shipping date)
     const dealsByEmbarque = new Map<string, any[]>();
 
-    deals?.forEach((deal) => {
+    deals.forEach((deal) => {
       const embarqueDate = deal.data_embarque || "Sem data de embarque";
       if (!dealsByEmbarque.has(embarqueDate)) {
         dealsByEmbarque.set(embarqueDate, []);
@@ -114,9 +113,9 @@ export async function GET(request: NextRequest) {
       });
 
     // Calculate summary statistics
-    const totalDeals = deals?.length || 0;
+    const totalDeals = deals.length;
     const totalValue =
-      deals?.reduce((sum, deal) => sum + (deal.value || 0), 0) || 0;
+      deals.reduce((sum, deal) => sum + (deal.value || 0), 0) || 0;
 
     return NextResponse.json({
       success: true,
@@ -139,7 +138,7 @@ export async function GET(request: NextRequest) {
         stack: error instanceof Error ? error.stack : null,
         timestamp: new Date().toISOString(),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

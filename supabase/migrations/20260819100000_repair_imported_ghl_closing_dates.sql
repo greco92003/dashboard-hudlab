@@ -16,7 +16,7 @@ set closing_date = custom_field_value::date,
       to_jsonb(custom_field_value),
       true
     ),
-    last_change_source = 'closing_date_repair',
+    last_change_source = 'manual',
     last_request_id = 'ac-ghl-cutover-2026-08-03',
     last_synced_at = now()
 where source_system = 'ghl'
