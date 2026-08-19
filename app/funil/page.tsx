@@ -64,6 +64,18 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value);
 }
 
+function formatWebhookDate(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  }).format(date);
+}
+
 // White label with a dark halo: readable both over the funnel colors and
 // over the page background when the funnel narrows.
 const LABEL_STYLE: CSSProperties = {
@@ -96,6 +108,7 @@ function FunnelPanel({ funnel }: { funnel: ApiFunnel }) {
     [funnel.stages],
   );
   const isMobile = useIsMobile() ?? false;
+  const lastEventLabel = formatWebhookDate(funnel.lastEventAt);
 
   return (
     <section className="overflow-hidden rounded-3xl border border-border/60 bg-card/60 shadow-sm backdrop-blur-sm">
@@ -118,14 +131,9 @@ function FunnelPanel({ funnel }: { funnel: ApiFunnel }) {
               </span>
             )}
           </div>
-          {funnel.lastEventAt && (
+          {lastEventLabel && (
             <p className="mt-1 text-xs text-muted-foreground">
-              último webhook:{" "}
-              {new Intl.DateTimeFormat("pt-BR", {
-                dateStyle: "short",
-                timeStyle: "short",
-                timeZone: "America/Sao_Paulo",
-              }).format(new Date(funnel.lastEventAt))}
+              último webhook: {lastEventLabel}
             </p>
           )}
         </div>
@@ -252,13 +260,9 @@ export default function FunilPage() {
       )
     : [];
 
-  const lastEventLabel = data?.meta.lastEventAt
-    ? new Intl.DateTimeFormat("pt-BR", {
-        dateStyle: "short",
-        timeStyle: "short",
-        timeZone: "America/Sao_Paulo",
-      }).format(new Date(data.meta.lastEventAt))
-    : "aguardando o primeiro webhook";
+  const lastEventLabel =
+    formatWebhookDate(data?.meta.lastEventAt ?? null) ??
+    "aguardando o primeiro webhook";
 
   return (
     <main className="relative flex flex-1 overflow-hidden px-4 py-8 sm:px-6 lg:px-8 lg:py-12">

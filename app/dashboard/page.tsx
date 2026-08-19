@@ -97,14 +97,12 @@ export default function DashboardPage() {
   // Compute average lead time (closing date - created date) in days
   const avgLeadTime = React.useMemo(() => {
     const valid = deals.filter((d) => {
-      const closing = d.custom_field_value || d.closing_date;
+      const closing = d.closing_date;
       return closing && d.created_date;
     });
     if (valid.length === 0) return null;
     const total = valid.reduce((sum, d) => {
-      const closingStr = (d.custom_field_value || d.closing_date)!.split(
-        "T",
-      )[0];
+      const closingStr = d.closing_date!.split("T")[0];
       const createdStr = d.created_date!.split("T")[0];
       const diff =
         (new Date(closingStr).getTime() - new Date(createdStr).getTime()) /
@@ -117,14 +115,12 @@ export default function DashboardPage() {
   // Compute average lead time for previous year deals
   const avgPrevLeadTime = React.useMemo(() => {
     const valid = prevDeals.filter((d) => {
-      const closing = d.custom_field_value || d.closing_date;
+      const closing = d.closing_date;
       return closing && d.created_date;
     });
     if (valid.length === 0) return null;
     const total = valid.reduce((sum, d) => {
-      const closingStr = (d.custom_field_value || d.closing_date)!.split(
-        "T",
-      )[0];
+      const closingStr = d.closing_date!.split("T")[0];
       const createdStr = d.created_date!.split("T")[0];
       const diff =
         (new Date(closingStr).getTime() - new Date(createdStr).getTime()) /
@@ -143,9 +139,7 @@ export default function DashboardPage() {
       // Group deals by date
       const groupedByDate = deals.reduce(
         (acc: Record<string, number>, item: Deal) => {
-          const date =
-            item.custom_field_value?.split("T")[0] ||
-            item.closing_date?.split("T")[0];
+          const date = item.closing_date?.split("T")[0];
           if (!date) return acc; // Skip deals without closing date
           // Divide by 100 to get real values (database stores values multiplied by 100)
           const value = (item.value || 0) / 100;
@@ -209,9 +203,7 @@ export default function DashboardPage() {
       // Group deals by date
       const groupedByDate = deals.reduce(
         (acc: Record<string, number>, item: Deal) => {
-          const date =
-            item.custom_field_value?.split("T")[0] ||
-            item.closing_date?.split("T")[0];
+          const date = item.closing_date?.split("T")[0];
           if (!date) return acc; // Skip deals without closing date
           // Divide by 100 to get real values (database stores values multiplied by 100)
           const value = (item.value || 0) / 100;
@@ -471,9 +463,7 @@ export default function DashboardPage() {
           // Build previous year chart data aligned by period length (won deals only)
           const groupedByDate = prevWonDeals.reduce(
             (acc: Record<string, number>, item: Deal) => {
-              const date =
-                item.custom_field_value?.split("T")[0] ||
-                item.closing_date?.split("T")[0];
+              const date = item.closing_date?.split("T")[0];
               if (!date) return acc;
               const value = (item.value || 0) / 100;
               acc[date] = (acc[date] || 0) + value;

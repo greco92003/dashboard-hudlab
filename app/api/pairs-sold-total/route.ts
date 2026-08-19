@@ -7,6 +7,7 @@ import {
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -79,27 +80,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch deals from cache and sum quantidade-de-pares field (won deals only)
-    const { data: deals, error } = await supabase
-      .from("deals_cache")
-      .select('"quantidade-de-pares"')
-      .eq("source_system", "ghl")
-      .eq("sync_status", "synced")
-      .in("status", ["won", "1"])
-      .not("closing_date", "is", null)
-      .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
-      .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate));
-
-    if (error) {
-      console.error("Error fetching deals from cache:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch deals from cache" },
-        { status: 500 },
-      );
-    }
+    const deals = await fetchAllSupabaseRows<any>(
+      (from, to) =>
+        supabase
+          .from("deals_cache")
+          .select('deal_id, "quantidade-de-pares"')
+          .eq("source_system", "ghl")
+          .eq("sync_status", "synced")
+          .in("status", ["won", "1"])
+          .not("closing_date", "is", null)
+          .gte(
+            "closing_date",
+            startDateParam || formatBrazilDateToLocal(startDate),
+          )
+          .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate))
+          .order("deal_id", { ascending: true })
+          .range(from, to),
+      "GHL pairs read failed",
+    );
 
     // Calculate total pairs sold from quantidade-de-pares field
     const totalPairsSold =
-      deals?.reduce((sum: number, deal) => {
+      deals.reduce((sum: number, deal) => {
         const quantidadePares = parseInt(deal["quantidade-de-pares"] || "0");
         return sum + quantidadePares;
       }, 0) || 0;
@@ -127,11 +129,11 @@ export async function GET(request: NextRequest) {
           start: formatBrazilDateToLocal(startDate),
           end: formatBrazilDateToLocal(endDate),
         },
-        totalDealsAnalyzed: deals?.length || 0,
+        totalDealsAnalyzed: deals.length,
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=300", // Cache for 5 minutes
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
         },
       },
     );

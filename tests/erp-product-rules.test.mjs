@@ -29,6 +29,21 @@ test("gera título, SKU pai e SKU de variação no padrão HudLab", () => {
     "CH-SL-METANOIA-PRT-3435",
   );
 });
+test("diferencia nome e SKU da grade infantil sem alterar o padrão adulto", () => {
+  const date = new Date("2026-08-03T12:00:00-03:00");
+  assert.equal(
+    buildProductTitle({
+      opportunityName: "Metanoia",
+      color: "Preta",
+      modelNumber: 1,
+      audience: "infantil",
+      date,
+    }),
+    "Chinelo Slide Infantil 082601 - METANOIA - Preto",
+  );
+  assert.equal(buildBaseSku("Metanoia", "Preta", "infantil"), "CH-SL-INF-METANOIA-PRT");
+  assert.equal(buildBaseSku("Metanoia", "Preta", "adulto"), "CH-SL-METANOIA-PRT");
+});
 
 test("infere a cor da gáspea a partir dos nomes dos cloners", () => {
   assert.equal(

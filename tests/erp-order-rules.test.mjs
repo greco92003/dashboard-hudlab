@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dateFromOpportunityName, extractGhlOrderSource, natureName, paymentKind } from "../lib/erp/order-rules.ts";
+import { dateFromOpportunityName, ebookAdjustedFootwearUnitPrice, extractGhlOrderSource, natureName, paymentKind } from "../lib/erp/order-rules.ts";
 
 test("normaliza as duas formas de Pix e cartão do GHL", () => {
   assert.equal(paymentKind("PIX à vista"), "pix");
@@ -41,4 +41,9 @@ test("lê quantidade, preço, frete e pagamento dos campos reais do GHL", () => 
   assert.equal(result.customerFreight, 80);
   assert.equal(result.paymentKind, "pix");
   assert.equal(result.dueDate, null);
+});
+test("desconta o ebook do total e recalcula o valor unitário dos pares", () => {
+  assert.equal(ebookAdjustedFootwearUnitPrice(5_000, 26.45, 100, 100), 23.55);
+  assert.equal(ebookAdjustedFootwearUnitPrice(5_000, 26.45, 80, 100), 28.84);
+  assert.equal(ebookAdjustedFootwearUnitPrice(5_000, 26.45, 100, 0), null);
 });

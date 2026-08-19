@@ -64,15 +64,12 @@ export async function POST(request: NextRequest) {
   }
 
   const webhookId = firstString(payload.webhookId, payload.eventId);
-  const claim = await claimWebhookEvent({
+  const claimInput = {
     provider: "ghl",
     idempotencyKey: buildWebhookIdempotencyKey("ghl", webhookId, rawBody),
     payloadSha256: sha256Hex(rawBody),
     requestTimestamp: null,
-  });
-  if (!claim.claimed) {
-    return NextResponse.json({ success: true, duplicate: true });
-  }
+  } as const;
 
   const requestId = request.headers.get("x-vercel-id") || webhookId || crypto.randomUUID();
   try {
@@ -88,12 +85,24 @@ export async function POST(request: NextRequest) {
         .eq("source_system", "ghl")
         .eq("deal_id", opportunityId);
       if (error) throw error;
-      return NextResponse.json({ success: true, deleted: opportunityId });
+      const claim = await claimWebhookEvent(claimInput);
+      return NextResponse.json({
+        success: true,
+        deleted: opportunityId,
+        duplicate: !claim.claimed,
+      });
     }
 
     const deal = await getGhlDeal(opportunityId);
     await upsertGhlDeals([deal], "webhook", requestId);
-    return NextResponse.json({ success: true, updated: opportunityId });
+    // Claim only after the idempotent mutation succeeds. If processing fails,
+    // GHL can retry instead of having the retry discarded as a duplicate.
+    const claim = await claimWebhookEvent(claimInput);
+    return NextResponse.json({
+      success: true,
+      updated: opportunityId,
+      duplicate: !claim.claimed,
+    });
   } catch (error) {
     console.error("GHL deal webhook processing failed", error);
     // GHL retries non-2xx responses with exponential backoff.

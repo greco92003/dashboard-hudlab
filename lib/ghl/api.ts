@@ -16,6 +16,11 @@ import {
   includesPtBrSearch,
 } from "@/lib/search/pt-br";
 import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
+import {
+  collectGhlCursorSnapshot,
+  type GhlCompleteSnapshot,
+} from "@/lib/ghl/cursor-pagination";
+import { resolveGhlClosingDate } from "@/lib/ghl/closing-date";
 
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
@@ -128,8 +133,9 @@ async function ghlFetch<T>(
     }
   }
 
-  // Single retry on rate limit (PIT burst limit: 100 requests / 10s)
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Honor the provider's backoff signal and retry transient failures. All
+  // mutations happen after the complete snapshot, so a final error is safe.
+  for (let attempt = 0; attempt < 4; attempt++) {
     const response = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -139,8 +145,12 @@ async function ghlFetch<T>(
       cache: "no-store",
     });
 
-    if (response.status === 429 && attempt === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    if ((response.status === 429 || response.status >= 500) && attempt < 3) {
+      const retryAfterSeconds = Number(response.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfterSeconds)
+        ? Math.max(1_000, retryAfterSeconds * 1_000)
+        : 1_000 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
       continue;
     }
 
@@ -263,7 +273,6 @@ export async function searchGhlContacts(
       });
 
   const direct = await searchProbe(probes[0], maximum);
-  const directContacts = direct.contacts ?? [];
 
   const matchesQuery = (contact: GhlContactSummary) => {
     const searchable = [
@@ -279,12 +288,11 @@ export async function searchGhlContacts(
     return includesPtBrSearch(searchable, query);
   };
 
-  // Correctly accented searches remain a single GHL request. Only use the
-  // broader probes when the direct result has no normalized match.
-  const queryHasDiacritics = query.normalize("NFD") !== query;
-  const fallbackResponses = directContacts.some(matchesQuery) && queryHasDiacritics
-    ? []
-    : await Promise.all(probes.slice(1).map((probe) => searchProbe(probe, 100)));
+  // Always run every normalized/accented probe. The GHL endpoint is accent-
+  // sensitive in both directions: "jose" and "josé" return different sets.
+  const fallbackResponses = await Promise.all(
+    probes.slice(1).map((probe) => searchProbe(probe, 100)),
+  );
   const responses = [direct, ...fallbackResponses];
 
   const unique = new Map<string, GhlContactSummary>();
@@ -298,6 +306,38 @@ export async function searchGhlContacts(
       const bName = b.contactName || `${b.firstName ?? ""} ${b.lastName ?? ""}`;
       return aName.localeCompare(bName, "pt-BR", { sensitivity: "base" });
     })
+    .slice(0, maximum);
+}
+
+export async function searchGhlOpportunitiesByName(
+  query: string,
+  limit = 20,
+): Promise<GhlOpportunity[]> {
+  const { locationId } = requireEnv();
+  const maximum = Math.min(Math.max(limit, 1), 100);
+  const probes = buildContactSearchProbes(query);
+  const responses = await Promise.all(
+    probes.map((probe) =>
+      ghlFetch<{ opportunities?: GhlOpportunity[] }>("/opportunities/search", {
+        location_id: locationId,
+        q: probe,
+        status: "all",
+        limit: "100",
+      }),
+    ),
+  );
+
+  const unique = new Map<string, GhlOpportunity>();
+  for (const opportunity of responses.flatMap(
+    (response) => response.opportunities ?? [],
+  )) {
+    if (includesPtBrSearch(opportunity.name ?? "", query)) {
+      unique.set(opportunity.id, opportunity);
+    }
+  }
+
+  return Array.from(unique.values())
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
     .slice(0, maximum);
 }
 
@@ -331,50 +371,29 @@ async function fetchStageTitles(): Promise<Map<string, string>> {
   return titles;
 }
 
-async function fetchAllOpportunities(): Promise<GhlOpportunity[]> {
+async function fetchOpportunities(
+  status: "all" | "won",
+): Promise<GhlCompleteSnapshot<GhlOpportunity>> {
   const { locationId } = requireEnv();
-  const all: GhlOpportunity[] = [];
   const limit = 100;
-  const maxRequests = 2000;
-  let page = 1;
-  let startAfter: string | null = null;
-  let startAfterId: string | null = null;
-
-  for (let requestNumber = 1; requestNumber <= maxRequests; requestNumber++) {
-    const data: {
-      opportunities: GhlOpportunity[];
-      meta?: { total?: number; nextPageUrl?: string | null };
-    } = await ghlFetch("/opportunities/search", {
-      location_id: locationId,
-      limit: String(limit),
-      status: "all",
-      ...(startAfter && startAfterId
-        ? { startAfter, startAfterId }
-        : { page: String(page) }),
-    });
-
-    const batch = data.opportunities || [];
-    all.push(...batch);
-
-    if (batch.length < limit) break;
-
-    if (all.length >= 10_000 && data.meta?.nextPageUrl) {
-      const nextPage: URL = new URL(data.meta.nextPageUrl);
-      startAfter = nextPage.searchParams.get("startAfter");
-      startAfterId = nextPage.searchParams.get("startAfterId");
-      if (!startAfter || !startAfterId) {
-        throw new Error("GHL cursor pagination metadata is incomplete");
-      }
-    } else {
-      page += 1;
-    }
-
-    if (requestNumber === maxRequests) {
-      throw new Error("GHL opportunity pagination safety limit reached");
-    }
-  }
-
-  return all;
+  return collectGhlCursorSnapshot({
+    fetchPage: async (cursor) => {
+      const data = await ghlFetch<{
+        opportunities?: GhlOpportunity[];
+        meta?: { total?: number; nextPageUrl?: string | null };
+      }>("/opportunities/search", {
+        location_id: locationId,
+        limit: String(limit),
+        status,
+        ...(cursor || { page: "1" }),
+      });
+      return {
+        items: data.opportunities || [],
+        total: data.meta?.total ?? -1,
+        nextPageUrl: data.meta?.nextPageUrl ?? null,
+      };
+    },
+  });
 }
 
 async function fetchContactCustomFields(
@@ -476,22 +495,26 @@ export function mapOpportunity(
     }
   }
 
-  // Closing date precedence: "Data de Fechamento" custom field, then the
-  // date the opportunity was marked won (lastStatusChangeAt)
+  // For won deals, the actual GHL status transition is canonical. The custom
+  // field is retained below for audit/display but can contain stale CRM dates.
   const closingFromField = normalizeGhlDateString(
     deal.custom_field_value as string | null,
   );
+  const normalizedStatus = normalizeGhlDealStatus(
+    opp.pipelineId,
+    opp.pipelineStageId,
+    opp.status,
+  );
   const closingFromStatus =
-    normalizeGhlDealStatus(
-      opp.pipelineId,
-      opp.pipelineStageId,
-      opp.status,
-    ) === "won" &&
-    opp.lastStatusChangeAt
+    normalizedStatus === "won" && opp.lastStatusChangeAt
       ? toBrazilDateString(opp.lastStatusChangeAt)
       : null;
 
-  deal.closing_date = closingFromField || closingFromStatus;
+  deal.closing_date = resolveGhlClosingDate({
+    normalizedStatus,
+    statusChangeDate: closingFromStatus,
+    customFieldDate: closingFromField,
+  });
   deal.custom_field_value = closingFromField;
 
   return deal;
@@ -561,6 +584,9 @@ export interface GhlDealsResult {
   deals: GhlMappedDeal[];
   fetchedAt: string;
   totalOpportunities: number;
+  pages: number;
+  duplicates: number;
+  snapshotComplete: true;
 }
 
 let dealsCache: { result: GhlDealsResult; timestamp: number } | null = null;
@@ -568,22 +594,44 @@ let inflightFetch: Promise<GhlDealsResult> | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function fetchAndMapAllDeals(): Promise<GhlDealsResult> {
-  const [oppDefs, opportunities, stageTitlesById] = await Promise.all([
+  const [oppDefs, snapshot, stageTitlesById] = await Promise.all([
     fetchCustomFieldDefs("opportunity"),
-    fetchAllOpportunities(),
+    fetchOpportunities("all"),
     fetchStageTitles(),
   ]);
 
   const oppDefsById = new Map(oppDefs.map((d) => [d.id, d]));
 
-  const deals = opportunities.map((opp) =>
+  const deals = snapshot.items.map((opp) =>
     mapOpportunity(opp, oppDefsById, stageTitlesById),
   );
 
   return {
     deals,
     fetchedAt: new Date().toISOString(),
-    totalOpportunities: opportunities.length,
+    totalOpportunities: snapshot.expectedTotal,
+    pages: snapshot.pages,
+    duplicates: snapshot.duplicates,
+    snapshotComplete: snapshot.complete,
+  };
+}
+
+async function fetchAndMapWonDeals(): Promise<GhlDealsResult> {
+  const [oppDefs, snapshot, stageTitlesById] = await Promise.all([
+    fetchCustomFieldDefs("opportunity"),
+    fetchOpportunities("won"),
+    fetchStageTitles(),
+  ]);
+  const oppDefsById = new Map(oppDefs.map((definition) => [definition.id, definition]));
+  return {
+    deals: snapshot.items.map((opportunity) =>
+      mapOpportunity(opportunity, oppDefsById, stageTitlesById),
+    ),
+    fetchedAt: new Date().toISOString(),
+    totalOpportunities: snapshot.expectedTotal,
+    pages: snapshot.pages,
+    duplicates: snapshot.duplicates,
+    snapshotComplete: snapshot.complete,
   };
 }
 
@@ -624,6 +672,11 @@ export async function getGhlDeals(refresh = false): Promise<GhlDealsResult> {
   }
 
   return inflightFetch;
+}
+
+/** Lightweight reconciliation for newly won opportunities. */
+export function getGhlWonDeals(): Promise<GhlDealsResult> {
+  return fetchAndMapWonDeals();
 }
 
 /** Filter deals whose closing_date (YYYY-MM-DD) falls within [start, end]. */

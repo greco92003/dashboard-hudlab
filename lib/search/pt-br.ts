@@ -36,6 +36,7 @@ export function buildContactSearchProbes(query: string) {
   };
   for (const word of words) {
     const normalized = normalizePtBrSearch(word);
+    probes.push(normalized);
     for (let index = 0; index < normalized.length; index += 1) {
       for (const accented of accents[normalized[index]] ?? []) {
         probes.push(

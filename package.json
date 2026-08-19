@@ -11,6 +11,7 @@
     "security:package2": "node scripts/security-package2-check.mjs",
     "test:security-package3": "node --experimental-strip-types --test tests/security-package3.test.mjs",
     "verify:supabase-keys": "node scripts/verify-supabase-key-migration.mjs",
+    "verify:ghl-dashboard": "node --experimental-strip-types scripts/verify-ghl-dashboard-consistency.mjs",
     "webhooks:setup": "node scripts/setup-webhooks.js",
     "webhooks:list": "node scripts/setup-webhooks.js list",
     "webhooks:health": "node scripts/setup-webhooks.js health",

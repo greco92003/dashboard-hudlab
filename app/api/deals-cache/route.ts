@@ -9,6 +9,7 @@ import {
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
 import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
 const formatDateToLocal = (date: Date): string => {
@@ -86,10 +87,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch deals from cache (updated by cron) - include all custom fields
-    const { data: deals, error } = await supabase
-      .from("deals_cache")
-      .select(
-        `
+    const deals = await fetchAllSupabaseRows<any>(
+      (from, to) =>
+        supabase
+          .from("deals_cache")
+          .select(
+            `
         id, deal_id, title, value, currency, status, stage_id,
         pipeline_id, stage_title, source_system, source_id,
         closing_date, created_date, custom_field_value, custom_field_id,
@@ -98,27 +101,26 @@ export async function GET(request: NextRequest) {
         contact_id, organization_id, api_updated_at, last_synced_at,
         segmento_de_negocio, intencao_de_compra
       `,
-      )
-      .eq("source_system", "ghl")
-      .eq("sync_status", "synced")
-      .not("closing_date", "is", null)
-      .gte("closing_date", startDateParam || formatBrazilDateToLocal(startDate))
-      .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate))
-      .order("closing_date", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching deals from cache:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch deals from cache" },
-        { status: 500 },
-      );
-    }
+          )
+          .eq("source_system", "ghl")
+          .eq("sync_status", "synced")
+          .not("closing_date", "is", null)
+          .gte(
+            "closing_date",
+            startDateParam || formatBrazilDateToLocal(startDate),
+          )
+          .lte("closing_date", endDateParam || formatBrazilDateToLocal(endDate))
+          .order("closing_date", { ascending: false })
+          .order("deal_id", { ascending: true })
+          .range(from, to),
+      "GHL deals cache read failed",
+    );
 
     // Keep every dashboard aligned with the GHL business rule. Moving an
     // already completed sale to the Mockup Factory resets its provider status
     // to `open`, so normalize it again at read time as a safety net for rows
     // created before the cache migration/backfill ran.
-    const normalizedDeals = (deals || []).map((deal) => ({
+    const normalizedDeals = deals.map((deal) => ({
       ...deal,
       status: normalizeGhlDealStatus(
         deal.pipeline_id,
@@ -166,7 +168,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
           "X-Data-Source": "ghl-deals-cache",
         },
       },

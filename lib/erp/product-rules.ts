@@ -74,14 +74,21 @@ export function buildProductTitle(input: {
   color: string;
   modelNumber: number;
   date: Date;
+  audience?: "adulto" | "infantil";
 }): string {
   const opportunity = input.opportunityName.trim().toUpperCase();
   const color = normalizeColorName(input.color);
-  return `Chinelo Slide ${buildModelCode(input.date, input.modelNumber)} - ${opportunity} - ${color}`;
+  const product = input.audience === "infantil" ? "Chinelo Slide Infantil" : "Chinelo Slide";
+  return `${product} ${buildModelCode(input.date, input.modelNumber)} - ${opportunity} - ${color}`;
 }
 
-export function buildBaseSku(opportunityName: string, color: string): string {
-  return `CH-SL-${normalizeSkuPart(opportunityName)}-${abbreviateColor(color)}`;
+export function buildBaseSku(
+  opportunityName: string,
+  color: string,
+  audience: "adulto" | "infantil" = "adulto",
+): string {
+  const audienceCode = audience === "infantil" ? "-INF" : "";
+  return `CH-SL${audienceCode}-${normalizeSkuPart(opportunityName)}-${abbreviateColor(color)}`;
 }
 
 export function buildVariationSku(baseSku: string, size: string): string {

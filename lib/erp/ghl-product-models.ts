@@ -3,6 +3,7 @@ import { positiveQuantity, type ErpGradeItem } from "./product-rules";
 
 export type GhlProductModel = {
   modelNumber: number;
+  audience: "adulto" | "infantil";
   artUrl: string | null;
   grades: ErpGradeItem[];
   totalPairs: number;
@@ -38,18 +39,21 @@ export function extractGhlProductModels(
   const fieldsById = new Map(
     (opportunity.customFields ?? []).map((field) => [field.id, field]),
   );
-  const models = new Map<number, GhlProductModel>();
+  const models = new Map<string, GhlProductModel>();
+  const artUrls = new Map<number, string>();
 
-  const getModel = (modelNumber: number) => {
-    const current = models.get(modelNumber);
+  const getModel = (modelNumber: number, audience: "adulto" | "infantil") => {
+    const key = `${modelNumber}:${audience}`;
+    const current = models.get(key);
     if (current) return current;
     const created: GhlProductModel = {
       modelNumber,
       artUrl: null,
+      audience,
       grades: [],
       totalPairs: 0,
     };
-    models.set(modelNumber, created);
+    models.set(key, created);
     return created;
   };
 
@@ -63,7 +67,7 @@ export function extractGhlProductModels(
       const optionLabels = new Map(
         (definition.picklistOptions ?? []).map((option) => [option.id, option.label]),
       );
-      const model = getModel(grade.modelNumber);
+      const model = getModel(grade.modelNumber, grade.audience);
 
       for (const [optionId, rawQuantity] of Object.entries(
         value as Record<string, unknown>,
@@ -82,7 +86,7 @@ export function extractGhlProductModels(
     const entry = fieldsById.get(definition.id);
     const value = entry ? rawFieldValue(entry) : null;
     if (typeof value === "string" && value.trim()) {
-      getModel(Number(artMatch[1])).artUrl = value.trim();
+      artUrls.set(Number(artMatch[1]), value.trim());
     }
   }
 
@@ -91,6 +95,7 @@ export function extractGhlProductModels(
     .map((model) => ({
       ...model,
       grades: model.grades.sort((a, b) => a.size.localeCompare(b.size, "pt-BR")),
+      artUrl: artUrls.get(model.modelNumber) ?? null,
     }))
-    .sort((a, b) => a.modelNumber - b.modelNumber);
+    .sort((a, b) => a.modelNumber - b.modelNumber || a.audience.localeCompare(b.audience));
 }

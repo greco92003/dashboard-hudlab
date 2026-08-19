@@ -1,4 +1,5 @@
 import { buildVariationSku } from "./product-rules";
+import { tinyClonerBasePrice, tinyClonerVariationPrice } from "./tiny-cloner-prices";
 
 type TinyGrade = { chave?: string | null; valor?: string | null };
 
@@ -8,6 +9,7 @@ export type TinyClonerDetail = {
   descricao?: string | null;
   tipo?: string | null;
   produtoPai?: { id?: number } | null;
+  grade?: TinyGrade[];
   descricaoComplementar?: string | null;
   unidade?: string | null;
   unidadePorCaixa?: string | null;
@@ -132,9 +134,9 @@ export function buildTinyVariationsFromCloner(input: {
     return compact({
       sku,
       // GTIN is intentionally not cloned: it must remain unique per product.
-      precos: source.precos ?? {
-        preco: input.cloner.precos?.preco,
-        precoPromocional: input.cloner.precos?.precoPromocional,
+      precos: {
+        preco: tinyClonerVariationPrice(input.cloner, source),
+        precoPromocional: source.precos?.precoPromocional ?? input.cloner.precos?.precoPromocional,
       },
       estoque: { inicial: 0 },
       grade: (source.grade ?? []).map((item) => ({
@@ -176,7 +178,7 @@ export function buildTinyProductFromCloner(input: {
     marca: cloner.marca?.id ? { id: cloner.marca.id } : undefined,
     categoria: cloner.categoria?.id ? { id: cloner.categoria.id } : undefined,
     precos: {
-      preco: cloner.precos?.preco,
+      preco: tinyClonerBasePrice(cloner),
       precoPromocional: cloner.precos?.precoPromocional,
       precoCusto: cloner.precos?.precoCusto,
     },

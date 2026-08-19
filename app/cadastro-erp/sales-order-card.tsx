@@ -1,27 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, ReceiptText, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ErpContactDraft } from "@/lib/erp/contact-rules";
-import { FREE_SAMPLE_NATURE, natureName, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
-import type { ErpDealProductPreview } from "@/lib/erp/types";
+import { ebookAdjustedFootwearUnitPrice, FREE_SAMPLE_NATURE, natureName, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
+import type { ErpDealProductPreview, TinyOrderProduct } from "@/lib/erp/types";
 
 type Mapping = { title: string; baseSku: string; variationSkus?: Record<string, string> };
-type Item = { sku: string; description: string; quantity: number; unitPrice: number };
+type Item = { productId?: number; sku: string; description: string; unit: string; quantity: number; unitPrice: number };
 type PaymentForm = "Pix" | "Cartão de Crédito" | "";
+type CardBrand = "Visa" | "Mastercard" | "American Express" | "Sorocred" | "Diners Club" | "Elo" | "Hipercard" | "Aura" | "Cabal" | "Outros" | "";
+type PaymentCondition = "parcelado em 1x" | "parcelado em 2x" | "parcelado em 3x" | "parcelado em 4x" | "parcelado em 5x" | "parcelado em 6x" | "parcelado em 7x" | "parcelado em 8x" | "parcelado em 9x" | "parcelado em 10x" | "parcelado em 11x" | "parcelado em 12x" | "";
 
 type Props = {
   preview: ErpDealProductPreview;
-  mappings: Record<number, Mapping>;
+  mappings: Record<string, Mapping>;
   tinyContactId: number;
   contact: ErpContactDraft;
 };
@@ -37,18 +40,25 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Props) {
   const initialItems = useMemo<Item[]>(() => preview.models.flatMap((model) => {
-    const mapping = mappings[model.modelNumber];
+    const mapping = mappings[`${model.modelNumber}:${model.audience}`];
     return model.grades.map((grade) => ({
       // The order may use only sizes filled in the GHL, but each SKU must have
       // been confirmed by Tiny. Never invent a variation SKU at order time.
       sku: mapping.variationSkus?.[grade.size] ?? "",
       description: `${mapping.title} - ${grade.size}`.slice(0, 120),
+      unit: "PR",
       quantity: grade.quantity,
       unitPrice: preview.order.unitPrice ?? 0,
     }));
   }), [preview, mappings]);
   const initialContributor = contact.contributor !== "0" ? contact.contributor : contact.personType === "F" ? "9" : "0";
   const [items, setItems] = useState(initialItems);
+  const [accessProduct, setAccessProduct] = useState<TinyOrderProduct | null>(null);
+  const [accessProductLoading, setAccessProductLoading] = useState(true);
+  const [accessProductError, setAccessProductError] = useState("");
+  const [includeAccessProduct, setIncludeAccessProduct] = useState(false);
+  const [accessQuantity, setAccessQuantity] = useState(0);
+  const [accessUnitPrice, setAccessUnitPrice] = useState(0);
   const [contributor, setContributor] = useState(initialContributor);
   const [nature, setNature] = useState(natureName(contact.state, initialContributor));
   const [orderDate, setOrderDate] = useState(today());
@@ -57,6 +67,8 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
   const [paymentForm, setPaymentForm] = useState<PaymentForm>(preview.order.paymentKind === "pix" ? "Pix" : preview.order.paymentKind === "credit_card" ? "Cartão de Crédito" : "");
   const [paymentMedium, setPaymentMedium] = useState("Banco");
   const [bankAccount, setBankAccount] = useState(preview.order.paymentKind === "credit_card" ? "Sicredi - PJ" : "Sicredi");
+  const [cardBrand, setCardBrand] = useState<CardBrand>("");
+  const [paymentCondition, setPaymentCondition] = useState<PaymentCondition>("");
   const [category, setCategory] = useState("Venda de Slides");
   const [dueDate, setDueDate] = useState(preview.order.dueDate ?? "");
   const [notes, setNotes] = useState("");
@@ -64,21 +76,60 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ id: number; number: string; existing: boolean } | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/erp/tiny/access-product", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Falha ao carregar o Livro Digital.");
+        if (active) setAccessProduct(data.product as TinyOrderProduct);
+      } catch (error) {
+        if (active) setAccessProductError(error instanceof Error ? error.message : "Falha ao carregar o Livro Digital.");
+      } finally {
+        if (active) setAccessProductLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
   const itemPairs = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const expectedPairs = preview.order.expectedPairs;
   const pairsMatch = expectedPairs !== null && Math.abs(itemPairs - expectedPairs) < 0.001;
   const isFreeSample = nature === FREE_SAMPLE_NATURE;
-  const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) + freight;
-  const itemsWithoutSku = items.filter((item) => !item.sku.trim());
+  const footwearTotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const accessSubtotal = includeAccessProduct ? accessQuantity * accessUnitPrice : 0;
+  const adjustedFootwearUnitPrice = includeAccessProduct
+    ? ebookAdjustedFootwearUnitPrice(footwearTotal, accessUnitPrice, accessQuantity, itemPairs)
+    : null;
+  const footwearOrderItems = adjustedFootwearUnitPrice === null
+    ? items
+    : items.map((item) => ({ ...item, unitPrice: adjustedFootwearUnitPrice }));
+  const accessItem: Item | null = includeAccessProduct && accessProduct ? {
+    productId: accessProduct.id,
+    sku: accessProduct.sku,
+    description: accessProduct.description,
+    unit: accessProduct.unit,
+    quantity: accessQuantity,
+    unitPrice: accessUnitPrice,
+  } : null;
+  const orderItems = accessItem ? [...footwearOrderItems, accessItem] : footwearOrderItems;
+  const total = orderItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0) + freight;
+  const itemsWithoutSku = orderItems.filter((item) => !item.sku.trim());
   const problems = [
     contributor === "0" ? "Confirme se o cliente é contribuinte." : "",
     !nature.trim() ? "Informe a natureza da operação." : "",
     !expectedDeliveryDate ? "Informe a data prevista de entrega." : "",
     !isFreeSample && expectedPairs === null ? "Quantidade de pares não encontrada no GHL." : !isFreeSample && !pairsMatch ? `A grade soma ${itemPairs}, mas o GHL informa ${expectedPairs}.` : "",
     itemsWithoutSku.length > 0 ? `O Tiny não possui SKU confirmado para: ${itemsWithoutSku.map((item) => item.description).join(", ")}.` : "",
+    includeAccessProduct && accessProductLoading ? "Aguarde o carregamento do Livro Digital." : "",
+    includeAccessProduct && !accessProductLoading && !accessProduct ? accessProductError || "O Livro Digital não foi encontrado no Tiny." : "",
+    includeAccessProduct && adjustedFootwearUnitPrice !== null && adjustedFootwearUnitPrice < 0 ? "O valor total dos ebooks supera o valor original dos chinelos." : "",
     !isFreeSample && !paymentForm.trim() ? "Forma de recebimento não encontrada." : "",
+    !isFreeSample && paymentForm === "Cartão de Crédito" && !cardBrand ? "Informe a bandeira do cartão." : "",
+    !isFreeSample && paymentForm === "Cartão de Crédito" && !paymentCondition ? "Informe a condição de pagamento." : "",
     !isFreeSample && paymentForm && !dueDate ? paymentForm === "Pix" ? "Informe manualmente o vencimento do Pix." : "Informe o vencimento do cartão." : "",
-    items.some((item) => !item.description.trim() || item.quantity <= 0 || item.unitPrice < 0 || (!isFreeSample && item.unitPrice <= 0)) ? isFreeSample ? "Revise os itens; a quantidade deve ser positiva e o valor não pode ser negativo." : "Revise os itens e confirme que todos possuem preço unitário." : "",
+    orderItems.some((item) => !item.description.trim() || !item.unit.trim() || item.quantity <= 0 || item.unitPrice < 0 || (!isFreeSample && item.unitPrice <= 0)) ? isFreeSample ? "Revise os itens; a quantidade deve ser positiva e o valor não pode ser negativo." : "Revise os itens e confirme que todos possuem quantidade, unidade e preço unitário." : "",
   ].filter(Boolean);
   const warnings = isFreeSample && !pairsMatch
     ? [expectedPairs === null ? "A quantidade do GHL não foi encontrada. Para amostra grátis, isso não impede a criação." : `A grade soma ${itemPairs}, mas o GHL informa ${expectedPairs}. Em amostra grátis, a divergência é permitida porque o envio pode conter apenas um pé.`]
@@ -89,6 +140,8 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
     setPaymentForm(value);
     setPaymentMedium("Banco");
     setBankAccount(value === "Cartão de Crédito" ? "Sicredi - PJ" : "Sicredi");
+    setCardBrand("");
+    setPaymentCondition("");
     if (value === "Pix") setDueDate("");
   };
   const updateContributor = (value: ErpContactDraft["contributor"]) => {
@@ -100,7 +153,7 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
     setSaving(true);
     setConfirmOpen(false);
     try {
-      const created = await postOrder({ dealId: preview.deal.id, tinyContactId, contributor, expectedPairs, orderDate, expectedDeliveryDate, natureName: nature, freight, paymentForm: isFreeSample ? "" : paymentForm, paymentMedium: isFreeSample ? "" : paymentMedium, bankAccount: isFreeSample ? "" : bankAccount, category: isFreeSample ? "" : category, dueDate: isFreeSample ? "" : dueDate, notes, items });
+      const created = await postOrder({ dealId: preview.deal.id, tinyContactId, contributor, expectedPairs, orderDate, expectedDeliveryDate, natureName: nature, freight, paymentForm: isFreeSample ? "" : paymentForm, paymentMedium: isFreeSample ? "" : paymentMedium, bankAccount: isFreeSample ? "" : bankAccount, cardBrand: isFreeSample || paymentForm !== "Cartão de Crédito" ? "" : cardBrand, paymentCondition: isFreeSample || paymentForm !== "Cartão de Crédito" ? "" : paymentCondition, category: isFreeSample ? "" : category, dueDate: isFreeSample ? "" : dueDate, notes, items: orderItems });
       setResult(created);
       toast.success(created.existing ? `Pedido já existente no Tiny (ID ${created.id}).` : `Pedido ${created.number || created.id} criado no Tiny.`);
     } catch (error) {
@@ -128,7 +181,51 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
           <Field label="Soma da grade"><Input value={itemPairs} readOnly className={pairsMatch ? "border-emerald-500" : isFreeSample ? "border-amber-500" : "border-destructive"} /></Field>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[850px] text-sm"><thead className="bg-muted/40 text-left"><tr><th className="p-3">SKU</th><th className="p-3">Descrição</th><th className="w-28 p-3">Qtd.</th><th className="w-36 p-3">Preço un.</th><th className="w-32 p-3 text-right">Subtotal</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.sku}-${index}`} className="border-t"><td className="p-2"><Input value={item.sku} onChange={(event) => updateItem(index, { sku: event.target.value })} /></td><td className="p-2"><Input value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} /></td><td className="p-2"><Input type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} /></td><td className="p-2"><Input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} /></td><td className="p-3 text-right">{(item.quantity * item.unitPrice).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[850px] text-sm"><thead className="bg-muted/40 text-left"><tr><th className="p-3">SKU</th><th className="p-3">Descrição</th><th className="w-28 p-3">Qtd.</th><th className="w-36 p-3">Preço un.</th><th className="w-32 p-3 text-right">Subtotal</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.sku}-${index}`} className="border-t"><td className="p-2"><Input value={item.sku} onChange={(event) => updateItem(index, { sku: event.target.value })} /></td><td className="p-2"><Input value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} /></td><td className="p-2"><Input type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })} /></td><td className="p-2"><Input type="number" min="0" step="0.01" value={adjustedFootwearUnitPrice ?? item.unitPrice} readOnly={includeAccessProduct} onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })} /></td><td className="p-3 text-right">{(item.quantity * (adjustedFootwearUnitPrice ?? item.unitPrice)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>)}</tbody></table></div>
+
+        <div className="space-y-4 rounded-xl border p-4">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="include-access-product"
+              checked={includeAccessProduct}
+              disabled={accessProductLoading || !accessProduct}
+              onCheckedChange={(checked) => {
+                const include = checked === true;
+                setIncludeAccessProduct(include);
+                if (include) {
+                  setAccessQuantity(itemPairs);
+                  setAccessUnitPrice(accessProduct?.price ?? 0);
+                }
+              }}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="include-access-product" className="cursor-pointer">
+                Incluir LIVRO DIGITAL HUD LAB - Quantidade de Acessos
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                A quantidade inicial acompanha a soma de pares do pedido. Quantidade e preço podem ser editados.
+              </p>
+            </div>
+          </div>
+          {accessProductLoading && <p className="text-xs text-muted-foreground">Carregando o produto cadastrado no Tiny…</p>}
+          {accessProductError && <p className="text-xs text-destructive">{accessProductError}</p>}
+          {includeAccessProduct && accessProduct && (
+            <div className="grid gap-4 rounded-lg bg-muted/30 p-4 md:grid-cols-2 lg:grid-cols-4">
+              <Field label="Produto"><Input value={accessProduct.description} readOnly /></Field>
+              <Field label="SKU"><Input value={accessProduct.sku} readOnly /></Field>
+              <Field label="Quantidade de acessos"><Input type="number" min="1" step="1" value={accessQuantity} onChange={(event) => setAccessQuantity(Number(event.target.value))} /></Field>
+              <Field label="Preço unitário"><Input type="number" min="0" step="0.01" value={accessUnitPrice} onChange={(event) => setAccessUnitPrice(Number(event.target.value))} /></Field>
+              <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-xs md:col-span-2 lg:col-span-4">
+                <p>Total original dos chinelos: {footwearTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+                <p>Total do Livro Digital: {accessSubtotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+                <p className="font-medium">Novo valor unitário dos pares: {(adjustedFootwearUnitPrice ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+              </div>
+              <p className="text-xs text-muted-foreground md:col-span-2 lg:col-span-4">
+                Vinculado ao produto Tiny ID {accessProduct.id} · Unidade {accessProduct.unit} · NCM {accessProduct.ncm || "não informado"}. O pedido usa o ID do produto para carregar o cadastro fiscal e contábil existente no Tiny.
+              </p>
+            </div>
+          )}
+        </div>
 
         {!isFreeSample ? <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Field label="Forma de recebimento">
@@ -140,6 +237,36 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
               </SelectContent>
             </Select>
           </Field>
+          {paymentForm === "Cartão de Crédito" && <>
+            <Field label="Bandeira">
+              <Select value={cardBrand} onValueChange={(value) => setCardBrand(value as CardBrand)}>
+                <SelectTrigger><SelectValue placeholder="Selecione a bandeira" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Visa">Visa</SelectItem>
+                  <SelectItem value="Mastercard">Mastercard</SelectItem>
+                  <SelectItem value="American Express">American Express</SelectItem>
+                  <SelectItem value="Sorocred">Sorocred</SelectItem>
+                  <SelectItem value="Diners Club">Diners Club</SelectItem>
+                  <SelectItem value="Elo">Elo</SelectItem>
+                  <SelectItem value="Hipercard">Hipercard</SelectItem>
+                  <SelectItem value="Aura">Aura</SelectItem>
+                  <SelectItem value="Cabal">Cabal</SelectItem>
+                  <SelectItem value="Outros">Outros</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Condição de pagamento">
+              <Select value={paymentCondition} onValueChange={(value) => setPaymentCondition(value as PaymentCondition)}>
+                <SelectTrigger><SelectValue placeholder="Selecione a condição" /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, index) => {
+                    const condition = `parcelado em ${index + 1}x` as PaymentCondition;
+                    return <SelectItem key={condition} value={condition}>{condition}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+            </Field>
+          </>}
           {paymentForm && <>
             <Field label="Meio"><Input value={paymentMedium} onChange={(event) => setPaymentMedium(event.target.value)} /></Field>
             <Field label="Conta bancária"><Input value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} /></Field>

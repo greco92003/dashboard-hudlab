@@ -29,6 +29,17 @@ function money(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function ebookAdjustedFootwearUnitPrice(
+  footwearTotal: number,
+  ebookUnitPrice: number,
+  ebookQuantity: number,
+  pairQuantity: number,
+): number | null {
+  if (!Number.isFinite(pairQuantity) || pairQuantity <= 0) return null;
+  const adjusted = (footwearTotal - ebookUnitPrice * ebookQuantity) / pairQuantity;
+  return Math.round((adjusted + Number.EPSILON) * 100) / 100;
+}
+
 export function paymentKind(value: string): ErpOrderSource["paymentKind"] {
   const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (/pix/i.test(normalized)) return "pix";

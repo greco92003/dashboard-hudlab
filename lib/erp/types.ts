@@ -8,6 +8,7 @@ export type ErpContact = {
   companyName: string | null;
   email: string | null;
   phone: string | null;
+  deals: Array<{ id: string; name: string }>;
 };
 
 export type ErpDeal = {
@@ -21,6 +22,7 @@ export type ErpDeal = {
 
 export type ErpProductModel = {
   modelNumber: number;
+  audience: "adulto" | "infantil";
   artUrl: string | null;
   grades: ErpGradeItem[];
   totalPairs: number;
@@ -47,6 +49,16 @@ export type TinyExistingProduct = {
   description: string;
   variationSkus: Record<string, string>;
   variationSizes: string[];
+};
+
+export type TinyOrderProduct = {
+  id: number;
+  sku: string;
+  description: string;
+  price: number | null;
+  unit: string;
+  ncm: string | null;
+  origin: number | null;
 };
 
 export type ErpContactPreview = {
