@@ -169,7 +169,13 @@ function extractQtyPares(opp: any, paresFieldIds: Set<string>): number | null {
     if (!byId && !byName) continue;
     const raw = cf.fieldValueNumber ?? cf.fieldValueString ?? cf.fieldValue ?? cf.value;
     const n = Number(raw);
-    if (Number.isFinite(n) && n > 0) return Math.round(n);
+    // Sanidade de infraestrutura (2026-08-19): qty_pares é integer
+    // (Postgres, max ~2,1 bilhões) -- erro de digitação/campo trocado
+    // na automação pode colar algo tipo timestamp/CEP aqui (achado
+    // real: "20250618141621", 14 dígitos). Mesmo motivo do guard em
+    // monetary_value logo abaixo: evita "out of range for type
+    // integer" derrubando o upsert do lote inteiro.
+    if (Number.isFinite(n) && n > 0 && n < 1e9) return Math.round(n);
   }
   return null;
 }
@@ -191,7 +197,9 @@ function mapContact(c: any, fieldMap: Map<string, string>) {
     state: (c.state && String(c.state).trim() !== "" ? c.state : null) ??
       cfValue(c, fieldMap, "estado"),
     source: c.source ?? null,
-    qty_pares: Number.isFinite(pares) && pares > 0 ? Math.round(pares) : null,
+    // Mesmo guard de sanidade de extractQtyPares (qty_pares também é
+    // integer em ghl_contacts).
+    qty_pares: Number.isFinite(pares) && pares > 0 && pares < 1e9 ? Math.round(pares) : null,
     ...utms,
     raw: c,
     synced_at: new Date().toISOString(),
@@ -443,7 +451,22 @@ async function runOpportunities(supabase: any, token: string, locationId: string
           stage_id: o.pipelineStageId ?? null,
           stage_name: stageNames.get(o.pipelineStageId) ?? null,
           status,
-          monetary_value: o.monetaryValue != null ? Number(o.monetaryValue) : null,
+          // Sanidade de infraestrutura (2026-08-19): a coluna é
+          // numeric(12,2) (até ~10 dígitos inteiros). Um valor
+          // absurdo vindo do GHL (erro de digitação/campo errado na
+          // automação -- achado real: R$1.010.505.845.266.887,90 numa
+          // única oportunidade) faz o upsert INTEIRO do lote falhar
+          // com "numeric field overflow", derrubando negócios
+          // legítimos que vieram juntos no mesmo lote paginado. Isso
+          // é diferente de dado_par_plausivel (julgamento de negócio,
+          // aplicado nas views pra decidir o que conta como venda) --
+          // aqui só evita o CRASH da gravação bruta; o valor vira
+          // null (não é descartado, só fica sem preço até corrigir na
+          // origem, mesmo padrão de v_negocios_dado_suspeito).
+          monetary_value:
+            o.monetaryValue != null && Math.abs(Number(o.monetaryValue)) < 1e10
+              ? Number(o.monetaryValue)
+              : null,
           qty_pares: extractQtyPares(o, paresFieldIds),
           created_at: o.createdAt ?? null,
           updated_at: o.updatedAt ?? null,
