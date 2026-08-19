@@ -6,10 +6,32 @@ test("won uses the real GHL status transition instead of a stale custom date", (
   assert.equal(
     resolveGhlClosingDate({
       normalizedStatus: "won",
-      statusChangeDate: "2026-08-10",
+      statusChangeDate: "2026-07-20",
       customFieldDate: "2025-12-05",
     }),
-    "2026-08-10",
+    "2026-07-20",
+  );
+});
+
+test("known AC import artifact uses the migrated closing-date field", () => {
+  assert.equal(
+    resolveGhlClosingDate({
+      normalizedStatus: "won",
+      statusChangeDate: "2026-08-03",
+      customFieldDate: "2025-12-05",
+    }),
+    "2025-12-05",
+  );
+});
+
+test("03/08 without a custom closing date keeps the GHL timestamp", () => {
+  assert.equal(
+    resolveGhlClosingDate({
+      normalizedStatus: "won",
+      statusChangeDate: "2026-08-03",
+      customFieldDate: null,
+    }),
+    "2026-08-03",
   );
 });
 
