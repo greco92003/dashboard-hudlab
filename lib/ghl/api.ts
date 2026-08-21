@@ -66,11 +66,16 @@ export interface GhlCustomFieldDef {
   fieldKey: string;
   model: string;
   dataType: string;
-  picklistOptions?: Array<{
-    id: string;
-    label: string;
-    prefillValue?: string;
-  }>;
+  picklistOptions?: Array<
+    | string
+    | {
+        id: string;
+        label: string;
+        prefillValue?: string;
+      }
+  >;
+  isMultiFileAllowed?: boolean;
+  maxFileLimit?: number;
 }
 
 export interface GhlContactSummary {
@@ -109,9 +114,42 @@ export interface GhlOpportunity {
   contactId: string | null;
   assignedTo?: string | null;
   customFields?: Array<Record<string, unknown> & { id: string }>;
-  contact?: { id: string; name: string | null };
+  contact?: {
+    id: string;
+    name: string | null;
+    companyName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
 }
 
+export interface GhlPipeline {
+  id: string;
+  name: string;
+  stages?: Array<{ id: string; name: string; position?: number }>;
+}
+
+export type GhlOpportunityUpdate = {
+  monetaryValue?: number;
+  customFields?: Array<{
+    id: string;
+    fieldValue: unknown;
+  }>;
+};
+
+export type GhlUploadedFile = {
+  deleted: false;
+  url: string;
+  meta: {
+    fieldname?: string;
+    originalname?: string;
+    name?: string;
+    encoding?: string;
+    mimetype: string;
+    size: number;
+    url: string;
+  };
+};
 function requireEnv(): { token: string; locationId: string } {
   if (!GHL_TOKEN || !GHL_LOCATION_ID) {
     throw new Error(
@@ -167,6 +205,170 @@ async function ghlFetch<T>(
   throw new Error(`GHL API rate limited on ${url.pathname}`);
 }
 
+async function ghlV3JsonRequest<T>(
+  path: string,
+  method: "PUT" | "POST",
+  body: unknown,
+): Promise<T> {
+  const { token } = requireEnv();
+  const url = new URL(path, GHL_BASE_URL);
+  const maximumAttempts = method === "PUT" ? 3 : 1;
+
+  for (let attempt = 0; attempt < maximumAttempts; attempt++) {
+    const response = await fetch(url.toString(), {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: "v3",
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+
+    if (
+      (response.status === 429 || response.status >= 500) &&
+      attempt < maximumAttempts - 1
+    ) {
+      const retryAfterSeconds = Number(response.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfterSeconds)
+        ? Math.max(1_000, retryAfterSeconds * 1_000)
+        : 1_000 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      continue;
+    }
+
+    if (!response.ok) {
+      const responseBody = await response.text();
+      throw new Error(`GHL API error ${response.status} on ${url.pathname}: ${responseBody.slice(0, 500)}`);
+    }
+
+    return (await response.json()) as T;
+  }
+
+  throw new Error(`GHL API request failed on ${url.pathname}`);
+}
+
+export async function fetchGhlPipelines(): Promise<GhlPipeline[]> {
+  const { locationId } = requireEnv();
+  const data = await ghlFetch<{ pipelines?: GhlPipeline[] }>(
+    "/opportunities/pipelines",
+    { locationId },
+  );
+  return data.pipelines ?? [];
+}
+
+export async function searchGhlOpportunitiesByStage(
+  pipelineId: string,
+  pipelineStageId: string,
+  status: "open" | "won" = "open",
+): Promise<GhlOpportunity[]> {
+  const { locationId } = requireEnv();
+  const data = await ghlFetch<{
+    opportunities?: GhlOpportunity[];
+    meta?: { total?: number };
+  }>("/opportunities/search", {
+    location_id: locationId,
+    pipeline_id: pipelineId,
+    pipeline_stage_id: pipelineStageId,
+    status,
+    limit: "100",
+  });
+
+  const opportunities = data.opportunities ?? [];
+  if ((data.meta?.total ?? opportunities.length) > opportunities.length) {
+    throw new Error(
+      "GHL returned more than 100 opportunities for the order registration stage",
+    );
+  }
+  return opportunities;
+}
+
+export async function updateGhlOpportunity(
+  opportunityId: string,
+  update: GhlOpportunityUpdate,
+): Promise<GhlOpportunity> {
+  const data = await ghlV3JsonRequest<{ opportunity: GhlOpportunity }>(
+    `/opportunities/${opportunityId}`,
+    "PUT",
+    update,
+  );
+  return data.opportunity;
+}
+
+export async function uploadGhlCustomFieldFiles(
+  customFieldId: string,
+  files: File[],
+): Promise<GhlUploadedFile[]> {
+  if (files.length === 0) return [];
+
+  const { token, locationId } = requireEnv();
+  const formData = new FormData();
+  formData.set("id", customFieldId);
+  formData.set("maxFiles", String(files.length));
+  for (const file of files) formData.append("file", file, file.name);
+
+  const url = new URL(
+    `/locations/${locationId}/customFields/upload`,
+    GHL_BASE_URL,
+  );
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: "v3",
+      Accept: "application/json",
+    },
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(`GHL API error ${response.status} on ${url.pathname}: ${responseBody.slice(0, 500)}`);
+  }
+
+  const data = (await response.json()) as {
+    uploadedFiles?: Record<string, string>;
+    meta?: Array<{
+      fieldname?: string;
+      originalname?: string;
+      encoding?: string;
+      mimetype?: string;
+      size?: number;
+      url?: string;
+    }>;
+  };
+  const metadata = data.meta ?? [];
+  const uploadedEntries = Object.entries(data.uploadedFiles ?? {});
+  const resultCount = Math.max(metadata.length, uploadedEntries.length);
+
+  return Array.from({ length: resultCount }, (_, index) => {
+    const item = metadata[index] ?? {};
+    const uploadedEntry = uploadedEntries[index];
+    const urlValue = item.url || uploadedEntry?.[1];
+    if (!urlValue) {
+      throw new Error("GHL file upload did not return a URL");
+    }
+    const originalname =
+      item.originalname || uploadedEntry?.[0] || files[index]?.name;
+    return {
+      deleted: false,
+      url: urlValue,
+      meta: {
+        fieldname: item.fieldname,
+        originalname,
+        name: originalname,
+        encoding: item.encoding,
+        mimetype:
+          item.mimetype || files[index]?.type || "application/octet-stream",
+        size: item.size ?? files[index]?.size ?? 0,
+        url: urlValue,
+      },
+    };
+  });
+}
 /** Convert a UTC ISO timestamp to a YYYY-MM-DD date string in Brazil (UTC-3). */
 function toBrazilDateString(isoTimestamp: string): string | null {
   const time = Date.parse(isoTimestamp);

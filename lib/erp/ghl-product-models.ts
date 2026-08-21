@@ -64,9 +64,12 @@ export function extractGhlProductModels(
       const value = entry ? rawFieldValue(entry) : null;
       if (!value || typeof value !== "object" || Array.isArray(value)) continue;
 
-      const optionLabels = new Map(
-        (definition.picklistOptions ?? []).map((option) => [option.id, option.label]),
-      );
+      const optionLabels = new Map<string, string>();
+      for (const option of definition.picklistOptions ?? []) {
+        if (typeof option !== "string") {
+          optionLabels.set(option.id, option.label);
+        }
+      }
       const model = getModel(grade.modelNumber, grade.audience);
 
       for (const [optionId, rawQuantity] of Object.entries(
