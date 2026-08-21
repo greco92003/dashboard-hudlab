@@ -15,7 +15,7 @@ const schema = z.object({
   contributor: z.enum(TINY_CONTRIBUTOR_VALUES),
   address: z.string().trim().max(50),
   number: z.string().trim().max(10),
-  complement: z.string().trim().max(50),
+  complement: z.string().trim().max(50).optional().default(""),
   neighborhood: z.string().trim().max(30),
   postalCode: z.string().trim().max(10),
   city: z.string().trim().max(30),

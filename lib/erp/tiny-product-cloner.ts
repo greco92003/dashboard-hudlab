@@ -56,7 +56,7 @@ export type TinyClonerDetail = {
     diasPreparacao?: number | null;
     localizacao?: string | null;
   } | null;
-  anexos?: Array<{ url?: string | null; externo?: boolean | null }>;
+  anexos?: Array<{ id?: number; url?: string | null; externo?: boolean | null }>;
   producao?: {
     produtos?: Array<{
       produto?: { id?: number; sku?: string | null; descricao?: string | null };
@@ -151,8 +151,9 @@ export function buildTinyProductFromCloner(input: {
   cloner: TinyClonerDetail;
   title: string;
   baseSku: string;
+  artwork?: { url: string; externo: false };
 }) {
-  const { cloner, title, baseSku } = input;
+  const { cloner, title, baseSku, artwork } = input;
   const gradeKeys = Array.from(
     new Set(
       (cloner.variacoes ?? [])
@@ -222,6 +223,7 @@ export function buildTinyProductFromCloner(input: {
       localizacao: cloner.estoque?.localizacao,
       inicial: 0,
     },
+    anexos: artwork ? [artwork] : undefined,
     grade: gradeKeys,
     producao: {
       produtos: cloner.producao?.produtos?.flatMap((item) =>

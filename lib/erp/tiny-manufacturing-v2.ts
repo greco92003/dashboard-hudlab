@@ -145,25 +145,26 @@ export async function setTinyVariationsAsManufactured(
   pairs: TinyManufacturingPair[],
 ) {
   if (pairs.length === 0) return;
-  if (pairs.length > MAX_PRODUCTS_PER_BATCH) {
-    throw new Error(`O lote de fabricação excedeu ${MAX_PRODUCTS_PER_BATCH} variações.`);
-  }
 
   await assertSameTinyAccount();
-  const products = pairs.map((pair, index) =>
-    buildTinyV2ManufacturedProduct(pair, index + 1));
-  const { response, data } = await scheduledBatch(() => tinyV2Post(
-    "/produto.alterar.php",
-    { produto: JSON.stringify({ produtos: products }) },
-  ));
-
-  if (!response.ok || data.retorno?.status !== "OK") {
+  for (let offset = 0; offset < pairs.length; offset += MAX_PRODUCTS_PER_BATCH) {
+    const chunk = pairs.slice(offset, offset + MAX_PRODUCTS_PER_BATCH);
+    const products = chunk.map((pair, index) =>
+      buildTinyV2ManufacturedProduct(pair, index + 1));
+    const { response, data } = await scheduledBatch(() => tinyV2Post(
+      "/produto.alterar.php",
+      { produto: JSON.stringify({ produtos: products }) },
+    ));
     const records = responseRecords(data);
-    const recordErrors = records.flatMap((record) =>
-      (record.erros ?? []).flatMap((item) => item.erro ? [item.erro] : []));
-    throw new Error(
-      [...messages(data), ...recordErrors].join("; ")
-        || `Tiny API v2 respondeu HTTP ${response.status} ao cadastrar as variações como Fabricadas.`,
-    );
+    const failedRecords = records.filter((record) => record.status && record.status !== "OK");
+
+    if (!response.ok || data.retorno?.status !== "OK" || failedRecords.length > 0) {
+      const recordErrors = failedRecords.flatMap((record) =>
+        (record.erros ?? []).flatMap((item) => item.erro ? [item.erro] : []));
+      throw new Error(
+        [...messages(data), ...recordErrors].join("; ")
+          || `Tiny API v2 respondeu HTTP ${response.status} ao cadastrar as variações como Fabricadas.`,
+      );
+    }
   }
 }

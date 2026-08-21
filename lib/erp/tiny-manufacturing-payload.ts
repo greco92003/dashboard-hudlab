@@ -7,6 +7,56 @@ export type TinyManufacturingPair = {
   source: TinyVariation;
 };
 
+function variationSize(variation: TinyVariation) {
+  return variation.grade?.find((item) =>
+    /tamanho|numera|grade/i.test(item.chave?.trim() ?? ""),
+  )?.valor?.trim() || variation.grade?.[0]?.valor?.trim();
+}
+
+export function prepareTinyManufacturedVariations(
+  product: TinyClonerDetail,
+  cloner: TinyClonerDetail,
+) {
+  const targetBySize = new Map(
+    (product.variacoes ?? []).flatMap((variation) => {
+      const size = variationSize(variation);
+      return size ? [[size, variation] as const] : [];
+    }),
+  );
+  const pairs: TinyManufacturingPair[] = [];
+  const sizes: string[] = [];
+
+  for (const source of cloner.variacoes ?? []) {
+    if (source.tipo !== "F") continue;
+    const size = variationSize(source);
+    const targetVariation = size ? targetBySize.get(size) : undefined;
+    if (!size || !targetVariation?.id || !targetVariation.sku?.trim()) {
+      throw new Error(
+        `Não foi possível relacionar a variação fabricada ${size ?? source.sku ?? "do cloner"}.`,
+      );
+    }
+    if (targetVariation.tipo === "F") continue;
+
+    pairs.push({
+      source,
+      target: {
+        ...product,
+        ...targetVariation,
+        id: targetVariation.id,
+        sku: targetVariation.sku,
+        descricao: targetVariation.descricao?.trim()
+          || `${product.descricao?.trim() || product.sku?.trim() || "Produto"} ${size}`,
+        precos: targetVariation.precos ?? product.precos,
+        grade: targetVariation.grade,
+        variacoes: undefined,
+      },
+    });
+    sizes.push(size);
+  }
+
+  return { pairs, sizes };
+}
+
 export function buildTinyV2ManufacturedProduct(
   pair: TinyManufacturingPair,
   sequence: number,

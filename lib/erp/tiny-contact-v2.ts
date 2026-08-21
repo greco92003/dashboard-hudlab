@@ -206,7 +206,7 @@ function toTinyPayload(draft: ErpContactDraft, tinyId?: number) {
     im: draft.municipalRegistration.trim(),
     endereco: draft.address.trim(),
     numero: draft.number.trim(),
-    complemento: draft.complement.trim(),
+    ...(draft.complement.trim() ? { complemento: draft.complement.trim() } : {}),
     bairro: draft.neighborhood.trim(),
     cep: draft.postalCode.trim(),
     cidade: draft.city.trim(),

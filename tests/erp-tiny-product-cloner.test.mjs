@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeTinyCreatedProductResponse } from "../lib/erp/tiny-created-product.ts";
-import { buildTinyV2ManufacturedProduct } from "../lib/erp/tiny-manufacturing-payload.ts";
+import {
+  buildTinyV2ManufacturedProduct,
+  prepareTinyManufacturedVariations,
+} from "../lib/erp/tiny-manufacturing-payload.ts";
 import {
   tinyClonerBasePrice,
   tinyClonerVariationPrice,
@@ -157,4 +160,44 @@ test("envia preço zero explícito quando o cloner não possui nenhum preço", (
 
   assert.equal(tinyClonerBasePrice(cloner), 0);
   assert.equal(tinyClonerVariationPrice(cloner, cloner.variacoes[0]), 0);
+});
+
+test("prepara o lote Fabricado usando o retorno da criação, sem reler a variação", () => {
+  const cloner = {
+    variacoes: [{
+      id: 20,
+      sku: "CLONER-3435",
+      tipo: "F",
+      grade: [{ chave: "Tamanho", valor: "34/35" }],
+      producao: {
+        produtos: [{ produto: { id: 30, descricao: "Componente" }, quantidade: 1 }],
+        etapas: ["Montagem"],
+      },
+    }],
+  };
+  const createdProduct = {
+    id: 10,
+    sku: "NOVO",
+    descricao: "Produto novo",
+    unidade: "PR",
+    ncm: "64022000",
+    origem: 0,
+    precos: { preco: 59.9 },
+    variacoes: [{
+      id: 11,
+      sku: "NOVO-3435",
+      grade: [{ chave: "Tamanho", valor: "34/35" }],
+    }],
+  };
+
+  const prepared = prepareTinyManufacturedVariations(createdProduct, cloner);
+
+  assert.deepEqual(prepared.sizes, ["34/35"]);
+  assert.equal(prepared.pairs.length, 1);
+  assert.equal(prepared.pairs[0].target.id, 11);
+  assert.equal(prepared.pairs[0].target.sku, "NOVO-3435");
+  assert.equal(prepared.pairs[0].target.descricao, "Produto novo 34/35");
+  assert.equal(prepared.pairs[0].target.unidade, "PR");
+  assert.equal(prepared.pairs[0].target.ncm, "64022000");
+  assert.equal(prepared.pairs[0].source, cloner.variacoes[0]);
 });
