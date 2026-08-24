@@ -31,6 +31,7 @@ import {
   Truck,
   Instagram,
   Database,
+  ClipboardCheck,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -117,8 +118,13 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: "ERP",
+    label: "Cadastros",
     items: [
+      {
+        title: "Cadastro de Pedido",
+        url: "/cadastro-pedido",
+        icon: ClipboardCheck,
+      },
       {
         title: "Cadastro ERP",
         url: "/cadastro-erp",
@@ -319,9 +325,9 @@ export function AppSidebar() {
   // Filter menu groups based on user role
   const getFilteredMenuGroups = (): MenuGroup[] => {
     if (isPartnersMedia) {
-      // ERP is intentionally available to every approved role.
+      // Cadastros is intentionally available to every approved role.
       return menuGroups.filter(
-        (group) => group.label === "Parceiros" || group.label === "ERP",
+        (group) => group.label === "Parceiros" || group.label === "Cadastros",
       );
     }
 
@@ -337,7 +343,7 @@ export function AppSidebar() {
     // Filter NCT group - partners-media cannot see it (already handled above)
     // NCT is available to all non-partners-media users, including team-leaders
 
-    // Only owners and admins can access financial costs. ERP is available to
+    // Only owners and admins can access financial costs. Cadastros is available to
     // every approved application user.
     if (!isOwner && !isAdmin) {
       filteredGroups = filteredGroups.filter(

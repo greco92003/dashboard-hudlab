@@ -185,7 +185,7 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
               <Field label="Endereço" className="lg:col-span-3"><Input value={draft.address} maxLength={50} onChange={(e) => update("address", e.target.value)} /></Field>
               <Field label="Número"><Input value={draft.number} maxLength={10} onChange={(e) => update("number", e.target.value)} /></Field>
-              <Field label="Complemento" className="lg:col-span-2"><Input value={draft.complement} maxLength={50} onChange={(e) => update("complement", e.target.value)} /></Field>
+              <Field label="Complemento (opcional)" className="lg:col-span-2"><Input value={draft.complement} maxLength={50} onChange={(e) => update("complement", e.target.value)} /></Field>
               <Field label="Bairro" className="lg:col-span-2"><Input value={draft.neighborhood} maxLength={30} onChange={(e) => update("neighborhood", e.target.value)} /></Field>
               <Field label="CEP"><Input value={draft.postalCode} maxLength={10} onChange={(e) => update("postalCode", e.target.value)} /></Field>
               <Field label="Cidade" className="lg:col-span-2"><Input value={draft.city} maxLength={30} onChange={(e) => update("city", e.target.value)} /></Field>
