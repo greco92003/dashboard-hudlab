@@ -62,6 +62,16 @@ export const EXPEDICAO_COLUMNS: Array<{
   title: string;
   stageTitles: string[];
 }> = [
+  {
+    // Etapa criada nos pipelines Atendimento e Representantes para receber o
+    // que a produção dá como concluído. É o único movimento que o dashboard
+    // faz no CRM; daqui em diante quem toca é o escritório, dentro do GHL.
+    // A coluna se chama "Na Expedição" porque o board inteiro já se chama
+    // Expedição — o título da etapa no CRM continua sendo "Expedição".
+    id: "expedicao",
+    title: "Na Expedição",
+    stageTitles: ["Expedição"],
+  },
   { id: "cobrar-saldo", title: "Cobrar Saldo", stageTitles: ["Cobrar Saldo"] },
   {
     id: "aprovar-financeiro",

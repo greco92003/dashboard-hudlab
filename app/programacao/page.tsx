@@ -616,6 +616,7 @@ export default function ProgramacaoPage() {
                     key={deal.id}
                     deal={deal}
                     isActive={activeCards.has(deal.id)}
+                    showValue={false}
                     onToggle={handleCardToggle}
                     onClick={handleDealClick}
                   />
@@ -637,6 +638,7 @@ export default function ProgramacaoPage() {
       <DealDialog
         deal={selectedDeal}
         open={isDealDialogOpen}
+        showValue={false}
         onOpenChange={setIsDealDialogOpen}
       />
     </div>

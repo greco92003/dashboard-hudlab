@@ -23,6 +23,7 @@ export function DealCard({
   deal,
   concluido = false,
   isActive = true,
+  showValue = true,
   onToggle,
   onClick,
 }: {
@@ -30,6 +31,12 @@ export function DealCard({
   /** Deal já recebido pelo cliente: pinta de verde e ignora o atraso. */
   concluido?: boolean;
   isActive?: boolean;
+  /**
+   * A Programação é planejamento de fábrica e roda em tela de chão de fábrica,
+   * onde o valor do pedido não tem por que aparecer. A Expedição, que cuida de
+   * cobrança e faturamento, mostra.
+   */
+  showValue?: boolean;
   /** Quando ausente, o card não mostra o botão liga/desliga. */
   onToggle?: (dealId: string, event: React.MouseEvent) => void;
   onClick: (deal: BoardDeal) => void;
@@ -85,10 +92,12 @@ export function DealCard({
           </div>
         )}
 
-        <div className="flex items-center gap-1 text-sm font-medium text-green-600">
-          <TrendingUp className="h-3 w-3" />
-          {formatCurrency(deal.value / 100, deal.currency)}
-        </div>
+        {showValue && (
+          <div className="flex items-center gap-1 text-sm font-medium text-green-600">
+            <TrendingUp className="h-3 w-3" />
+            {formatCurrency(deal.value / 100, deal.currency)}
+          </div>
+        )}
 
         {deal.stageTitle && (
           <div className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-600 dark:bg-blue-950/20">
