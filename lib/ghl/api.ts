@@ -54,6 +54,8 @@ export interface GhlMappedDeal {
   segmento_de_negocio: string | null;
   intencao_de_compra: string | null;
   data_embarque: string | null;
+  /** Campo "Tipo do Pedido" do GHL: Evento | Amostra | Pedido | Reposição. */
+  tipo_pedido: string | null;
   assigned_to: string | null;
   "utm-source": string | null;
   "utm-medium": string | null;
@@ -622,6 +624,7 @@ const OPPORTUNITY_FIELD_MAP: Record<string, keyof GhlMappedDeal> = {
   segmento_do_negcio: "segmento_de_negocio",
   inteno_de_compra_negcio: "intencao_de_compra",
   data_de_embarque: "data_embarque",
+  tipo_do_pedido: "tipo_pedido",
   utm_source_negcio: "utm-source",
   utm_medium_negcio: "utm-medium",
 };
@@ -674,6 +677,7 @@ export function mapOpportunity(
     segmento_de_negocio: null,
     intencao_de_compra: null,
     data_embarque: null,
+    tipo_pedido: null,
     assigned_to: opp.assignedTo || null,
     "utm-source": null,
     "utm-medium": null,
@@ -693,7 +697,9 @@ export function mapOpportunity(
 
     const mappedKey = OPPORTUNITY_FIELD_MAP[keySuffix];
     if (mappedKey) {
-      deal[mappedKey] = value;
+      // Campos do CRM são digitados à mão; espaço nas pontas vira grupo
+      // duplicado no board (" 17/08/2026" != "17/08/2026").
+      deal[mappedKey] = typeof value === "string" ? value.trim() : value;
     }
   }
 

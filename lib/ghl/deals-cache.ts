@@ -7,6 +7,7 @@ import {
   type GhlMappedDeal,
 } from "@/lib/ghl/api";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
+import { toIsoDate } from "@/lib/programacao/board-dates";
 
 const UPSERT_BATCH_SIZE = 500;
 
@@ -52,6 +53,8 @@ export function toDealsCacheRow(
     segmento_de_negocio: deal.segmento_de_negocio,
     intencao_de_compra: deal.intencao_de_compra,
     data_embarque: deal.data_embarque,
+    data_embarque_date: toIsoDate(deal.data_embarque),
+    tipo_pedido: deal.tipo_pedido,
     assigned_to: deal.assigned_to,
     provider_payload: deal,
     last_synced_at: new Date().toISOString(),
