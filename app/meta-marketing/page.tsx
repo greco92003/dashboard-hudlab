@@ -2,28 +2,19 @@
 
 import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 import { RefreshCw, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import Calendar23 from "@/components/calendar-23";
+import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
 import { VisaoGeral } from "./components/visao-geral";
 import { Anuncios } from "./components/anuncios";
 import { Regioes } from "./components/regioes";
 import { Saude } from "./components/saude";
 import { Insights } from "./components/insights";
 import { Criativos } from "./components/criativos";
-import { PERIODOS, dateParaIso, type Periodo, type RangeCustom } from "./lib";
 
 const ABAS = ["visao-geral", "anuncios", "regioes", "saude", "insights", "criativos"] as const;
 
@@ -41,55 +32,13 @@ function MetaMarketingContent() {
     ? (abaParam as (typeof ABAS)[number])
     : "visao-geral";
 
-  const inicioParam = searchParams.get("inicio");
-  const fimParam = searchParams.get("fim");
-  const customRange: RangeCustom | undefined =
-    inicioParam && fimParam ? { inicio: inicioParam, fim: fimParam } : undefined;
-
-  const periodoParam = searchParams.get("periodo");
-  const periodo: Periodo =
-    periodoParam === "custom" && customRange
-      ? "custom"
-      : PERIODOS.some((p) => p.value === periodoParam)
-        ? (periodoParam as Periodo)
-        : "30d";
+  const { periodo, customRange } = usePeriodoParams();
 
   const setParam = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set(key, value);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
-
-  const setParams = (entries: Record<string, string | null>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(entries)) {
-      if (value == null) params.delete(key);
-      else params.set(key, value);
-    }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
-
-  const handlePeriodoPreset = (value: string) => {
-    setParams({ periodo: value, inicio: null, fim: null });
-  };
-
-  const handleCalendarChange = (range: DateRange | undefined) => {
-    if (range?.from && range?.to) {
-      setParams({
-        periodo: "custom",
-        inicio: dateParaIso(range.from),
-        fim: dateParaIso(range.to),
-      });
-    }
-  };
-
-  const calendarValue: DateRange | undefined =
-    periodo === "custom" && customRange
-      ? {
-          from: new Date(`${customRange.inicio}T12:00:00`),
-          to: new Date(`${customRange.fim}T12:00:00`),
-        }
-      : undefined;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -141,26 +90,7 @@ function MetaMarketingContent() {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Atualizando..." : "Atualizar"}
           </Button>
-          {(aba === "visao-geral" || aba === "anuncios") && (
-            <>
-              <Select
-                value={periodo === "custom" ? "" : periodo}
-                onValueChange={handlePeriodoPreset}
-              >
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Selecionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERIODOS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Calendar23 value={calendarValue} onChange={handleCalendarChange} hideLabel />
-            </>
-          )}
+          {(aba === "visao-geral" || aba === "anuncios") && <SeletorPeriodo />}
         </div>
       </div>
 

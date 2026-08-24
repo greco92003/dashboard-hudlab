@@ -15,12 +15,27 @@ export interface FollowUpLead {
   occurred_at: string;
 }
 
+type FollowUpEventRow = Omit<FollowUpLead, "stage_order">;
+
 export interface FollowUpData {
   listaA: FollowUpLead[];
   listaB: FollowUpLead[];
   listaC: FollowUpLead[];
   archived: FollowUpLead[];
+  /**
+   * Último evento recebido do ManyChat. A captura foi encerrada na migração
+   * para o GHL (CRM e chat), então esta lista é um backlog histórico que não
+   * recebe lead novo -- a página avisa a partir daqui, em vez de fingir que
+   * a fila está viva.
+   */
+  ultimoEventoEm: string | null;
 }
+
+// O PostgREST corta em 1000 linhas por padrão: sem paginar, o "maior
+// estágio" de cada lead sairia de uma fatia dos eventos mais recentes e
+// leads antigos sumiriam da lista.
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 50;
 
 const STAGE_ORDER: Record<string, number> = {
   lead: 1,
@@ -44,18 +59,37 @@ export async function GET() {
     const supabaseKey = getSupabaseSecretKey();
 
     if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ listaA: [], listaB: [], listaC: [], archived: [] });
+      return NextResponse.json({
+        listaA: [],
+        listaB: [],
+        listaC: [],
+        archived: [],
+        ultimoEventoEm: null,
+      } satisfies FollowUpData);
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get all tag events
-    const { data: events, error } = await supabase
-      .from("manychat_tag_events")
-      .select("subscriber_id, nome, telefone, email, quantidade_pares, stage_slug, stage_name, occurred_at")
-      .order("occurred_at", { ascending: false });
+    // Get all tag events. A ordem decrescente importa: para um mesmo
+    // estágio, o primeiro visto é a ocorrência mais recente, e é a data
+    // dele que a lista mostra. O subscriber_id desempata para o .range()
+    // não repetir nem pular linha entre páginas.
+    const events: FollowUpEventRow[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const from = page * PAGE_SIZE;
+      const { data, error } = await supabase
+        .from("manychat_tag_events")
+        .select("subscriber_id, nome, telefone, email, quantidade_pares, stage_slug, stage_name, occurred_at")
+        .order("occurred_at", { ascending: false })
+        .order("subscriber_id", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) throw error;
+      if (error) throw error;
+
+      const batch = (data ?? []) as FollowUpEventRow[];
+      events.push(...batch);
+      if (batch.length < PAGE_SIZE) break;
+    }
 
     // Get archived leads
     const { data: archivedRows } = await supabase
@@ -66,7 +100,7 @@ export async function GET() {
 
     // Build map: subscriber_id -> highest stage event
     const leadMap = new Map<string, FollowUpLead>();
-    for (const ev of events ?? []) {
+    for (const ev of events) {
       const order = STAGE_ORDER[ev.stage_slug] ?? 0;
       const existing = leadMap.get(ev.subscriber_id);
       if (!existing || order > (STAGE_ORDER[existing.stage_slug] ?? 0)) {
@@ -127,11 +161,15 @@ export async function GET() {
         return new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime();
       });
 
+    // events vem ordenado por occurred_at desc, então o primeiro é o mais novo.
+    const ultimoEventoEm = events[0]?.occurred_at ?? null;
+
     return NextResponse.json({
       listaA: sortLeads(listaA),
       listaB: sortLeads(listaB),
       listaC: sortLeads(listaC),
       archived: sortLeads(archivedLeads),
+      ultimoEventoEm,
     } satisfies FollowUpData);
   } catch (error) {
     console.error("[FollowUp] Error:", error);

@@ -10,6 +10,7 @@
     "security:package1": "node scripts/security-package1-check.mjs",
     "security:package2": "node scripts/security-package2-check.mjs",
     "test:security-package3": "node --experimental-strip-types --test tests/security-package3.test.mjs",
+    "test:ghl": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/ghl-closing-date.test.mjs tests/ghl-cursor-pagination.test.mjs tests/ghl-funnel-dates.test.mjs tests/ghl-funnel-sales.test.mjs tests/ghl-pipelines.test.mjs",
     "verify:supabase-keys": "node scripts/verify-supabase-key-migration.mjs",
     "verify:ghl-dashboard": "node --experimental-strip-types scripts/verify-ghl-dashboard-consistency.mjs",
     "webhooks:setup": "node scripts/setup-webhooks.js",

@@ -118,7 +118,9 @@ export interface FunnelChartProps {
 
 import { intFmt } from "./chart-formatters";
 
-const fmtPct = (p: number) => `${Math.round(p)}%`;
+// Sem base de comparação (primeira etapa zerada) não existe percentual:
+// melhor um traço do que "NaN%".
+const fmtPct = (p: number) => (Number.isFinite(p) ? `${Math.round(p)}%` : "—");
 const fmtVal = intFmt;
 
 // ─── SVG helpers ────────────────────────────────────────────────────
@@ -826,9 +828,15 @@ export function FunnelChart({
   if (!first) {
     return null;
   }
-  const max = first.value;
+  // O percentual é sempre relativo ao topo do funil, mas a GEOMETRIA se
+  // normaliza pela maior etapa: quando uma etapa posterior supera a
+  // primeira (acontece quando cada etapa é contada pela data do próprio
+  // evento, não por coorte), normalizar pelo topo faria o desenho
+  // transbordar o quadro. Com dados monotônicos os dois são o mesmo valor.
+  const pctBase = first.value;
+  const max = Math.max(...data.map((d) => (Number.isFinite(d.value) ? d.value : 0)));
   const n = data.length;
-  const norms = data.map((d) => d.value / max);
+  const norms = data.map((d) => (max > 0 ? d.value / max : 0));
   const horiz = orientation === "horizontal";
   const { w: W, h: H } = sz;
 
@@ -1003,7 +1011,7 @@ export function FunnelChart({
           {/* Label overlays — one per segment, positioned over each segment cell.
               These are the hover triggers for each segment. */}
           {data.map((stage, i) => {
-            const pct = (stage.value / max) * 100;
+            const pct = (stage.value / pctBase) * 100;
             const posStyle: CSSProperties = horiz
               ? {
                   left: (segW + gap) * i,

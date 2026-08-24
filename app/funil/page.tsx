@@ -2,12 +2,14 @@
 
 import {
   type CSSProperties,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import { AlertCircle, RefreshCw, Split } from "lucide-react";
+import { AlertCircle, Info, ListChecks, RefreshCw, Split } from "lucide-react";
+import Link from "next/link";
 import {
   FunnelChart,
   type FunnelStage as ChartStage,
@@ -16,9 +18,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import Calendar23 from "@/components/calendar-23";
-import type { DateRange } from "react-day-picker";
-import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
+import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
+import { periodoParaDatas } from "@/lib/periodo";
 import { storage } from "@/lib/storage";
 
 const HEATMAP_COLORS = [
@@ -55,6 +56,7 @@ interface FunnelResponse {
     unassignedContacts: number;
     ambiguousContacts: number;
     lastEventAt: string | null;
+    firstEventAt: string | null;
     generatedAt: string;
     range: { from: string; to: string } | null;
   };
@@ -74,6 +76,26 @@ function formatWebhookDate(value: string | null): string | null {
     timeStyle: "short",
     timeZone: "America/Sao_Paulo",
   }).format(date);
+}
+
+/** Dia (YYYY-MM-DD) de um instante ISO no calendário de São Paulo. */
+function toDiaSaoPaulo(iso: string): string | null {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  // en-CA formata como YYYY-MM-DD, que é o mesmo formato dos parâmetros.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** "2026-07-15" -> "15/07" (nunca mm/dd). */
+function formatDiaCurto(dia: string): string {
+  const [, mes, diaDoMes] = dia.split("-");
+  return `${diaDoMes}/${mes}`;
 }
 
 // White label with a dark halo: readable both over the funnel colors and
@@ -187,16 +209,9 @@ function FunnelSkeleton() {
   );
 }
 
-export default function FunilPage() {
-  const {
-    dateRange,
-    period,
-    useCustomPeriod,
-    isHydrated,
-    handleDateRangeChange,
-    handlePeriodChange,
-    getApiUrl,
-  } = useGlobalDateRange();
+function FunilContent() {
+  const { periodo, customRange } = usePeriodoParams();
+  const { inicio, fim } = periodoParaDatas(periodo, customRange);
   const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
   const [data, setData] = useState<FunnelResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -220,7 +235,10 @@ export default function FunilPage() {
     else setLoading(true);
 
     try {
-      const response = await fetch(getApiUrl("/api/ghl/funnel"), { cache: "no-store" });
+      const response = await fetch(
+        `/api/ghl/funnel?startDate=${inicio}&endDate=${fim}`,
+        { cache: "no-store" },
+      );
       const body = (await response.json()) as FunnelResponse & { error?: string };
       if (!response.ok) {
         throw new Error(body.error ?? "Não foi possível carregar os funis");
@@ -237,22 +255,25 @@ export default function FunilPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getApiUrl]);
+  }, [inicio, fim]);
 
   useEffect(() => {
-    if (!isHydrated) return;
     loadFunnels();
-    const interval = window.setInterval(() => loadFunnels(true), 30_000);
-    return () => window.clearInterval(interval);
-  }, [loadFunnels, isHydrated]);
 
-  const handlePeriodChangeLocal = (newPeriod: number) => {
-    handlePeriodChange(newPeriod);
-  };
+    // Cada chamada lê a tabela de eventos inteira, então não faz sentido
+    // continuar consultando com a aba escondida -- ao voltar pra aba,
+    // atualiza na hora.
+    const atualizarSeVisivel = () => {
+      if (document.visibilityState === "visible") loadFunnels(true);
+    };
+    const interval = window.setInterval(atualizarSeVisivel, 30_000);
+    document.addEventListener("visibilitychange", atualizarSeVisivel);
 
-  const handleDateRangeChangeLocal = (newDateRange: DateRange | undefined) => {
-    handleDateRangeChange(newDateRange);
-  };
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", atualizarSeVisivel);
+    };
+  }, [loadFunnels]);
 
   const visibleFunnels = data
     ? [data.funnels.withMockup, data.funnels.withoutMockup].filter(
@@ -263,6 +284,16 @@ export default function FunilPage() {
   const lastEventLabel =
     formatWebhookDate(data?.meta.lastEventAt ?? null) ??
     "aguardando o primeiro webhook";
+
+  // O funil só existe a partir do primeiro webhook: sem esse aviso, um
+  // período que começa antes disso parece queda de desempenho.
+  const primeiroDia = data?.meta.firstEventAt
+    ? toDiaSaoPaulo(data.meta.firstEventAt)
+    : null;
+  const avisoInicio =
+    primeiroDia && inicio < primeiroDia
+      ? `O funil começou a receber dados em ${formatDiaCurto(primeiroDia)}. O período selecionado inclui dias anteriores a isso, que aparecem vazios.`
+      : null;
 
   return (
     <main className="relative flex flex-1 overflow-hidden px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
@@ -281,47 +312,31 @@ export default function FunilPage() {
             automaticamente pelos webhooks do GHL.
           </p>
 
-          <Button
-            aria-label="Atualizar funis"
-            className="mt-5 gap-2 sm:absolute sm:right-0 sm:top-0 sm:mt-0"
-            disabled={loading || refreshing}
-            onClick={() => loadFunnels(true)}
-            size="sm"
-            variant="outline"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            />
-            Atualizar
-          </Button>
+          <div className="mt-5 flex flex-wrap justify-center gap-2 sm:absolute sm:right-0 sm:top-0 sm:mt-0">
+            <Button asChild size="sm" variant="outline">
+              <Link className="gap-2" href="/funil/followup">
+                <ListChecks className="h-4 w-4" />
+                Follow-Up
+              </Link>
+            </Button>
+            <Button
+              aria-label="Atualizar funis"
+              className="gap-2"
+              disabled={loading || refreshing}
+              onClick={() => loadFunnels(true)}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Atualizar
+            </Button>
+          </div>
         </header>
 
         <div className="flex flex-col items-center gap-3 lg:flex-row lg:justify-center">
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button
-              variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-              size="sm"
-              onClick={() => handlePeriodChangeLocal(30)}
-            >
-              Último mês
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-              size="sm"
-              onClick={() => handlePeriodChangeLocal(60)}
-            >
-              Últimos 2 meses
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-              size="sm"
-              onClick={() => handlePeriodChangeLocal(90)}
-            >
-              Últimos 3 meses
-            </Button>
-          </div>
-
-          <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
+          <SeletorPeriodo className="justify-center" />
 
           <div className="flex gap-2">
             <Button
@@ -340,6 +355,13 @@ export default function FunilPage() {
             </Button>
           </div>
         </div>
+
+        {avisoInicio && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>{avisoInicio}</AlertDescription>
+          </Alert>
+        )}
 
         {error && (
           <Alert variant="destructive">
@@ -376,5 +398,20 @@ export default function FunilPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function FunilPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex flex-1 flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+          <FunnelSkeleton />
+          <FunnelSkeleton />
+        </main>
+      }
+    >
+      <FunilContent />
+    </Suspense>
   );
 }

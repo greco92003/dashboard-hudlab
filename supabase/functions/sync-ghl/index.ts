@@ -221,6 +221,15 @@ function mapContact(c: any, fieldMap: Map<string, string>) {
 // oportunidade mais recente de cada contato (created_at desc), assim
 // todo dia o cursor (que sempre reinicia em offset=0) ataca primeiro
 // os contatos mais novos, independente do tamanho da fila de órfãos.
+//
+// 2026-08-21: mesmo com created_at desc, o orçamento de tempo acabava
+// antes de alcançar o backlog antigo -- 2.697 dos 3.220 contatos em
+// Atendimento nunca chegavam a ser sincronizados. Isso passou a doer
+// quando o follow-up automatizado começou a marcar justamente esse
+// backlog: tag aplicada em contato não sincronizado é medição perdida
+// em silêncio, já que ghl_contact_tags só registra o que o sync vê.
+// Fix: contatos nas etapas da régua (Atendimento/Negociação) vão para
+// a frente da fila; o resto da base segue depois, na ordem de sempre.
 // deno-lint-ignore no-explicit-any
 async function runLinkedContacts(supabase: any, token: string, locationId: string, state: ChainState, deadline: number) {
   const startedAt = new Date();
@@ -232,22 +241,41 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
     const fieldMap = await fetchFieldMap(token, locationId);
     const { data, error } = await supabase
       .from("ghl_opportunities")
-      .select("contact_id, created_at")
+      .select("contact_id, created_at, stage_name")
       .not("contact_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(20000);
     if (error) throw new Error(`Lista de contact_ids: ${error.message}`);
-    // Primeira ocorrência de cada contact_id, já em ordem created_at desc
-    // (a query trouxe as linhas mais recentes primeiro) = prioriza contatos
-    // ligados à oportunidade mais nova.
-    const seen = new Set<string>();
-    const ids: string[] = [];
-    for (const r of data as { contact_id: string; created_at: string }[]) {
-      if (!seen.has(r.contact_id)) {
-        seen.add(r.contact_id);
-        ids.push(r.contact_id);
+
+    const linhas = data as {
+      contact_id: string;
+      created_at: string;
+      stage_name: string | null;
+    }[];
+
+    // Contatos nas etapas da régua de follow-up vêm primeiro. Aqui cada
+    // contato custa uma chamada GET /contacts/{id}, então o orçamento de
+    // tempo acaba antes da lista e o backlog antigo nunca era alcançado --
+    // e tag aplicada em contato não sincronizado é medição perdida em
+    // silêncio, porque ghl_contact_tags só registra o que o sync enxerga.
+    // Dentro de cada grupo, mantém a ordem de sempre (oportunidade mais
+    // nova primeiro).
+    const emRegua = new Set<string>();
+    for (const r of linhas) {
+      if (r.stage_name === "Atendimento" || r.stage_name === "Negociação") {
+        emRegua.add(r.contact_id);
       }
     }
+
+    const seen = new Set<string>();
+    const prioritarios: string[] = [];
+    const demais: string[] = [];
+    for (const r of linhas) {
+      if (seen.has(r.contact_id)) continue;
+      seen.add(r.contact_id);
+      (emRegua.has(r.contact_id) ? prioritarios : demais).push(r.contact_id);
+    }
+    const ids = [...prioritarios, ...demais];
 
     let i = offset;
     let batch: ReturnType<typeof mapContact>[] = [];

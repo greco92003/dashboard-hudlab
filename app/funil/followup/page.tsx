@@ -1,255 +1,220 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  AlertCircle,
   ArrowLeft,
-  RefreshCw,
-  Phone,
-  Mail,
-  PhoneCall,
-  ArchiveRestore,
-  Clock,
-  Archive,
-  Users,
+  Info,
   ListChecks,
+  RefreshCw,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-interface FollowUpLead {
-  subscriber_id: string;
-  nome: string | null;
-  telefone: string | null;
-  email: string | null;
-  quantidade_pares: number | null;
-  stage_slug: string;
-  stage_name: string;
-  stage_order: number;
-  occurred_at: string;
+interface FollowUpDegrau {
+  rotulo: string;
+  degrau: number;
+  versao: number;
+  receberam: number;
+  destravaram: number;
+  taxa: number | null;
+  vendas: number | null;
+  faturamento: number | null;
+  valorEmNegociacao: number | null;
 }
 
-interface FollowUpData {
-  listaA: FollowUpLead[];
-  listaB: FollowUpLead[];
-  listaC: FollowUpLead[];
-  archived: FollowUpLead[];
+interface FollowUpReguaResponse {
+  atendimento: FollowUpDegrau[];
+  negociacao: FollowUpDegrau[];
+  meta: { geradoEm: string; aguardandoPrimeiraObservacao: boolean };
 }
 
-function LeadCard({
-  lead,
-  onArchive,
-  onUnarchive,
-  isArchived,
+const inteiro = new Intl.NumberFormat("pt-BR");
+const moeda = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  maximumFractionDigits: 0,
+});
+
+function fmtTaxa(taxa: number | null) {
+  return taxa === null ? "—" : `${taxa.toFixed(1).replace(".", ",")}%`;
+}
+
+function fmtMoeda(valor: number | null) {
+  return valor === null ? "—" : moeda.format(valor);
+}
+
+/** Destaca a taxa do degrau que mais destravou — a copy que está ganhando. */
+function melhorTaxa(degraus: FollowUpDegrau[]): number | null {
+  const comBase = degraus.filter((d) => d.receberam > 0 && d.taxa !== null);
+  if (comBase.length < 2) return null;
+  return Math.max(...comBase.map((d) => d.taxa as number));
+}
+
+function BlocoRegua({
+  titulo,
+  descricao,
+  degraus,
+  vazio,
+  comFaturamento,
 }: {
-  lead: FollowUpLead;
-  onArchive?: () => void;
-  onUnarchive?: () => void;
-  isArchived?: boolean;
+  titulo: string;
+  descricao: string;
+  degraus: FollowUpDegrau[];
+  vazio: string;
+  comFaturamento: boolean;
 }) {
-  const name = lead.nome ?? `ID: ${lead.subscriber_id}`;
-  const hasPhone = !!lead.telefone;
-  const hasEmail = !!lead.email;
-  const daysInList = Math.floor(
-    (Date.now() - new Date(lead.occurred_at).getTime()) / (1000 * 60 * 60 * 24),
-  );
-  const daysLabel =
-    daysInList === 0
-      ? "hoje"
-      : daysInList === 1
-        ? "1 dia"
-        : `${daysInList} dias`;
-  const daysBadgeClass =
-    daysInList >= 8
-      ? "text-xs shrink-0 border-red-500 text-red-600 bg-red-50 dark:bg-red-950/30"
-      : daysInList >= 4
-        ? "text-xs shrink-0 border-orange-400 text-orange-600 bg-orange-50 dark:bg-orange-950/30"
-        : "text-xs shrink-0";
+  const melhor = melhorTaxa(degraus);
 
   return (
-    <div className="flex items-start justify-between gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/30 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm truncate">{name}</span>
-          {lead.quantidade_pares !== null && (
-            <Badge variant="secondary" className="text-xs shrink-0">
-              {lead.quantidade_pares} pares
-            </Badge>
-          )}
-          <Badge variant="outline" className="text-xs shrink-0">
-            {lead.stage_name}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={daysBadgeClass}
-            title="Dias na lista desde o primeiro contato"
-          >
-            <Clock className="h-3 w-3 mr-1" />
-            {daysLabel}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-3 mt-1 flex-wrap">
-          {lead.telefone && (
-            <a
-              href={`https://wa.me/${lead.telefone.replace(/\D/g, "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-emerald-600 hover:underline"
-            >
-              <Phone className="h-3 w-3" />
-              {lead.telefone}
-            </a>
-          )}
-          {lead.email && (
-            <a
-              href={`mailto:${lead.email}`}
-              className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-            >
-              <Mail className="h-3 w-3" />
-              {lead.email}
-            </a>
-          )}
-          {!hasPhone && !hasEmail && (
-            <span className="text-xs text-muted-foreground">Sem contato</span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {!isArchived && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1 text-xs"
-            onClick={onArchive}
-            title="Marcar como contactado e arquivar"
-          >
-            <PhoneCall className="h-3 w-3" />
-            Contactado
-          </Button>
+    <Card>
+      <CardHeader>
+        <CardTitle>{titulo}</CardTitle>
+        <CardDescription>{descricao}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {degraus.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {vazio}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Disparo</TableHead>
+                  <TableHead className="text-right">Receberam</TableHead>
+                  <TableHead className="text-right">Destravaram</TableHead>
+                  <TableHead className="text-right">Taxa</TableHead>
+                  {comFaturamento && (
+                    <>
+                      <TableHead className="text-right">Vendas</TableHead>
+                      <TableHead className="text-right">Faturamento</TableHead>
+                      <TableHead className="text-right">
+                        Em negociação
+                      </TableHead>
+                    </>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {degraus.map((d) => (
+                  <TableRow key={`${d.degrau}-${d.versao}`}>
+                    <TableCell className="font-medium">{d.rotulo}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {inteiro.format(d.receberam)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {inteiro.format(d.destravaram)}
+                    </TableCell>
+                    <TableCell
+                      className={`text-right font-semibold tabular-nums ${
+                        melhor !== null && d.taxa === melhor
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : ""
+                      }`}
+                    >
+                      {fmtTaxa(d.taxa)}
+                    </TableCell>
+                    {comFaturamento && (
+                      <>
+                        <TableCell className="text-right tabular-nums">
+                          {d.vendas === null ? "—" : inteiro.format(d.vendas)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">
+                          {fmtMoeda(d.faturamento)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {fmtMoeda(d.valorEmNegociacao)}
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
-        {isArchived && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1 text-xs"
-            onClick={onUnarchive}
-            title="Desarquivar lead"
-          >
-            <ArchiveRestore className="h-3 w-3" />
-            Desarquivar
-          </Button>
-        )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function FollowUpPage() {
-  const [data, setData] = useState<FollowUpData | null>(null);
+  const [data, setData] = useState<FollowUpReguaResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
+  const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/manychat/followup");
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
-      const json: FollowUpData = await res.json();
-      setData(json);
-    } catch {
-      // silently fail
+      const res = await fetch("/api/ghl/followup", { cache: "no-store" });
+      const body = (await res.json()) as FollowUpReguaResponse & {
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? `Erro ${res.status}`);
+      setData(body);
+      setErro(null);
+    } catch (loadError) {
+      // Falha de rede não pode ficar igual a "nenhum disparo ainda" -- a
+      // tabela vazia é justamente um estado normal aqui.
+      setErro(
+        loadError instanceof Error
+          ? `Não foi possível carregar a régua (${loadError.message}).`
+          : "Não foi possível carregar a régua.",
+      );
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const handleArchive = async (lead: FollowUpLead, listaOrigem: string) => {
-    await fetch("/api/manychat/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscriber_id: lead.subscriber_id,
-        lista_origem: listaOrigem,
-      }),
-    });
-    loadData();
-  };
-
-  const handleUnarchive = async (lead: FollowUpLead) => {
-    await fetch("/api/manychat/archive", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subscriber_id: lead.subscriber_id }),
-    });
-    loadData();
-  };
-
-  const listConfig = [
-    {
-      key: "listaA",
-      label: "Lista A",
-      description:
-        "Alta prioridade — Leads com 36 pares ou mais que ainda não solicitaram mockup oficial",
-      color: "#1A00FF",
-      leads: data?.listaA ?? [],
-    },
-    {
-      key: "listaB",
-      label: "Lista B",
-      description:
-        "Média prioridade — Leads com menos de 36 pares que ainda não solicitaram mockup oficial",
-      color: "#FF9900",
-      leads: data?.listaB ?? [],
-    },
-    {
-      key: "listaC",
-      label: "Lista C",
-      description:
-        "Reengajamento — Leads que só viram modelos e preços e não avançaram",
-      color: "#FF1A00",
-      leads: data?.listaC ?? [],
-    },
-    {
-      key: "arquivados",
-      label: "Arquivados",
-      description:
-        "Leads já contactados. Clique em Desarquivar para devolvê-los à lista original.",
-      color: "#6b7280",
-      leads: data?.archived ?? [],
-    },
-  ];
+    carregar();
+  }, [carregar]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm" className="gap-1.5 -ml-2">
+          <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
             <Link href="/funil">
               <ArrowLeft className="h-4 w-4" />
               Funil
             </Link>
           </Button>
-          <div className="w-px h-6 bg-border" />
+          <div className="h-6 w-px bg-border" />
           <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
               <ListChecks className="h-6 w-6 text-primary" />
-              Lista de Follow-Up
+              Follow-Up Automatizado
             </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Gerencie os leads que precisam de acompanhamento
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Quanto cada mensagem da régua destrava — para decidir qual
+              abordagem manter
             </p>
           </div>
         </div>
         <Button
           variant="outline"
           size="icon"
-          onClick={loadData}
+          onClick={carregar}
           disabled={loading}
           title="Atualizar"
         >
@@ -257,76 +222,54 @@ export default function FollowUpPage() {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="listaA">
-        <TabsList>
-          {listConfig.map((list) => (
-            <TabsTrigger key={list.key} value={list.key} className="gap-1.5">
-              {list.label}
-              {!loading && (
-                <Badge
-                  className="text-xs font-bold h-4 px-1 min-w-4"
-                  style={{ backgroundColor: list.color, color: "#fff" }}
-                >
-                  {list.leads.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {erro && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{erro}</AlertDescription>
+        </Alert>
+      )}
 
-        {listConfig.map((list) => (
-          <TabsContent key={list.key} value={list.key} className="mt-4">
-            <p className="text-sm text-muted-foreground mb-4">
-              {list.description}
-            </p>
-            {loading ? (
-              <div className="flex flex-col gap-2">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
-                ))}
-              </div>
-            ) : list.leads.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                {list.key === "arquivados" ? (
-                  <Archive className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                ) : (
-                  <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                )}
-                <p className="text-sm">
-                  {list.key === "arquivados"
-                    ? "Nenhum lead arquivado"
-                    : "Nenhum lead nesta lista"}
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {list.leads.map((lead) => (
-                  <LeadCard
-                    key={lead.subscriber_id}
-                    lead={lead}
-                    isArchived={list.key === "arquivados"}
-                    onArchive={
-                      list.key !== "arquivados"
-                        ? () =>
-                            handleArchive(
-                              lead,
-                              list.key.replace("lista", "").toUpperCase(),
-                            )
-                        : undefined
-                    }
-                    onUnarchive={
-                      list.key === "arquivados"
-                        ? () => handleUnarchive(lead)
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
+      {data?.meta.aguardandoPrimeiraObservacao && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            As tags atuais vieram da carga inicial, então a data de entrada de
+            cada contato ainda é um teto, não uma observação. A partir do
+            próximo sync isso passa a ser registrado de verdade — é o que vai
+            permitir comparar V1 com V2 quando a copy mudar.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {loading ? (
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-56 w-full rounded-xl" />
+          <Skeleton className="h-56 w-full rounded-xl" />
+        </div>
+      ) : data ? (
+        <div className="flex flex-col gap-6">
+          <BlocoRegua
+            titulo="Atendimento"
+            descricao="Leads que receberam a Amostra Digital e não responderam. Destravar aqui é avançar para Negociação — e só isso: o fechamento ainda está longe desta etapa."
+            degraus={data.atendimento}
+            vazio="Nenhum disparo de Atendimento registrado ainda."
+            comFaturamento={false}
+          />
+          <BlocoRegua
+            titulo="Negociação"
+            descricao="Leads que responderam e travaram. Destravar é chegar a Prioridade de Fechamento, Finalizando Venda ou negócio ganho — e o faturamento atribuído é a métrica final da promoção."
+            degraus={data.negociacao}
+            vazio="Nenhuma promoção registrada ainda."
+            comFaturamento
+          />
+          <p className="text-center text-xs text-muted-foreground">
+            Cada disparo recebe o crédito do avanço porque a régua para quando o
+            lead reage: a última mensagem que ele tem é a que estava valendo.
+            &quot;Em negociação&quot; é o valor em aberto dos negócios que a
+            promoção está trabalhando.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

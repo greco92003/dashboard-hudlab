@@ -8,26 +8,13 @@ import {
   type GhlFunnelStageSlug,
   type GhlFunnelVariant,
 } from "@/lib/ghl/funnel";
+import { parseGhlFunnelTimestamp } from "@/lib/ghl/funnel-dates";
 import {
-  GHL_MOCKUP_FACTORY_PIPELINE_ID,
-  GHL_MOCKUP_FACTORY_WON_STAGE_IDS,
-} from "@/lib/ghl/pipelines";
-import {
-  parseGhlFunnelTimestamp,
-  toGhlFunnelIso,
-} from "@/lib/ghl/funnel-dates";
-
-interface FunnelEventRow {
-  contact_id: string;
-  stage_slug: GhlFunnelStageSlug;
-  received_at: string;
-}
-
-interface FactoryDealRow {
-  contact_id: string | null;
-  closing_date: string | null;
-  provider_payload: Record<string, unknown> | null;
-}
+  mergeSalesIntoFunnelEvents,
+  type GhlFunnelEvent,
+  type GhlFunnelEventRow,
+  type GhlWonDealRow,
+} from "@/lib/ghl/funnel-sales";
 
 interface ContactJourney {
   /** Timestamp of each stage's event. GHL tags never fire twice for the same
@@ -38,8 +25,12 @@ interface ContactJourney {
   withoutMockupAt: number | null;
   /** Whether the contact had at least one event inside the selected range */
   hasEventInRange: boolean;
-  /** All-time last event, used for funnel activity regardless of the range */
-  lastEventAt: number;
+  /**
+   * All-time last *webhook*, used for funnel activity regardless of the
+   * range. Venda vinda do `deals_cache` não conta aqui: o selo Ativo e o
+   * "último webhook" do painel falam do fluxo de tags do GHL, não do cache.
+   */
+  lastWebhookAt: number | null;
 }
 
 interface DateRangeMs {
@@ -49,6 +40,13 @@ interface DateRangeMs {
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 100;
+// A página faz poll a cada 30s e monta o funil lendo a tabela de eventos
+// inteira. Como a resposta é a mesma para todos os usuários aprovados, um
+// cache curto por intervalo faz várias abas dividirem a mesma leitura sem
+// que o painel deixe de parecer ao vivo.
+const CACHE_TTL_MS = 20_000;
+const MAX_CACHE_ENTRIES = 50;
+const responseCache = new Map<string, { at: number; body: unknown }>();
 // Um funil é considerado desativado após 2 dias seguidos sem receber webhook.
 const INACTIVITY_THRESHOLD_MS = 2 * 24 * 60 * 60 * 1000;
 // São Paulo é UTC-3 fixo (sem horário de verão desde 2019).
@@ -100,7 +98,7 @@ function parseRange(searchParams: URLSearchParams): DateRangeMs | null {
   };
 }
 
-async function fetchAllEvents(): Promise<FunnelEventRow[]> {
+async function fetchAllEvents(): Promise<GhlFunnelEventRow[]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = getSupabaseSecretKey();
   if (!supabaseUrl || !serviceRoleKey) {
@@ -110,7 +108,7 @@ async function fetchAllEvents(): Promise<FunnelEventRow[]> {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const rows: FunnelEventRow[] = [];
+  const rows: GhlFunnelEventRow[] = [];
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const from = page * PAGE_SIZE;
@@ -122,7 +120,7 @@ async function fetchAllEvents(): Promise<FunnelEventRow[]> {
 
     if (error) throw new Error(error.message);
 
-    const batch = (data ?? []) as FunnelEventRow[];
+    const batch = (data ?? []) as GhlFunnelEventRow[];
     rows.push(...batch);
     if (batch.length < PAGE_SIZE) break;
   }
@@ -130,7 +128,7 @@ async function fetchAllEvents(): Promise<FunnelEventRow[]> {
   return rows;
 }
 
-async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
+async function fetchWonSales(): Promise<GhlWonDealRow[]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = getSupabaseSecretKey();
   if (!supabaseUrl || !serviceRoleKey) {
@@ -140,7 +138,7 @@ async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const rows: FactoryDealRow[] = [];
+  const rows: GhlWonDealRow[] = [];
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const from = page * PAGE_SIZE;
@@ -149,74 +147,28 @@ async function fetchMockupFactorySales(): Promise<FunnelEventRow[]> {
       .select("contact_id, closing_date, provider_payload")
       .eq("source_system", "ghl")
       .eq("sync_status", "synced")
-      .eq("pipeline_id", GHL_MOCKUP_FACTORY_PIPELINE_ID)
-      .in("stage_id", Array.from(GHL_MOCKUP_FACTORY_WON_STAGE_IDS))
+      // `status` já chega normalizado por normalizeGhlDealStatus, então as
+      // etapas pós-venda da Fábrica de Mockups entram aqui junto com o
+      // pipeline principal -- onde estão 1031 dos 1034 negócios ganhos.
+      // Filtrar só pela Fábrica deixava a etapa Negócio Fechado praticamente
+      // zerada (3 negócios, nenhum deles com tag de variante).
+      .eq("status", "won")
       .not("contact_id", "is", null)
+      // Sem ordem estável o .range() pode repetir ou pular linhas entre páginas.
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw new Error(error.message);
 
-    const batch = (data ?? []) as FactoryDealRow[];
+    const batch = (data ?? []) as GhlWonDealRow[];
     rows.push(...batch);
     if (batch.length < PAGE_SIZE) break;
   }
 
-  const firstSaleByContact = new Map<string, string>();
-  for (const row of rows) {
-    if (!row.contact_id) continue;
-
-    const statusChangedAt = row.provider_payload?.ghl_last_status_change_at;
-    // Prefer the canonical closing date, but tolerate legacy/partial cache
-    // rows and fall back to GHL's status-change timestamp. Conversion happens
-    // only after validation so malformed values can never throw RangeError.
-    const receivedAt =
-      toGhlFunnelIso(row.closing_date) ?? toGhlFunnelIso(statusChangedAt);
-    if (!receivedAt) continue;
-
-    const current = firstSaleByContact.get(row.contact_id);
-    if (!current || Date.parse(receivedAt) < Date.parse(current)) {
-      firstSaleByContact.set(row.contact_id, receivedAt);
-    }
-  }
-
-  return Array.from(firstSaleByContact, ([contact_id, received_at]) => ({
-    contact_id,
-    stage_slug: "negociofechado",
-    received_at,
-  }));
+  return rows;
 }
 
-function mergeFactorySales(
-  webhookEvents: FunnelEventRow[],
-  factorySales: FunnelEventRow[],
-): FunnelEventRow[] {
-  // `received_at` is a database-generated TIMESTAMPTZ, but ignoring a bad
-  // legacy/imported row keeps one record from taking the whole page down.
-  const validWebhookEvents = webhookEvents.filter(
-    (event) => parseGhlFunnelTimestamp(event.received_at) !== null,
-  );
-  const validFactorySales = factorySales.filter(
-    (event) => parseGhlFunnelTimestamp(event.received_at) !== null,
-  );
-  const contactsWithClosedEvent = new Set(
-    validWebhookEvents
-      .filter((event) => event.stage_slug === "negociofechado")
-      .map((event) => event.contact_id),
-  );
-
-  return [
-    ...validWebhookEvents,
-    ...validFactorySales.filter(
-      (event) => !contactsWithClosedEvent.has(event.contact_id),
-    ),
-  ].sort(
-    (left, right) =>
-      (parseGhlFunnelTimestamp(left.received_at) ?? 0) -
-      (parseGhlFunnelTimestamp(right.received_at) ?? 0),
-  );
-}
-
-function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
+function buildJourneys(events: GhlFunnelEvent[], range: DateRangeMs | null) {
   const journeys = new Map<string, ContactJourney>();
 
   for (const event of events) {
@@ -229,13 +181,16 @@ function buildJourneys(events: FunnelEventRow[], range: DateRangeMs | null) {
         withMockupAt: null,
         withoutMockupAt: null,
         hasEventInRange: range === null,
-        lastEventAt: timestamp,
+        lastWebhookAt: null,
       };
       journeys.set(event.contact_id, journey);
     }
 
-    if (timestamp > journey.lastEventAt) {
-      journey.lastEventAt = timestamp;
+    if (
+      event.source === "webhook" &&
+      (journey.lastWebhookAt === null || timestamp > journey.lastWebhookAt)
+    ) {
+      journey.lastWebhookAt = timestamp;
     }
 
     if (range && timestamp >= range.start && timestamp <= range.end) {
@@ -323,8 +278,9 @@ function variantActivity(
   let lastEventAt: number | null = null;
   for (const journey of journeys.values()) {
     if (resolveVariant(journey) !== variant) continue;
-    if (lastEventAt === null || journey.lastEventAt > lastEventAt) {
-      lastEventAt = journey.lastEventAt;
+    if (journey.lastWebhookAt === null) continue;
+    if (lastEventAt === null || journey.lastWebhookAt > lastEventAt) {
+      lastEventAt = journey.lastWebhookAt;
     }
   }
 
@@ -343,11 +299,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const range = parseRange(searchParams);
 
-    const [webhookEvents, factorySales] = await Promise.all([
+    const cacheKey = range ? `${range.start}:${range.end}` : "all";
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      return NextResponse.json(cached.body, {
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Data-Source": "ghl-webhooks",
+          "X-Cache": "hit",
+        },
+      });
+    }
+
+    const [webhookRows, wonDealRows] = await Promise.all([
       fetchAllEvents(),
-      fetchMockupFactorySales(),
+      fetchWonSales(),
     ]);
-    const events = mergeFactorySales(webhookEvents, factorySales);
+    const events = mergeSalesIntoFunnelEvents(webhookRows, wonDealRows);
     const journeys = buildJourneys(events, range);
     const journeyList = Array.from(journeys.values());
     const inRangeJourneys = journeyList.filter(
@@ -355,8 +323,11 @@ export async function GET(request: Request) {
     );
     const now = Date.now();
 
+    // O rodapé conta "webhooks", então as vendas trazidas do deals_cache
+    // ficam de fora daqui e do "último evento".
+    const webhookEvents = events.filter((event) => event.source === "webhook");
     const eventsInRange = range
-      ? events.filter((event) => {
+      ? webhookEvents.filter((event) => {
           const timestamp = parseGhlFunnelTimestamp(event.received_at);
           return (
             timestamp !== null &&
@@ -364,7 +335,7 @@ export async function GET(request: Request) {
             timestamp <= range.end
           );
         }).length
-      : events.length;
+      : webhookEvents.length;
 
     const withMockupActivity = variantActivity(journeys, "with_mockup", now);
     const withoutMockupActivity = variantActivity(
@@ -373,52 +344,58 @@ export async function GET(request: Request) {
       now,
     );
 
-    return NextResponse.json(
-      {
-        funnels: {
-          withMockup: {
-            id: "with_mockup",
-            title: "Com Mockup Automático",
-            stages: buildFunnel(journeys, "with_mockup", range),
-            active: withMockupActivity.active,
-            lastEventAt: withMockupActivity.lastEventAt,
-          },
-          withoutMockup: {
-            id: "without_mockup",
-            title: "Sem Mockup Automático",
-            stages: buildFunnel(journeys, "without_mockup", range),
-            active: withoutMockupActivity.active,
-            lastEventAt: withoutMockupActivity.lastEventAt,
-          },
+    const body = {
+      funnels: {
+        withMockup: {
+          id: "with_mockup",
+          title: "Com Mockup Automático",
+          stages: buildFunnel(journeys, "with_mockup", range),
+          active: withMockupActivity.active,
+          lastEventAt: withMockupActivity.lastEventAt,
         },
-        meta: {
-          totalEvents: eventsInRange,
-          totalContacts: inRangeJourneys.length,
-          unassignedContacts: inRangeJourneys.filter(
-            (journey) => resolveVariant(journey) === null,
-          ).length,
-          ambiguousContacts: inRangeJourneys.filter(
-            (journey) =>
-              journey.withMockupAt !== null &&
-              journey.withoutMockupAt !== null,
-          ).length,
-          lastEventAt: events.at(-1)?.received_at ?? null,
-          range: range
-            ? {
-                from: new Date(range.start).toISOString(),
-                to: new Date(range.end).toISOString(),
-              }
-            : null,
-          generatedAt: new Date().toISOString(),
+        withoutMockup: {
+          id: "without_mockup",
+          title: "Sem Mockup Automático",
+          stages: buildFunnel(journeys, "without_mockup", range),
+          active: withoutMockupActivity.active,
+          lastEventAt: withoutMockupActivity.lastEventAt,
         },
       },
-      {
-        headers: {
-          "Cache-Control": "no-store",
-          "X-Data-Source": "ghl-webhooks",
-        },
+      meta: {
+        totalEvents: eventsInRange,
+        totalContacts: inRangeJourneys.length,
+        unassignedContacts: inRangeJourneys.filter(
+          (journey) => resolveVariant(journey) === null,
+        ).length,
+        ambiguousContacts: inRangeJourneys.filter(
+          (journey) =>
+            journey.withMockupAt !== null &&
+            journey.withoutMockupAt !== null,
+        ).length,
+        lastEventAt: webhookEvents.at(-1)?.received_at ?? null,
+        // A página avisa quando o período escolhido começa antes do
+        // primeiro webhook -- senão dias sem dado parecem queda.
+        firstEventAt: webhookEvents[0]?.received_at ?? null,
+        range: range
+          ? {
+              from: new Date(range.start).toISOString(),
+              to: new Date(range.end).toISOString(),
+            }
+          : null,
+        generatedAt: new Date().toISOString(),
       },
-    );
+    };
+
+    if (responseCache.size >= MAX_CACHE_ENTRIES) responseCache.clear();
+    responseCache.set(cacheKey, { at: Date.now(), body });
+
+    return NextResponse.json(body, {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Data-Source": "ghl-webhooks",
+        "X-Cache": "miss",
+      },
+    });
   } catch (error) {
     console.error("[GHL Funnel] Failed to build funnel", error);
     return NextResponse.json(
