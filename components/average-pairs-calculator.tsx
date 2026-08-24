@@ -42,7 +42,7 @@ interface Holiday {
 interface Deal {
   id: string;
   title: string;
-  customField54: string | null; // Data de embarque
+  dataEmbarque: string | null;
   quantidadePares: string | null;
 }
 
@@ -129,9 +129,9 @@ export function AveragePairsCalculator({
 
       // Filtrar deals pela data de embarque dentro do período selecionado
       const filteredDeals = deals.filter((deal) => {
-        if (!deal.customField54 || !activeCards.has(deal.id)) return false;
+        if (!deal.dataEmbarque || !activeCards.has(deal.id)) return false;
 
-        const embarqueDate = parseDate(deal.customField54);
+        const embarqueDate = parseDate(deal.dataEmbarque);
         if (!embarqueDate) return false;
 
         // Verificar se a data de embarque está dentro do período
@@ -257,8 +257,8 @@ export function AveragePairsCalculator({
 
     // Filter deals for the selected period
     const filteredDeals = deals.filter((deal) => {
-      if (!deal.customField54 || !activeCards.has(deal.id)) return false;
-      const embarqueDate = parseDate(deal.customField54);
+      if (!deal.dataEmbarque || !activeCards.has(deal.id)) return false;
+      const embarqueDate = parseDate(deal.dataEmbarque);
       if (!embarqueDate) return false;
       return embarqueDate >= dateRange.from! && embarqueDate <= dateRange.to!;
     });
@@ -266,12 +266,12 @@ export function AveragePairsCalculator({
     // Prepare table data
     const tableData = filteredDeals.map((deal) => {
       let dataEmbarque = "-";
-      if (deal.customField54) {
-        if (deal.customField54.includes("-")) {
-          const [year, month, day] = deal.customField54.split("-");
+      if (deal.dataEmbarque) {
+        if (deal.dataEmbarque.includes("-")) {
+          const [year, month, day] = deal.dataEmbarque.split("-");
           dataEmbarque = `${day}/${month}/${year}`;
         } else {
-          dataEmbarque = deal.customField54;
+          dataEmbarque = deal.dataEmbarque;
         }
       }
 
@@ -360,8 +360,8 @@ export function AveragePairsCalculator({
 
     // Filter deals for the selected period
     const filteredDeals = deals.filter((deal) => {
-      if (!deal.customField54 || !activeCards.has(deal.id)) return false;
-      const embarqueDate = parseDate(deal.customField54);
+      if (!deal.dataEmbarque || !activeCards.has(deal.id)) return false;
+      const embarqueDate = parseDate(deal.dataEmbarque);
       if (!embarqueDate) return false;
       return embarqueDate >= dateRange.from! && embarqueDate <= dateRange.to!;
     });
@@ -402,12 +402,12 @@ export function AveragePairsCalculator({
     // Prepare deals data
     const dealsData = filteredDeals.map((deal) => {
       let dataEmbarque = "-";
-      if (deal.customField54) {
-        if (deal.customField54.includes("-")) {
-          const [year, month, day] = deal.customField54.split("-");
+      if (deal.dataEmbarque) {
+        if (deal.dataEmbarque.includes("-")) {
+          const [year, month, day] = deal.dataEmbarque.split("-");
           dataEmbarque = `${day}/${month}/${year}`;
         } else {
-          dataEmbarque = deal.customField54;
+          dataEmbarque = deal.dataEmbarque;
         }
       }
 

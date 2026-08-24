@@ -32,6 +32,7 @@ import {
   Instagram,
   Database,
   ClipboardCheck,
+  PackageCheck,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -114,6 +115,11 @@ const menuGroups: MenuGroup[] = [
         title: "Programação",
         url: "/programacao",
         icon: Clock,
+      },
+      {
+        title: "Expedição",
+        url: "/expedicao",
+        icon: PackageCheck,
       },
     ],
   },

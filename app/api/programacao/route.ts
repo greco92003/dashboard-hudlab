@@ -1,141 +1,97 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
-import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
+import { fetchBoardDeals, type BoardDeal } from "@/lib/ghl/board-deals";
+import {
+  CONCLUIDO_STAGE_TITLES,
+  EXPEDICAO_STAGE_TITLES,
+  TIPO_PEDIDO_ORDER,
+} from "@/lib/ghl/programacao-stages";
 
-// GET GHL deals from the unified deals_cache organized by shipping date.
-export async function GET(request: NextRequest) {
+export const SEM_DATA_GROUP_ID = "sem-data";
+
+/**
+ * Board da produção: deals ganhos do GHL que ainda dependem da fábrica,
+ * agrupados por Data de Embarque. Tudo a partir de "Cobrar Saldo" já é
+ * responsabilidade da /expedicao e sai daqui.
+ *
+ * O corte é por exclusão (e não por lista branca) para que uma etapa nova ou
+ * renomeada no CRM apareça neste board em vez de desaparecer das duas telas.
+ */
+export async function GET() {
   const access = await requireApprovedUser();
   if (!access.ok) return access.response;
 
   try {
     const supabase = await createClient();
 
-    // Check authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is approved
-    const { data: profile, error: profileError } = await supabase
-      .from("user_profiles")
-      .select("approved, role")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !profile?.approved) {
-      return NextResponse.json({ error: "User not approved" }, { status: 403 });
-    }
-
-    console.log("📦 Fetching all won GHL deals from deals_cache...");
-
-    // Supabase projects commonly cap each response at 1,000 rows.
-    const deals = await fetchAllSupabaseRows<any>(
-      (from, to) =>
-        supabase
-          .from("deals_cache")
-          .select(
-            `
-        deal_id,
-        title,
-        value,
-        currency,
-        stage_id,
-        stage_title,
-        data_embarque,
-        created_date,
-        estado,
-        "quantidade-de-pares",
-        vendedor,
-        designer
-      `,
-          )
-          .eq("source_system", "ghl")
-          .eq("status", "won")
-          .eq("sync_status", "synced")
-          .order("data_embarque", { ascending: true, nullsFirst: false })
-          .order("deal_id", { ascending: true })
-          .range(from, to),
-      "Programacao deals read failed",
-    );
-
-    console.log(`✅ Found ${deals.length} deals`);
-
-    // Group deals by data_embarque (shipping date)
-    const dealsByEmbarque = new Map<string, any[]>();
-
-    deals.forEach((deal) => {
-      const embarqueDate = deal.data_embarque || "Sem data de embarque";
-      if (!dealsByEmbarque.has(embarqueDate)) {
-        dealsByEmbarque.set(embarqueDate, []);
-      }
-      dealsByEmbarque.get(embarqueDate)!.push({
-        id: deal.deal_id,
-        title: deal.title,
-        value: deal.value,
-        currency: deal.currency,
-        stageTitle: deal.stage_title,
-        quantidadePares: deal["quantidade-de-pares"],
-        vendedor: deal.vendedor,
-        designer: deal.designer,
-        customField54: deal.data_embarque,
-      });
+    const deals = await fetchBoardDeals(supabase, {
+      excludeStageTitles: [
+        ...EXPEDICAO_STAGE_TITLES,
+        ...CONCLUIDO_STAGE_TITLES,
+      ],
     });
 
-    // Transform into groups array sorted by date
+    // Agrupa por Data de Embarque. O split de "Em atraso" fica no cliente, que
+    // conhece o fuso do usuário e recalcula ao filtrar.
+    const dealsByEmbarque = new Map<string, BoardDeal[]>();
+    for (const deal of deals) {
+      const key = deal.dataEmbarque || SEM_DATA_GROUP_ID;
+      const bucket = dealsByEmbarque.get(key);
+      if (bucket) bucket.push(deal);
+      else dealsByEmbarque.set(key, [deal]);
+    }
+
+    const parseDate = (value: string) => {
+      const [day, month, year] = value.split("/").map(Number);
+      return new Date(year, month - 1, day).getTime();
+    };
+
     const groups = Array.from(dealsByEmbarque.entries())
-      .map(([embarqueDate, groupDeals]) => ({
-        id: embarqueDate,
-        title: embarqueDate,
+      .map(([dataEmbarque, groupDeals]) => ({
+        id: dataEmbarque,
+        title: dataEmbarque === SEM_DATA_GROUP_ID ? "Sem data" : dataEmbarque,
         dealsCount: groupDeals.length,
         deals: groupDeals,
       }))
       .sort((a, b) => {
-        // Sort groups by date (DD/MM/YYYY format)
-        if (a.title === "Sem data de embarque") return 1;
-        if (b.title === "Sem data de embarque") return -1;
-
-        const parseDate = (dateStr: string) => {
-          const [day, month, year] = dateStr.split("/").map(Number);
-          return new Date(year, month - 1, day).getTime();
-        };
-
+        if (a.id === SEM_DATA_GROUP_ID) return 1;
+        if (b.id === SEM_DATA_GROUP_ID) return -1;
         try {
-          return parseDate(a.title) - parseDate(b.title);
+          return parseDate(a.id) - parseDate(b.id);
         } catch {
           return 0;
         }
       });
 
-    // Calculate summary statistics
-    const totalDeals = deals.length;
-    const totalValue =
-      deals.reduce((sum, deal) => sum + (deal.value || 0), 0) || 0;
+    const porTipo: Record<string, number> = { "Sem tipo": 0 };
+    for (const tipo of TIPO_PEDIDO_ORDER) porTipo[tipo] = 0;
+    for (const deal of deals) porTipo[deal.tipoPedido ?? "Sem tipo"] += 1;
+
+    const totalPares = deals.reduce(
+      (sum, deal) => sum + (parseInt(deal.quantidadePares || "0", 10) || 0),
+      0,
+    );
 
     return NextResponse.json({
       success: true,
-      message: "Successfully retrieved deals from cache",
+      message: "Programação carregada do cache unificado do GHL",
       summary: {
-        totalDeals,
-        totalValue: totalValue / 100, // Convert from cents
+        totalDeals: deals.length,
+        // O cache guarda centavos (herança do ActiveCampaign).
+        totalValue: deals.reduce((sum, deal) => sum + (deal.value || 0), 0) / 100,
         totalGroups: groups.length,
+        totalPares,
+        porTipo,
       },
       groups,
-      debug: {
-        timestamp: new Date().toISOString(),
-      },
+      debug: { timestamp: new Date().toISOString() },
     });
   } catch (error) {
-    console.error("❌ Error in programacao endpoint:", error);
+    console.error("❌ Erro na rota /api/programacao:", error);
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Internal server error",
-        stack: error instanceof Error ? error.stack : null,
         timestamp: new Date().toISOString(),
       },
       { status: 500 },

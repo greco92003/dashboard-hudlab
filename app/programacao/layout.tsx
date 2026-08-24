@@ -2,7 +2,8 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Programação | Dashboard HUDLAB",
-  description: "Visualização Kanban de deals ganhos organizados por stage",
+  description:
+    "Kanban dos pedidos ganhos em produção, organizados por data de embarque",
 };
 
 export default function ProgramacaoLayout({

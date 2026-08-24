@@ -19,18 +19,19 @@ export function ConditionalSidebar({
   const pathname = usePathname();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
 
-  // State to control sidebar open/close - only for non-programacao pages
+  // State to control sidebar open/close - only for non-board pages
   const [forcedOpen, setForcedOpen] = useState(true);
   const [isClientReady, setIsClientReady] = useState(false);
 
-  // Pages where the sidebar can be collapsed by the user
-  const isProgramacaoPage = pathname === "/programacao";
+  // Pages where the sidebar can be collapsed by the user. Os kanbans de
+  // /programacao e /expedicao ocupam a tela inteira e precisam do espaço.
+  const isBoardPage = pathname === "/programacao" || pathname === "/expedicao";
   const isNctsPage = pathname.startsWith("/ncts");
-  const isCollapsiblePage = isProgramacaoPage || isNctsPage;
+  const isCollapsiblePage = isBoardPage || isNctsPage;
 
   // Check if current page needs full height layout (no padding)
   // NCT pages handle their own padding via layout.tsx
-  const isFullHeightPage = isProgramacaoPage || isNctsPage;
+  const isFullHeightPage = isBoardPage || isNctsPage;
 
   // Mark client as ready after hydration
   useEffect(() => {
@@ -146,10 +147,10 @@ export function ConditionalSidebar({
       <div suppressHydrationWarning>
         <SidebarProvider
           defaultOpen={defaultSidebarOpen}
-          // Force sidebar open for all pages except /programacao (only after client is ready)
-          open={isClientReady && !isProgramacaoPage ? forcedOpen : undefined}
+          // Force sidebar open for all pages except os kanbans (only after client is ready)
+          open={isClientReady && !isBoardPage ? forcedOpen : undefined}
           onOpenChange={
-            isClientReady && !isProgramacaoPage ? setForcedOpen : undefined
+            isClientReady && !isBoardPage ? setForcedOpen : undefined
           }
           style={
             {

@@ -32,7 +32,6 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
@@ -42,17 +41,31 @@ import {
   type TipoFilterValue,
 } from "@/components/programacao/tipo-pedido-filter";
 import { getTipoPedidoRank } from "@/lib/ghl/programacao-stages";
-import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
+import { parseDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
 
-const SEM_DATA_GROUP_ID = "sem-data";
-const EM_ATRASO_GROUP_ID = "em-atraso";
+const RECEBIDO_GROUP_ID = "recebido";
 
-interface ProgramacaoData {
+/**
+ * Janelas da coluna histórica de recebidos, medidas pela DATA DE EMBARQUE.
+ * Não dá para medir por data de atualização: a migração do ActiveCampaign para
+ * o GHL reescreveu esses timestamps em bloco e todo o histórico passaria por
+ * recente.
+ */
+const JANELAS_RECEBIDOS = [
+  { value: "30", label: "Embarque 30d" },
+  { value: "90", label: "Embarque 90d" },
+  { value: "0", label: "Todos" },
+];
+
+interface ExpedicaoData {
   success: boolean;
   message: string;
   summary: {
     totalDeals: number;
+    emAndamento: number;
+    recebidos: number;
+    recebidosDias: number;
     totalValue: number;
     totalGroups: number;
     totalPares: number;
@@ -61,31 +74,31 @@ interface ProgramacaoData {
   groups: BoardGroup[];
 }
 
-export default function ProgramacaoPage() {
-  const [data, setData] = useState<ProgramacaoData | null>(null);
+export default function ExpedicaoPage() {
+  const [data, setData] = useState<ExpedicaoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortBy, setSortBy] = useState<"value" | "title">("value");
+  const [sortBy, setSortBy] = useState<"date" | "value" | "title">("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedDeal, setSelectedDeal] = useState<BoardDeal | null>(null);
   const [isDealDialogOpen, setIsDealDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [tipoFilter, setTipoFilter] = useState<Set<TipoFilterValue>>(new Set());
+  const [recebidosDias, setRecebidosDias] = useState("30");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
-  const [activeCards, setActiveCards] = useState<Set<string>>(new Set());
 
   // ── Carga e sincronização ────────────────────────────────────────────────
 
-  const fetchProgramacaoData = useCallback(
-    async (showToast = false, silent = false) => {
+  const fetchExpedicaoData = useCallback(
+    async (dias: string, showToast = false, silent = false) => {
       try {
         if (!silent) setLoading(true);
         setError(null);
 
-        const response = await fetch("/api/programacao");
+        const response = await fetch(`/api/expedicao?recebidosDias=${dias}`);
         if (!response.ok) {
           throw new Error(`Erro ao buscar dados: ${response.statusText}`);
         }
@@ -93,7 +106,7 @@ export default function ProgramacaoPage() {
         setData(await response.json());
         if (showToast) toast.success("Dados atualizados com sucesso!");
       } catch (err) {
-        console.error("Erro ao buscar dados de programação:", err);
+        console.error("Erro ao buscar dados de expedição:", err);
         const message = err instanceof Error ? err.message : "Erro desconhecido";
         setError(message);
         if (showToast) toast.error(`Erro ao atualizar: ${message}`);
@@ -113,7 +126,7 @@ export default function ProgramacaoPage() {
         method: "POST",
       });
       if (!syncResponse.ok) throw new Error("Failed to sync data");
-      await fetchProgramacaoData(true);
+      await fetchExpedicaoData(recebidosDias, true);
     } catch (err) {
       console.error("Error syncing data:", err);
       toast.error("Erro ao sincronizar dados");
@@ -121,29 +134,9 @@ export default function ProgramacaoPage() {
     }
   };
 
-  const loadActiveCardsFromSupabase = useCallback(async () => {
-    try {
-      const { data: states, error: statesError } = await supabase
-        .from("programacao_card_states")
-        .select("deal_id, is_active")
-        .returns<{ deal_id: string; is_active: boolean }[]>();
-
-      if (statesError) {
-        console.error("Error loading active cards from Supabase:", statesError);
-        return;
-      }
-      setActiveCards(
-        new Set((states || []).filter((s) => s.is_active).map((s) => s.deal_id)),
-      );
-    } catch (err) {
-      console.error("Error loading active cards:", err);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchProgramacaoData();
-    loadActiveCardsFromSupabase();
-  }, [fetchProgramacaoData, loadActiveCardsFromSupabase]);
+    fetchExpedicaoData(recebidosDias);
+  }, [fetchExpedicaoData, recebidosDias]);
 
   // Realtime: o webhook do GHL (ou um sync manual) mexe no deals_cache e o board
   // se atualiza sozinho. Com debounce porque os syncs gravam centenas de linhas.
@@ -151,7 +144,7 @@ export default function ProgramacaoPage() {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const channel = supabase
-      .channel("deals_cache_ghl_changes")
+      .channel("deals_cache_expedicao_changes")
       .on(
         "postgres_changes",
         {
@@ -163,7 +156,7 @@ export default function ProgramacaoPage() {
         () => {
           if (debounceTimer) clearTimeout(debounceTimer);
           debounceTimer = setTimeout(
-            () => fetchProgramacaoData(false, true),
+            () => fetchExpedicaoData(recebidosDias, false, true),
             1500,
           );
         },
@@ -174,150 +167,76 @@ export default function ProgramacaoPage() {
       if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
-  }, [fetchProgramacaoData]);
+  }, [fetchExpedicaoData, recebidosDias]);
 
   // ── Preferências locais ──────────────────────────────────────────────────
 
   useEffect(() => {
     setIsHydrated(true);
 
-    const savedSortBy = storage.getItem("programacao-sortBy");
-    if (savedSortBy === "value" || savedSortBy === "title") {
+    const savedSortBy = storage.getItem("expedicao-sortBy");
+    if (savedSortBy === "date" || savedSortBy === "value" || savedSortBy === "title") {
       setSortBy(savedSortBy);
     }
 
-    const savedSortDirection = storage.getItem("programacao-sortDirection");
+    const savedSortDirection = storage.getItem("expedicao-sortDirection");
     if (savedSortDirection === "asc" || savedSortDirection === "desc") {
       setSortDirection(savedSortDirection);
     }
 
-    const savedTipoFilter = storage.getItem("programacao-tipoFilter");
+    const savedTipoFilter = storage.getItem("expedicao-tipoFilter");
     if (savedTipoFilter) {
       try {
         setTipoFilter(new Set(JSON.parse(savedTipoFilter)));
       } catch {
-        storage.removeItem("programacao-tipoFilter");
+        storage.removeItem("expedicao-tipoFilter");
       }
     }
 
-    // Chave legada da antiga visibilidade de grupos: guardava ids de datas, que
-    // apodreciam conforme o calendário andava e escondiam colunas novas.
-    storage.removeItem("programacao-visibleGroups");
-    storage.removeItem("programacao-visibleGroups", "local");
+    const savedDias = storage.getItem("expedicao-recebidosDias");
+    if (savedDias && JANELAS_RECEBIDOS.some((j) => j.value === savedDias)) {
+      setRecebidosDias(savedDias);
+    }
 
-    const savedHeaderCollapsed = storage.getItem("programacao-headerCollapsed");
+    const savedHeaderCollapsed = storage.getItem("expedicao-headerCollapsed");
     if (savedHeaderCollapsed !== null) {
       setIsHeaderCollapsed(savedHeaderCollapsed === "true");
     }
 
-    const savedZoomLevel = storage.getItem("programacao-zoomLevel");
+    const savedZoomLevel = storage.getItem("expedicao-zoomLevel");
     if (savedZoomLevel) setZoomLevel(Number(savedZoomLevel));
   }, []);
 
   useEffect(() => {
-    if (isHydrated) storage.setItem("programacao-sortBy", sortBy);
+    if (isHydrated) storage.setItem("expedicao-sortBy", sortBy);
   }, [sortBy, isHydrated]);
 
   useEffect(() => {
-    if (isHydrated) storage.setItem("programacao-sortDirection", sortDirection);
+    if (isHydrated) storage.setItem("expedicao-sortDirection", sortDirection);
   }, [sortDirection, isHydrated]);
 
   useEffect(() => {
     if (isHydrated) {
       storage.setItem(
-        "programacao-tipoFilter",
+        "expedicao-tipoFilter",
         JSON.stringify(Array.from(tipoFilter)),
       );
     }
   }, [tipoFilter, isHydrated]);
 
   useEffect(() => {
+    if (isHydrated) storage.setItem("expedicao-recebidosDias", recebidosDias);
+  }, [recebidosDias, isHydrated]);
+
+  useEffect(() => {
     if (isHydrated) {
-      storage.setItem("programacao-headerCollapsed", String(isHeaderCollapsed));
+      storage.setItem("expedicao-headerCollapsed", String(isHeaderCollapsed));
     }
   }, [isHeaderCollapsed, isHydrated]);
 
   useEffect(() => {
-    if (isHydrated) storage.setItem("programacao-zoomLevel", String(zoomLevel));
+    if (isHydrated) storage.setItem("expedicao-zoomLevel", String(zoomLevel));
   }, [zoomLevel, isHydrated]);
-
-  // Card novo entra ligado. O upsert com ignoreDuplicates evita o 409 quando o
-  // efeito roda em paralelo (Strict Mode / dados mudando).
-  useEffect(() => {
-    if (!data) return;
-
-    const initializeNewCards = async () => {
-      try {
-        const allDealIds = new Set(
-          data.groups.flatMap((group) => group.deals.map((deal) => deal.id)),
-        );
-
-        const { data: existingStates, error: statesError } = await supabase
-          .from("programacao_card_states")
-          .select("deal_id")
-          .returns<{ deal_id: string }[]>();
-
-        if (statesError) {
-          console.error("Error fetching existing card states:", statesError);
-          return;
-        }
-
-        const existingDealIds = new Set(
-          (existingStates || []).map((state) => state.deal_id),
-        );
-        const newDealIds = Array.from(allDealIds).filter(
-          (dealId) => !existingDealIds.has(dealId),
-        );
-        if (newDealIds.length === 0) return;
-
-        const { error: insertError } = await supabase
-          .from("programacao_card_states")
-          .upsert(
-            newDealIds.map((dealId) => ({
-              deal_id: dealId,
-              is_active: true,
-            })) as any,
-            { onConflict: "deal_id", ignoreDuplicates: true },
-          );
-
-        if (insertError) {
-          console.error(
-            "Error inserting new card states:",
-            insertError.message,
-          );
-          return;
-        }
-        loadActiveCardsFromSupabase();
-      } catch (err) {
-        console.error("Error initializing new cards:", err);
-      }
-    };
-
-    initializeNewCards();
-  }, [data, loadActiveCardsFromSupabase]);
-
-  const handleCardToggle = (dealId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setActiveCards((prev) => {
-      const next = new Set(prev);
-      const isActive = !next.has(dealId);
-      if (isActive) next.add(dealId);
-      else next.delete(dealId);
-
-      supabase
-        .from("programacao_card_states")
-        .upsert({ deal_id: dealId, is_active: isActive } as any, {
-          onConflict: "deal_id",
-        })
-        .then(({ error: upsertError }) => {
-          if (upsertError) {
-            console.error("Error saving active card:", upsertError);
-          }
-        });
-
-      return next;
-    });
-  };
 
   // ── Montagem do board ────────────────────────────────────────────────────
 
@@ -345,65 +264,30 @@ export default function ProgramacaoPage() {
         .includes(normalizedSearch);
     };
 
-    // Ordem dentro da coluna: primeiro o tipo (Evento na frente), depois o
-    // critério escolhido no seletor. "Em atraso" mistura muitos dias, então lá
-    // a data manda e o tipo desempata.
-    const sortDeals = (deals: BoardDeal[], groupId: string) =>
+    // Evento na frente aqui também: é o pedido cuja data não pode escorregar.
+    const sortDeals = (deals: BoardDeal[]) =>
       [...deals].sort((a, b) => {
-        if (groupId === EM_ATRASO_GROUP_ID) {
-          const dateA = parseDate(a.dataEmbarque)?.getTime() ?? Infinity;
-          const dateB = parseDate(b.dataEmbarque)?.getTime() ?? Infinity;
-          if (dateA !== dateB) {
-            return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
-          }
-        }
-
         const rankDiff =
           getTipoPedidoRank(a.tipoPedido) - getTipoPedidoRank(b.tipoPedido);
         if (rankDiff !== 0) return rankDiff;
 
-        const comparison =
-          sortBy === "title"
-            ? a.title.localeCompare(b.title)
-            : b.value - a.value;
+        let comparison = 0;
+        if (sortBy === "date") {
+          const dateA = parseDate(a.dataEmbarque)?.getTime() ?? Infinity;
+          const dateB = parseDate(b.dataEmbarque)?.getTime() ?? Infinity;
+          comparison = dateA - dateB;
+        } else if (sortBy === "title") {
+          comparison = a.title.localeCompare(b.title);
+        } else {
+          comparison = b.value - a.value;
+        }
         return sortDirection === "asc" ? comparison : -comparison;
       });
 
-    const overdueDeals: BoardDeal[] = [];
-    const remainingGroups: BoardGroup[] = [];
-
-    for (const group of data.groups) {
-      const deals = group.deals.filter(matchesFilters);
-      const onTime: BoardDeal[] = [];
-
-      for (const deal of deals) {
-        if (group.id !== SEM_DATA_GROUP_ID && isOverdue(deal.dataEmbarque)) {
-          overdueDeals.push(deal);
-        } else {
-          onTime.push(deal);
-        }
-      }
-
-      if (onTime.length > 0) {
-        remainingGroups.push({
-          ...group,
-          deals: sortDeals(onTime, group.id),
-          dealsCount: onTime.length,
-        });
-      }
-    }
-
-    const groups: BoardGroup[] = [];
-    if (overdueDeals.length > 0) {
-      groups.push({
-        id: EM_ATRASO_GROUP_ID,
-        title: "Em atraso",
-        dealsCount: overdueDeals.length,
-        deals: sortDeals(overdueDeals, EM_ATRASO_GROUP_ID),
-      });
-    }
-    groups.push(...remainingGroups);
-    return groups;
+    return data.groups.map((group) => {
+      const deals = sortDeals(group.deals.filter(matchesFilters));
+      return { ...group, deals, dealsCount: deals.length };
+    });
   }, [data, normalizedSearch, tipoFilter, sortBy, sortDirection]);
 
   const displayTotalDeals = displayGroups.reduce(
@@ -423,10 +307,10 @@ export default function ProgramacaoPage() {
       {!isHeaderCollapsed && (
         <>
           <div className="flex flex-shrink-0 items-center gap-3">
-            <Clock className="h-6 w-6" />
-            <h1 className="text-xl font-bold sm:text-2xl">Programação</h1>
+            <PackageCheck className="h-6 w-6" />
+            <h1 className="text-xl font-bold sm:text-2xl">Expedição</h1>
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              Pedidos ganhos até a produção
+              Depois da produção, até o cliente receber
             </span>
           </div>
 
@@ -455,30 +339,47 @@ export default function ProgramacaoPage() {
                 <Select
                   value={sortBy}
                   onValueChange={(value) =>
-                    setSortBy(value as "value" | "title")
+                    setSortBy(value as "date" | "value" | "title")
                   }
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Ordenar por" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="date">Data de Embarque</SelectItem>
                     <SelectItem value="value">Valor</SelectItem>
                     <SelectItem value="title">Título</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <AveragePairsCalculator
-                deals={data?.groups.flatMap((group) => group.deals) || []}
-                activeCards={activeCards}
-              />
+              <div className="flex items-center gap-2">
+                <span
+                  className="whitespace-nowrap text-sm text-muted-foreground"
+                  title="Recorta a coluna Recebido pela data de embarque"
+                >
+                  Recebidos:
+                </span>
+                <Select value={recebidosDias} onValueChange={setRecebidosDias}>
+                  <SelectTrigger className="w-[130px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JANELAS_RECEBIDOS.map((janela) => (
+                      <SelectItem key={janela.value} value={janela.value}>
+                        {janela.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex w-full gap-2 sm:w-auto">
               <Button asChild variant="ghost" size="sm">
-                <Link href="/expedicao">
-                  <PackageCheck className="mr-2 h-4 w-4" />
-                  Expedição
+                <Link href="/programacao">
+                  <Clock className="mr-2 h-4 w-4" />
+                  Programação
                 </Link>
               </Button>
               <Button
@@ -515,7 +416,7 @@ export default function ProgramacaoPage() {
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <Skeleton className="h-full w-full" />
         </div>
-      ) : data && data.groups.length > 0 ? (
+      ) : data ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -535,7 +436,7 @@ export default function ProgramacaoPage() {
                   <ChevronUp className="h-5 w-5" />
                 )}
               </Button>
-              <h2 className="text-xl font-bold">Data de Embarque</h2>
+              <h2 className="text-xl font-bold">Etapa</h2>
             </div>
 
             <div className="relative order-last w-full sm:order-none sm:w-auto sm:max-w-xs sm:flex-1">
@@ -588,6 +489,9 @@ export default function ProgramacaoPage() {
                 </Button>
               </div>
               <Badge variant="outline">
+                {data.summary.emAndamento} em andamento
+              </Badge>
+              <Badge variant="outline">
                 {displayTotalDeals} {displayTotalDeals === 1 ? "deal" : "deals"}
                 {hasFilters ? ` de ${data.summary.totalDeals}` : ""}
               </Badge>
@@ -595,44 +499,27 @@ export default function ProgramacaoPage() {
           </div>
 
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white bg-transparent">
-            {displayGroups.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
-                <Search className="h-8 w-8 opacity-50" />
-                <p>Nenhum deal encontrado com os filtros atuais</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setTipoFilter(new Set());
-                  }}
-                >
-                  Limpar filtros
-                </Button>
-              </div>
-            ) : (
-              <BoardColumns
-                groups={displayGroups}
-                cardWidth={cardWidth}
-                renderCard={(deal) => (
-                  <DealCard
-                    key={deal.id}
-                    deal={deal}
-                    isActive={activeCards.has(deal.id)}
-                    onToggle={handleCardToggle}
-                    onClick={handleDealClick}
-                  />
-                )}
-              />
-            )}
+            <BoardColumns
+              groups={displayGroups}
+              cardWidth={cardWidth}
+              emptyLabel="Nada nesta etapa"
+              renderCard={(deal, group) => (
+                <DealCard
+                  key={deal.id}
+                  deal={deal}
+                  concluido={group.id === RECEBIDO_GROUP_ID}
+                  onClick={handleDealClick}
+                />
+              )}
+            />
           </div>
         </div>
       ) : (
         <Alert className="flex-shrink-0">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Nenhum pedido em produção no momento. Clique em &quot;Atualizar&quot;
-            para sincronizar com o GHL.
+            Nenhum dado disponível. Clique em &quot;Atualizar&quot; para
+            sincronizar com o GHL.
           </AlertDescription>
         </Alert>
       )}
