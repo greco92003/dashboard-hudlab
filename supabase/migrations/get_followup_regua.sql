@@ -15,18 +15,24 @@
 -- quem não destravou na D1) e as taxas são comparáveis entre si.
 --
 -- DESTRAVOU = esteve na etapa adiante DEPOIS da última vez que foi visto na
--- etapa de origem, medido contra a foto diária `ghl_stage_snapshots`. A
--- primeira versão usava a maior etapa já alcançada e contava como destravado
--- quem passou por Negociação antes da mensagem e depois voltou: 98 pela
--- regra antiga contra 88 pela nova, ou seja 10 contatos que seguem na fila.
--- A granularidade é o dia, o que basta para uma régua de D1/D3/D7 e para
--- promoções semanais.
+-- etapa de origem, medido contra a foto diária `ghl_stage_snapshots`. Uma
+-- versão intermediária usava a maior etapa já alcançada e contava como
+-- destravado quem passou por Negociação antes da mensagem e depois voltou:
+-- 98 pela regra antiga contra 88 pela nova, ou seja 10 contatos que seguem
+-- na fila. A granularidade é o dia, o que basta para uma régua de D1/D3/D7 e
+-- para promoções semanais.
 --
 -- FATURAMENTO vem de `v_vendas`, a fonte canônica: aplica a sanidade de
 -- `dado_par_plausivel` e exclui contatos importados -- mas com a saída
 -- `venda_real_fora_da_rajada`, que devolve à contagem o contato migrado que
 -- compra de verdade. Ou seja, venda gerada pela promo aparece normalmente,
 -- mesmo o público sendo majoritariamente backlog migrado.
+--
+-- PERFORMANCE: a primeira versão agregava ghl_stage_snapshots (204k linhas),
+-- ghl_opportunities e v_vendas INTEIRAS para depois casar com os poucos
+-- contatos tagueados -- 46,6 s, tempo suficiente para a página estourar. O
+-- conjunto de contatos da régua entra como filtro dentro de cada CTE, o que
+-- levou a 3,6 s.
 --
 -- VERSIONAMENTO: a versão sai do sufixo `_v2`; tag sem sufixo é v1. Copy
 -- nova aparece sozinha na tela, sem mexer em código. As tags reais em
@@ -61,16 +67,24 @@ AS $$
     FROM public.ghl_contact_tags t
     WHERE t.tag ~ '^follow_(atendimento_d|negociacao_m)\d+(_v\d+)?$'
   ),
+  contatos AS (
+    SELECT DISTINCT contact_id FROM tags
+  ),
   ultimo AS (
     SELECT DISTINCT ON (contact_id, bloco)
       contact_id, bloco, degrau, versao
     FROM tags
     ORDER BY contact_id, bloco, degrau DESC, versao DESC
   ),
+  oportunidade AS (
+    SELECT o.id, o.contact_id, o.pipeline_id, o.stage_name, o.status, o.monetary_value
+    FROM public.ghl_opportunities o
+    JOIN contatos c ON c.contact_id = o.contact_id
+  ),
   snap AS (
     SELECT o.contact_id, s.snapshot_date, MAX(dd.stage_order) AS ordem
-    FROM public.ghl_stage_snapshots s
-    JOIN public.ghl_opportunities o ON o.id = s.opportunity_id
+    FROM oportunidade o
+    JOIN public.ghl_stage_snapshots s ON s.opportunity_id = o.id
     JOIN public.dim_pipeline_stages dd
       ON dd.pipeline_id = s.pipeline_id AND dd.stage_name = s.stage_name
     GROUP BY 1, 2
@@ -90,13 +104,13 @@ AS $$
       o.contact_id,
       MAX((o.status = 'won')::INT) AS ganhou,
       SUM(o.monetary_value) FILTER (WHERE o.status <> 'won') AS valor_aberto
-    FROM public.ghl_opportunities o
-    WHERE o.pipeline_id IN (SELECT DISTINCT pipeline_id FROM public.dim_pipeline_stages)
+    FROM oportunidade o
     GROUP BY 1
   ),
   venda AS (
-    SELECT contact_id, SUM(monetary_value) AS faturamento, COUNT(*) AS vendas
-    FROM public.v_vendas
+    SELECT v.contact_id, SUM(v.monetary_value) AS faturamento, COUNT(*) AS vendas
+    FROM public.v_vendas v
+    JOIN contatos c ON c.contact_id = v.contact_id
     GROUP BY 1
   ),
   atribuido AS (
@@ -141,3 +155,11 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_followup_regua() TO authenticated;
+
+-- O join snapshots -> oportunidade é por opportunity_id vindo de um conjunto
+-- pequeno; sem índice ele vira scan da tabela de 204k linhas.
+CREATE INDEX IF NOT EXISTS idx_ghl_stage_snapshots_opportunity
+  ON public.ghl_stage_snapshots (opportunity_id);
+
+CREATE INDEX IF NOT EXISTS idx_ghl_opportunities_contact
+  ON public.ghl_opportunities (contact_id);
