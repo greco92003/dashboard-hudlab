@@ -202,7 +202,8 @@ export interface Database {
             | "user"
             | "manager"
             | "team-leader"
-            | "partners-media";
+            | "partners-media"
+            | "producao";
           first_name: string | null;
           last_name: string | null;
           avatar_url: string | null;
@@ -234,7 +235,8 @@ export interface Database {
             | "user"
             | "manager"
             | "team-leader"
-            | "partners-media";
+            | "partners-media"
+            | "producao";
           first_name?: string | null;
           last_name?: string | null;
           avatar_url?: string | null;
@@ -266,7 +268,8 @@ export interface Database {
             | "user"
             | "manager"
             | "team-leader"
-            | "partners-media";
+            | "partners-media"
+            | "producao";
           first_name?: string | null;
           last_name?: string | null;
           avatar_url?: string | null;

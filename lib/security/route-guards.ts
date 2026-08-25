@@ -11,7 +11,11 @@ type UserRole =
   | "user"
   | "manager"
   | "team-leader"
-  | "partners-media";
+  | "partners-media"
+  | "producao";
+
+/** Quem opera o board de chão de fábrica e pode concluir pedidos. */
+export const PRODUCAO_ROLES = ["producao", "admin", "owner"] as const;
 
 type UserProfile = {
   id: string;
@@ -44,7 +48,17 @@ export async function requireUser(): Promise<AccessResult> {
   return { ok: true, user, profile: null };
 }
 
-export async function requireApprovedUser(): Promise<AccessResult> {
+/**
+ * Aprovado e com acesso ao dashboard.
+ *
+ * O papel `producao` é barrado por padrão: quem opera o chão de fábrica não
+ * pode ver faturamento, comissão nem funil. As poucas rotas que a /producao
+ * consome passam `{ permitirProducao: true }` explicitamente — assim, uma rota
+ * nova nasce fechada para a produção em vez de aberta por esquecimento.
+ */
+export async function requireApprovedUser(
+  options: { permitirProducao?: boolean } = {},
+): Promise<AccessResult> {
   const authenticated = await requireUser();
   if (!authenticated.ok) return authenticated;
 
@@ -59,6 +73,10 @@ export async function requireApprovedUser(): Promise<AccessResult> {
     return deny("Usuário sem aprovação", 403);
   }
 
+  if (profile.role === "producao" && !options.permitirProducao) {
+    return deny("Permissão insuficiente", 403);
+  }
+
   return {
     ok: true,
     user: authenticated.user,
@@ -69,7 +87,9 @@ export async function requireApprovedUser(): Promise<AccessResult> {
 export async function requireRole(
   roles: readonly UserRole[],
 ): Promise<AccessResult> {
-  const approved = await requireApprovedUser();
+  const approved = await requireApprovedUser({
+    permitirProducao: roles.includes("producao"),
+  });
   if (!approved.ok) return approved;
 
   if (!approved.profile || !roles.includes(approved.profile.role)) {
@@ -80,6 +100,10 @@ export async function requireRole(
 
 export function requireAdmin(): Promise<AccessResult> {
   return requireRole(ADMIN_ROLES);
+}
+
+export function requireProducao(): Promise<AccessResult> {
+  return requireRole(PRODUCAO_ROLES);
 }
 
 export function safeSecretEqual(received: string, expected: string): boolean {

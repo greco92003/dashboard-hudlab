@@ -133,6 +133,9 @@ export interface GhlPipeline {
 
 export type GhlOpportunityUpdate = {
   monetaryValue?: number;
+  /** Avança o negócio de etapa. Usado pelo botão Concluir da /producao. */
+  pipelineStageId?: string;
+  pipelineId?: string;
   customFields?: Array<{
     id: string;
     fieldValue: unknown;
@@ -285,6 +288,25 @@ export async function searchGhlOpportunitiesByStage(
     );
   }
   return opportunities;
+}
+
+/**
+ * Id da etapa `stageName` dentro de `pipelineId`. Resolvido no ar em vez de
+ * fixado no código porque as etapas são criadas e reordenadas no CRM — o board
+ * inteiro já se orienta por título de etapa pelo mesmo motivo.
+ */
+export async function findStageIdByName(
+  pipelineId: string,
+  stageName: string,
+): Promise<string | null> {
+  const alvo = stageName.trim().toLowerCase();
+  const pipelines = await fetchGhlPipelines();
+  const pipeline = pipelines.find((p) => p.id === pipelineId);
+  if (!pipeline) return null;
+  const stage = (pipeline.stages || []).find(
+    (s) => s.name.trim().toLowerCase() === alvo,
+  );
+  return stage?.id ?? null;
 }
 
 export async function updateGhlOpportunity(

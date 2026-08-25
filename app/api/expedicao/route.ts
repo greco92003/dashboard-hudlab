@@ -28,7 +28,8 @@ const EM_ANDAMENTO_STAGE_TITLES = EXPEDICAO_COLUMNS.filter(
  * pela operação e escapou dessa distorção. `?recebidosDias=0` traz tudo.
  */
 export async function GET(request: NextRequest) {
-  const access = await requireApprovedUser();
+  // A /producao lê estes dois boards; nenhum deles expõe faturamento.
+  const access = await requireApprovedUser({ permitirProducao: true });
   if (!access.ok) return access.response;
 
   try {
