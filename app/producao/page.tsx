@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { AlertaSemData } from "@/components/programacao/alerta-sem-data";
+import {
+  ForaDoBoard,
+  type MotivoFora,
+} from "@/components/programacao/fora-do-board";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
@@ -29,6 +32,7 @@ import {
 } from "@/components/programacao/tipo-pedido-filter";
 import {
   getTipoPedidoRank,
+  isDadosEmConferencia,
   isEtapaConcluivel,
 } from "@/lib/ghl/programacao-stages";
 import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
@@ -63,7 +67,7 @@ export default function ProducaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState<Set<TipoFilterValue>>(new Set());
-  const [soSemData, setSoSemData] = useState(false);
+  const [foraAtivo, setForaAtivo] = useState<MotivoFora | null>(null);
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
   const { profile } = useUserProfile();
 
@@ -126,12 +130,12 @@ export default function ProducaoPage() {
 
   const buscaNormalizada = busca.trim().toLowerCase();
 
-  const { grupos, semDataGroup } = useMemo<{
+  const { grupos, gruposFora } = useMemo<{
     grupos: BoardGroup[];
-    semDataGroup: BoardGroup | null;
+    gruposFora: Partial<Record<MotivoFora, BoardGroup>>;
   }>(() => {
     const resposta = dados[aba];
-    if (!resposta) return { grupos: [], semDataGroup: null };
+    if (!resposta) return { grupos: [], gruposFora: {} };
 
     const combina = (deal: BoardDeal) => {
       if (tipoFiltro.size > 0) {
@@ -161,31 +165,30 @@ export default function ProducaoPage() {
         const deals = ordenar(grupo.deals.filter(combina));
         return { ...grupo, deals, dealsCount: deals.length };
       });
-      return { grupos, semDataGroup: null };
+      return { grupos, gruposFora: {} };
     }
 
     const atrasados: BoardDeal[] = [];
     const restantes: BoardGroup[] = [];
-    let semData: BoardGroup | null = null;
+    const emConferencia: BoardDeal[] = [];
+    const semData: BoardDeal[] = [];
 
     for (const grupo of resposta.groups) {
       const deals = grupo.deals.filter(combina);
+      const agendaveis: BoardDeal[] = [];
 
-      // Sem data não responde a pergunta do board; vira aviso, não coluna.
-      if (grupo.id === SEM_DATA_GROUP_ID) {
-        if (deals.length > 0) {
-          semData = {
-            ...grupo,
-            title: "Sem data de embarque",
-            deals: ordenar(deals),
-            dealsCount: deals.length,
-          };
-        }
-        continue;
+      for (const deal of deals) {
+        // Em conferência o cadastro ainda está sendo preenchido: a data é
+        // suposta e não pode ocupar coluna de dia nem contar como atraso.
+        if (isDadosEmConferencia(deal.stageTitle)) emConferencia.push(deal);
+        else if (grupo.id === SEM_DATA_GROUP_ID) semData.push(deal);
+        else agendaveis.push(deal);
       }
 
+      if (grupo.id === SEM_DATA_GROUP_ID) continue;
+
       const noPrazo: BoardDeal[] = [];
-      for (const deal of deals) {
+      for (const deal of agendaveis) {
         if (isOverdue(deal.dataEmbarque)) atrasados.push(deal);
         else noPrazo.push(deal);
       }
@@ -208,10 +211,30 @@ export default function ProducaoPage() {
       });
     }
     resultado.push(...restantes);
-    return { grupos: resultado, semDataGroup: semData };
+
+    const fora: Partial<Record<MotivoFora, BoardGroup>> = {};
+    if (emConferencia.length > 0) {
+      fora["em-conferencia"] = {
+        id: "em-conferencia",
+        title: "Conferir Pgto/Completar Dados",
+        dealsCount: emConferencia.length,
+        deals: ordenar(emConferencia),
+      };
+    }
+    if (semData.length > 0) {
+      fora["sem-data"] = {
+        id: SEM_DATA_GROUP_ID,
+        title: "Sem data de embarque",
+        dealsCount: semData.length,
+        deals: ordenar(semData),
+      };
+    }
+
+    return { grupos: resultado, gruposFora: fora };
   }, [dados, aba, buscaNormalizada, tipoFiltro]);
 
-  const gruposVisiveis = soSemData && semDataGroup ? [semDataGroup] : grupos;
+  const grupoFora = foraAtivo ? gruposFora[foraAtivo] : undefined;
+  const gruposVisiveis = grupoFora ? [grupoFora] : grupos;
 
   const totalVisivel = gruposVisiveis.reduce(
     (soma, g) => soma + g.deals.length,
@@ -291,10 +314,21 @@ export default function ProducaoPage() {
         tamanho="grande"
       />
 
-      <AlertaSemData
-        quantidade={semDataGroup?.dealsCount ?? 0}
-        ativo={soSemData}
-        onToggle={() => setSoSemData((v) => !v)}
+      <ForaDoBoard
+        buckets={[
+          {
+            motivo: "em-conferencia",
+            quantidade: gruposFora["em-conferencia"]?.dealsCount ?? 0,
+          },
+          {
+            motivo: "sem-data",
+            quantidade: gruposFora["sem-data"]?.dealsCount ?? 0,
+          },
+        ]}
+        ativo={foraAtivo}
+        onToggle={(motivo) =>
+          setForaAtivo((atual) => (atual === motivo ? null : motivo))
+        }
         tamanho="grande"
       />
 

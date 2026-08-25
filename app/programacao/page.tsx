@@ -33,7 +33,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
-import { AlertaSemData } from "@/components/programacao/alerta-sem-data";
+import {
+  ForaDoBoard,
+  type MotivoFora,
+} from "@/components/programacao/fora-do-board";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
@@ -80,8 +83,8 @@ export default function ProgramacaoPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
-  // Mostra só os pedidos sem data de embarque, a partir do aviso.
-  const [soSemData, setSoSemData] = useState(false);
+  // Quando preenchido, o board mostra só o grupo que ficou de fora dele.
+  const [foraAtivo, setForaAtivo] = useState<MotivoFora | null>(null);
   const [activeCards, setActiveCards] = useState<Set<string>>(new Set());
 
   // ── Carga e sincronização ────────────────────────────────────────────────
@@ -325,11 +328,11 @@ export default function ProgramacaoPage() {
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
-  const { displayGroups, semDataGroup } = useMemo<{
+  const { displayGroups, gruposFora } = useMemo<{
     displayGroups: BoardGroup[];
-    semDataGroup: BoardGroup | null;
+    gruposFora: Partial<Record<MotivoFora, BoardGroup>>;
   }>(() => {
-    if (!data) return { displayGroups: [], semDataGroup: null };
+    if (!data) return { displayGroups: [], gruposFora: {} };
 
     const matchesFilters = (deal: BoardDeal) => {
       if (tipoFilter.size > 0) {
@@ -375,27 +378,31 @@ export default function ProgramacaoPage() {
 
     const overdueDeals: BoardDeal[] = [];
     const remainingGroups: BoardGroup[] = [];
-    let semData: BoardGroup | null = null;
+    const emConferencia: BoardDeal[] = [];
+    const semData: BoardDeal[] = [];
 
     for (const group of data.groups) {
       const deals = group.deals.filter(matchesFilters);
+      const agendaveis: BoardDeal[] = [];
 
-      // Pedido sem data não responde "o que embarca em cada dia?", que é a
-      // pergunta do board. Sai das colunas e vira aviso.
-      if (group.id === SEM_DATA_GROUP_ID) {
-        if (deals.length > 0) {
-          semData = {
-            ...group,
-            title: "Sem data de embarque",
-            deals: sortDeals(deals, group.id),
-            dealsCount: deals.length,
-          };
+      for (const deal of deals) {
+        // Em conferência o cadastro ainda está sendo preenchido, então a data
+        // é suposta. Deixá-lo numa coluna de dia faz o board prometer um
+        // embarque que ninguém confirmou — e, se a data já venceu, joga os
+        // pares dele na conta de "Em atraso" da fábrica.
+        if (isDadosEmConferencia(deal.stageTitle)) {
+          emConferencia.push(deal);
+        } else if (group.id === SEM_DATA_GROUP_ID) {
+          semData.push(deal);
+        } else {
+          agendaveis.push(deal);
         }
-        continue;
       }
 
+      if (group.id === SEM_DATA_GROUP_ID) continue;
+
       const onTime: BoardDeal[] = [];
-      for (const deal of deals) {
+      for (const deal of agendaveis) {
         if (isOverdue(deal.dataEmbarque)) overdueDeals.push(deal);
         else onTime.push(deal);
       }
@@ -419,12 +426,30 @@ export default function ProgramacaoPage() {
       });
     }
     groups.push(...remainingGroups);
-    return { displayGroups: groups, semDataGroup: semData };
+
+    const fora: Partial<Record<MotivoFora, BoardGroup>> = {};
+    if (emConferencia.length > 0) {
+      fora["em-conferencia"] = {
+        id: "em-conferencia",
+        title: "Conferir Pgto/Completar Dados",
+        dealsCount: emConferencia.length,
+        deals: sortDeals(emConferencia, "em-conferencia"),
+      };
+    }
+    if (semData.length > 0) {
+      fora["sem-data"] = {
+        id: SEM_DATA_GROUP_ID,
+        title: "Sem data de embarque",
+        dealsCount: semData.length,
+        deals: sortDeals(semData, SEM_DATA_GROUP_ID),
+      };
+    }
+
+    return { displayGroups: groups, gruposFora: fora };
   }, [data, normalizedSearch, tipoFilter, sortBy, sortDirection]);
 
-  // Com o aviso aberto, o board mostra só a exceção.
-  const gruposVisiveis =
-    soSemData && semDataGroup ? [semDataGroup] : displayGroups;
+  const grupoFora = foraAtivo ? gruposFora[foraAtivo] : undefined;
+  const gruposVisiveis = grupoFora ? [grupoFora] : displayGroups;
 
   const displayTotalDeals = gruposVisiveis.reduce(
     (sum, group) => sum + group.deals.length,
@@ -526,10 +551,21 @@ export default function ProgramacaoPage() {
             counts={data?.summary.porTipo}
           />
 
-          <AlertaSemData
-            quantidade={semDataGroup?.dealsCount ?? 0}
-            ativo={soSemData}
-            onToggle={() => setSoSemData((v) => !v)}
+          <ForaDoBoard
+            buckets={[
+              {
+                motivo: "em-conferencia",
+                quantidade: gruposFora["em-conferencia"]?.dealsCount ?? 0,
+              },
+              {
+                motivo: "sem-data",
+                quantidade: gruposFora["sem-data"]?.dealsCount ?? 0,
+              },
+            ]}
+            ativo={foraAtivo}
+            onToggle={(motivo) =>
+              setForaAtivo((atual) => (atual === motivo ? null : motivo))
+            }
           />
 
           {error && (
