@@ -23,6 +23,11 @@ import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
 import {
+  SEM_TIPO_KEY,
+  TipoPedidoFilter,
+  type TipoFilterValue,
+} from "@/components/programacao/tipo-pedido-filter";
+import {
   getTipoPedidoRank,
   isEtapaConcluivel,
 } from "@/lib/ghl/programacao-stages";
@@ -37,7 +42,7 @@ type Aba = "programacao" | "expedicao";
 
 interface BoardResposta {
   groups: BoardGroup[];
-  summary: { totalDeals: number };
+  summary: { totalDeals: number; porTipo?: Record<string, number> };
 }
 
 /**
@@ -57,6 +62,7 @@ export default function ProducaoPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
+  const [tipoFiltro, setTipoFiltro] = useState<Set<TipoFilterValue>>(new Set());
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
   const { profile } = useUserProfile();
 
@@ -124,6 +130,10 @@ export default function ProducaoPage() {
     if (!resposta) return [];
 
     const combina = (deal: BoardDeal) => {
+      if (tipoFiltro.size > 0) {
+        const chave: TipoFilterValue = deal.tipoPedido ?? SEM_TIPO_KEY;
+        if (!tipoFiltro.has(chave)) return false;
+      }
       if (!buscaNormalizada) return true;
       return [deal.title, deal.vendedor, deal.stageTitle, deal.dataEmbarque]
         .filter(Boolean)
@@ -182,7 +192,7 @@ export default function ProducaoPage() {
     }
     resultado.push(...restantes);
     return resultado;
-  }, [dados, aba, buscaNormalizada]);
+  }, [dados, aba, buscaNormalizada, tipoFiltro]);
 
   const totalVisivel = grupos.reduce((soma, g) => soma + g.deals.length, 0);
 
@@ -252,6 +262,13 @@ export default function ProducaoPage() {
         )}
       </div>
 
+      <TipoPedidoFilter
+        selected={tipoFiltro}
+        onChange={setTipoFiltro}
+        counts={dados[aba]?.summary.porTipo}
+        tamanho="grande"
+      />
+
       {erro && (
         <Alert variant="destructive" className="flex-shrink-0">
           <AlertCircle className="h-4 w-4" />
@@ -272,9 +289,16 @@ export default function ProducaoPage() {
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
             <Search className="h-8 w-8 opacity-50" />
             <p className="text-lg">Nada por aqui.</p>
-            {busca && (
-              <Button variant="outline" onClick={() => setBusca("")}>
-                Limpar busca
+            {(busca || tipoFiltro.size > 0) && (
+              <Button
+                variant="outline"
+                className="h-11"
+                onClick={() => {
+                  setBusca("");
+                  setTipoFiltro(new Set());
+                }}
+              >
+                Limpar filtros
               </Button>
             )}
           </div>

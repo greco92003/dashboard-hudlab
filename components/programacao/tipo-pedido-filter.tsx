@@ -19,10 +19,13 @@ export function TipoPedidoFilter({
   selected,
   onChange,
   counts,
+  tamanho = "normal",
 }: {
   selected: Set<TipoFilterValue>;
   onChange: (next: Set<TipoFilterValue>) => void;
   counts?: Record<string, number>;
+  /** "grande" para o chão de fábrica, onde tudo é operado no toque. */
+  tamanho?: "normal" | "grande";
 }) {
   const options: TipoFilterValue[] = [...TIPO_PEDIDO_ORDER, SEM_TIPO_KEY];
 
@@ -33,8 +36,10 @@ export function TipoPedidoFilter({
     onChange(next);
   };
 
+  const grande = tamanho === "grande";
+
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className={cn("flex flex-wrap items-center", grande ? "gap-2" : "gap-1")}>
       {options.map((option) => {
         const isOn = selected.has(option);
         const count = counts?.[option];
@@ -46,7 +51,8 @@ export function TipoPedidoFilter({
             size="sm"
             onClick={() => toggle(option)}
             className={cn(
-              "h-8 px-2 text-xs font-semibold uppercase tracking-wide",
+              "font-semibold uppercase tracking-wide",
+              grande ? "h-11 px-3.5 text-sm" : "h-8 px-2 text-xs",
               option === "Evento" &&
                 isOn &&
                 "bg-violet-600 hover:bg-violet-700 dark:bg-violet-500",
@@ -65,7 +71,7 @@ export function TipoPedidoFilter({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-8 px-2 text-xs"
+          className={cn(grande ? "h-11 px-3 text-sm" : "h-8 px-2 text-xs")}
           onClick={() => onChange(new Set())}
         >
           Limpar
