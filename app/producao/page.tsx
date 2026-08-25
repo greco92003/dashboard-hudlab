@@ -5,9 +5,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   AlertCircle,
+  ArrowLeft,
   Clock,
   PackageCheck,
   RefreshCw,
@@ -55,6 +58,11 @@ export default function ProducaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
+  const { profile } = useUserProfile();
+
+  // A tela não tem menu, de propósito. Quem é do escritório precisa de uma
+  // saída; quem é da produção não — para ela esta é a única tela que existe.
+  const mostrarVolta = Boolean(profile) && profile?.role !== "producao";
 
   const carregar = useCallback(async (silencioso = false) => {
     try {
@@ -233,6 +241,15 @@ export default function ProducaoPage() {
         >
           <RefreshCw className={cn("h-5 w-5", carregando && "animate-spin")} />
         </Button>
+
+        {mostrarVolta && (
+          <Button asChild variant="ghost" className="h-11">
+            <Link href="/programacao">
+              <ArrowLeft className="mr-2 h-5 w-5" />
+              Dashboard
+            </Link>
+          </Button>
+        )}
       </div>
 
       {erro && (
