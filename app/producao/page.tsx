@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AlertaSemData } from "@/components/programacao/alerta-sem-data";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
@@ -62,6 +63,7 @@ export default function ProducaoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState<Set<TipoFilterValue>>(new Set());
+  const [soSemData, setSoSemData] = useState(false);
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
   const { profile } = useUserProfile();
 
@@ -124,9 +126,12 @@ export default function ProducaoPage() {
 
   const buscaNormalizada = busca.trim().toLowerCase();
 
-  const grupos = useMemo<BoardGroup[]>(() => {
+  const { grupos, semDataGroup } = useMemo<{
+    grupos: BoardGroup[];
+    semDataGroup: BoardGroup | null;
+  }>(() => {
     const resposta = dados[aba];
-    if (!resposta) return [];
+    if (!resposta) return { grupos: [], semDataGroup: null };
 
     const combina = (deal: BoardDeal) => {
       if (tipoFiltro.size > 0) {
@@ -152,23 +157,37 @@ export default function ProducaoPage() {
       });
 
     if (aba === "expedicao") {
-      return resposta.groups.map((grupo) => {
+      const grupos = resposta.groups.map((grupo) => {
         const deals = ordenar(grupo.deals.filter(combina));
         return { ...grupo, deals, dealsCount: deals.length };
       });
+      return { grupos, semDataGroup: null };
     }
 
     const atrasados: BoardDeal[] = [];
     const restantes: BoardGroup[] = [];
+    let semData: BoardGroup | null = null;
 
     for (const grupo of resposta.groups) {
-      const noPrazo: BoardDeal[] = [];
-      for (const deal of grupo.deals.filter(combina)) {
-        if (grupo.id !== SEM_DATA_GROUP_ID && isOverdue(deal.dataEmbarque)) {
-          atrasados.push(deal);
-        } else {
-          noPrazo.push(deal);
+      const deals = grupo.deals.filter(combina);
+
+      // Sem data não responde a pergunta do board; vira aviso, não coluna.
+      if (grupo.id === SEM_DATA_GROUP_ID) {
+        if (deals.length > 0) {
+          semData = {
+            ...grupo,
+            title: "Sem data de embarque",
+            deals: ordenar(deals),
+            dealsCount: deals.length,
+          };
         }
+        continue;
+      }
+
+      const noPrazo: BoardDeal[] = [];
+      for (const deal of deals) {
+        if (isOverdue(deal.dataEmbarque)) atrasados.push(deal);
+        else noPrazo.push(deal);
       }
       if (noPrazo.length > 0) {
         restantes.push({
@@ -189,10 +208,15 @@ export default function ProducaoPage() {
       });
     }
     resultado.push(...restantes);
-    return resultado;
+    return { grupos: resultado, semDataGroup: semData };
   }, [dados, aba, buscaNormalizada, tipoFiltro]);
 
-  const totalVisivel = grupos.reduce((soma, g) => soma + g.deals.length, 0);
+  const gruposVisiveis = soSemData && semDataGroup ? [semDataGroup] : grupos;
+
+  const totalVisivel = gruposVisiveis.reduce(
+    (soma, g) => soma + g.deals.length,
+    0,
+  );
 
   const botaoAba = (valor: Aba, rotulo: string, icone: React.ReactNode) => (
     <button
@@ -267,6 +291,13 @@ export default function ProducaoPage() {
         tamanho="grande"
       />
 
+      <AlertaSemData
+        quantidade={semDataGroup?.dealsCount ?? 0}
+        ativo={soSemData}
+        onToggle={() => setSoSemData((v) => !v)}
+        tamanho="grande"
+      />
+
       {erro && (
         <Alert variant="destructive" className="flex-shrink-0">
           <AlertCircle className="h-4 w-4" />
@@ -283,7 +314,7 @@ export default function ProducaoPage() {
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border">
         {carregando ? (
           <Skeleton className="h-full w-full" />
-        ) : grupos.length === 0 ? (
+        ) : gruposVisiveis.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
             <Search className="h-8 w-8 opacity-50" />
             <p className="text-lg">Nada por aqui.</p>
@@ -302,7 +333,7 @@ export default function ProducaoPage() {
           </div>
         ) : (
           <BoardColumns
-            groups={grupos}
+            groups={gruposVisiveis}
             cardWidth={340}
             emptyLabel="Nada nesta etapa"
             renderCard={(deal, grupo) => (
