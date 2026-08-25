@@ -227,7 +227,8 @@ export function UserManagement({}: UserManagementProps) {
       | "user"
       | "manager"
       | "team-leader"
-      | "partners-media",
+      | "partners-media"
+      | "producao",
   ) => {
     setActionLoading(userId);
     setMessage(null);
@@ -690,6 +691,10 @@ export function UserManagement({}: UserManagementProps) {
                               permissions.canChangeUserRole(
                                 user.role,
                                 "user",
+                              ) ||
+                              permissions.canChangeUserRole(
+                                user.role,
+                                "producao",
                               )) && (
                               <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
@@ -744,6 +749,20 @@ export function UserManagement({}: UserManagementProps) {
                                       >
                                         <Star className="h-4 w-4 mr-2 text-violet-500" />
                                         Team Leader
+                                      </DropdownMenuItem>
+                                    )}
+                                  {user.role !== "producao" &&
+                                    permissions.canChangeUserRole(
+                                      user.role,
+                                      "producao",
+                                    ) && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          updateUserRole(user.id, "producao")
+                                        }
+                                      >
+                                        <Shield className="h-4 w-4 mr-2 text-emerald-500" />
+                                        Produção
                                       </DropdownMenuItem>
                                     )}
                                   {user.role !== "partners-media" &&

@@ -19,7 +19,8 @@ export const SEM_DATA_GROUP_ID = "sem-data";
  * renomeada no CRM apareça neste board em vez de desaparecer das duas telas.
  */
 export async function GET() {
-  const access = await requireApprovedUser();
+  // A /producao lê estes dois boards; nenhum deles expõe faturamento.
+  const access = await requireApprovedUser({ permitirProducao: true });
   if (!access.ok) return access.response;
 
   try {

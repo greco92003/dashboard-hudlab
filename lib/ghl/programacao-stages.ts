@@ -137,6 +137,45 @@ export function getExpedicaoColumnId(
   return null;
 }
 
+/**
+ * Etapas em que a produção pode dar o pedido como concluído. É o único
+ * movimento que o dashboard faz no CRM; tudo depois disso é o escritório,
+ * dentro do GHL.
+ */
+export const CONCLUIVEL_STAGE_TITLES = [
+  "Produção de Pedidos",
+  "Produção de Amostras",
+  "Produção", // pipeline Representantes
+];
+
+/** Destino do botão Concluir, nos pipelines Atendimento e Representantes. */
+export const EXPEDICAO_STAGE_TITLE = "Expedição";
+
+/**
+ * Etapa onde o cadastro ainda está sendo completado — é ela que existe para
+ * preencher data de embarque, quantidade de pares e o resto. Negócio incompleto
+ * ali é o estado normal da etapa, não erro; e como os dados ainda não são
+ * confiáveis, esses pedidos ficam fora do cálculo de capacidade.
+ */
+export const DADOS_EM_CONFERENCIA_STAGE_TITLE = "Conferir Pgto/Completar Dados";
+
+const CONCLUIVEL_SET = new Set(CONCLUIVEL_STAGE_TITLES.map(normalizeStageTitle));
+
+export function isEtapaConcluivel(
+  stageTitle: string | null | undefined,
+): boolean {
+  return CONCLUIVEL_SET.has(normalizeStageTitle(stageTitle));
+}
+
+export function isDadosEmConferencia(
+  stageTitle: string | null | undefined,
+): boolean {
+  return (
+    normalizeStageTitle(stageTitle) ===
+    normalizeStageTitle(DADOS_EM_CONFERENCIA_STAGE_TITLE)
+  );
+}
+
 // ── Tipo do Pedido ──────────────────────────────────────────────────────────
 // Campo customizado de oportunidade no GHL (opportunity.tipo_do_pedido).
 // A ordem abaixo é a ordem de prioridade na tela: Evento primeiro.

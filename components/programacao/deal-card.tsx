@@ -25,6 +25,7 @@ export function DealCard({
   isActive = true,
   showValue = true,
   onToggle,
+  footer,
   onClick,
 }: {
   deal: BoardDeal;
@@ -39,7 +40,13 @@ export function DealCard({
   showValue?: boolean;
   /** Quando ausente, o card não mostra o botão liga/desliga. */
   onToggle?: (dealId: string, event: React.MouseEvent) => void;
-  onClick: (deal: BoardDeal) => void;
+  /**
+   * Ação do card, desenhada dentro dele. Fica aqui e não abaixo do card para
+   * ler como parte do pedido, e não como outro elemento da coluna.
+   */
+  footer?: React.ReactNode;
+  /** Sem handler, o card não é clicável e não finge ser. */
+  onClick?: (deal: BoardDeal) => void;
 }) {
   const status = concluido
     ? { message: "✓ Recebido", colorClass: "text-green-700 dark:text-green-400 font-semibold" }
@@ -52,11 +59,12 @@ export function DealCard({
   return (
     <Card
       className={cn(
-        "relative cursor-pointer border p-3 transition-all hover:shadow-md",
+        "relative border p-3 transition-all",
+        onClick && "cursor-pointer hover:shadow-md",
         isActive ? background : DESLIGADO_CLASSES,
         isActive && getTipoAccentClass(deal.tipoPedido),
       )}
-      onClick={() => onClick(deal)}
+      onClick={onClick ? () => onClick(deal) : undefined}
     >
       {onToggle && (
         <button
@@ -120,6 +128,15 @@ export function DealCard({
             </div>
           )}
         </div>
+
+        {footer && (
+          <div
+            className="pt-1"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </Card>
   );

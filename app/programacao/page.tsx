@@ -41,7 +41,10 @@ import {
   TipoPedidoFilter,
   type TipoFilterValue,
 } from "@/components/programacao/tipo-pedido-filter";
-import { getTipoPedidoRank } from "@/lib/ghl/programacao-stages";
+import {
+  getTipoPedidoRank,
+  isDadosEmConferencia,
+} from "@/lib/ghl/programacao-stages";
 import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
 
@@ -466,7 +469,11 @@ export default function ProgramacaoPage() {
               </div>
 
               <AveragePairsCalculator
-                deals={data?.groups.flatMap((group) => group.deals) || []}
+                deals={
+                  data?.groups
+                    .flatMap((group) => group.deals)
+                    .filter((deal) => !isDadosEmConferencia(deal.stageTitle)) || []
+                }
                 activeCards={activeCards}
               />
             </div>
