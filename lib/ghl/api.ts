@@ -679,6 +679,7 @@ export function mapOpportunity(
       opp.pipelineId,
       opp.pipelineStageId,
       opp.status,
+      opp.monetaryValue,
     ),
     stage_id: opp.pipelineStageId || null,
     pipeline_id: opp.pipelineId || null,
@@ -734,6 +735,7 @@ export function mapOpportunity(
     opp.pipelineId,
     opp.pipelineStageId,
     opp.status,
+    opp.monetaryValue,
   );
   const closingFromStatus =
     normalizedStatus === "won" && opp.lastStatusChangeAt

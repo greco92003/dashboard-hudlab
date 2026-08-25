@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
         deal.pipeline_id,
         deal.stage_id,
         deal.status,
+        deal.value,
       ),
     }));
     const transformedDeals = statusParam

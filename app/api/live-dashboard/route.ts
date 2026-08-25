@@ -48,8 +48,12 @@ export async function GET() {
     // moved into the operational Mockup Factory pipeline.
     const wonDeals = (monthlyDeals || []).filter(
       (deal) =>
-        normalizeGhlDealStatus(deal.pipeline_id, deal.stage_id, deal.status) ===
-        "won",
+        normalizeGhlDealStatus(
+          deal.pipeline_id,
+          deal.stage_id,
+          deal.status,
+          deal.value,
+        ) === "won",
     );
 
     // Forecast candidates: only open GHL deals with value > 0.
