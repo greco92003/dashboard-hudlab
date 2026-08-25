@@ -33,6 +33,7 @@ import {
   Database,
   ClipboardCheck,
   PackageCheck,
+  Factory,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -120,6 +121,11 @@ const menuGroups: MenuGroup[] = [
         title: "Expedição",
         url: "/expedicao",
         icon: PackageCheck,
+      },
+      {
+        title: "Produção",
+        url: "/producao",
+        icon: Factory,
       },
     ],
   },
