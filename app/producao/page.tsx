@@ -23,7 +23,6 @@ import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
 import {
-  SEM_TIPO_KEY,
   TipoPedidoFilter,
   type TipoFilterValue,
 } from "@/components/programacao/tipo-pedido-filter";
@@ -131,8 +130,7 @@ export default function ProducaoPage() {
 
     const combina = (deal: BoardDeal) => {
       if (tipoFiltro.size > 0) {
-        const chave: TipoFilterValue = deal.tipoPedido ?? SEM_TIPO_KEY;
-        if (!tipoFiltro.has(chave)) return false;
+        if (!deal.tipoPedido || !tipoFiltro.has(deal.tipoPedido)) return false;
       }
       if (!buscaNormalizada) return true;
       return [deal.title, deal.vendedor, deal.stageTitle, deal.dataEmbarque]

@@ -37,7 +37,6 @@ import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
 import {
-  SEM_TIPO_KEY,
   TipoPedidoFilter,
   type TipoFilterValue,
 } from "@/components/programacao/tipo-pedido-filter";
@@ -328,8 +327,7 @@ export default function ProgramacaoPage() {
 
     const matchesFilters = (deal: BoardDeal) => {
       if (tipoFilter.size > 0) {
-        const key: TipoFilterValue = deal.tipoPedido ?? SEM_TIPO_KEY;
-        if (!tipoFilter.has(key)) return false;
+        if (!deal.tipoPedido || !tipoFilter.has(deal.tipoPedido)) return false;
       }
       if (!normalizedSearch) return true;
       return [

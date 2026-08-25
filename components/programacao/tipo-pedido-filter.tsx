@@ -7,13 +7,15 @@ import {
   type TipoPedido,
 } from "@/lib/ghl/programacao-stages";
 
-export const SEM_TIPO_KEY = "Sem tipo";
-
-export type TipoFilterValue = TipoPedido | typeof SEM_TIPO_KEY;
+export type TipoFilterValue = TipoPedido;
 
 /**
  * Filtro por Tipo do Pedido. Seleção vazia = mostra tudo, que é o estado útil
  * enquanto o campo ainda está sendo preenchido no GHL.
+ *
+ * Não há opção "Sem tipo": ela existiria só enquanto o campo não estiver
+ * preenchido no CRM, e some sozinha quando estiver. Pedido sem tipo
+ * simplesmente não casa com nenhum filtro ativo.
  */
 export function TipoPedidoFilter({
   selected,
@@ -27,7 +29,7 @@ export function TipoPedidoFilter({
   /** "grande" para o chão de fábrica, onde tudo é operado no toque. */
   tamanho?: "normal" | "grande";
 }) {
-  const options: TipoFilterValue[] = [...TIPO_PEDIDO_ORDER, SEM_TIPO_KEY];
+  const options: TipoFilterValue[] = [...TIPO_PEDIDO_ORDER];
 
   const toggle = (value: TipoFilterValue) => {
     const next = new Set(selected);
@@ -56,7 +58,6 @@ export function TipoPedidoFilter({
               option === "Evento" &&
                 isOn &&
                 "bg-violet-600 hover:bg-violet-700 dark:bg-violet-500",
-              option === SEM_TIPO_KEY && "font-normal normal-case",
             )}
           >
             {option}
@@ -66,17 +67,16 @@ export function TipoPedidoFilter({
           </Button>
         );
       })}
-      {selected.size > 0 && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn(grande ? "h-11 px-3 text-sm" : "h-8 px-2 text-xs")}
-          onClick={() => onChange(new Set())}
-        >
-          Limpar
-        </Button>
-      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={selected.size === 0}
+        className={cn(grande ? "h-11 px-3 text-sm" : "h-8 px-2 text-xs")}
+        onClick={() => onChange(new Set())}
+      >
+        Limpar filtros
+      </Button>
     </div>
   );
 }
