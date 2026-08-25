@@ -36,10 +36,13 @@ function DetailItem({
 export function DealDialog({
   deal,
   open,
+  showValue = true,
   onOpenChange,
 }: {
   deal: BoardDeal | null;
   open: boolean;
+  /** Ver a nota em DealCard: a Programação não mostra valor. */
+  showValue?: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   return (
@@ -66,21 +69,35 @@ export function DealDialog({
               </div>
             )}
 
-            <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/20">
-              <DollarSign className="h-8 w-8 text-green-600" />
-              <div>
-                <p className="text-sm text-muted-foreground">Valor do Deal</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(deal.value / 100, deal.currency)}
-                </p>
-                {deal.stageTitle && (
-                  <p className="mt-1 flex items-center gap-1 text-sm font-medium text-blue-600">
-                    <span className="h-2 w-2 rounded-full bg-blue-600" />
-                    {deal.stageTitle}
+            {showValue ? (
+              <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/20">
+                <DollarSign className="h-8 w-8 text-green-600" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Valor do Deal</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {formatCurrency(deal.value / 100, deal.currency)}
                   </p>
-                )}
+                  {deal.stageTitle && (
+                    <p className="mt-1 flex items-center gap-1 text-sm font-medium text-blue-600">
+                      <span className="h-2 w-2 rounded-full bg-blue-600" />
+                      {deal.stageTitle}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              deal.stageTitle && (
+                <div className="flex items-center gap-3 rounded-lg bg-blue-50 p-4 dark:bg-blue-950/20">
+                  <span className="h-3 w-3 rounded-full bg-blue-600" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Etapa</p>
+                    <p className="text-lg font-semibold text-blue-600">
+                      {deal.stageTitle}
+                    </p>
+                  </div>
+                </div>
+              )
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailItem

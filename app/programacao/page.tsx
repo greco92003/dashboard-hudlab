@@ -46,6 +46,8 @@ import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
 
 const SEM_DATA_GROUP_ID = "sem-data";
+// Os ids do `.in()` viajam na querystring; em lotes para não estourar a URL.
+const CARD_STATE_BATCH_SIZE = 80;
 const EM_ATRASO_GROUP_ID = "em-atraso";
 
 interface ProgramacaoData {
@@ -121,29 +123,72 @@ export default function ProgramacaoPage() {
     }
   };
 
-  const loadActiveCardsFromSupabase = useCallback(async () => {
-    try {
-      const { data: states, error: statesError } = await supabase
-        .from("programacao_card_states")
-        .select("deal_id, is_active")
-        .returns<{ deal_id: string; is_active: boolean }[]>();
+  /**
+   * Estado liga/desliga dos cards, lido SEMPRE restrito aos deals que estão no
+   * board. Ler a tabela inteira não funciona: ela guarda o histórico de todo
+   * deal que já passou pela programação (2.050 linhas hoje) e o PostgREST corta
+   * a resposta em 1.000 — os deals de fora dessa fatia voltavam como
+   * "desligado", ficavam cinza e sumiam da Média de Pares/dia.
+   *
+   * O `.in()` vai na URL, então os ids são consultados em lotes.
+   */
+  const syncCardStates = useCallback(async (dealIds: string[]) => {
+    if (dealIds.length === 0) {
+      setActiveCards(new Set());
+      return;
+    }
 
-      if (statesError) {
-        console.error("Error loading active cards from Supabase:", statesError);
-        return;
+    try {
+      const estadoPorDeal = new Map<string, boolean>();
+
+      for (let i = 0; i < dealIds.length; i += CARD_STATE_BATCH_SIZE) {
+        const lote = dealIds.slice(i, i + CARD_STATE_BATCH_SIZE);
+        const { data: states, error: statesError } = await supabase
+          .from("programacao_card_states")
+          .select("deal_id, is_active")
+          .in("deal_id", lote)
+          .returns<{ deal_id: string; is_active: boolean }[]>();
+
+        if (statesError) {
+          console.error("Error loading card states:", statesError);
+          return;
+        }
+        for (const state of states || []) {
+          estadoPorDeal.set(state.deal_id, state.is_active);
+        }
       }
+
+      // Card novo entra ligado. ignoreDuplicates evita o 409 quando o efeito
+      // roda em paralelo (Strict Mode / dados mudando).
+      const novos = dealIds.filter((dealId) => !estadoPorDeal.has(dealId));
+      if (novos.length > 0) {
+        const { error: insertError } = await supabase
+          .from("programacao_card_states")
+          .upsert(
+            novos.map((dealId) => ({ deal_id: dealId, is_active: true })) as any,
+            { onConflict: "deal_id", ignoreDuplicates: true },
+          );
+        if (insertError) {
+          console.error("Error inserting new card states:", insertError.message);
+        }
+        for (const dealId of novos) estadoPorDeal.set(dealId, true);
+      }
+
       setActiveCards(
-        new Set((states || []).filter((s) => s.is_active).map((s) => s.deal_id)),
+        new Set(
+          Array.from(estadoPorDeal)
+            .filter(([, ativo]) => ativo)
+            .map(([dealId]) => dealId),
+        ),
       );
     } catch (err) {
-      console.error("Error loading active cards:", err);
+      console.error("Error syncing card states:", err);
     }
   }, []);
 
   useEffect(() => {
     fetchProgramacaoData();
-    loadActiveCardsFromSupabase();
-  }, [fetchProgramacaoData, loadActiveCardsFromSupabase]);
+  }, [fetchProgramacaoData]);
 
   // Realtime: o webhook do GHL (ou um sync manual) mexe no deals_cache e o board
   // se atualiza sozinho. Com debounce porque os syncs gravam centenas de linhas.
@@ -241,60 +286,12 @@ export default function ProgramacaoPage() {
     if (isHydrated) storage.setItem("programacao-zoomLevel", String(zoomLevel));
   }, [zoomLevel, isHydrated]);
 
-  // Card novo entra ligado. O upsert com ignoreDuplicates evita o 409 quando o
-  // efeito roda em paralelo (Strict Mode / dados mudando).
   useEffect(() => {
     if (!data) return;
-
-    const initializeNewCards = async () => {
-      try {
-        const allDealIds = new Set(
-          data.groups.flatMap((group) => group.deals.map((deal) => deal.id)),
-        );
-
-        const { data: existingStates, error: statesError } = await supabase
-          .from("programacao_card_states")
-          .select("deal_id")
-          .returns<{ deal_id: string }[]>();
-
-        if (statesError) {
-          console.error("Error fetching existing card states:", statesError);
-          return;
-        }
-
-        const existingDealIds = new Set(
-          (existingStates || []).map((state) => state.deal_id),
-        );
-        const newDealIds = Array.from(allDealIds).filter(
-          (dealId) => !existingDealIds.has(dealId),
-        );
-        if (newDealIds.length === 0) return;
-
-        const { error: insertError } = await supabase
-          .from("programacao_card_states")
-          .upsert(
-            newDealIds.map((dealId) => ({
-              deal_id: dealId,
-              is_active: true,
-            })) as any,
-            { onConflict: "deal_id", ignoreDuplicates: true },
-          );
-
-        if (insertError) {
-          console.error(
-            "Error inserting new card states:",
-            insertError.message,
-          );
-          return;
-        }
-        loadActiveCardsFromSupabase();
-      } catch (err) {
-        console.error("Error initializing new cards:", err);
-      }
-    };
-
-    initializeNewCards();
-  }, [data, loadActiveCardsFromSupabase]);
+    syncCardStates(
+      data.groups.flatMap((group) => group.deals.map((deal) => deal.id)),
+    );
+  }, [data, syncCardStates]);
 
   const handleCardToggle = (dealId: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -619,6 +616,7 @@ export default function ProgramacaoPage() {
                     key={deal.id}
                     deal={deal}
                     isActive={activeCards.has(deal.id)}
+                    showValue={false}
                     onToggle={handleCardToggle}
                     onClick={handleDealClick}
                   />
@@ -640,6 +638,7 @@ export default function ProgramacaoPage() {
       <DealDialog
         deal={selectedDeal}
         open={isDealDialogOpen}
+        showValue={false}
         onOpenChange={setIsDealDialogOpen}
       />
     </div>
