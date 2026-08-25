@@ -118,15 +118,26 @@ export default function ProgramacaoPage() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      // Reconciliação completa do GHL -> deals_cache (mesma rota usada pelo cron).
-      const syncResponse = await fetch("/api/ghl/sync-deals", {
+      // Só os negócios ganhos: ~15s, contra ~2min da reconciliação completa.
+      // É tudo que este board mostra.
+      const syncResponse = await fetch("/api/ghl/sync-won-deals", {
         method: "POST",
       });
-      if (!syncResponse.ok) throw new Error("Failed to sync data");
+      if (!syncResponse.ok) {
+        const detalhe = await syncResponse
+          .json()
+          .then((corpo) => corpo?.error)
+          .catch(() => null);
+        throw new Error(detalhe || `Falha ao sincronizar (${syncResponse.status})`);
+      }
       await fetchProgramacaoData(true);
     } catch (err) {
       console.error("Error syncing data:", err);
-      toast.error("Erro ao sincronizar dados");
+      // Mostra o motivo que o servidor deu, em vez de um texto fixo que
+      // esconde 403 de permissão, 503 de leitura e erro do GHL sob a mesma frase.
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao sincronizar dados",
+      );
       setRefreshing(false);
     }
   };

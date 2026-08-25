@@ -69,7 +69,18 @@ export async function requireApprovedUser(
     .eq("id", authenticated.user.id)
     .single();
 
-  if (error || !profile || profile.approved !== true) {
+  // Falha ao LER a permissão não é o mesmo que não ter permissão. Juntar os
+  // dois num 403 "sem aprovação" fez um erro transitório de banco parecer, por
+  // semanas, que o botão de Atualizar estava barrando um usuário owner.
+  if (error) {
+    console.error("Falha ao ler user_profiles para autorização:", error);
+    return deny(
+      "Não consegui verificar sua permissão agora. Tente de novo em instantes.",
+      503,
+    );
+  }
+
+  if (!profile || profile.approved !== true) {
     return deny("Usuário sem aprovação", 403);
   }
 
