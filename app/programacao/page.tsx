@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AveragePairsCalculator } from "@/components/average-pairs-calculator";
+import { AlertaSemData } from "@/components/programacao/alerta-sem-data";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
@@ -79,6 +80,8 @@ export default function ProgramacaoPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100);
+  // Mostra só os pedidos sem data de embarque, a partir do aviso.
+  const [soSemData, setSoSemData] = useState(false);
   const [activeCards, setActiveCards] = useState<Set<string>>(new Set());
 
   // ── Carga e sincronização ────────────────────────────────────────────────
@@ -322,8 +325,11 @@ export default function ProgramacaoPage() {
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
 
-  const displayGroups = useMemo<BoardGroup[]>(() => {
-    if (!data) return [];
+  const { displayGroups, semDataGroup } = useMemo<{
+    displayGroups: BoardGroup[];
+    semDataGroup: BoardGroup | null;
+  }>(() => {
+    if (!data) return { displayGroups: [], semDataGroup: null };
 
     const matchesFilters = (deal: BoardDeal) => {
       if (tipoFilter.size > 0) {
@@ -369,17 +375,29 @@ export default function ProgramacaoPage() {
 
     const overdueDeals: BoardDeal[] = [];
     const remainingGroups: BoardGroup[] = [];
+    let semData: BoardGroup | null = null;
 
     for (const group of data.groups) {
       const deals = group.deals.filter(matchesFilters);
-      const onTime: BoardDeal[] = [];
 
-      for (const deal of deals) {
-        if (group.id !== SEM_DATA_GROUP_ID && isOverdue(deal.dataEmbarque)) {
-          overdueDeals.push(deal);
-        } else {
-          onTime.push(deal);
+      // Pedido sem data não responde "o que embarca em cada dia?", que é a
+      // pergunta do board. Sai das colunas e vira aviso.
+      if (group.id === SEM_DATA_GROUP_ID) {
+        if (deals.length > 0) {
+          semData = {
+            ...group,
+            title: "Sem data de embarque",
+            deals: sortDeals(deals, group.id),
+            dealsCount: deals.length,
+          };
         }
+        continue;
+      }
+
+      const onTime: BoardDeal[] = [];
+      for (const deal of deals) {
+        if (isOverdue(deal.dataEmbarque)) overdueDeals.push(deal);
+        else onTime.push(deal);
       }
 
       if (onTime.length > 0) {
@@ -401,10 +419,14 @@ export default function ProgramacaoPage() {
       });
     }
     groups.push(...remainingGroups);
-    return groups;
+    return { displayGroups: groups, semDataGroup: semData };
   }, [data, normalizedSearch, tipoFilter, sortBy, sortDirection]);
 
-  const displayTotalDeals = displayGroups.reduce(
+  // Com o aviso aberto, o board mostra só a exceção.
+  const gruposVisiveis =
+    soSemData && semDataGroup ? [semDataGroup] : displayGroups;
+
+  const displayTotalDeals = gruposVisiveis.reduce(
     (sum, group) => sum + group.deals.length,
     0,
   );
@@ -504,6 +526,12 @@ export default function ProgramacaoPage() {
             counts={data?.summary.porTipo}
           />
 
+          <AlertaSemData
+            quantidade={semDataGroup?.dealsCount ?? 0}
+            ativo={soSemData}
+            onToggle={() => setSoSemData((v) => !v)}
+          />
+
           {error && (
             <Alert variant="destructive" className="flex-shrink-0">
               <AlertCircle className="h-4 w-4" />
@@ -597,7 +625,7 @@ export default function ProgramacaoPage() {
           </div>
 
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white bg-transparent">
-            {displayGroups.length === 0 ? (
+            {gruposVisiveis.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <Search className="h-8 w-8 opacity-50" />
                 <p>Nenhum deal encontrado com os filtros atuais</p>
@@ -614,7 +642,7 @@ export default function ProgramacaoPage() {
               </div>
             ) : (
               <BoardColumns
-                groups={displayGroups}
+                groups={gruposVisiveis}
                 cardWidth={cardWidth}
                 renderCard={(deal) => (
                   <DealCard

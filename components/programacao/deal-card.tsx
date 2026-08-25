@@ -2,7 +2,14 @@
 
 import { Card } from "@/components/ui/card";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Clock, Package, Power, TrendingUp, User } from "lucide-react";
+import {
+  CalendarOff,
+  Clock,
+  Package,
+  Power,
+  TrendingUp,
+  User,
+} from "lucide-react";
 import type { BoardDeal } from "@/lib/programacao/board-types";
 import {
   formatDate,
@@ -86,7 +93,7 @@ export function DealCard({
 
         <h4 className="line-clamp-2 text-sm font-semibold">{deal.title}</h4>
 
-        {deal.dataEmbarque && (
+        {deal.dataEmbarque ? (
           <div className="space-y-1">
             <div className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-sm font-bold text-primary">
               <Clock className="h-4 w-4" />
@@ -97,6 +104,12 @@ export function DealCard({
                 {status.message}
               </div>
             )}
+          </div>
+        ) : (
+          // Ocupa o mesmo lugar da data, para a falta nunca parecer normal.
+          <div className="flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-sm font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            <CalendarOff className="h-4 w-4" />
+            Sem data de embarque
           </div>
         )}
 

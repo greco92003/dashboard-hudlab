@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Loader2, PackageCheck } from "lucide-react";
+import { AlertCircle, CalendarOff, Loader2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { BoardDeal } from "@/lib/programacao/board-types";
 
@@ -181,6 +181,17 @@ export function ConcluirDialog({
           </div>
         ) : (
           campoPin(pin, setPin, "Seu PIN", true)
+        )}
+
+        {deal && modo === "confirmar" && !deal.dataEmbarque && (
+          <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <CalendarOff className="h-4 w-4" />
+            <AlertDescription>
+              Este pedido está <strong>sem data de embarque</strong> — ele nunca
+              entrou no planejamento por dia. Dá para concluir mesmo assim, mas
+              vale avisar o comercial.
+            </AlertDescription>
+          </Alert>
         )}
 
         {erro && (
