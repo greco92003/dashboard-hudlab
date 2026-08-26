@@ -146,6 +146,33 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
+    // Quem é da produção só tem a /producao.
+    //
+    // Este bloco vem ANTES de todos os outros redirecionamentos de propósito:
+    // o atalho do app abre em /live-dashboard (start_url do manifest), e sem
+    // isto a pessoa via aquela tela piscar antes de um redirecionamento feito
+    // no cliente. Aqui ela nunca chega a renderizar.
+    //
+    // A trava de verdade continua nas rotas de API, onde requireApprovedUser
+    // barra o papel; isto aqui é navegação.
+    if (user && userProfile?.approved && userProfile.role === "producao") {
+      const podeAcessar =
+        pathname === "/producao" ||
+        pathname.startsWith("/profile-settings") ||
+        pathname.startsWith("/auth/") ||
+        pathname === "/reset-password" ||
+        pathname === "/privacy-policy" ||
+        pathname === "/terms-of-service";
+
+      if (!podeAcessar) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/producao";
+        return NextResponse.redirect(url);
+      }
+
+      return supabaseResponse;
+    }
+
     if (isAuth && user && userProfile?.approved) {
       // Allow authenticated and approved users to access reset-password page
       if (request.nextUrl.pathname === "/reset-password") {

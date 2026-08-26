@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { useHydrationFix } from "@/hooks/useHydrationFix";
-import { useUserProfile } from "@/hooks/useUserProfile";
 
 interface ConditionalSidebarProps {
   children: React.ReactNode;
@@ -18,18 +17,7 @@ export function ConditionalSidebar({
   defaultSidebarOpen = true,
 }: ConditionalSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
-  const { profile } = useUserProfile();
-
-  // Quem é da produção só tem a /producao. O bloqueio de verdade está nas rotas
-  // de API (requireApprovedUser barra o papel); isto aqui é a navegação, para a
-  // pessoa não cair numa tela de erro ao abrir o app pelo atalho.
-  useEffect(() => {
-    if (profile?.role === "producao" && pathname !== "/producao") {
-      router.replace("/producao");
-    }
-  }, [profile?.role, pathname, router]);
 
   // State to control sidebar open/close - only for non-board pages
   const [forcedOpen, setForcedOpen] = useState(true);
