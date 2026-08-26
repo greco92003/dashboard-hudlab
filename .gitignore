@@ -16,6 +16,8 @@
 
 # next.js
 /.next/
+# distDir alternativo (NEXT_DIST_DIR) para rodar um segundo dev server
+/.next-*/
 /out/
 
 # PWA files

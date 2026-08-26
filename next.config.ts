@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 const withPWA = require("@ducanh2912/next-pwa").default;
 
 const nextConfig: NextConfig = {
+  // O Next 16 recusa um segundo `next dev` no mesmo diretório — o lock mora
+  // dentro do distDir, não na porta. Apontar NEXT_DIST_DIR para outra pasta
+  // permite rodar uma segunda instância em paralelo (ex.: duas sessões de
+  // trabalho na mesma cópia do repo) sem derrubar a primeira.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Explicitly expose only the publishable key; DASHBOARD_SECRET stays server-only.
   env: {
     NEXT_PUBLIC_DASHBOARD_PUBLISHABLE:
