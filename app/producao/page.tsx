@@ -12,6 +12,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Clock,
+  Factory,
   PackageCheck,
   RefreshCw,
   Search,
@@ -68,6 +69,8 @@ export default function ProducaoPage() {
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState<Set<TipoFilterValue>>(new Set());
   const [foraAtivo, setForaAtivo] = useState<MotivoFora | null>(null);
+  // Só o que está de fato na máquina, escondendo fotolito, serigrafia e cadastro.
+  const [soEmProducao, setSoEmProducao] = useState(false);
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
   const { profile } = useUserProfile();
 
@@ -138,6 +141,9 @@ export default function ProducaoPage() {
     if (!resposta) return { grupos: [], gruposFora: {} };
 
     const combina = (deal: BoardDeal) => {
+      // Mesmo critério do botão Concluir, para os dois nunca divergirem: o que
+      // o filtro mostra é exatamente o que a produção consegue concluir.
+      if (soEmProducao && !isEtapaConcluivel(deal.stageTitle)) return false;
       if (tipoFiltro.size > 0) {
         if (!deal.tipoPedido || !tipoFiltro.has(deal.tipoPedido)) return false;
       }
@@ -231,7 +237,18 @@ export default function ProducaoPage() {
     }
 
     return { grupos: resultado, gruposFora: fora };
-  }, [dados, aba, buscaNormalizada, tipoFiltro]);
+  }, [dados, aba, buscaNormalizada, tipoFiltro, soEmProducao]);
+
+  // Contagem do filtro: quantos cards da aba Produção estão numa etapa de máquina.
+  const emProducaoCount = useMemo(
+    () =>
+      (dados.programacao?.groups ?? []).reduce(
+        (soma, grupo) =>
+          soma + grupo.deals.filter((d) => isEtapaConcluivel(d.stageTitle)).length,
+        0,
+      ),
+    [dados.programacao],
+  );
 
   const grupoFora = foraAtivo ? gruposFora[foraAtivo] : undefined;
   const gruposVisiveis = grupoFora ? [grupoFora] : grupos;
@@ -307,12 +324,31 @@ export default function ProducaoPage() {
         )}
       </div>
 
-      <TipoPedidoFilter
-        selected={tipoFiltro}
-        onChange={setTipoFiltro}
-        counts={dados[aba]?.summary.porTipo}
-        tamanho="grande"
-      />
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+        {aba === "programacao" && (
+          <>
+            <Button
+              type="button"
+              variant={soEmProducao ? "default" : "outline"}
+              onClick={() => setSoEmProducao((v) => !v)}
+              className="h-11 gap-2 text-base font-semibold"
+              title="Mostrar só o que está na máquina agora"
+            >
+              <Factory className="h-5 w-5" />
+              Em produção
+              <span className="opacity-70">{emProducaoCount}</span>
+            </Button>
+            <div className="h-7 w-px bg-border" aria-hidden="true" />
+          </>
+        )}
+
+        <TipoPedidoFilter
+          selected={tipoFiltro}
+          onChange={setTipoFiltro}
+          counts={dados[aba]?.summary.porTipo}
+          tamanho="grande"
+        />
+      </div>
 
       <ForaDoBoard
         buckets={[
@@ -352,13 +388,14 @@ export default function ProducaoPage() {
           <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
             <Search className="h-8 w-8 opacity-50" />
             <p className="text-lg">Nada por aqui.</p>
-            {(busca || tipoFiltro.size > 0) && (
+            {(busca || tipoFiltro.size > 0 || soEmProducao) && (
               <Button
                 variant="outline"
                 className="h-11"
                 onClick={() => {
                   setBusca("");
                   setTipoFiltro(new Set());
+                  setSoEmProducao(false);
                 }}
               >
                 Limpar filtros
