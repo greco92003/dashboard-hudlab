@@ -127,6 +127,11 @@ const menuGroups: MenuGroup[] = [
         url: "/producao",
         icon: Factory,
       },
+      {
+        title: "Estoque",
+        url: "/estoque",
+        icon: Package,
+      },
     ],
   },
   {

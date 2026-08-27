@@ -393,6 +393,20 @@ async function resolveTarget() {
   return { pipeline, stage };
 }
 
+/** Small batches keep the per-id reads from bursting against GHL's rate limit. */
+const DETAIL_BATCH_SIZE = 5;
+
+async function fetchOpportunityDetails(
+  ids: string[],
+): Promise<GhlOpportunity[]> {
+  const details: GhlOpportunity[] = [];
+  for (let index = 0; index < ids.length; index += DETAIL_BATCH_SIZE) {
+    const batch = ids.slice(index, index + DETAIL_BATCH_SIZE);
+    details.push(...(await Promise.all(batch.map(fetchOpportunityById))));
+  }
+  return details;
+}
+
 export async function getOrderRegistrationSnapshot(): Promise<OrderRegistrationResponse> {
   const [definitions, target] = await Promise.all([
     fetchCustomFieldDefs("opportunity"),
@@ -411,23 +425,29 @@ export async function getOrderRegistrationSnapshot(): Promise<OrderRegistrationR
       "won",
     ),
   ]);
-  const opportunities = Array.from(
+  const summaries = Array.from(
     new Map(
       [...openOpportunities, ...wonOpportunities].map((opportunity) => [
         opportunity.id,
         opportunity,
       ]),
     ).values(),
+  ).filter(
+    (opportunity) =>
+      opportunity.pipelineId === target.pipeline.id &&
+      opportunity.pipelineStageId === target.stage.id &&
+      (opportunity.status === "open" || opportunity.status === "won"),
+  );
+
+  // `/opportunities/search` omits TEXTBOX_LIST fields, so the grades come back
+  // empty from it. Only the per-id read has them — and a form loaded without
+  // the stored grades would write blanks over them on the next save.
+  const opportunities = await fetchOpportunityDetails(
+    summaries.map((opportunity) => opportunity.id),
   );
 
   return {
     opportunities: opportunities
-      .filter(
-        (opportunity) =>
-          opportunity.pipelineId === target.pipeline.id &&
-          opportunity.pipelineStageId === target.stage.id &&
-          (opportunity.status === "open" || opportunity.status === "won"),
-      )
       .map((opportunity) => mapOpportunity(opportunity, resolved))
       .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")),
     config: resolved.config,
