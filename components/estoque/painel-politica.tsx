@@ -97,9 +97,14 @@ export function PainelPolitica({ dados }: { dados: SoladoResumo }) {
             Compra
           </h3>
           <Item
-            rotulo="Lote mínimo"
+            rotulo="Lote mínimo por numeração"
             valor={`${p.lotePorNumeracao} pares`}
             nota="Pedido mínimo por numeração junto ao fornecedor. Acima disso a quantidade é livre."
+          />
+          <Item
+            rotulo="Pedido mínimo total"
+            valor={`${p.pedidoMinimoTotal} pares`}
+            nota="A ordem inteira precisa fechar esse volume. Enquanto a sugestão não chega lá, a compra fica retida — comprar 240 pares para cobrir 2 seria pior do que esperar."
           />
           <Item
             rotulo="Teto por pedido na curva"

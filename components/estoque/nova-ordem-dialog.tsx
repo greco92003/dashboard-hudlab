@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import type { SoladoResumo } from "@/lib/estoque/solados";
+import { completarGrade } from "@/lib/estoque/solados";
+import type { SoladoParametros, SoladoResumo } from "@/lib/estoque/solados";
 
 /** Preços da OC 1908 do INPU. Editáveis porque tabela de preço muda. */
 const PRECO_ADULTO = "12.60";
@@ -25,6 +26,8 @@ type Rascunho = {
   produtoId: number;
   rotulo: string;
   infantil: boolean;
+  /** Estoque mínimo da linha — peso na hora de completar a grade. */
+  peso: number;
   pares: string;
 };
 
@@ -50,6 +53,7 @@ export function NovaOrdemDialog({
   const [previstaPara, setPrevistaPara] = useState("");
   const [precoAdulto, setPrecoAdulto] = useState(PRECO_ADULTO);
   const [precoInfantil, setPrecoInfantil] = useState(PRECO_INFANTIL);
+  const [parametros, setParametros] = useState<SoladoParametros | null>(null);
 
   const carregarSugestao = useCallback(async () => {
     setCarregando(true);
@@ -57,16 +61,19 @@ export function NovaOrdemDialog({
       const resposta = await fetch("/api/estoque/solados");
       const corpo = (await resposta.json()) as SoladoResumo;
       if (!resposta.ok) throw new Error();
+      setParametros(corpo.parametros);
+      // Todas as numerações entram na lista, não só as que a sugestão pede: se
+      // a grade precisar ser completada até o pedido mínimo, é entre elas que a
+      // distribuição acontece.
       setItens(
         corpo.linhas
-          .filter(
-            (linha) => (linha.sugestaoCompra ?? 0) > 0 && linha.produtoId,
-          )
+          .filter((linha) => linha.produtoId)
           .map((linha) => ({
             produtoId: linha.produtoId!,
             rotulo: `${linha.cor} ${linha.numeracao}`,
             infantil: linha.publico === "infantil",
-            pares: String(linha.sugestaoCompra),
+            peso: linha.minimo,
+            pares: String(linha.sugestaoCompra ?? 0),
           })),
       );
     } catch {
@@ -92,6 +99,21 @@ export function NovaOrdemDialog({
   });
   const totalPares = validos.reduce((s, i) => s + i.paresNum, 0);
   const totalReais = validos.reduce((s, i) => s + i.paresNum * i.valor, 0);
+
+  const minimoTotal = parametros?.pedidoMinimoTotal ?? 0;
+  const abaixoDoMinimo = totalPares > 0 && totalPares < minimoTotal;
+
+  const completar = () => {
+    if (!parametros) return;
+    const pares = completarGrade(
+      itens.map((item) => ({ pares: Number(item.pares) || 0, peso: item.peso })),
+      parametros.pedidoMinimoTotal,
+      parametros.lotePorNumeracao,
+    );
+    setItens((atual) =>
+      atual.map((item, i) => ({ ...item, pares: String(pares[i]) })),
+    );
+  };
 
   const salvar = async () => {
     if (validos.length === 0) {
@@ -186,7 +208,13 @@ export function NovaOrdemDialog({
                 key={item.produtoId}
                 className="flex items-center gap-3 border-b px-3 py-1.5 last:border-0"
               >
-                <span className="flex-1 text-sm">{item.rotulo}</span>
+                <span
+                  className={`flex-1 text-sm ${
+                    Number(item.pares) > 0 ? "" : "text-muted-foreground"
+                  }`}
+                >
+                  {item.rotulo}
+                </span>
                 <Input
                   type="number"
                   min={0}
@@ -205,15 +233,33 @@ export function NovaOrdemDialog({
           </div>
         )}
 
+        {abaixoDoMinimo && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm">
+            <span className="flex-1">
+              O INPU não aceita pedido abaixo de {minimoTotal} pares. Faltam{" "}
+              <strong className="tabular-nums">
+                {minimoTotal - totalPares}
+              </strong>
+              .
+            </span>
+            <Button size="sm" variant="secondary" onClick={completar}>
+              Completar grade
+            </Button>
+          </div>
+        )}
+
         <DialogFooter className="items-center sm:justify-between">
-          <span className="text-sm text-muted-foreground tabular-nums">
+          <span className="text-sm tabular-nums text-muted-foreground">
             {totalPares} pares · {brl(totalReais)}
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setAberto(false)}>
               Cancelar
             </Button>
-            <Button onClick={salvar} disabled={salvando || totalPares === 0}>
+            <Button
+              onClick={salvar}
+              disabled={salvando || totalPares === 0 || abaixoDoMinimo}
+            >
               Criar no Tiny
             </Button>
           </div>

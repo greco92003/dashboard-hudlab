@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   combinacoesSolado,
+  completarGrade,
   curvaDeDemanda,
   montarResumo,
   NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP,
@@ -32,10 +33,25 @@ const negocio = (over = {}) => ({
   ...over,
 });
 
+/**
+ * O pedido mínimo total sai de cena por padrão: quase todo teste aqui olha uma
+ * linha isolada, e completar até 240 mascararia o que se quer medir. Os testes
+ * do pedido mínimo o ligam de volta.
+ */
+const isolado = { pedidoMinimoTotal: 0 };
+
 /** Parâmetros com a cobertura desligada, para isolar trava e lote. */
-const semCobertura = { ...SOLADO_PARAMETROS_PADRAO, consumoMensalMedio: 0 };
+const semCobertura = {
+  ...SOLADO_PARAMETROS_PADRAO,
+  ...isolado,
+  consumoMensalMedio: 0,
+};
 /** 1.390 pares/mês ÷ 21 dias úteis × 15 = 993 pares de cobertura. */
-const comCobertura = { ...SOLADO_PARAMETROS_PADRAO, consumoMensalMedio: 1390 };
+const comCobertura = {
+  ...SOLADO_PARAMETROS_PADRAO,
+  ...isolado,
+  consumoMensalMedio: 1390,
+};
 
 const linha = (resumo, cor, numeracao) =>
   resumo.linhas.find((l) => l.cor === cor && l.numeracao === numeracao);
@@ -309,4 +325,55 @@ test("soma os pares de modelos que ficaram sem cor de solado", () => {
     parametros: semCobertura,
   });
   assert.equal(resumo.paresSemSolado, 8);
+});
+
+// ── pedido mínimo do fornecedor ─────────────────────────────────────────────
+
+
+// ── pedido mínimo do fornecedor, na hora de gerar a OC ──────────────────────
+
+test("grade acima do pedido mínimo passa intacta", () => {
+  const itens = [
+    { pares: 200, peso: 100 },
+    { pares: 100, peso: 50 },
+  ];
+  assert.deepEqual(completarGrade(itens, 240, 40), [200, 100]);
+});
+
+test("grade abaixo do mínimo é completada na proporção do consumo", () => {
+  // 60 pares pedidos, faltam 180 para os 240. Pesos 3:1.
+  const itens = [
+    { pares: 40, peso: 150 },
+    { pares: 20, peso: 50 },
+    { pares: 0, peso: 30 },
+  ];
+  const saida = completarGrade(itens, 240, 40);
+  assert.equal(saida.reduce((a, b) => a + b, 0), 240, "fecha exatamente");
+  assert.equal(saida[2], 0, "quem não estava na ordem continua fora");
+  assert.ok(saida[0] > saida[1], "a numeração que mais gira recebe mais");
+});
+
+test("grade vazia é semeada pelas numerações de maior giro", () => {
+  // Nada pedido: sem semear, não haveria onde distribuir. Entram as
+  // ceil(240/40) = 6 de maior giro; as duas últimas ficam de fora.
+  const itens = [
+    { pares: 0, peso: 300 },
+    { pares: 0, peso: 280 },
+    { pares: 0, peso: 260 },
+    { pares: 0, peso: 240 },
+    { pares: 0, peso: 220 },
+    { pares: 0, peso: 200 },
+    { pares: 0, peso: 10 },
+    { pares: 0, peso: 5 },
+  ];
+  const saida = completarGrade(itens, 240, 40);
+  assert.equal(saida.reduce((a, b) => a + b, 0), 240);
+  assert.ok(saida[0] >= 40, "as de maior giro entram com pelo menos um lote");
+  assert.equal(saida[6], 0, "as de giro irrelevante ficam de fora");
+  assert.equal(saida[7], 0);
+});
+
+test("completar não mexe em nada quando não há peso nenhum", () => {
+  const itens = [{ pares: 0, peso: 0 }];
+  assert.deepEqual(completarGrade(itens, 240, 40), [0]);
 });

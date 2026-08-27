@@ -78,6 +78,11 @@ export type SoladoParametros = {
   travaPorSku: number;
   /** Pedido mínimo por numeração junto ao fornecedor; acima disso é livre. */
   lotePorNumeracao: number;
+  /**
+   * Pedido mínimo total do fornecedor. Não se pede 40 pares de uma numeração
+   * só: a ordem inteira precisa fechar esse volume.
+   */
+  pedidoMinimoTotal: number;
   /** Dias úteis por mês, para converter o consumo mensal em consumo diário. */
   diasUteisPorMes: number;
   /**
@@ -96,6 +101,7 @@ export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
   diasUteisCobertura: 15,
   travaPorSku: 20,
   lotePorNumeracao: 40,
+  pedidoMinimoTotal: 240,
   diasUteisPorMes: 21,
   tetoInfluenciaPedido: 0.1,
   consumoMensalMedio: 0,
@@ -293,6 +299,66 @@ export function curvaDeDemanda(
     }
   });
   return curva;
+}
+
+/**
+ * Completa uma grade de compra até o pedido mínimo do fornecedor.
+ *
+ * Mora aqui e não em `montarResumo` de propósito: a tela mostra o que falta, e
+ * o pedido mínimo é condição da TRANSAÇÃO, não da necessidade. Inflar a
+ * sugestão esconderia o que realmente falta; escondê-la até fechar 240 deixaria
+ * de avisar que algo está acabando. Quem decide comprar é quem abre a ordem — e
+ * é nesse momento que a grade precisa ficar viável.
+ *
+ * `peso` é o estoque mínimo de cada linha, que é a proporção do consumo. A
+ * distribuição privilegia o que já está na ordem; se ela estiver vazia, semeia
+ * as numerações de maior giro com um lote cada.
+ */
+export function completarGrade(
+  itens: Array<{ pares: number; peso: number }>,
+  pedidoMinimoTotal: number,
+  lotePorNumeracao: number,
+): number[] {
+  const saida = itens.map((item) => item.pares);
+  const total = saida.reduce((a, b) => a + b, 0);
+  if (total >= pedidoMinimoTotal) return saida;
+
+  let candidatas = saida
+    .map((pares, indice) => ({ indice, pares, peso: itens[indice].peso }))
+    .filter((c) => c.pares > 0);
+
+  // Ordem vazia: semeia com um lote nas numerações de maior giro, o suficiente
+  // para chegar ao mínimo.
+  if (candidatas.length === 0) {
+    const quantas = Math.max(1, Math.ceil(pedidoMinimoTotal / lotePorNumeracao));
+    candidatas = itens
+      .map((item, indice) => ({ indice, pares: 0, peso: item.peso }))
+      .filter((c) => c.peso > 0)
+      .sort((a, b) => b.peso - a.peso)
+      .slice(0, quantas);
+    for (const candidata of candidatas) {
+      saida[candidata.indice] = lotePorNumeracao;
+    }
+  }
+  if (candidatas.length === 0) return saida;
+
+  const faltam =
+    pedidoMinimoTotal - saida.reduce((a, b) => a + b, 0);
+  if (faltam <= 0) return saida;
+
+  const pesoTotal = candidatas.reduce((s, c) => s + c.peso, 0) || 1;
+  let distribuido = 0;
+  candidatas.forEach((candidata, ordem) => {
+    // A última absorve o arredondamento, para fechar o total exato.
+    const parte =
+      ordem === candidatas.length - 1
+        ? faltam - distribuido
+        : Math.round((candidata.peso / pesoTotal) * faltam);
+    if (parte <= 0) return;
+    saida[candidata.indice] += parte;
+    distribuido += parte;
+  });
+  return saida;
 }
 
 export function montarResumo(input: {
