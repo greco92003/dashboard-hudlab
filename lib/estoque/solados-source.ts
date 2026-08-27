@@ -36,9 +36,16 @@ import {
 const CACHE_MS = 5 * 60 * 1_000;
 const LOTE_GHL = 5;
 
-let cache: { resumo: SoladoResumo; lidoEm: string; expiraEm: number } | null =
+/** O que vale a pena cachear: tudo menos as ordens de compra. */
+type BaseSolados = {
+  negocios: SoladoNegocio[];
+  skus: SoladoSkuTiny[];
+  consumoMensalMedio: number;
+};
+
+let cache: { base: BaseSolados; lidoEm: string; expiraEm: number } | null =
   null;
-let emVoo: Promise<{ resumo: SoladoResumo; lidoEm: string }> | null = null;
+let emVoo: Promise<{ base: BaseSolados; lidoEm: string }> | null = null;
 
 async function emLotes<T, R>(
   itens: T[],
@@ -318,42 +325,69 @@ async function lerConsumoMensalMedio(meses = 6): Promise<number> {
 // ── Orquestração ────────────────────────────────────────────────────────────
 
 /**
- * Descarta o cache. Chamado depois de mexer numa ordem de compra: sem isso a
- * tela continuaria mostrando o "a caminho" de antes por até cinco minutos.
+ * Descarta o cache. Chamado depois de mexer numa ordem de compra pela nossa
+ * rota — mas note que ordem criada direto no Tiny não passa por aqui, e é por
+ * isso que as OCs ficam fora do cache (ver `getResumoSolados`).
  */
 export function invalidarCacheSolados(): void {
   cache = null;
 }
 
+/**
+ * A parte cara e lenta: ~65 chamadas no GHL, 18 no Tiny, e a média de consumo.
+ * Muda devagar — os pedidos entram ao longo do dia — então vale cachear.
+ */
+async function lerBaseCacheada(): Promise<{
+  base: BaseSolados;
+  lidoEm: string;
+}> {
+  const [negocios, skus, consumoMensalMedio] = await Promise.all([
+    lerNegociosGhl(),
+    lerSkusTiny(),
+    lerConsumoMensalMedio(),
+  ]);
+  const lidoEm = new Date().toISOString();
+  const base = { negocios, skus, consumoMensalMedio };
+  cache = { base, lidoEm, expiraEm: Date.now() + CACHE_MS };
+  return { base, lidoEm };
+}
+
 export async function getResumoSolados(
   opcoes: { forcar?: boolean } = {},
 ): Promise<{ resumo: SoladoResumo; lidoEm: string }> {
-  if (!opcoes.forcar && cache && cache.expiraEm > Date.now()) {
-    return { resumo: cache.resumo, lidoEm: cache.lidoEm };
-  }
-  if (emVoo) return emVoo;
+  const valido = !opcoes.forcar && cache && cache.expiraEm > Date.now();
 
-  emVoo = (async () => {
-    const [negocios, skus, consumoMensalMedio, ordens] = await Promise.all([
-      lerNegociosGhl(),
-      lerSkusTiny(),
-      lerConsumoMensalMedio(),
-      listarOrdensCompra(),
-    ]);
+  // As ordens de compra ficam FORA do cache de propósito: são só duas chamadas
+  // e são criadas direto no Tiny com frequência, sem passar pela nossa rota.
+  // Cacheá-las junto fazia a tela mostrar "a caminho" zerado por até cinco
+  // minutos depois de uma OC nova — sem ninguém entender por quê.
+  const ordens = listarOrdensCompra();
 
+  if (valido) {
     const resumo = montarResumo({
-      negocios,
-      skus,
-      aCaminho: paresACaminho(ordens),
-      parametros: { ...SOLADO_PARAMETROS_PADRAO, consumoMensalMedio },
+      ...cache!.base,
+      aCaminho: paresACaminho(await ordens),
+      parametros: {
+        ...SOLADO_PARAMETROS_PADRAO,
+        consumoMensalMedio: cache!.base.consumoMensalMedio,
+      },
     });
-    const lidoEm = new Date().toISOString();
-    cache = { resumo, lidoEm, expiraEm: Date.now() + CACHE_MS };
-    return { resumo, lidoEm };
-  })();
+    return { resumo, lidoEm: cache!.lidoEm };
+  }
 
+  emVoo ??= lerBaseCacheada();
   try {
-    return await emVoo;
+    const { base, lidoEm } = await emVoo;
+    const resumo = montarResumo({
+      negocios: base.negocios,
+      skus: base.skus,
+      aCaminho: paresACaminho(await ordens),
+      parametros: {
+        ...SOLADO_PARAMETROS_PADRAO,
+        consumoMensalMedio: base.consumoMensalMedio,
+      },
+    });
+    return { resumo, lidoEm };
   } finally {
     emVoo = null;
   }
