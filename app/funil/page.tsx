@@ -38,18 +38,20 @@ interface ApiFunnelStage {
 }
 
 interface ApiFunnel {
-  id: "with_mockup" | "without_mockup";
+  /** Braço do teste A/B. Os braços mudam com o tempo -- o "Com Mockup
+   * Automático" foi aposentado em 26/08/2026 e substituído pelo "Atendimento
+   * Lado B" --, então a lista vem pronta da API em vez de campos fixos. */
+  id: string;
   title: string;
   stages: ApiFunnelStage[];
   active: boolean;
+  /** Data em que o braço parou de receber lead novo, se aposentado. */
+  retiredAt: string | null;
   lastEventAt: string | null;
 }
 
 interface FunnelResponse {
-  funnels: {
-    withMockup: ApiFunnel;
-    withoutMockup: ApiFunnel;
-  };
+  funnels: ApiFunnel[];
   meta: {
     totalEvents: number;
     totalContacts: number;
@@ -149,7 +151,9 @@ function FunnelPanel({ funnel }: { funnel: ApiFunnel }) {
               </span>
             ) : (
               <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                Desativado
+                {funnel.retiredAt
+                  ? `Aposentado em ${formatDiaCurto(funnel.retiredAt)}`
+                  : "Desativado"}
               </span>
             )}
           </div>
@@ -276,9 +280,7 @@ function FunilContent() {
   }, [loadFunnels]);
 
   const visibleFunnels = data
-    ? [data.funnels.withMockup, data.funnels.withoutMockup].filter(
-        (f) => statusFilter === "all" || f.active,
-      )
+    ? data.funnels.filter((f) => statusFilter === "all" || f.active)
     : [];
 
   const lastEventLabel =
@@ -308,8 +310,9 @@ function FunilContent() {
             Funil de Conversão
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Progressão dos contatos nos dois caminhos do teste A/B, atualizada
-            automaticamente pelos webhooks do GHL.
+            Progressão dos contatos em cada braço do teste A/B, atualizada
+            automaticamente pelos webhooks do GHL. Braço aposentado continua
+            aqui pelo histórico, com a data em que saiu.
           </p>
 
           <div className="mt-5 flex flex-wrap justify-center gap-2 sm:absolute sm:right-0 sm:top-0 sm:mt-0">

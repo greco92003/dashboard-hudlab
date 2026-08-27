@@ -4,7 +4,13 @@ import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 import {
   GHL_FUNNEL_PATHS,
+  GHL_FUNNEL_RETIRED,
   GHL_FUNNEL_STAGES,
+  GHL_FUNNEL_TITLES,
+  GHL_FUNNEL_VARIANT_MARKER,
+  GHL_FUNNEL_VARIANT_TAGS,
+  GHL_FUNNEL_VARIANTS,
+  getGhlFunnelVariant,
   type GhlFunnelStageSlug,
   type GhlFunnelVariant,
 } from "@/lib/ghl/funnel";
@@ -21,8 +27,8 @@ interface ContactJourney {
    * contact, so this is the one and only occurrence -- range filtering
    * happens per-stage in buildFunnel, not here. */
   stageAt: Map<GhlFunnelStageSlug, number>;
-  withMockupAt: number | null;
-  withoutMockupAt: number | null;
+  /** Quando o contato entrou em cada braço do teste; o mais antigo vence. */
+  variantAt: Map<GhlFunnelVariant, number>;
   /** Whether the contact had at least one event inside the selected range */
   hasEventInRange: boolean;
   /**
@@ -98,7 +104,11 @@ function parseRange(searchParams: URLSearchParams): DateRangeMs | null {
   };
 }
 
-async function fetchAllEvents(): Promise<GhlFunnelEventRow[]> {
+interface FunnelEventRowComTags extends GhlFunnelEventRow {
+  tags: string[] | null;
+}
+
+async function fetchAllEvents(): Promise<FunnelEventRowComTags[]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = getSupabaseSecretKey();
   if (!supabaseUrl || !serviceRoleKey) {
@@ -108,24 +118,121 @@ async function fetchAllEvents(): Promise<GhlFunnelEventRow[]> {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const rows: GhlFunnelEventRow[] = [];
+  const rows: FunnelEventRowComTags[] = [];
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const from = page * PAGE_SIZE;
     const { data, error } = await supabase
       .from("ghl_funnel_events")
-      .select("contact_id, stage_slug, received_at")
+      .select("contact_id, stage_slug, received_at, tags")
       .order("received_at", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw new Error(error.message);
 
-    const batch = (data ?? []) as GhlFunnelEventRow[];
+    const batch = (data ?? []) as FunnelEventRowComTags[];
     rows.push(...batch);
     if (batch.length < PAGE_SIZE) break;
   }
 
   return rows;
+}
+
+/**
+ * Contatos marcados com a tag de um braço, segundo o sync de contatos.
+ *
+ * Fonte complementar ao array `tags` dos eventos: o sync roda uma vez por
+ * dia e às vezes vê a tag antes do próximo webhook do contato, às vezes
+ * depois. Usar as duas e ficar com a evidência mais antiga é o que dá o
+ * retrato completo do braço.
+ */
+async function fetchVariantTagContacts(): Promise<Map<string, number>> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = getSupabaseSecretKey();
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase service credentials are missing");
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data, error } = await supabase
+    .from("ghl_contact_tags")
+    .select("contact_id, tag, primeiro_visto_em")
+    .in("tag", Object.keys(GHL_FUNNEL_VARIANT_TAGS));
+
+  if (error) throw new Error(error.message);
+
+  const primeiroPorContato = new Map<string, number>();
+  for (const row of (data ?? []) as {
+    contact_id: string;
+    tag: string;
+    primeiro_visto_em: string;
+  }[]) {
+    const at = parseGhlFunnelTimestamp(row.primeiro_visto_em);
+    if (at === null) continue;
+    const atual = primeiroPorContato.get(row.contact_id);
+    if (atual === undefined || at < atual) {
+      primeiroPorContato.set(row.contact_id, at);
+    }
+  }
+
+  return primeiroPorContato;
+}
+
+/**
+ * Evento sintético da etapa marcadora para os braços que só existem como tag.
+ *
+ * O "Atendimento Lado B" substituiu o "Com Mockup Automático" sem ganhar um
+ * webhook próprio, então nenhum evento chega com `stage_slug` dele -- a tag
+ * só aparece de carona no array `tags` dos eventos das outras etapas. Sem
+ * este evento sintético o braço inteiro seria invisível no funil, mesmo com
+ * os leads circulando normalmente.
+ *
+ * A âncora é a evidência mais antiga da tag, que é o mais perto que dá para
+ * chegar do momento em que o contato entrou no braço.
+ */
+function buildVariantTagEvents(
+  rows: FunnelEventRowComTags[],
+  tagContacts: Map<string, number>,
+): GhlFunnelEventRow[] {
+  const primeiroPorContato = new Map<string, { at: number; variante: GhlFunnelVariant }>();
+
+  const registrar = (
+    contactId: string,
+    at: number,
+    variante: GhlFunnelVariant,
+  ) => {
+    const atual = primeiroPorContato.get(contactId);
+    if (atual === undefined || at < atual.at) {
+      primeiroPorContato.set(contactId, { at, variante });
+    }
+  };
+
+  for (const row of rows) {
+    const at = parseGhlFunnelTimestamp(row.received_at);
+    if (at === null) continue;
+    for (const tag of row.tags ?? []) {
+      const variante = GHL_FUNNEL_VARIANT_TAGS[tag];
+      if (variante) registrar(row.contact_id, at, variante);
+    }
+  }
+
+  // O sync de contatos não guarda qual tag deu origem; como só existe um
+  // braço por tag hoje, resolve pela primeira correspondência.
+  const [variantePadrao] = Object.values(GHL_FUNNEL_VARIANT_TAGS);
+  if (variantePadrao) {
+    for (const [contactId, at] of tagContacts) {
+      registrar(contactId, at, variantePadrao);
+    }
+  }
+
+  return Array.from(primeiroPorContato, ([contact_id, { at, variante }]) => ({
+    contact_id,
+    stage_slug: GHL_FUNNEL_VARIANT_MARKER[variante],
+    received_at: new Date(at).toISOString(),
+  }));
 }
 
 async function fetchWonSales(): Promise<GhlWonDealRow[]> {
@@ -178,8 +285,7 @@ function buildJourneys(events: GhlFunnelEvent[], range: DateRangeMs | null) {
     if (!journey) {
       journey = {
         stageAt: new Map(),
-        withMockupAt: null,
-        withoutMockupAt: null,
+        variantAt: new Map(),
         hasEventInRange: range === null,
         lastWebhookAt: null,
       };
@@ -199,17 +305,9 @@ function buildJourneys(events: GhlFunnelEvent[], range: DateRangeMs | null) {
 
     // The A/B variant identity comes from the first event of each arm,
     // regardless of the selected range.
-    if (
-      event.stage_slug === "commockautomatico" &&
-      journey.withMockupAt === null
-    ) {
-      journey.withMockupAt = timestamp;
-    }
-    if (
-      event.stage_slug === "semmockautomatico" &&
-      journey.withoutMockupAt === null
-    ) {
-      journey.withoutMockupAt = timestamp;
+    const variante = getGhlFunnelVariant(event.stage_slug);
+    if (variante && !journey.variantAt.has(variante)) {
+      journey.variantAt.set(variante, timestamp);
     }
 
     // Each GHL tag fires at most once per contact -- record its real
@@ -223,16 +321,24 @@ function buildJourneys(events: GhlFunnelEvent[], range: DateRangeMs | null) {
   return journeys;
 }
 
+/**
+ * Um contato pertence ao braço em que entrou primeiro. Na prática as tags
+ * são exclusivas -- nenhum contato do Lado B carrega com/sem mockup --, mas
+ * o desempate por data mantém o funil determinístico se algum dia se
+ * sobrepuserem.
+ */
 function resolveVariant(journey: ContactJourney): GhlFunnelVariant | null {
-  if (journey.withMockupAt === null && journey.withoutMockupAt === null) {
-    return null;
-  }
-  if (journey.withoutMockupAt === null) return "with_mockup";
-  if (journey.withMockupAt === null) return "without_mockup";
+  let escolhida: GhlFunnelVariant | null = null;
+  let maisAntiga = Number.POSITIVE_INFINITY;
 
-  return journey.withMockupAt <= journey.withoutMockupAt
-    ? "with_mockup"
-    : "without_mockup";
+  for (const [variante, at] of journey.variantAt) {
+    if (at < maisAntiga) {
+      maisAntiga = at;
+      escolhida = variante;
+    }
+  }
+
+  return escolhida;
 }
 
 function buildFunnel(
@@ -311,11 +417,15 @@ export async function GET(request: Request) {
       });
     }
 
-    const [webhookRows, wonDealRows] = await Promise.all([
+    const [webhookRows, wonDealRows, tagContacts] = await Promise.all([
       fetchAllEvents(),
       fetchWonSales(),
+      fetchVariantTagContacts(),
     ]);
-    const events = mergeSalesIntoFunnelEvents(webhookRows, wonDealRows);
+    const events = mergeSalesIntoFunnelEvents(
+      [...webhookRows, ...buildVariantTagEvents(webhookRows, tagContacts)],
+      wonDealRows,
+    );
     const journeys = buildJourneys(events, range);
     const journeyList = Array.from(journeys.values());
     const inRangeJourneys = journeyList.filter(
@@ -337,30 +447,23 @@ export async function GET(request: Request) {
         }).length
       : webhookEvents.length;
 
-    const withMockupActivity = variantActivity(journeys, "with_mockup", now);
-    const withoutMockupActivity = variantActivity(
-      journeys,
-      "without_mockup",
-      now,
-    );
+    const funnels = GHL_FUNNEL_VARIANTS.map((variante) => {
+      const atividade = variantActivity(journeys, variante, now);
+      const aposentadoEm = GHL_FUNNEL_RETIRED[variante] ?? null;
+      return {
+        id: variante,
+        title: GHL_FUNNEL_TITLES[variante],
+        stages: buildFunnel(journeys, variante, range),
+        // Braço aposentado nunca aparece como ativo, mesmo que o último
+        // webhook ainda esteja dentro do limiar de inatividade.
+        active: aposentadoEm === null && atividade.active,
+        retiredAt: aposentadoEm,
+        lastEventAt: atividade.lastEventAt,
+      };
+    });
 
     const body = {
-      funnels: {
-        withMockup: {
-          id: "with_mockup",
-          title: "Com Mockup Automático",
-          stages: buildFunnel(journeys, "with_mockup", range),
-          active: withMockupActivity.active,
-          lastEventAt: withMockupActivity.lastEventAt,
-        },
-        withoutMockup: {
-          id: "without_mockup",
-          title: "Sem Mockup Automático",
-          stages: buildFunnel(journeys, "without_mockup", range),
-          active: withoutMockupActivity.active,
-          lastEventAt: withoutMockupActivity.lastEventAt,
-        },
-      },
+      funnels,
       meta: {
         totalEvents: eventsInRange,
         totalContacts: inRangeJourneys.length,
@@ -368,9 +471,7 @@ export async function GET(request: Request) {
           (journey) => resolveVariant(journey) === null,
         ).length,
         ambiguousContacts: inRangeJourneys.filter(
-          (journey) =>
-            journey.withMockupAt !== null &&
-            journey.withoutMockupAt !== null,
+          (journey) => journey.variantAt.size > 1,
         ).length,
         lastEventAt: webhookEvents.at(-1)?.received_at ?? null,
         // A página avisa quando o período escolhido começa antes do
