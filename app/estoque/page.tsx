@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { AlertCircle, Clock, Package, RefreshCw } from "lucide-react";
+import { AlertCircle, Package, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { PainelPolitica } from "@/components/estoque/painel-politica";
 import { TabelaSolados } from "@/components/estoque/tabela-solados";
 import type { SoladoResumo } from "@/lib/estoque/solados";
 
@@ -56,18 +58,29 @@ export default function EstoquePage() {
   }, [dados]);
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+    <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
       <div className="flex flex-wrap items-center gap-3">
         <SidebarTrigger className="-ml-1" />
         <Package className="h-5 w-5" />
         <h1 className="text-xl font-semibold">Estoque de Solados</h1>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1">
           {dados && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
+            <span className="mr-2 text-xs tabular-nums text-muted-foreground">
               {formatarHora(dados.lidoEm)}
             </span>
           )}
+          {dados && <PainelPolitica dados={dados} />}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/estoque/ordens">
+              <Truck className="h-4 w-4" />
+              Ordens
+              {dados && dados.totalACaminho > 0 && (
+                <span className="ml-1 tabular-nums text-muted-foreground">
+                  {dados.totalACaminho}
+                </span>
+              )}
+            </Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -81,12 +94,6 @@ export default function EstoquePage() {
           </Button>
         </div>
       </div>
-
-      <p className="text-sm text-muted-foreground">
-        Pares vendidos e ainda não faturados — o Tiny só baixa o solado no
-        faturamento, então tudo isso ainda está no saldo dele. Um par consome um
-        solado.
-      </p>
 
       {erro && (
         <Alert variant="destructive">
@@ -104,40 +111,7 @@ export default function EstoquePage() {
 
       {dados && (
         <>
-          {dados.paresSemSolado > 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {dados.paresSemSolado} pares estão em pedidos sem a cor do
-                solado preenchida no GHL e ficaram de fora da conta.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {dados.linhas.some((linha) => linha.saldoNegativo) && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {dados.linhas.filter((l) => l.saldoNegativo).length} numerações
-                estão com saldo negativo no Tiny: solado já vendido e faturado
-                que não existe. Entra inteiro na sugestão de compra.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {dados.legadosForaDaConta > 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {dados.legadosForaDaConta} pedidos anteriores a 27/08 estão fora
-                da conta: o solado deles já foi baixado no cadastro do ERP e não
-                será baixado de novo no faturamento. Some sozinho conforme forem
-                faturados — quando este aviso desaparecer, a regra temporária no
-                código pode ser removida.
-              </AlertDescription>
-            </Alert>
-          )}
-
+          {/* Erro de cadastro: a demanda existe e não tem onde cair. */}
           {dados.skusNaoEncontrados.length > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -148,12 +122,34 @@ export default function EstoquePage() {
             </Alert>
           )}
 
+          {/* Acionável: alguém precisa preencher a cor no GHL. */}
+          {dados.paresSemSolado > 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {dados.paresSemSolado} pares estão em pedidos sem a cor do
+                solado preenchida no GHL e ficaram de fora da conta.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid gap-4 lg:grid-cols-2">
             {porCor.map(({ cor, linhas }) => (
               <TabelaSolados key={cor} cor={cor} linhas={linhas} />
             ))}
           </div>
 
+          {/*
+            Contexto, não alerta: some sozinho quando o último pedido antigo
+            faturar, e é o sinal para remover a regra temporária do código.
+          */}
+          {dados.legadosForaDaConta > 0 && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {dados.legadosForaDaConta} pedidos anteriores a 27/08 estão fora
+              da conta — o solado deles já foi baixado no cadastro do ERP e não
+              será baixado de novo no faturamento.
+            </p>
+          )}
         </>
       )}
     </div>

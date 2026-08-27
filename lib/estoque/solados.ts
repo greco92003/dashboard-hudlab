@@ -67,6 +67,41 @@ export const SOLADO_STAGE_TITLES_REPRESENTANTES = [
 ];
 
 /**
+ * Parâmetros da política de estoque. Ficam aqui, e não no Tiny, porque o mínimo
+ * é recalculado a cada leitura conforme o consumo muda — travar no ERP daria um
+ * número que envelhece em silêncio.
+ */
+export type SoladoParametros = {
+  /** Dias ÚTEIS de consumo que o estoque mínimo deve cobrir. */
+  diasUteisCobertura: number;
+  /** Nenhum tamanho × cor pode ficar abaixo disso, mesmo sem demanda. */
+  travaPorSku: number;
+  /** Pedido mínimo por numeração junto ao fornecedor; acima disso é livre. */
+  lotePorNumeracao: number;
+  /** Dias úteis por mês, para converter o consumo mensal em consumo diário. */
+  diasUteisPorMes: number;
+  /**
+   * Peso máximo de um único pedido na curva de numeração e cor.
+   *
+   * Sem isso um pedido grande reescreve a política inteira: o MANYCHAT, com 500
+   * pares pretos, era 30% da amostra e movia o split de cor em 7 pontos — e
+   * quase saiu branco, mudou na última hora.
+   */
+  tetoInfluenciaPedido: number;
+  /** Consumo médio mensal em pares, do histórico de embarques. */
+  consumoMensalMedio: number;
+};
+
+export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
+  diasUteisCobertura: 15,
+  travaPorSku: 20,
+  lotePorNumeracao: 40,
+  diasUteisPorMes: 21,
+  tetoInfluenciaPedido: 0.1,
+  consumoMensalMedio: 0,
+};
+
+/**
  * ⚠️  LISTA TEMPORÁRIA — APAGAR QUANDO ESVAZIAR.
  *
  * Até 26/08/2026 o Tiny baixava o solado no cadastro do ERP. Estes pedidos
@@ -134,7 +169,6 @@ export type SoladoSkuTiny = {
   cor: SoladoCor;
   numeracao: string;
   saldo: number;
-  minimo: number;
 };
 
 export type SoladoLinha = {
@@ -145,13 +179,22 @@ export type SoladoLinha = {
   /** Saldo do Tiny. Negativo significa solado já vendido que não existe. */
   saldo: number | null;
   saldoNegativo: boolean;
-  minimo: number | null;
+  /** Pares em ordens de compra emitidas e ainda não recebidas. */
+  aCaminho: number;
+  /** Fatia da cobertura que a curva de demanda destina a este SKU. */
+  curva: number;
+  /** `max(trava, curva)` — o estoque mínimo desta linha. */
+  minimo: number;
+  /** `true` quando a trava levantou o mínimo acima do que a curva pedia. */
+  minimoTravado: boolean;
   /** Pares vendidos e ainda não faturados — o Tiny ainda não os descontou. */
   necessidade: number;
-  /** `saldo - necessidade`. `null` quando o SKU não existe no Tiny. */
+  /** `saldo + aCaminho - necessidade`. `null` sem o SKU no Tiny. */
   projetado: number | null;
-  /** Quanto comprar para cobrir a necessidade e ainda deixar o mínimo. */
+  /** Quanto comprar para chegar ao mínimo, respeitando o lote do fornecedor. */
   sugestaoCompra: number | null;
+  /** `true` quando o lote mínimo levantou a compra acima do necessário. */
+  compraArredondadaAoLote: boolean;
 };
 
 export type SoladoResumo = {
@@ -161,6 +204,12 @@ export type SoladoResumo = {
   skusNaoEncontrados: string[];
   totalNecessidade: number;
   totalSugestaoCompra: number;
+  totalACaminho: number;
+  /** Soma dos mínimos, já com a trava aplicada. */
+  totalMinimo: number;
+  /** Pares que a cobertura sozinha pediria, antes da trava. */
+  coberturaEmPares: number;
+  parametros: SoladoParametros;
   /**
    * Pedidos da janela que ficaram de fora por já terem baixado no cadastro do
    * ERP. Existe para a exceção não apodrecer em silêncio: quando zerar,
@@ -217,14 +266,47 @@ export function combinacoesSolado(): Array<{
   return combos;
 }
 
+/**
+ * Peso de cada SKU na demanda, com o peso de cada PEDIDO limitado ao teto.
+ *
+ * O pedido que passa do teto é reduzido inteiro, proporcionalmente — assim ele
+ * perde influência sem distorcer a grade interna dele.
+ */
+export function curvaDeDemanda(
+  negocios: SoladoNegocio[],
+  tetoInfluencia: number,
+): Map<string, number> {
+  const totalPorNegocio = negocios.map((negocio) =>
+    negocio.itens.reduce((total, item) => total + item.pares, 0),
+  );
+  const totalGeral = totalPorNegocio.reduce((a, b) => a + b, 0);
+  const limite = totalGeral * tetoInfluencia;
+
+  const curva = new Map<string, number>();
+  negocios.forEach((negocio, indice) => {
+    const totalNegocio = totalPorNegocio[indice];
+    if (!totalNegocio) return;
+    const fator = totalNegocio > limite ? limite / totalNegocio : 1;
+    for (const item of negocio.itens) {
+      const chave = CHAVE(item.cor, item.numeracao);
+      curva.set(chave, (curva.get(chave) ?? 0) + item.pares * fator);
+    }
+  });
+  return curva;
+}
+
 export function montarResumo(input: {
   negocios: SoladoNegocio[];
   skus: SoladoSkuTiny[];
+  aCaminho?: SoladoItemDemanda[];
+  parametros: SoladoParametros;
 }): SoladoResumo {
+  const p = input.parametros;
   const skuPorChave = new Map(
     input.skus.map((sku) => [CHAVE(sku.cor, sku.numeracao), sku]),
   );
   const necessidade = new Map<string, number>();
+  const aCaminho = new Map<string, number>();
 
   // Exceção temporária: ver NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP.
   const negocios = input.negocios.filter(
@@ -238,14 +320,40 @@ export function montarResumo(input: {
       necessidade.set(chave, (necessidade.get(chave) ?? 0) + item.pares);
     }
   }
+  for (const item of input.aCaminho ?? []) {
+    const chave = CHAVE(item.cor, item.numeracao);
+    aCaminho.set(chave, (aCaminho.get(chave) ?? 0) + item.pares);
+  }
+
+  // A curva sai da demanda que o dashboard enxerga hoje; o histórico mensal
+  // ainda está sendo acumulado. Por isso a trava e o override existem.
+  const curva = curvaDeDemanda(negocios, p.tetoInfluenciaPedido);
+  const somaCurva = [...curva.values()].reduce((a, b) => a + b, 0);
+  const coberturaEmPares = Math.round(
+    (p.consumoMensalMedio / p.diasUteisPorMes) * p.diasUteisCobertura,
+  );
 
   const linhas = combinacoesSolado().map(({ cor, numeracao, publico }) => {
     const chave = CHAVE(cor, numeracao);
     const sku = skuPorChave.get(chave);
     const necessidadeLinha = necessidade.get(chave) ?? 0;
+    const aCaminhoLinha = aCaminho.get(chave) ?? 0;
     const saldo = sku?.saldo ?? null;
-    const minimo = sku?.minimo ?? null;
-    const projetado = saldo === null ? null : saldo - necessidadeLinha;
+
+    const fatia = somaCurva > 0 ? (curva.get(chave) ?? 0) / somaCurva : 0;
+    const curvaPares = Math.round(fatia * coberturaEmPares);
+    const minimo = Math.max(p.travaPorSku, curvaPares);
+
+    const projetado =
+      saldo === null ? null : saldo + aCaminhoLinha - necessidadeLinha;
+    const falta = projetado === null ? null : minimo - projetado;
+    const sugestaoCompra =
+      falta === null || falta <= 0
+        ? falta === null
+          ? null
+          : 0
+        : Math.max(p.lotePorNumeracao, falta);
+
     return {
       cor,
       numeracao,
@@ -253,12 +361,15 @@ export function montarResumo(input: {
       produtoId: sku?.produtoId ?? null,
       saldo,
       saldoNegativo: saldo !== null && saldo < 0,
+      aCaminho: aCaminhoLinha,
+      curva: curvaPares,
       minimo,
+      minimoTravado: curvaPares < p.travaPorSku,
       necessidade: necessidadeLinha,
       projetado,
-      // Comprar o que falta para zerar a necessidade e ainda sobrar o mínimo.
-      sugestaoCompra:
-        projetado === null ? null : Math.max(0, (minimo ?? 0) - projetado),
+      sugestaoCompra,
+      compraArredondadaAoLote:
+        falta !== null && falta > 0 && falta < p.lotePorNumeracao,
     };
   });
 
@@ -281,6 +392,10 @@ export function montarResumo(input: {
       (total, l) => total + (l.sugestaoCompra ?? 0),
       0,
     ),
+    totalACaminho: linhas.reduce((total, l) => total + l.aCaminho, 0),
+    totalMinimo: linhas.reduce((total, l) => total + l.minimo, 0),
+    coberturaEmPares,
+    parametros: p,
     legadosForaDaConta,
   };
 }

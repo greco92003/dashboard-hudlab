@@ -16,10 +16,13 @@ import {
   type GhlOpportunity,
 } from "@/lib/ghl/api";
 import { normalizeStageTitle } from "@/lib/ghl/programacao-stages";
+import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
+import { listarOrdensCompra, paresACaminho } from "./ordem-compra";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
   montarResumo,
   parseSoladoDescricao,
+  SOLADO_PARAMETROS_PADRAO,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
   type SoladoCor,
@@ -243,15 +246,12 @@ async function lerSkusTiny(): Promise<SoladoSkuTiny[]> {
   });
 
   // Leitura sequencial: em paralelo o Tiny devolve 429 para a maior parte das
-  // 36 chamadas. São ~13 segundos, absorvidos pelo cache.
+  // chamadas. São ~7 segundos, absorvidos pelo cache.
   const skus: SoladoSkuTiny[] = [];
   for (const candidato of candidatos) {
     const estoque = await tinyV3Request<{ saldo?: number | null }>(
       `/estoque/${candidato.id}`,
     );
-    const produto = await tinyV3Request<{
-      estoque?: { minimo?: number | null } | null;
-    }>(`/produtos/${candidato.id}`);
 
     // Saldo ausente não pode virar zero: a tela mandaria comprar o estoque
     // inteiro de novo. Falha alto em vez de sugerir compra errada.
@@ -268,13 +268,61 @@ async function lerSkusTiny(): Promise<SoladoSkuTiny[]> {
       cor: candidato.cor,
       numeracao: candidato.numeracao,
       saldo,
-      minimo: Number(produto.estoque?.minimo ?? 0),
     });
   }
   return skus;
 }
 
+/**
+ * Consumo médio mensal em pares, pelos embarques dos últimos meses fechados.
+ *
+ * Vem do `deals_cache` e não do GHL porque aqui só interessa o VOLUME, que está
+ * na tabela e é barato. A quebra por numeração e cor não existe no histórico —
+ * os campos de grade entraram em 21/08/2026 — e por isso a curva sai da janela
+ * atual, com teto por pedido.
+ */
+async function lerConsumoMensalMedio(meses = 6): Promise<number> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const chave = getSupabaseSecretKey();
+  if (!supabaseUrl || !chave) return 0;
+
+  const inicio = new Date();
+  inicio.setDate(1);
+  inicio.setMonth(inicio.getMonth() - meses);
+  const desde = inicio.toISOString().slice(0, 10);
+  // O mês corrente fica de fora: ainda não fechou e puxaria a média para baixo.
+  const fim = new Date();
+  fim.setDate(1);
+  const ate = fim.toISOString().slice(0, 10);
+
+  const url =
+    `${supabaseUrl}/rest/v1/deals_cache` +
+    `?select=quantidade-de-pares&status=eq.won` +
+    `&data_embarque_date=gte.${desde}&data_embarque_date=lt.${ate}`;
+
+  const resposta = await fetch(url, {
+    headers: { apikey: chave, Authorization: `Bearer ${chave}` },
+    cache: "no-store",
+  });
+  if (!resposta.ok) return 0;
+
+  const linhas = (await resposta.json()) as Array<Record<string, unknown>>;
+  const total = linhas.reduce((soma, linha) => {
+    const bruto = Number(linha["quantidade-de-pares"]);
+    return soma + (Number.isFinite(bruto) && bruto > 0 ? bruto : 0);
+  }, 0);
+  return meses > 0 ? Math.round(total / meses) : 0;
+}
+
 // ── Orquestração ────────────────────────────────────────────────────────────
+
+/**
+ * Descarta o cache. Chamado depois de mexer numa ordem de compra: sem isso a
+ * tela continuaria mostrando o "a caminho" de antes por até cinco minutos.
+ */
+export function invalidarCacheSolados(): void {
+  cache = null;
+}
 
 export async function getResumoSolados(
   opcoes: { forcar?: boolean } = {},
@@ -285,12 +333,19 @@ export async function getResumoSolados(
   if (emVoo) return emVoo;
 
   emVoo = (async () => {
-    const [negocios, skus] = await Promise.all([
+    const [negocios, skus, consumoMensalMedio, ordens] = await Promise.all([
       lerNegociosGhl(),
       lerSkusTiny(),
+      lerConsumoMensalMedio(),
+      listarOrdensCompra(),
     ]);
 
-    const resumo = montarResumo({ negocios, skus });
+    const resumo = montarResumo({
+      negocios,
+      skus,
+      aCaminho: paresACaminho(ordens),
+      parametros: { ...SOLADO_PARAMETROS_PADRAO, consumoMensalMedio },
+    });
     const lidoEm = new Date().toISOString();
     cache = { resumo, lidoEm, expiraEm: Date.now() + CACHE_MS };
     return { resumo, lidoEm };

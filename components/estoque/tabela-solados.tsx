@@ -13,11 +13,20 @@ function Numero({
   if (valor === null) return <span className="text-muted-foreground">—</span>;
   const negativo = destacarNegativo && valor < 0;
   return (
-    <span className={negativo ? "font-semibold text-destructive" : "tabular-nums"}>
+    <span
+      className={negativo ? "font-semibold text-destructive" : "tabular-nums"}
+    >
       {valor}
     </span>
   );
 }
+
+const zeroTraco = (valor: number) =>
+  valor ? (
+    <span className="tabular-nums">{valor}</span>
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );
 
 export function TabelaSolados({
   cor,
@@ -27,6 +36,8 @@ export function TabelaSolados({
   linhas: SoladoLinha[];
 }) {
   const totalNecessidade = linhas.reduce((t, l) => t + l.necessidade, 0);
+  const totalACaminho = linhas.reduce((t, l) => t + l.aCaminho, 0);
+  const totalMinimo = linhas.reduce((t, l) => t + l.minimo, 0);
   const totalCompra = linhas.reduce((t, l) => t + (l.sugestaoCompra ?? 0), 0);
 
   return (
@@ -41,12 +52,13 @@ export function TabelaSolados({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-muted-foreground">
-              <th className="px-4 py-2 text-left font-medium">Numeração</th>
-              <th className="px-4 py-2 text-right font-medium">Saldo Tiny</th>
-              <th className="px-4 py-2 text-right font-medium">Necessidade</th>
-              <th className="px-4 py-2 text-right font-medium">Projetado</th>
-              <th className="px-4 py-2 text-right font-medium">Mínimo</th>
-              <th className="px-4 py-2 text-right font-medium">Comprar</th>
+              <th className="px-3 py-2 text-left font-medium">Numeração</th>
+              <th className="px-3 py-2 text-right font-medium">Saldo</th>
+              <th className="px-3 py-2 text-right font-medium">A caminho</th>
+              <th className="px-3 py-2 text-right font-medium">Necessidade</th>
+              <th className="px-3 py-2 text-right font-medium">Projetado</th>
+              <th className="px-3 py-2 text-right font-medium">Mínimo</th>
+              <th className="border-l px-3 py-2 text-right font-medium">Comprar</th>
             </tr>
           </thead>
           <tbody>
@@ -55,7 +67,7 @@ export function TabelaSolados({
                 key={`${linha.cor}-${linha.numeracao}`}
                 className="border-b last:border-0"
               >
-                <td className="px-4 py-2">
+                <td className="px-3 py-2">
                   {linha.numeracao}
                   {linha.publico === "infantil" && (
                     <span className="ml-2 text-xs text-muted-foreground">
@@ -64,7 +76,7 @@ export function TabelaSolados({
                   )}
                 </td>
                 <td
-                  className="px-4 py-2 text-right"
+                  className="px-3 py-2 text-right"
                   title={
                     linha.saldoNegativo
                       ? "Saldo negativo: solado já faturado que não existe. Entra inteiro na sugestão de compra."
@@ -73,20 +85,37 @@ export function TabelaSolados({
                 >
                   <Numero valor={linha.saldo} destacarNegativo />
                 </td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {linha.necessidade || (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                <td className="px-3 py-2 text-right">
+                  {zeroTraco(linha.aCaminho)}
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td className="px-3 py-2 text-right">
+                  {zeroTraco(linha.necessidade)}
+                </td>
+                <td className="px-3 py-2 text-right">
                   <Numero valor={linha.projetado} destacarNegativo />
                 </td>
-                <td className="px-4 py-2 text-right text-muted-foreground tabular-nums">
-                  {linha.minimo ?? "—"}
+                <td
+                  className="px-3 py-2 text-right tabular-nums text-muted-foreground"
+                  title={
+                    linha.minimoTravado
+                      ? `A curva destinaria ${linha.curva} pares; a trava garante ${linha.minimo}.`
+                      : undefined
+                  }
+                >
+                  {linha.minimo}
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td
+                  className="border-l px-3 py-2 text-right"
+                  title={
+                    linha.compraArredondadaAoLote
+                      ? "Faltava menos que o lote mínimo do fornecedor; subiu para o lote."
+                      : undefined
+                  }
+                >
                   {linha.sugestaoCompra ? (
-                    <span className="font-semibold">{linha.sugestaoCompra}</span>
+                    <span className="font-semibold tabular-nums">
+                      {linha.sugestaoCompra}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -96,13 +125,19 @@ export function TabelaSolados({
           </tbody>
           <tfoot>
             <tr className="bg-muted/40 font-medium">
-              <td className="px-4 py-2">Total</td>
+              <td className="px-3 py-2">Total</td>
               <td />
-              <td className="px-4 py-2 text-right tabular-nums">
+              <td className="px-3 py-2 text-right tabular-nums">
+                {totalACaminho || ""}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
                 {totalNecessidade}
               </td>
-              <td colSpan={2} />
-              <td className="px-4 py-2 text-right tabular-nums">
+              <td />
+              <td className="px-3 py-2 text-right tabular-nums">
+                {totalMinimo}
+              </td>
+              <td className="border-l px-3 py-2 text-right tabular-nums">
                 {totalCompra}
               </td>
             </tr>
