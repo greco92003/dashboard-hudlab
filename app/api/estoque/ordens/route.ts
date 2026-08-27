@@ -3,25 +3,29 @@ import { z } from "zod";
 import {
   criarOrdemCompra,
   listarOrdensCompra,
-} from "@/lib/estoque/ordem-compra";
+} from "@/lib/estoque/ordem-compra-source";
 import { invalidarCacheSolados } from "@/lib/estoque/solados-source";
-import { SOLADO_CORES } from "@/lib/estoque/solados";
-import { requireApprovedUser } from "@/lib/security/route-guards";
+import { requireApprovedUser, requireRole } from "@/lib/security/route-guards";
 
-const NUMERACAO = /^\d{2}\/\d{2}$/;
+/**
+ * Criar ordem de compra é compromisso financeiro com fornecedor, e sai daqui
+ * direto para o Tiny. Fica restrito a quem responde por isso; ler é liberado
+ * para qualquer usuário aprovado.
+ */
+const PAPEIS_QUE_COMPRAM = ["owner", "admin"] as const;
 
 const novaOrdemSchema = z.object({
-  numero: z.string().trim().max(30).nullish(),
-  fornecedor: z.string().trim().min(1).max(80).default("INPU"),
-  emitidaEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  previstaPara: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
-  observacao: z.string().trim().max(500).nullish(),
+  dataPrevista: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
+  observacoes: z.string().trim().max(500).nullish(),
   itens: z
     .array(
       z.object({
-        cor: z.enum(SOLADO_CORES),
-        numeracao: z.string().regex(NUMERACAO),
-        paresPedidos: z.number().int().positive().max(100_000),
+        produtoId: z.number().int().positive(),
+        quantidade: z.number().int().positive().max(100_000),
+        valor: z.number().nonnegative().max(100_000),
       }),
     )
     .min(1)
@@ -35,7 +39,7 @@ export async function GET() {
   try {
     return NextResponse.json({ ordens: await listarOrdensCompra() });
   } catch (error) {
-    console.error("Falha ao listar ordens de compra", error);
+    console.error("Falha ao listar ordens de compra no Tiny", error);
     return NextResponse.json(
       { error: "Não foi possível carregar as ordens de compra." },
       { status: 502 },
@@ -44,7 +48,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const acesso = await requireApprovedUser();
+  const acesso = await requireRole(PAPEIS_QUE_COMPRAM);
   if (!acesso.ok) return acesso.response;
 
   const corpo = novaOrdemSchema.safeParse(await request.json());
@@ -55,27 +59,23 @@ export async function POST(request: Request) {
     );
   }
 
-  // Duas linhas para a mesma cor e numeração violariam a restrição do banco
-  // com uma mensagem que não ajuda ninguém.
-  const chaves = corpo.data.itens.map((i) => `${i.cor} ${i.numeracao}`);
-  if (new Set(chaves).size !== chaves.length) {
+  // O mesmo produto duas vezes viraria duas linhas na OC do Tiny.
+  const ids = corpo.data.itens.map((item) => item.produtoId);
+  if (new Set(ids).size !== ids.length) {
     return NextResponse.json(
-      { error: "Há numerações repetidas na mesma cor." },
+      { error: "Há produtos repetidos na ordem." },
       { status: 400 },
     );
   }
 
   try {
-    const ordem = await criarOrdemCompra({
-      ...corpo.data,
-      criadaPor: acesso.user.id,
-    });
+    const ordem = await criarOrdemCompra(corpo.data);
     invalidarCacheSolados();
     return NextResponse.json({ ordem }, { status: 201 });
   } catch (error) {
-    console.error("Falha ao criar ordem de compra", error);
+    console.error("Falha ao criar ordem de compra no Tiny", error);
     return NextResponse.json(
-      { error: "Não foi possível criar a ordem de compra." },
+      { error: "O Tiny recusou a ordem de compra." },
       { status: 502 },
     );
   }

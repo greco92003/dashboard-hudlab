@@ -15,16 +15,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import type { SoladoCor, SoladoResumo } from "@/lib/estoque/solados";
+import type { SoladoResumo } from "@/lib/estoque/solados";
 
-type Rascunho = { cor: SoladoCor; numeracao: string; pares: string };
+/** Preços da OC 1908 do INPU. Editáveis porque tabela de preço muda. */
+const PRECO_ADULTO = "12.60";
+const PRECO_INFANTIL = "9.63";
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+type Rascunho = {
+  produtoId: number;
+  rotulo: string;
+  infantil: boolean;
+  pares: string;
+};
+
+const brl = (valor: number) =>
+  valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /**
- * A ordem nasce da própria sugestão de compra — é o caminho normal. Os campos
+ * A ordem nasce da sugestão de compra e é criada direto no Tiny. Os campos
  * ficam editáveis porque quem compra sempre ajusta: arredonda para fechar
- * caminhão, antecipa uma numeração, corta outra.
+ * carga, antecipa uma numeração, corta outra.
  */
 export function NovaOrdemDialog({
   children,
@@ -37,22 +47,25 @@ export function NovaOrdemDialog({
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [itens, setItens] = useState<Rascunho[]>([]);
-  const [numero, setNumero] = useState("");
   const [previstaPara, setPrevistaPara] = useState("");
-  const [emitidaEm, setEmitidaEm] = useState(hoje);
+  const [precoAdulto, setPrecoAdulto] = useState(PRECO_ADULTO);
+  const [precoInfantil, setPrecoInfantil] = useState(PRECO_INFANTIL);
 
   const carregarSugestao = useCallback(async () => {
     setCarregando(true);
     try {
       const resposta = await fetch("/api/estoque/solados");
       const corpo = (await resposta.json()) as SoladoResumo;
-      if (!resposta.ok) throw new Error("Falha ao ler a sugestão.");
+      if (!resposta.ok) throw new Error();
       setItens(
         corpo.linhas
-          .filter((linha) => (linha.sugestaoCompra ?? 0) > 0)
+          .filter(
+            (linha) => (linha.sugestaoCompra ?? 0) > 0 && linha.produtoId,
+          )
           .map((linha) => ({
-            cor: linha.cor,
-            numeracao: linha.numeracao,
+            produtoId: linha.produtoId!,
+            rotulo: `${linha.cor} ${linha.numeracao}`,
+            infantil: linha.publico === "infantil",
             pares: String(linha.sugestaoCompra),
           })),
       );
@@ -68,22 +81,30 @@ export function NovaOrdemDialog({
     if (aberto) void carregarSugestao();
   }, [aberto, carregarSugestao]);
 
-  const total = itens.reduce((soma, item) => {
-    const valor = Number(item.pares);
-    return soma + (Number.isFinite(valor) && valor > 0 ? valor : 0);
-  }, 0);
+  const preco = (infantil: boolean) =>
+    Number((infantil ? precoInfantil : precoAdulto).replace(",", ".")) || 0;
+
+  const validos = itens.flatMap((item) => {
+    const pares = Number(item.pares);
+    return Number.isInteger(pares) && pares > 0
+      ? [{ ...item, paresNum: pares, valor: preco(item.infantil) }]
+      : [];
+  });
+  const totalPares = validos.reduce((s, i) => s + i.paresNum, 0);
+  const totalReais = validos.reduce((s, i) => s + i.paresNum * i.valor, 0);
 
   const salvar = async () => {
-    const validos = itens.flatMap((item) => {
-      const pares = Number(item.pares);
-      return Number.isInteger(pares) && pares > 0
-        ? [{ cor: item.cor, numeracao: item.numeracao, paresPedidos: pares }]
-        : [];
-    });
     if (validos.length === 0) {
       toast.error("A ordem precisa de pelo menos um item.");
       return;
     }
+    const resumo =
+      `Criar ordem de compra no Tiny para o INPU?\n\n` +
+      `${validos.length} itens · ${totalPares} pares · ${brl(totalReais)}` +
+      (previstaPara
+        ? `\nPrevisão: ${new Date(`${previstaPara}T12:00:00`).toLocaleDateString("pt-BR")}`
+        : "");
+    if (!confirm(resumo)) return;
 
     setSalvando(true);
     try {
@@ -91,17 +112,19 @@ export function NovaOrdemDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          numero: numero.trim() || null,
-          emitidaEm,
-          previstaPara: previstaPara || null,
-          itens: validos,
+          dataPrevista: previstaPara || null,
+          observacoes: "Gerada pelo dashboard a partir da sugestão de compra.",
+          itens: validos.map((item) => ({
+            produtoId: item.produtoId,
+            quantidade: item.paresNum,
+            valor: item.valor,
+          })),
         }),
       });
       const corpo = await resposta.json();
       if (!resposta.ok) throw new Error(corpo.error ?? "Falha ao criar.");
-      toast.success("Ordem de compra criada.");
+      toast.success("Ordem de compra criada no Tiny.");
       setAberto(false);
-      setNumero("");
       setPrevistaPara("");
       onCriada();
     } catch (e) {
@@ -118,36 +141,34 @@ export function NovaOrdemDialog({
         <DialogHeader>
           <DialogTitle>Nova ordem de compra</DialogTitle>
           <DialogDescription>
-            Itens vindos da sugestão de compra. Ajuste o que precisar.
+            Vai direto para o Tiny, no INPU. Itens vindos da sugestão de compra.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="oc-numero">Número</Label>
-            <Input
-              id="oc-numero"
-              value={numero}
-              onChange={(e) => setNumero(e.target.value)}
-              placeholder="1908"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="oc-emitida">Emitida em</Label>
-            <Input
-              id="oc-emitida"
-              type="date"
-              value={emitidaEm}
-              onChange={(e) => setEmitidaEm(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="oc-prevista">Prevista</Label>
+            <Label htmlFor="oc-prevista">Previsão de chegada</Label>
             <Input
               id="oc-prevista"
               type="date"
               value={previstaPara}
               onChange={(e) => setPrevistaPara(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="oc-preco-a">Preço adulto</Label>
+            <Input
+              id="oc-preco-a"
+              value={precoAdulto}
+              onChange={(e) => setPrecoAdulto(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="oc-preco-i">Preço infantil</Label>
+            <Input
+              id="oc-preco-i"
+              value={precoInfantil}
+              onChange={(e) => setPrecoInfantil(e.target.value)}
             />
           </div>
         </div>
@@ -162,12 +183,10 @@ export function NovaOrdemDialog({
           <div className="rounded-md border">
             {itens.map((item, indice) => (
               <div
-                key={`${item.cor}-${item.numeracao}`}
+                key={item.produtoId}
                 className="flex items-center gap-3 border-b px-3 py-1.5 last:border-0"
               >
-                <span className="flex-1 text-sm">
-                  {item.cor} {item.numeracao}
-                </span>
+                <span className="flex-1 text-sm">{item.rotulo}</span>
                 <Input
                   type="number"
                   min={0}
@@ -187,15 +206,15 @@ export function NovaOrdemDialog({
         )}
 
         <DialogFooter className="items-center sm:justify-between">
-          <span className="text-sm text-muted-foreground">
-            {total} pares
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {totalPares} pares · {brl(totalReais)}
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setAberto(false)}>
               Cancelar
             </Button>
-            <Button onClick={salvar} disabled={salvando || total === 0}>
-              Criar ordem
+            <Button onClick={salvar} disabled={salvando || totalPares === 0}>
+              Criar no Tiny
             </Button>
           </div>
         </DialogFooter>

@@ -17,7 +17,8 @@ import {
 } from "@/lib/ghl/api";
 import { normalizeStageTitle } from "@/lib/ghl/programacao-stages";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
-import { listarOrdensCompra, paresACaminho } from "./ordem-compra";
+import { paresACaminho } from "./ordem-compra";
+import { listarOrdensCompra } from "./ordem-compra-source";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
   montarResumo,
