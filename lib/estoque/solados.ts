@@ -40,12 +40,21 @@ export type SoladoPublico = "adulto" | "infantil";
 /**
  * Etapas do pipeline Atendimento que ainda não faturaram.
  *
- * Começa depois de "Conferir Pgto/Completar Dados" — lá a grade ainda está
- * sendo preenchida e o dado não é confiável. Termina em "Aprovar Financeiro
- * Pedido Total", a última antes do Fiscal: da nota em diante o Tiny já baixou.
+ * Começa no **Cadastro ERP**, e não antes, porque só ali o dado parou de mudar.
+ * Nas etapas anteriores a grade existe mas é provisória: o cliente ainda não
+ * aprovou a arte, e aprovar pode trocar o modelo inteiro — inclusive a cor do
+ * solado. O MANYCHAT, de 500 pares, quase saiu branco e virou preto na última
+ * hora.
+ *
+ * Grade provisória é pior que grade ausente. Ausente contribui zero e não
+ * engana ninguém; provisória entra na conta com a cor errada, puxa compra de
+ * uma cor e deixa a outra descoberta. O cadastro no ERP é o momento em que o
+ * pedido para de se mexer, e o card chega nele assim que os dados fecham.
+ *
+ * Termina em "Aprovar Financeiro Pedido Total", a última antes do Fiscal: da
+ * nota em diante o Tiny já baixou o solado.
  */
 export const SOLADO_STAGE_TITLES_ATENDIMENTO = [
-  "Pagamento Confirmado",
   "Cadastro ERP",
   "Cadastro Contas a Receber",
   "Criar Arquivos Serigrafia",
@@ -58,9 +67,12 @@ export const SOLADO_STAGE_TITLES_ATENDIMENTO = [
   "Aprovar Financeiro Pedido Total",
 ];
 
-/** Mesmo corte no pipeline Representantes, que fatura em "Fiscal/Cobrança". */
+/**
+ * Mesmo corte no pipeline Representantes, que fatura em "Fiscal/Cobrança".
+ * "Aprovar pedido com banco" fica de fora pelo mesmo motivo do Atendimento: é
+ * a espera anterior ao cadastro, com dado ainda sujeito a mudança.
+ */
 export const SOLADO_STAGE_TITLES_REPRESENTANTES = [
-  "Aprovar pedido com banco",
   "Cadastro de pedido",
   "Produção",
   "Expedição",

@@ -186,8 +186,16 @@ async function lerNegociosGhl(): Promise<SoladoNegocio[]> {
       ? SOLADO_STAGE_TITLES_ATENDIMENTO
       : nome.includes("representante")
         ? SOLADO_STAGE_TITLES_REPRESENTANTES
-        : // A Fábrica de Mockups conta inteira: um pedido ganho pode estar
-          // parado em qualquer etapa dela enquanto a arte é feita.
+        : // A Fábrica de Mockups conta inteira, e quem faz o corte aqui é o
+          // filtro de GANHO, não a lista de etapas.
+          //
+          // Ela não é um pipeline de venda: é a fila de trabalho dos designers.
+          // "Criar Mockup", "Alteração" e "Mockup PRIORIDADE" são demanda
+          // pré-venda e vivem ali como `open`, então ficam de fora sozinhas.
+          // Negócio ganho só aparece depois do Cadastro ERP, levado por
+          // automação para "Criar Arquivo Serigrafia" — etapa de produção, com
+          // a arte já aprovada. Por isso não existe aqui o dado provisório que
+          // mantém as etapas anteriores do Atendimento fora da janela.
           nome.includes("mockup")
           ? estagios.map((etapa) => etapa.name)
           : null;
