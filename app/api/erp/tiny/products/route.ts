@@ -12,6 +12,7 @@ import {
   type TinyCreatedProductResponse,
 } from "@/lib/erp/tiny-created-product";
 import { buildVariationSku } from "@/lib/erp/product-rules";
+import { extractGhlOrderSource } from "@/lib/erp/order-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
@@ -130,8 +131,9 @@ async function resolveClonerVariations(
   product: TinyClonerDetail,
   cloner: TinyClonerDetail,
   baseSku: string,
+  unitPrice: number,
 ) {
-  const desired = buildTinyVariationsFromCloner({ cloner, baseSku });
+  const desired = buildTinyVariationsFromCloner({ cloner, baseSku, unitPrice });
   const resolved = [...(product.variacoes ?? [])];
   const variationSkus: Record<string, string> = {};
   const missingVariations: string[] = [];
@@ -162,6 +164,10 @@ async function resolveClonerVariations(
       continue;
     }
 
+    target = {
+      ...target,
+      precos: variation.precos ?? target.precos,
+    };
     const existingIndex = resolved.findIndex(
       (item) => item.id === target?.id
         || item.sku?.trim().toUpperCase() === sku.toUpperCase()
@@ -304,6 +310,14 @@ export async function POST(request: Request) {
       fetchCustomFieldDefs("opportunity"),
     ]);
     const models = extractGhlProductModels(opportunity, definitions);
+    const rawUnitPrice = extractGhlOrderSource(opportunity, definitions).unitPrice;
+    if (rawUnitPrice == null || rawUnitPrice <= 0) {
+      return NextResponse.json(
+        { error: "O Valor Unitário do Par precisa estar preenchido no GHL antes do cadastro." },
+        { status: 409 },
+      );
+    }
+    const unitPrice = Math.round((rawUnitPrice + Number.EPSILON) * 100) / 100;
     const modelByKey = new Map(
       models.map((model) => [`${model.modelNumber}:${model.audience}`, model]),
     );
@@ -369,6 +383,7 @@ export async function POST(request: Request) {
             existingProduct,
             cloner,
             requested.baseSku,
+            unitPrice,
           );
           await ensureProductArtwork(existingProduct, model.artUrl, publicOrigin);
           status = "existing";
@@ -378,6 +393,7 @@ export async function POST(request: Request) {
             cloner,
             title: requested.title,
             baseSku: requested.baseSku,
+            unitPrice,
             artwork: productArtwork(model.artUrl, publicOrigin),
           });
           const created = await tinyV3Request<TinyCreatedProductResponse>("/produtos", {
@@ -389,6 +405,7 @@ export async function POST(request: Request) {
             createdProduct,
             cloner,
             requested.baseSku,
+            unitPrice,
           );
           status = "created";
           tinyProductId = created.id;
@@ -397,6 +414,7 @@ export async function POST(request: Request) {
         const manufacturing = prepareTinyManufacturedVariations(
           completed.product,
           cloner,
+          unitPrice,
         );
         const resultIndex = results.length;
         results.push({

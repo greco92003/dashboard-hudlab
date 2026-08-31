@@ -14,14 +14,16 @@ function variationSize(variation: TinyVariation) {
 }
 
 function tinyV2Price(value: number | null | undefined) {
-  return Number.isFinite(value) && value != null && value >= 0
-    ? value.toFixed(2)
-    : "0.00";
+  if (!Number.isFinite(value) || value == null || value <= 0) {
+    throw new Error("A variação não possui um preço positivo para envio ao Tiny.");
+  }
+  return value.toFixed(2);
 }
 
 export function prepareTinyManufacturedVariations(
   product: TinyClonerDetail,
   cloner: TinyClonerDetail,
+  unitPrice?: number,
 ) {
   const targetBySize = new Map(
     (product.variacoes ?? []).flatMap((variation) => {
@@ -52,7 +54,10 @@ export function prepareTinyManufacturedVariations(
         sku: targetVariation.sku,
         descricao: targetVariation.descricao?.trim()
           || `${product.descricao?.trim() || product.sku?.trim() || "Produto"} ${size}`,
-        precos: targetVariation.precos ?? product.precos,
+        precos: {
+          ...(targetVariation.precos ?? product.precos),
+          ...(unitPrice != null ? { preco: unitPrice } : {}),
+        },
         grade: targetVariation.grade,
         variacoes: undefined,
       },
@@ -98,9 +103,6 @@ export function buildTinyV2ManufacturedProduct(
       codigo: target.sku.trim(),
       nome: target.descricao.trim(),
       unidade: target.unidade?.trim() || "PR",
-      // Tiny v2 treats the numeric value 0 as an omitted required field.
-      // Its product API examples serialize decimals as strings (for example,
-      // "50.25"), so keep that format even for a zero-valued product.
       preco: tinyV2Price(target.precos?.preco ?? source.precos?.preco),
       ncm: target.ncm?.trim() ?? "",
       origem: String(target.origem ?? 0),

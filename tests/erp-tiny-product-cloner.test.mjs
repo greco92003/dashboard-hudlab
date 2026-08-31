@@ -7,6 +7,7 @@ import {
 } from "../lib/erp/tiny-manufacturing-payload.ts";
 import {
   tinyClonerBasePrice,
+  tinyClonerBasePriceWithOverride,
   tinyClonerVariationPrice,
 } from "../lib/erp/tiny-cloner-prices.ts";
 
@@ -162,23 +163,37 @@ test("envia preço zero explícito quando o cloner não possui nenhum preço", (
   assert.equal(tinyClonerVariationPrice(cloner, cloner.variacoes[0]), 0);
 });
 
-test("serializa preço zero no formato decimal aceito pelo Tiny v2", () => {
-  const record = buildTinyV2ManufacturedProduct({
-    target: {
-      id: 10,
-      sku: "PRODUTO-3435",
-      descricao: "Produto 34/35",
-      precos: { preco: 0 },
-    },
-    source: {
-      id: 20,
-      sku: "CLONER-3435",
-      tipo: "F",
-      producao: { etapas: ["Montagem"] },
-    },
-  }, 1);
+test("prioriza o valor unitário do GHL quando o cloner infantil custa zero", () => {
+  const cloner = {
+    precos: { preco: 0 },
+    variacoes: [{ precos: { preco: 0 } }],
+  };
 
-  assert.equal(record.produto.preco, "0.00");
+  assert.equal(tinyClonerBasePriceWithOverride(cloner, 49.54), 49.54);
+  assert.equal(
+    tinyClonerVariationPrice(cloner, cloner.variacoes[0], 49.54),
+    49.54,
+  );
+});
+
+test("impede o envio v2 quando a variação continua com preço zero", () => {
+  assert.throws(
+    () => buildTinyV2ManufacturedProduct({
+      target: {
+        id: 10,
+        sku: "PRODUTO-3435",
+        descricao: "Produto 34/35",
+        precos: { preco: 0 },
+      },
+      source: {
+        id: 20,
+        sku: "CLONER-3435",
+        tipo: "F",
+        producao: { etapas: ["Montagem"] },
+      },
+    }, 1),
+    /preço positivo/,
+  );
 });
 
 test("usa o preço da variação-cloner quando o Tiny não o retorna no destino", () => {
@@ -238,4 +253,34 @@ test("prepara o lote Fabricado usando o retorno da criação, sem reler a varia�
   assert.equal(prepared.pairs[0].target.unidade, "PR");
   assert.equal(prepared.pairs[0].target.ncm, "64022000");
   assert.equal(prepared.pairs[0].source, cloner.variacoes[0]);
+});
+
+test("aplica o valor unitário do GHL ao lote Fabricado existente", () => {
+  const cloner = {
+    variacoes: [{
+      id: 20,
+      sku: "CLONER-2829",
+      tipo: "F",
+      precos: { preco: 0 },
+      grade: [{ chave: "Tamanho", valor: "28/29" }],
+      producao: { etapas: ["Montagem"] },
+    }],
+  };
+  const product = {
+    id: 10,
+    sku: "INFANTIL",
+    descricao: "Produto infantil",
+    precos: { preco: 0 },
+    variacoes: [{
+      id: 11,
+      sku: "INFANTIL-2829",
+      precos: { preco: 0 },
+      grade: [{ chave: "Tamanho", valor: "28/29" }],
+    }],
+  };
+
+  const prepared = prepareTinyManufacturedVariations(product, cloner, 49.54);
+  const record = buildTinyV2ManufacturedProduct(prepared.pairs[0], 1);
+
+  assert.equal(record.produto.preco, "49.54");
 });

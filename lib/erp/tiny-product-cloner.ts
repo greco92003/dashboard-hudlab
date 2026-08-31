@@ -1,5 +1,8 @@
 import { buildVariationSku } from "./product-rules";
-import { tinyClonerBasePrice, tinyClonerVariationPrice } from "./tiny-cloner-prices";
+import {
+  tinyClonerBasePriceWithOverride,
+  tinyClonerVariationPrice,
+} from "./tiny-cloner-prices";
 
 type TinyGrade = { chave?: string | null; valor?: string | null };
 
@@ -113,6 +116,7 @@ export function tinyVariationSize(variation: TinyVariation): string | null {
 export function buildTinyVariationsFromCloner(input: {
   cloner: TinyClonerDetail;
   baseSku: string;
+  unitPrice?: number;
 }) {
   const variations = input.cloner.variacoes ?? [];
   if (variations.length === 0) {
@@ -135,7 +139,7 @@ export function buildTinyVariationsFromCloner(input: {
       sku,
       // GTIN is intentionally not cloned: it must remain unique per product.
       precos: {
-        preco: tinyClonerVariationPrice(input.cloner, source),
+        preco: tinyClonerVariationPrice(input.cloner, source, input.unitPrice),
         precoPromocional: source.precos?.precoPromocional ?? input.cloner.precos?.precoPromocional,
       },
       estoque: { inicial: 0 },
@@ -151,9 +155,10 @@ export function buildTinyProductFromCloner(input: {
   cloner: TinyClonerDetail;
   title: string;
   baseSku: string;
+  unitPrice?: number;
   artwork?: { url: string; externo: false };
 }) {
-  const { cloner, title, baseSku, artwork } = input;
+  const { cloner, title, baseSku, unitPrice, artwork } = input;
   const gradeKeys = Array.from(
     new Set(
       (cloner.variacoes ?? [])
@@ -179,7 +184,7 @@ export function buildTinyProductFromCloner(input: {
     marca: cloner.marca?.id ? { id: cloner.marca.id } : undefined,
     categoria: cloner.categoria?.id ? { id: cloner.categoria.id } : undefined,
     precos: {
-      preco: tinyClonerBasePrice(cloner),
+      preco: tinyClonerBasePriceWithOverride(cloner, unitPrice),
       precoPromocional: cloner.precos?.precoPromocional,
       precoCusto: cloner.precos?.precoCusto,
     },
@@ -238,6 +243,6 @@ export function buildTinyProductFromCloner(input: {
         ? [{ produto: { id: item.produto.id }, quantidade: item.quantidade }]
         : [],
     ),
-    variacoes: buildTinyVariationsFromCloner({ cloner, baseSku }),
+    variacoes: buildTinyVariationsFromCloner({ cloner, baseSku, unitPrice }),
   });
 }
