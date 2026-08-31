@@ -12,12 +12,7 @@ interface ConditionalSidebarProps {
   defaultSidebarOpen?: boolean;
 }
 
-const operationalRoutes = [
-  "/programacao",
-  "/expedicao",
-  "/producao",
-  "/estoque",
-];
+const fullHeightBoardRoutes = ["/programacao", "/expedicao"];
 
 // Keep the same responsive content inset and rhythm used by /dashboard.
 const standardContentClassName =
@@ -37,17 +32,17 @@ export function ConditionalSidebar({
   const [forcedOpen, setForcedOpen] = useState(true);
   const [isClientReady, setIsClientReady] = useState(false);
 
-  // Pages where the sidebar can be collapsed by the user
-  const isOperationalPage = operationalRoutes.includes(pathname);
+  // Full-height Kanban pages can collapse the sidebar to maximize board space.
+  const isBoardPage = fullHeightBoardRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
-  const isCollapsiblePage = isOperationalPage || isNctsPage;
+  const isCollapsiblePage = isBoardPage || isNctsPage;
 
-  // Operational pages keep full height while using the same inset as /dashboard.
+  // Board pages keep full height while using the same inset as /dashboard.
   // NCT pages continue to handle their own padding via layout.tsx.
-  const isFullHeightPage = isOperationalPage || isNctsPage;
+  const isFullHeightPage = isBoardPage || isNctsPage;
   const contentClassName = isNctsPage
     ? unpaddedFullHeightContentClassName
-    : isOperationalPage
+    : isBoardPage
       ? fullHeightContentClassName
       : standardContentClassName;
 
