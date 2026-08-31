@@ -291,6 +291,43 @@ export async function searchGhlOpportunitiesByStage(
 }
 
 /**
+ * Como `searchGhlOpportunitiesByStage`, mas paginando.
+ *
+ * A versão acima recusa mais de 100 de propósito: nas etapas em que ela é usada
+ * o estouro significaria dado faltando em silêncio. As etapas de pós-venda são
+ * outra história — "Recebido Pedido" sozinha guarda quase mil negócios, e ali
+ * paginar é o comportamento certo, não uma exceção.
+ */
+export async function searchAllGhlOpportunitiesByStage(
+  pipelineId: string,
+  pipelineStageId: string,
+  status: "open" | "won" = "won",
+): Promise<GhlOpportunity[]> {
+  const { locationId } = requireEnv();
+  const snapshot = await collectGhlCursorSnapshot<GhlOpportunity>({
+    fetchPage: async (cursor) => {
+      const data = await ghlFetch<{
+        opportunities?: GhlOpportunity[];
+        meta?: { total?: number; nextPageUrl?: string | null };
+      }>("/opportunities/search", {
+        location_id: locationId,
+        pipeline_id: pipelineId,
+        pipeline_stage_id: pipelineStageId,
+        status,
+        limit: "100",
+        ...(cursor ?? {}),
+      });
+      return {
+        items: data.opportunities ?? [],
+        total: data.meta?.total ?? -1,
+        nextPageUrl: data.meta?.nextPageUrl ?? null,
+      };
+    },
+  });
+  return snapshot.items;
+}
+
+/**
  * Id da etapa `stageName` dentro de `pipelineId`. Resolvido no ar em vez de
  * fixado no código porque as etapas são criadas e reordenadas no CRM — o board
  * inteiro já se orienta por título de etapa pelo mesmo motivo.
