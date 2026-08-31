@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { downloadPublicArtworkAsJpeg } from "@/lib/erp/google-drive-artwork";
+import { artworkFileIdFromPathSegment } from "@/lib/erp/artwork-url";
 import { verifyArtworkFileIdSignature } from "@/lib/erp/artwork-proxy";
 
 export const maxDuration = 60;
@@ -8,7 +9,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ fileId: string }> },
 ) {
-  const fileId = (await context.params).fileId;
+  const fileId = artworkFileIdFromPathSegment((await context.params).fileId);
   const query = new URL(request.url).searchParams;
   const expiresAt = Number(query.get("expires"));
   const signature = query.get("signature") ?? "";

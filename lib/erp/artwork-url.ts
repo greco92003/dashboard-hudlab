@@ -23,3 +23,11 @@ export function artworkEmbedUrl(url: string): string | null {
     ? `https://drive.google.com/file/d/${encodeURIComponent(driveId)}/preview`
     : null;
 }
+
+export function artworkProxyPath(fileId: string) {
+  return `/api/erp/artwork/${encodeURIComponent(fileId)}.jpg`;
+}
+
+export function artworkFileIdFromPathSegment(pathSegment: string) {
+  return pathSegment.replace(/\.jpg$/i, "");
+}

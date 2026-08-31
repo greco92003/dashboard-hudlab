@@ -1,4 +1,8 @@
-import { artworkThumbnailUrl, googleDriveFileId } from "./artwork-url";
+import {
+  artworkProxyPath,
+  artworkThumbnailUrl,
+  googleDriveFileId,
+} from "./artwork-url";
 import { createArtworkSignature, isArtworkSignatureValid } from "./artwork-signature";
 
 function proxySecret() {
@@ -34,7 +38,7 @@ export function artworkImportUrl(sourceUrl: string, publicOrigin: string) {
   const fileId = googleDriveFileId(sourceUrl);
   if (!fileId) return artworkThumbnailUrl(sourceUrl);
   const expiresAt = Math.floor(Date.now() / 1_000) + 15 * 60;
-  const url = new URL(`/api/erp/artwork/${encodeURIComponent(fileId)}`, publicOrigin);
+  const url = new URL(artworkProxyPath(fileId), publicOrigin);
   url.searchParams.set("expires", String(expiresAt));
   url.searchParams.set("signature", signArtworkFileId(fileId, expiresAt));
   return url.toString();
