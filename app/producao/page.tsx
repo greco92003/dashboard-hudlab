@@ -222,7 +222,7 @@ export default function ProducaoPage() {
     if (emConferencia.length > 0) {
       fora["em-conferencia"] = {
         id: "em-conferencia",
-        title: "Conferir Pgto/Completar Dados",
+        title: "Pagamento Confirmado/Completar Dados",
         dealsCount: emConferencia.length,
         deals: ordenar(emConferencia),
       };

@@ -42,6 +42,7 @@ type FieldName =
 
 type ResolvedModelFields = {
   modelNumber: number;
+  sole: GhlCustomFieldDef;
   art: GhlCustomFieldDef;
   adult: GhlCustomFieldDef;
   child: GhlCustomFieldDef;
@@ -127,6 +128,11 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
     ]),
   );
   const fields = {} as Record<FieldName, GhlCustomFieldDef>;
+  const definitionByName = (name: string) =>
+    definitions.find(
+      (definition) =>
+        definition.name.localeCompare(name, "pt-BR", { sensitivity: "base" }) === 0,
+    );
 
   for (const [name, fieldKey] of Object.entries(FIELD_KEYS) as Array<
     [FieldName, string]
@@ -144,6 +150,11 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
   const models: ResolvedModelFields[] = [];
   const modelDefinitions: OrderRegistrationModelDefinition[] = [];
   for (let modelNumber = 1; modelNumber <= 10; modelNumber++) {
+    // Modelo 3 was created in GHL with a malformed fieldKey, so the visible
+    // field name is the reliable fallback for all model slots.
+    const sole =
+      definitionsByKey.get(`solado_modelo_${modelNumber}`) ??
+      definitionByName(`Solado Modelo ${modelNumber}`);
     const art = definitionsByKey.get(
       `artes_aprovadas_modelo_${modelNumber}`,
     );
@@ -158,8 +169,8 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
       `grade_modelo_${modelNumber}_infantil`,
     );
 
-    if (!art && !adult && !child) continue;
-    if (!art || !adult || !child) {
+    if (!sole && !art && !adult && !child) continue;
+    if (!sole || !art || !adult || !child) {
       throw new OrderRegistrationError(
         `Os campos do modelo ${modelNumber} estão incompletos no GHL.`,
         503,
@@ -174,8 +185,13 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
         503,
       );
     }
-    models.push({ modelNumber, art, adult, child });
-    modelDefinitions.push({ modelNumber, adultOptions, childOptions });
+    models.push({ modelNumber, sole, art, adult, child });
+    modelDefinitions.push({
+      modelNumber,
+      soleOptions: picklistStrings(sole),
+      adultOptions,
+      childOptions,
+    });
   }
 
   if (models.length === 0 || models[0]?.modelNumber !== 1) {
@@ -310,6 +326,7 @@ function mapOpportunity(
     const childGrade = gradeValues(model.child, fieldValue(model.child));
     return {
       modelNumber: model.modelNumber,
+      soleColor: valueAsString(fieldValue(model.sole)),
       artUrl: valueAsString(fieldValue(model.art)),
       adultGrade,
       hasChild: hasGradeValue(childGrade),
@@ -320,6 +337,7 @@ function mapOpportunity(
   for (const model of mappedModels) {
     if (
       model.artUrl ||
+      model.soleColor ||
       hasGradeValue(model.adultGrade) ||
       hasGradeValue(model.childGrade)
     ) {
@@ -536,7 +554,7 @@ export async function saveOrderRegistration(
     (opportunity.status !== "open" && opportunity.status !== "won")
   ) {
     throw new OrderRegistrationError(
-      "Esta oportunidade não está mais em Conferir Pgto/Completar Dados. Atualize a lista.",
+      "Esta oportunidade não está mais em Pagamento Confirmado/Completar Dados. Atualize a lista.",
       409,
     );
   }
@@ -588,6 +606,7 @@ export async function saveOrderRegistration(
       (item) => item.modelNumber === definition.modelNumber,
     );
     customFields.push(
+      fieldUpdate(definition.sole, model?.soleColor ?? ""),
       fieldUpdate(definition.art, model?.artUrl ?? ""),
       fieldUpdate(
         definition.adult,

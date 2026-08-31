@@ -72,23 +72,30 @@ export function buildModelCode(date: Date, modelNumber: number): string {
 export function buildProductTitle(input: {
   opportunityName: string;
   color: string;
+  soleColor?: string;
   modelNumber: number;
   date: Date;
   audience?: "adulto" | "infantil";
 }): string {
   const opportunity = input.opportunityName.trim().toUpperCase();
-  const color = normalizeColorName(input.color);
+  const upperColor = normalizeColorName(input.color);
+  const soleColor = normalizeColorName(input.soleColor ?? "");
+  const colors = soleColor ? `${soleColor} - ${upperColor}` : upperColor;
   const product = input.audience === "infantil" ? "Chinelo Slide Infantil" : "Chinelo Slide";
-  return `${product} ${buildModelCode(input.date, input.modelNumber)} - ${opportunity} - ${color}`;
+  return `${product} ${buildModelCode(input.date, input.modelNumber)} - ${opportunity} - ${colors}`;
 }
 
 export function buildBaseSku(
   opportunityName: string,
   color: string,
   audience: "adulto" | "infantil" = "adulto",
+  soleColor?: string,
 ): string {
   const audienceCode = audience === "infantil" ? "-INF" : "";
-  return `CH-SL${audienceCode}-${normalizeSkuPart(opportunityName)}-${abbreviateColor(color)}`;
+  const colorCode = soleColor
+    ? `${abbreviateColor(soleColor)}-${abbreviateColor(color)}`
+    : abbreviateColor(color);
+  return `CH-SL${audienceCode}-${normalizeSkuPart(opportunityName)}-${colorCode}`;
 }
 
 export function buildVariationSku(baseSku: string, size: string): string {

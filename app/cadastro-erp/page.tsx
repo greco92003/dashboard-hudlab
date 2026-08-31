@@ -342,7 +342,7 @@ export default function CadastroErpPage() {
     });
   };
 
-  const chooseCloner = (model: Pick<ErpProductModel, "modelNumber" | "audience">, clonerId: string) => {
+  const chooseCloner = (model: ErpProductModel, clonerId: string) => {
     const cloner = cloners.find((item) => String(item.id) === clonerId);
     const color = cloner ? inferUpperColorFromCloner(cloner.description) : "";
     const date = new Date(preview?.deal.createdAt ?? Date.now());
@@ -354,9 +354,9 @@ export default function CadastroErpPage() {
       variationSkus: {},
       color,
       title: color
-        ? buildProductTitle({ opportunityName, color, modelNumber: model.modelNumber, audience: model.audience, date })
+        ? buildProductTitle({ opportunityName, color, soleColor: model.soleColor ?? undefined, modelNumber: model.modelNumber, audience: model.audience, date })
         : "",
-      baseSku: color ? buildBaseSku(opportunityName, color, model.audience) : "",
+      baseSku: color ? buildBaseSku(opportunityName, color, model.audience, model.soleColor ?? undefined) : "",
     });
   };
 
@@ -388,14 +388,35 @@ export default function CadastroErpPage() {
           title: buildProductTitle({
             opportunityName: value,
             color: mapping.color,
+            soleColor: model.soleColor ?? undefined,
             modelNumber: model.modelNumber,
             date,
             audience: model.audience,
           }),
-          baseSku: buildBaseSku(value, mapping.color, model.audience),
+          baseSku: buildBaseSku(value, mapping.color, model.audience, model.soleColor ?? undefined),
         };
       }
       return next;
+    });
+  };
+
+  const updateUpperColor = (model: ErpProductModel, color: string) => {
+    const date = new Date(preview?.deal.createdAt ?? Date.now());
+    updateMapping(model, {
+      color,
+      title: color
+        ? buildProductTitle({
+            opportunityName: productBaseName,
+            color,
+            soleColor: model.soleColor ?? undefined,
+            modelNumber: model.modelNumber,
+            audience: model.audience,
+            date,
+          })
+        : "",
+      baseSku: color
+        ? buildBaseSku(productBaseName, color, model.audience, model.soleColor ?? undefined)
+        : "",
     });
   };
 
@@ -421,6 +442,9 @@ export default function CadastroErpPage() {
       }
       if (mapping.mode === "clone" && mapping.clonerId && !mapping.color) {
         problems.push(`${label}: informe a cor da gáspea.`);
+      }
+      if (mapping.mode === "clone" && !model.soleColor) {
+        problems.push(`${label}: a cor do solado não foi preenchida no GHL.`);
       }
       if (mapping.mode === "clone" && mapping.clonerId && (!mapping.title.trim() || !mapping.baseSku.trim())) {
         problems.push(`${label}: título e SKU são obrigatórios.`);
@@ -712,6 +736,7 @@ export default function CadastroErpPage() {
                         <div>
                           <p className="font-semibold">{productModelLabel(model)}</p>
                           <p className="text-xs text-muted-foreground">{model.totalPairs} pares · {model.grades.length} numerações</p>
+                          <Badge variant="outline" className="mt-2 font-normal">Solado: {model.soleColor ?? "não informado"}</Badge>
                         </div>
                         <ArtworkPreview url={model.artUrl} modelNumber={model.modelNumber} />
                         <div className="flex flex-wrap gap-1.5">
@@ -752,7 +777,7 @@ export default function CadastroErpPage() {
                           <Input
                             id={`color-${model.modelNumber}-${model.audience}`}
                             value={mapping?.color ?? ""}
-                            onChange={(event) => updateMapping(model, { color: event.target.value })}
+                            onChange={(event) => updateUpperColor(model, event.target.value)}
                             placeholder="Ex.: Preto"
                           />
                         </div>
@@ -762,7 +787,7 @@ export default function CadastroErpPage() {
                             id={`sku-${model.modelNumber}-${model.audience}`}
                             value={mapping?.baseSku ?? ""}
                             onChange={(event) => updateMapping(model, { baseSku: event.target.value })}
-                            placeholder="CH-SL-NOME-PRT"
+                            placeholder="CH-SL-NOME-PRT-BRC"
                           />
                         </div>
                         <div className="space-y-2 md:col-span-2">

@@ -29,7 +29,7 @@ export function normalizeStageTitle(title: string | null | undefined): string {
  */
 export const PROGRAMACAO_STAGE_TITLES = [
   // Pipeline Atendimento
-  "Conferir Pgto/Completar Dados",
+  "Pagamento Confirmado/Completar Dados",
   "Pagamento Confirmado",
   "Criar Arquivos Serigrafia",
   "Impressão de Fotolitos",
@@ -157,7 +157,7 @@ export const EXPEDICAO_STAGE_TITLE = "Expedição";
  * ali é o estado normal da etapa, não erro; e como os dados ainda não são
  * confiáveis, esses pedidos ficam fora do cálculo de capacidade.
  */
-export const DADOS_EM_CONFERENCIA_STAGE_TITLE = "Conferir Pgto/Completar Dados";
+export const DADOS_EM_CONFERENCIA_STAGE_TITLE = "Pagamento Confirmado/Completar Dados";
 
 const CONCLUIVEL_SET = new Set(CONCLUIVEL_STAGE_TITLES.map(normalizeStageTitle));
 

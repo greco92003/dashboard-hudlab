@@ -54,6 +54,28 @@ test("infere a cor da gáspea a partir dos nomes dos cloners", () => {
   assert.equal(abbreviateColor("Branca"), "BRC");
 });
 
+test("combina a cor do solado antes da cor da gáspea no nome e SKU", () => {
+  const date = new Date("2026-08-03T12:00:00-03:00");
+  assert.equal(
+    buildProductTitle({
+      opportunityName: "Metanoia",
+      soleColor: "Preto",
+      color: "Branco",
+      modelNumber: 1,
+      date,
+    }),
+    "Chinelo Slide 082601 - METANOIA - Preto - Branco",
+  );
+  assert.equal(
+    buildBaseSku("Metanoia", "Branco", "adulto", "Preto"),
+    "CH-SL-METANOIA-PRT-BRC",
+  );
+  assert.equal(
+    buildBaseSku("Metanoia", "Preto", "adulto", "Branco"),
+    "CH-SL-METANOIA-BRC-PRT",
+  );
+});
+
 test("considera somente quantidades numéricas positivas", () => {
   assert.equal(positiveQuantity("100"), 100);
   assert.equal(positiveQuantity("2,5"), 2.5);

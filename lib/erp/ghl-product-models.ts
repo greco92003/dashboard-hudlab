@@ -4,6 +4,7 @@ import { positiveQuantity, type ErpGradeItem } from "./product-rules";
 export type GhlProductModel = {
   modelNumber: number;
   audience: "adulto" | "infantil";
+  soleColor: string | null;
   artUrl: string | null;
   grades: ErpGradeItem[];
   totalPairs: number;
@@ -41,6 +42,7 @@ export function extractGhlProductModels(
   );
   const models = new Map<string, GhlProductModel>();
   const artUrls = new Map<number, string>();
+  const soleColors = new Map<number, string>();
 
   const getModel = (modelNumber: number, audience: "adulto" | "infantil") => {
     const key = `${modelNumber}:${audience}`;
@@ -48,6 +50,7 @@ export function extractGhlProductModels(
     if (current) return current;
     const created: GhlProductModel = {
       modelNumber,
+      soleColor: null,
       artUrl: null,
       audience,
       grades: [],
@@ -58,6 +61,18 @@ export function extractGhlProductModels(
   };
 
   for (const definition of definitions) {
+    const soleMatch =
+      definition.name.match(/^Solado Modelo (\d+)$/i) ??
+      definition.fieldKey.match(/\.solado_modelo_(\d+)$/i);
+    if (soleMatch) {
+      const entry = fieldsById.get(definition.id);
+      const value = entry ? rawFieldValue(entry) : null;
+      if (typeof value === "string" && value.trim()) {
+        soleColors.set(Number(soleMatch[1]), value.trim());
+      }
+      continue;
+    }
+
     const grade = gradeDefinition(definition);
     if (grade) {
       const entry = fieldsById.get(definition.id);
@@ -99,6 +114,7 @@ export function extractGhlProductModels(
       ...model,
       grades: model.grades.sort((a, b) => a.size.localeCompare(b.size, "pt-BR")),
       artUrl: artUrls.get(model.modelNumber) ?? null,
+      soleColor: soleColors.get(model.modelNumber) ?? null,
     }))
     .sort((a, b) => a.modelNumber - b.modelNumber || a.audience.localeCompare(b.audience));
 }

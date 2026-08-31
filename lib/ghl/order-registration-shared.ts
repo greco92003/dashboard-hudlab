@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ORDER_REGISTRATION_PIPELINE_NAME = "Atendimento";
 export const ORDER_REGISTRATION_STAGE_NAME =
-  "Conferir Pgto/Completar Dados";
+  "Pagamento Confirmado/Completar Dados";
 export const ORDER_REGISTRATION_MAX_MODELS = 10;
 export const ORDER_REGISTRATION_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -31,6 +31,7 @@ export type OrderRegistrationOption = {
 
 export type OrderRegistrationModelDefinition = {
   modelNumber: number;
+  soleOptions: string[];
   adultOptions: OrderRegistrationOption[];
   childOptions: OrderRegistrationOption[];
 };
@@ -55,6 +56,7 @@ export type OrderRegistrationPaymentProof = {
 
 export type OrderRegistrationModelValue = {
   modelNumber: number;
+  soleColor: string;
   artUrl: string;
   adultGrade: Record<string, string>;
   hasChild: boolean;
@@ -111,6 +113,7 @@ export const orderRegistrationDraftSchema = z.object({
     .array(
       z.object({
         modelNumber: z.number().int().min(1).max(ORDER_REGISTRATION_MAX_MODELS),
+        soleColor: z.string().trim().max(100),
         artUrl: z.string().trim().max(2_000),
         adultGrade: gradeSchema,
         hasChild: z.boolean(),
@@ -256,6 +259,9 @@ export function validateOrderRegistrationDraft(
       issues.push(`Modelo ${model.modelNumber} não está configurado no GHL.`);
       continue;
     }
+    if (!definition.soleOptions.includes(model.soleColor)) {
+      issues.push(`Selecione a cor do solado do modelo ${model.modelNumber}.`);
+    }
     if (!model.artUrl || !isHttpUrl(model.artUrl)) {
       issues.push(
         `Artes aprovadas do modelo ${model.modelNumber} deve ser um link válido.`,
@@ -370,6 +376,9 @@ function validationFieldFromMessage(
   if (normalized.includes("artes aprovadas") && modelNumber) {
     return `models.${modelNumber}.artUrl`;
   }
+  if (normalized.includes("cor do solado") && modelNumber) {
+    return `models.${modelNumber}.soleColor`;
+  }
   if (normalized.includes("grade adulta") && modelNumber) {
     return `models.${modelNumber}.adultGrade`;
   }
@@ -466,6 +475,7 @@ export function blankOrderRegistrationModel(
 ): OrderRegistrationModelValue {
   return {
     modelNumber: definition.modelNumber,
+    soleColor: "",
     artUrl: "",
     adultGrade: Object.fromEntries(
       definition.adultOptions.map((option) => [option.id, ""]),

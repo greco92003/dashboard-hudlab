@@ -273,9 +273,11 @@ function ModelFields({
   onRemove?: () => void;
 }) {
   const artField = `models.${model.modelNumber}.artUrl`;
+  const soleField = `models.${model.modelNumber}.soleColor`;
   const adultGradeField = `models.${model.modelNumber}.adultGrade`;
   const childGradeField = `models.${model.modelNumber}.childGrade`;
   const artError = fieldErrors.get(artField);
+  const soleError = fieldErrors.get(soleField);
   const adultGradeError = fieldErrors.get(adultGradeField);
   const childGradeError = fieldErrors.get(childGradeField);
   const updateAdultGrade = (optionId: string, value: string) => {
@@ -315,6 +317,31 @@ function ModelFields({
             </Button>
           ) : null}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`sole-${model.modelNumber}`}>
+          Cor do solado modelo {model.modelNumber}
+        </Label>
+        <Select
+          value={model.soleColor}
+          onValueChange={(soleColor) => onChange({ ...model, soleColor })}
+        >
+          <SelectTrigger
+            id={`sole-${model.modelNumber}`}
+            className={cn(soleError && INVALID_FIELD_CLASS)}
+            aria-invalid={Boolean(soleError)}
+            aria-describedby={soleError ? `${soleField}-error` : undefined}
+          >
+            <SelectValue placeholder="Selecione a cor do solado" />
+          </SelectTrigger>
+          <SelectContent>
+            {definition.soleOptions.map((option) => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldError id={`${soleField}-error`} message={soleError} />
       </div>
 
       <div className="space-y-2">

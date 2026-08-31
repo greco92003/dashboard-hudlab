@@ -23,6 +23,7 @@ export type ErpDeal = {
 export type ErpProductModel = {
   modelNumber: number;
   audience: "adulto" | "infantil";
+  soleColor: string | null;
   artUrl: string | null;
   grades: ErpGradeItem[];
   totalPairs: number;

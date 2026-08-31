@@ -19,6 +19,7 @@ const config = {
   modelDefinitions: [
     {
       modelNumber: 1,
+      soleOptions: ["Branco", "Preto"],
       adultOptions: [
         { id: "adult-34", label: "34/35" },
         { id: "adult-36", label: "36/37" },
@@ -38,6 +39,7 @@ function validDraft() {
     models: [
       {
         modelNumber: 1,
+        soleColor: "Preto",
         artUrl: "https://drive.google.com/file/example",
         adultGrade: { "adult-34": "4", "adult-36": "6" },
         hasChild: false,
@@ -90,6 +92,14 @@ test("requires a child grade only when the checkbox is enabled", () => {
 
   const issues = validateOrderRegistrationDraft(draft, config, 1);
   assert.ok(issues.some((issue) => issue.includes("grade infantil")));
+});
+
+test("requires a valid sole color for every model", () => {
+  const draft = validDraft();
+  draft.models[0].soleColor = "";
+
+  const issues = getOrderRegistrationValidationIssues(draft, config, 1);
+  assert.ok(issues.some((issue) => issue.field === "models.1.soleColor"));
 });
 
 test("requires at least one payment proof", () => {

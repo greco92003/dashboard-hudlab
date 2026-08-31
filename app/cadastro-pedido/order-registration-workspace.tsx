@@ -212,7 +212,7 @@ export default function OrderRegistrationWorkspace() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">
-            Atendimento · Conferir Pgto/Completar Dados · Abertos e ganhos
+            Atendimento · Pagamento Confirmado/Completar Dados · Abertos e ganhos
           </Badge>
           <Button
             type="button"
