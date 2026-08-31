@@ -109,7 +109,7 @@ test("monta uma variação Fabricada com estrutura e etapa em um registro v2", (
       codigo: "CH-SL-AFK-PRT-3435",
       nome: "Chinelo 34/35",
       unidade: "PR",
-      preco: 49.9,
+      preco: "49.90",
       ncm: "64022000",
       origem: "0",
       situacao: "A",
@@ -160,6 +160,44 @@ test("envia preço zero explícito quando o cloner não possui nenhum preço", (
 
   assert.equal(tinyClonerBasePrice(cloner), 0);
   assert.equal(tinyClonerVariationPrice(cloner, cloner.variacoes[0]), 0);
+});
+
+test("serializa preço zero no formato decimal aceito pelo Tiny v2", () => {
+  const record = buildTinyV2ManufacturedProduct({
+    target: {
+      id: 10,
+      sku: "PRODUTO-3435",
+      descricao: "Produto 34/35",
+      precos: { preco: 0 },
+    },
+    source: {
+      id: 20,
+      sku: "CLONER-3435",
+      tipo: "F",
+      producao: { etapas: ["Montagem"] },
+    },
+  }, 1);
+
+  assert.equal(record.produto.preco, "0.00");
+});
+
+test("usa o preço da variação-cloner quando o Tiny não o retorna no destino", () => {
+  const record = buildTinyV2ManufacturedProduct({
+    target: {
+      id: 10,
+      sku: "PRODUTO-3435",
+      descricao: "Produto 34/35",
+    },
+    source: {
+      id: 20,
+      sku: "CLONER-3435",
+      tipo: "F",
+      precos: { preco: 59.9 },
+      producao: { etapas: ["Montagem"] },
+    },
+  }, 1);
+
+  assert.equal(record.produto.preco, "59.90");
 });
 
 test("prepara o lote Fabricado usando o retorno da criação, sem reler a variação", () => {

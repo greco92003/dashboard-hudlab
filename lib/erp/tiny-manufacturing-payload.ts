@@ -13,6 +13,12 @@ function variationSize(variation: TinyVariation) {
   )?.valor?.trim() || variation.grade?.[0]?.valor?.trim();
 }
 
+function tinyV2Price(value: number | null | undefined) {
+  return Number.isFinite(value) && value != null && value >= 0
+    ? value.toFixed(2)
+    : "0.00";
+}
+
 export function prepareTinyManufacturedVariations(
   product: TinyClonerDetail,
   cloner: TinyClonerDetail,
@@ -92,7 +98,10 @@ export function buildTinyV2ManufacturedProduct(
       codigo: target.sku.trim(),
       nome: target.descricao.trim(),
       unidade: target.unidade?.trim() || "PR",
-      preco: target.precos?.preco ?? 0,
+      // Tiny v2 treats the numeric value 0 as an omitted required field.
+      // Its product API examples serialize decimals as strings (for example,
+      // "50.25"), so keep that format even for a zero-valued product.
+      preco: tinyV2Price(target.precos?.preco ?? source.precos?.preco),
       ncm: target.ncm?.trim() ?? "",
       origem: String(target.origem ?? 0),
       situacao: "A",

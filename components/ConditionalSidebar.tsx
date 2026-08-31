@@ -12,6 +12,20 @@ interface ConditionalSidebarProps {
   defaultSidebarOpen?: boolean;
 }
 
+const operationalRoutes = [
+  "/programacao",
+  "/expedicao",
+  "/producao",
+  "/estoque",
+];
+
+// Keep the same responsive content inset and rhythm used by /dashboard.
+const standardContentClassName =
+  "flex flex-col gap-4 p-4 pt-6 md:gap-6 md:p-6 md:pt-8";
+const fullHeightContentClassName = `${standardContentClassName} min-h-0 flex-1 overflow-hidden`;
+const unpaddedFullHeightContentClassName =
+  "flex min-h-0 flex-1 flex-col overflow-hidden";
+
 export function ConditionalSidebar({
   children,
   defaultSidebarOpen = true,
@@ -19,19 +33,23 @@ export function ConditionalSidebar({
   const pathname = usePathname();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
 
-  // State to control sidebar open/close - only for non-board pages
+  // State to control sidebar open/close - only for non-collapsible pages
   const [forcedOpen, setForcedOpen] = useState(true);
   const [isClientReady, setIsClientReady] = useState(false);
 
-  // Pages where the sidebar can be collapsed by the user. Os kanbans de
-  // /programacao e /expedicao ocupam a tela inteira e precisam do espaço.
-  const isBoardPage = pathname === "/programacao" || pathname === "/expedicao";
+  // Pages where the sidebar can be collapsed by the user
+  const isOperationalPage = operationalRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
-  const isCollapsiblePage = isBoardPage || isNctsPage;
+  const isCollapsiblePage = isOperationalPage || isNctsPage;
 
-  // Check if current page needs full height layout (no padding)
-  // NCT pages handle their own padding via layout.tsx
-  const isFullHeightPage = isBoardPage || isNctsPage;
+  // Operational pages keep full height while using the same inset as /dashboard.
+  // NCT pages continue to handle their own padding via layout.tsx.
+  const isFullHeightPage = isOperationalPage || isNctsPage;
+  const contentClassName = isNctsPage
+    ? unpaddedFullHeightContentClassName
+    : isOperationalPage
+      ? fullHeightContentClassName
+      : standardContentClassName;
 
   // Mark client as ready after hydration
   useEffect(() => {
@@ -67,6 +85,9 @@ export function ConditionalSidebar({
     "/dashboard",
     "/deals",
     "/programacao",
+    "/expedicao",
+    "/producao",
+    "/estoque",
     "/sellers",
     "/sellers_v2",
     "/designers",
@@ -148,10 +169,10 @@ export function ConditionalSidebar({
       <div suppressHydrationWarning>
         <SidebarProvider
           defaultOpen={defaultSidebarOpen}
-          // Force sidebar open for all pages except os kanbans (only after client is ready)
-          open={isClientReady && !isBoardPage ? forcedOpen : undefined}
+          // Force sidebar open for all pages except collapsible pages (only after client is ready)
+          open={isClientReady && !isCollapsiblePage ? forcedOpen : undefined}
           onOpenChange={
-            isClientReady && !isBoardPage ? setForcedOpen : undefined
+            isClientReady && !isCollapsiblePage ? setForcedOpen : undefined
           }
           style={
             {
@@ -167,15 +188,7 @@ export function ConditionalSidebar({
             suppressHydrationWarning
           >
             <SiteHeader />
-            <div
-              className={
-                isFullHeightPage
-                  ? "flex flex-col flex-1 overflow-hidden"
-                  : "p-4 pt-6 md:p-6 md:pt-8"
-              }
-            >
-              {children}
-            </div>
+            <div className={contentClassName}>{children}</div>
           </SidebarInset>
         </SidebarProvider>
       </div>
@@ -207,15 +220,7 @@ export function ConditionalSidebar({
         suppressHydrationWarning
       >
         <SiteHeader />
-        <div
-          className={
-            isFullHeightPage
-              ? "flex flex-col flex-1 overflow-hidden"
-              : "p-4 pt-6 md:p-6 md:pt-8"
-          }
-        >
-          {children}
-        </div>
+        <div className={contentClassName}>{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

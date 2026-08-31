@@ -275,7 +275,7 @@ export default function ProducaoPage() {
   );
 
   return (
-    <div className="flex h-dvh min-w-0 flex-col gap-3 p-3">
+    <div className="flex h-dvh min-w-0 flex-col gap-4 p-4 pt-6 md:gap-6 md:p-6 md:pt-8">
       <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
         {botaoAba("programacao", "Produção", <Clock className="h-5 w-5" />)}
         {botaoAba("expedicao", "Expedição", <PackageCheck className="h-5 w-5" />)}

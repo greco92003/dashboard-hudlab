@@ -58,7 +58,7 @@ export default function EstoquePage() {
   }, [dados]);
 
   return (
-    <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
+    <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div className="flex flex-wrap items-center gap-3">
         <SidebarTrigger className="-ml-1" />
         <Package className="h-5 w-5" />
