@@ -61,6 +61,7 @@ import {
   buildBaseSku,
   buildProductTitle,
   buildVariationSku,
+  inferSoleColorFromCloner,
   inferUpperColorFromCloner,
 } from "@/lib/erp/product-rules";
 import { ContactImportCard } from "./contact-import-card";
@@ -72,6 +73,7 @@ type ProductMapping = {
   clonerId: string;
   existingProductId: string;
   color: string;
+  soleColor: string;
   title: string;
   baseSku: string;
   variationSkus: Record<string, string>;
@@ -290,6 +292,7 @@ export default function CadastroErpPage() {
           clonerId: "",
           existingProductId: "",
           color: "",
+          soleColor: model.soleColor ?? "",
           title: "",
           baseSku: "",
           variationSkus: {},
@@ -319,7 +322,7 @@ export default function CadastroErpPage() {
   const selectedContact = contacts.find((contact) => contact.id === query.contact);
   const selectedDeal = deals.find((deal) => deal.id === query.deal);
 
-  const updateMapping = (model: Pick<ErpProductModel, "modelNumber" | "audience">, patch: Partial<ProductMapping>) => {
+  const updateMapping = (model: ErpProductModel, patch: Partial<ProductMapping>) => {
     const key = productModelKey(model);
     setCreationResults([]);
     setMappings((current) => {
@@ -328,6 +331,7 @@ export default function CadastroErpPage() {
         clonerId: "",
         existingProductId: "",
         color: "",
+        soleColor: model.soleColor ?? "",
         title: "",
         baseSku: "",
         variationSkus: {},
@@ -345,6 +349,9 @@ export default function CadastroErpPage() {
   const chooseCloner = (model: ErpProductModel, clonerId: string) => {
     const cloner = cloners.find((item) => String(item.id) === clonerId);
     const color = cloner ? inferUpperColorFromCloner(cloner.description) : "";
+    const soleColor = cloner
+      ? inferSoleColorFromCloner(cloner.description) || model.soleColor || ""
+      : model.soleColor || "";
     const date = new Date(preview?.deal.createdAt ?? Date.now());
     const opportunityName = productBaseName;
     updateMapping(model, {
@@ -353,19 +360,21 @@ export default function CadastroErpPage() {
       existingProductId: "",
       variationSkus: {},
       color,
+      soleColor,
       title: color
-        ? buildProductTitle({ opportunityName, color, soleColor: model.soleColor ?? undefined, modelNumber: model.modelNumber, audience: model.audience, date })
+        ? buildProductTitle({ opportunityName, color, soleColor, modelNumber: model.modelNumber, audience: model.audience, date })
         : "",
-      baseSku: color ? buildBaseSku(opportunityName, color, model.audience, model.soleColor ?? undefined) : "",
+      baseSku: color ? buildBaseSku(opportunityName, color, model.audience, soleColor) : "",
     });
   };
 
-  const chooseExistingProduct = (model: Pick<ErpProductModel, "modelNumber" | "audience">, product: TinyExistingProduct) => {
+  const chooseExistingProduct = (model: ErpProductModel, product: TinyExistingProduct) => {
     updateMapping(model, {
       mode: "existing",
       clonerId: "",
       existingProductId: String(product.id),
       color: "",
+      soleColor: "",
       title: product.description,
       baseSku: product.sku,
       variationSkus: product.variationSkus,
@@ -388,12 +397,12 @@ export default function CadastroErpPage() {
           title: buildProductTitle({
             opportunityName: value,
             color: mapping.color,
-            soleColor: model.soleColor ?? undefined,
+            soleColor: mapping.soleColor || model.soleColor || undefined,
             modelNumber: model.modelNumber,
             date,
             audience: model.audience,
           }),
-          baseSku: buildBaseSku(value, mapping.color, model.audience, model.soleColor ?? undefined),
+          baseSku: buildBaseSku(value, mapping.color, model.audience, mapping.soleColor || model.soleColor || undefined),
         };
       }
       return next;
@@ -408,14 +417,14 @@ export default function CadastroErpPage() {
         ? buildProductTitle({
             opportunityName: productBaseName,
             color,
-            soleColor: model.soleColor ?? undefined,
+            soleColor: mappings[productModelKey(model)]?.soleColor || model.soleColor || undefined,
             modelNumber: model.modelNumber,
             audience: model.audience,
             date,
           })
         : "",
       baseSku: color
-        ? buildBaseSku(productBaseName, color, model.audience, model.soleColor ?? undefined)
+        ? buildBaseSku(productBaseName, color, model.audience, mappings[productModelKey(model)]?.soleColor || model.soleColor || undefined)
         : "",
     });
   };
@@ -736,7 +745,7 @@ export default function CadastroErpPage() {
                         <div>
                           <p className="font-semibold">{productModelLabel(model)}</p>
                           <p className="text-xs text-muted-foreground">{model.totalPairs} pares · {model.grades.length} numerações</p>
-                          <Badge variant="outline" className="mt-2 font-normal">Solado: {model.soleColor ?? "não informado"}</Badge>
+                          <Badge variant="outline" className="mt-2 font-normal">Solado no pedido: {model.soleColor ?? "não informado"}</Badge>
                         </div>
                         <ArtworkPreview url={model.artUrl} modelNumber={model.modelNumber} />
                         <div className="flex flex-wrap gap-1.5">
@@ -769,7 +778,13 @@ export default function CadastroErpPage() {
                             </SelectContent>
                           </Select>
                           {cloner && (
-                            <p className="text-xs text-muted-foreground">SKU {cloner.sku} · {cloner.variationSizes.join(", ") || "grade não identificada"}</p>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              <p>SKU {cloner.sku} · {cloner.variationSizes.join(", ") || "grade não identificada"}</p>
+                              <p>Combinação usada no produto: {mapping?.soleColor || "solado não identificado"} - {mapping?.color || "gáspea não identificada"}</p>
+                              {model.soleColor && mapping?.soleColor && model.soleColor !== mapping.soleColor ? (
+                                <p className="font-medium text-amber-600 dark:text-amber-400">Atenção: o solado do cloner é diferente do solado salvo no pedido.</p>
+                              ) : null}
+                            </div>
                           )}
                         </div>
                         <div className="space-y-2">

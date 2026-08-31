@@ -85,6 +85,12 @@ export function buildProductTitle(input: {
   return `${product} ${buildModelCode(input.date, input.modelNumber)} - ${opportunity} - ${colors}`;
 }
 
+export function inferSoleColorFromCloner(description: string): string {
+  const normalized = description.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sole = normalized.match(/SOLA(?:DO)?\s*\(([^)]+)\)/i)?.[1];
+  return sole ? normalizeColorName(sole) : "";
+}
+
 export function buildBaseSku(
   opportunityName: string,
   color: string,

@@ -7,6 +7,7 @@ import {
   buildProductTitle,
   buildVariationSku,
   inferUpperColorFromCloner,
+  inferSoleColorFromCloner,
   positiveQuantity,
 } from "../lib/erp/product-rules.ts";
 
@@ -52,6 +53,14 @@ test("infere a cor da gáspea a partir dos nomes dos cloners", () => {
   );
   assert.equal(inferUpperColorFromCloner("Chinelo Slide CLONER - BRANCO (9 variações)"), "Branco");
   assert.equal(abbreviateColor("Branca"), "BRC");
+  assert.equal(
+    inferSoleColorFromCloner("Chinelo Slide CLONER - SOLA (BRANCA) / GÁSPEA (PRETA)"),
+    "Branco",
+  );
+  assert.equal(
+    inferSoleColorFromCloner("Chinelo Slide CLONER - SOLADO (PRETO) / GÁSPEA (BRANCA)"),
+    "Preto",
+  );
 });
 
 test("combina a cor do solado antes da cor da gáspea no nome e SKU", () => {
@@ -73,6 +82,28 @@ test("combina a cor do solado antes da cor da gáspea no nome e SKU", () => {
   assert.equal(
     buildBaseSku("Metanoia", "Preto", "adulto", "Branco"),
     "CH-SL-METANOIA-BRC-PRT",
+  );
+});
+
+test("usa a combinação completa do cloner no caso Vivian Choices to Grow", () => {
+  const cloner = "Chinelo Slide CLONER - SOLA (BRANCA) / GÁSPEA (PRETA)";
+  const soleColor = inferSoleColorFromCloner(cloner);
+  const color = inferUpperColorFromCloner(cloner);
+  const date = new Date("2026-08-03T12:00:00-03:00");
+
+  assert.equal(
+    buildBaseSku("Vivian - choices to grow", color, "adulto", soleColor),
+    "CH-SL-VIVIAN-CHOICES-TO-GROW-BRC-PRT",
+  );
+  assert.equal(
+    buildProductTitle({
+      opportunityName: "Vivian - choices to grow",
+      soleColor,
+      color,
+      modelNumber: 1,
+      date,
+    }),
+    "Chinelo Slide 082601 - VIVIAN - CHOICES TO GROW - Branco - Preto",
   );
 });
 
