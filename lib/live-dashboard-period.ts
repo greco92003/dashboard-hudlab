@@ -12,14 +12,14 @@ export interface LiveDashboardPeriod {
   endDate: string;
 }
 
-/** August 2026 exceptionally starts on the 4th; every other month starts on 1. */
+/** The live dashboard always covers the full current month. */
 export function getLiveDashboardPeriod(now = new Date()): LiveDashboardPeriod {
   const brazilNow = new Date(now.getTime() - BRAZIL_UTC_OFFSET_MS);
   const year = brazilNow.getUTCFullYear();
   const monthIndex = brazilNow.getUTCMonth();
   const todayDay = brazilNow.getUTCDate();
   const totalDaysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const startDay = year === 2026 && monthIndex === 7 ? 4 : 1;
+  const startDay = 1;
   const countedDays = totalDaysInMonth - startDay + 1;
   const elapsedDays = Math.max(
     0,

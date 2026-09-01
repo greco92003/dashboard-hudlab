@@ -25,6 +25,7 @@ import {
 } from "@/lib/ghl/order-registration-shared";
 
 type FieldName =
+  | "seller"
   | "orderType"
   | "embarkDate"
   | "designer"
@@ -55,6 +56,7 @@ type ResolvedFields = {
 };
 
 const FIELD_KEYS: Record<FieldName, string> = {
+  seller: "vendedor",
   orderType: "tipo_do_pedido",
   embarkDate: "data_de_embarque",
   designer: "designer_responsvel",
@@ -137,7 +139,9 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
   for (const [name, fieldKey] of Object.entries(FIELD_KEYS) as Array<
     [FieldName, string]
   >) {
-    const definition = definitionsByKey.get(fieldKey);
+    const definition =
+      definitionsByKey.get(fieldKey) ??
+      (name === "seller" ? definitionByName("Vendedor") : undefined);
     if (!definition) {
       throw new OrderRegistrationError(
         `O campo "${fieldKey}" não foi encontrado no GHL.`,
@@ -348,6 +352,7 @@ function mapOpportunity(
   return {
     id: opportunity.id,
     name: opportunity.name || "Oportunidade sem nome",
+    seller: valueAsString(fieldValue(resolved.fields.seller)),
     monetaryValue: opportunity.monetaryValue,
     source: opportunity.source,
     status: opportunity.status,
@@ -593,6 +598,7 @@ export async function saveOrderRegistration(
   }
 
   const customFields = [
+    fieldUpdate(resolved.fields.seller, draft.seller),
     fieldUpdate(resolved.fields.orderType, draft.orderType),
     fieldUpdate(
       resolved.fields.embarkDate,
@@ -668,6 +674,7 @@ export async function saveOrderRegistration(
   }
 
   await updateGhlOpportunity(opportunityId, {
+    name: draft.opportunityName,
     monetaryValue: Math.round(Number(draft.monetaryValue) * 100) / 100,
     customFields,
   });

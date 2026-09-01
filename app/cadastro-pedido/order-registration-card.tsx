@@ -124,6 +124,42 @@ function normalizeGradeLabel(label: string): string {
   return label.trim().toLocaleLowerCase("pt-BR");
 }
 
+function orderTypeBadgeClass(orderType: string): string {
+  const normalized = orderType
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (normalized === "evento") {
+    return "border-purple-500 bg-purple-50 text-purple-700 hover:bg-purple-50 dark:border-purple-400 dark:bg-purple-950/70 dark:text-purple-200";
+  }
+  if (normalized === "amostra") {
+    return "border-orange-500 bg-orange-50 text-orange-700 hover:bg-orange-50 dark:border-orange-400 dark:bg-orange-950/70 dark:text-orange-200";
+  }
+  if (normalized === "reposicao") {
+    return "border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-50 dark:border-blue-400 dark:bg-blue-950/70 dark:text-blue-200";
+  }
+  if (normalized === "pedido") {
+    return "border-green-600 bg-green-50 text-green-700 hover:bg-green-50 dark:border-green-400 dark:bg-green-950/70 dark:text-green-200";
+  }
+  return "border-muted-foreground/40 bg-muted text-muted-foreground hover:bg-muted";
+}
+
+function orderTypeAccentClass(orderType: string): string {
+  const normalized = orderType
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (normalized === "evento") return "border-l-purple-500";
+  if (normalized === "amostra") return "border-l-orange-500";
+  if (normalized === "reposicao") return "border-l-blue-500";
+  if (normalized === "pedido") return "border-l-green-600";
+  return "border-l-muted-foreground/40";
+}
+
 function remapGradeValues(
   values: Record<string, string>,
   sourceOptions: OrderRegistrationOption[],
@@ -168,30 +204,14 @@ function SummaryField({
   label,
   value,
   icon: Icon,
-  tone,
 }: {
   label: string;
   value: string;
   icon: typeof CalendarDays;
-  tone: "won" | "open";
 }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 rounded-lg border p-3 shadow-sm",
-        tone === "won"
-          ? "border-emerald-300 bg-emerald-200/80 text-emerald-950 dark:border-emerald-700 dark:bg-emerald-900/75 dark:text-emerald-50"
-          : "border-sky-300 bg-sky-200/80 text-sky-950 dark:border-sky-700 dark:bg-sky-900/75 dark:text-sky-50",
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-center gap-2 text-xs font-medium",
-          tone === "won"
-            ? "text-emerald-800 dark:text-emerald-200"
-            : "text-sky-800 dark:text-sky-200",
-        )}
-      >
+    <div className="min-w-0 px-4 py-3 first:pl-0 last:pr-0">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span>{label}</span>
       </div>
@@ -434,6 +454,8 @@ export function OrderRegistrationCard({
   onSaved,
   onEdit,
   onCancel,
+  restoredDraft,
+  onDraftChange,
 }: {
   opportunity: OrderRegistrationOpportunity;
   config: OrderRegistrationConfig;
@@ -441,9 +463,11 @@ export function OrderRegistrationCard({
   onSaved: (opportunity: OrderRegistrationOpportunity) => void;
   onEdit?: () => void;
   onCancel?: () => void;
+  restoredDraft?: OrderRegistrationDraft | null;
+  onDraftChange?: (draft: OrderRegistrationDraft) => void;
 }) {
   const [draft, setDraft] = useState<OrderRegistrationDraft>(() =>
-    createOrderRegistrationDraft(opportunity),
+    restoredDraft ?? createOrderRegistrationDraft(opportunity),
   );
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
@@ -451,9 +475,13 @@ export function OrderRegistrationCard({
   const [serverIssues, setServerIssues] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const restoredDraftRef = useRef(restoredDraft);
+  restoredDraftRef.current = restoredDraft;
 
   useEffect(() => {
-    setDraft(createOrderRegistrationDraft(opportunity));
+    setDraft(
+      restoredDraftRef.current ?? createOrderRegistrationDraft(opportunity),
+    );
     setSelectedFiles([]);
     setServerIssues([]);
     setShowIssues(false);
@@ -498,7 +526,9 @@ export function OrderRegistrationCard({
     selectedFiles.length;
 
   const updateDraft = (update: Partial<OrderRegistrationDraft>) => {
-    setDraft((current) => ({ ...current, ...update }));
+    const updatedDraft = { ...draft, ...update };
+    setDraft(updatedDraft);
+    onDraftChange?.(updatedDraft);
     setServerIssues([]);
   };
 
@@ -525,27 +555,25 @@ export function OrderRegistrationCard({
 
   const removeModel = (modelNumber: number) => {
     if (modelNumber <= 1) return;
-    setDraft((current) => {
-      const remainingModels = current.models.filter(
-        (model) => model.modelNumber !== modelNumber,
+    const remainingModels = draft.models.filter(
+      (model) => model.modelNumber !== modelNumber,
+    );
+    const models = remainingModels.map((model, index) => {
+      const sourceDefinition = config.modelDefinitions.find(
+        (definition) => definition.modelNumber === model.modelNumber,
       );
-      const models = remainingModels.map((model, index) => {
-        const sourceDefinition = config.modelDefinitions.find(
-          (definition) => definition.modelNumber === model.modelNumber,
-        );
-        const targetDefinition = config.modelDefinitions.find(
-          (definition) => definition.modelNumber === index + 1,
-        );
-        return sourceDefinition && targetDefinition
-          ? remapModelToDefinition(
-              model,
-              sourceDefinition,
-              targetDefinition,
-            )
-          : model;
-      });
-      return { ...current, models };
+      const targetDefinition = config.modelDefinitions.find(
+        (definition) => definition.modelNumber === index + 1,
+      );
+      return sourceDefinition && targetDefinition
+        ? remapModelToDefinition(
+            model,
+            sourceDefinition,
+            targetDefinition,
+          )
+        : model;
     });
+    updateDraft({ models });
     setServerIssues([]);
   };
 
@@ -629,7 +657,12 @@ export function OrderRegistrationCard({
   const isWon = opportunity.status?.toLowerCase() === "won";
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
+    <Card
+      className={cn(
+        "gap-0 overflow-hidden border-l-4 py-0",
+        orderTypeAccentClass(opportunity.orderType),
+      )}
+    >
       <CardHeader
         className={cn(
           "gap-4 border-b py-6",
@@ -678,6 +711,15 @@ export function OrderRegistrationCard({
                 <span>{opportunity.contact.phone}</span>
               ) : null}
             </div>
+            <div className="mt-2">
+              <Badge
+                variant="outline"
+                className={orderTypeBadgeClass(opportunity.orderType)}
+                title="Tipo de pedido"
+              >
+                {opportunity.orderType || "Tipo não informado"}
+              </Badge>
+            </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
@@ -704,31 +746,29 @@ export function OrderRegistrationCard({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryField
-            label="Tipo de pedido"
-            value={opportunity.orderType || "Não informado"}
-            icon={ReceiptText}
-            tone={isWon ? "won" : "open"}
-          />
-          <SummaryField
-            label="Data de embarque"
-            value={formatDateInput(opportunity.embarkDate)}
-            icon={CalendarDays}
-            tone={isWon ? "won" : "open"}
-          />
-          <SummaryField
-            label="Valor"
-            value={formatMoney(opportunity.monetaryValue)}
-            icon={CircleDollarSign}
-            tone={isWon ? "won" : "open"}
-          />
-          <SummaryField
-            label="Designer responsável"
-            value={opportunity.designer || "Não informado"}
-            icon={Palette}
-            tone={isWon ? "won" : "open"}
-          />
+        <div className="overflow-x-auto rounded-lg border border-border/60 bg-background/20">
+          <div className="grid min-w-[720px] grid-cols-4 divide-x divide-border/60 px-4">
+            <SummaryField
+              label="Data de embarque"
+              value={formatDateInput(opportunity.embarkDate)}
+              icon={CalendarDays}
+            />
+            <SummaryField
+              label="Valor"
+              value={formatMoney(opportunity.monetaryValue)}
+              icon={CircleDollarSign}
+            />
+            <SummaryField
+              label="Vendedor"
+              value={opportunity.seller || "Não informado"}
+              icon={UserRound}
+            />
+            <SummaryField
+              label="Designer responsável"
+              value={opportunity.designer || "Não informado"}
+              icon={Palette}
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
@@ -769,6 +809,44 @@ export function OrderRegistrationCard({
               description="Informações que identificam e totalizam o pedido."
             >
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor={`opportunity-name-${opportunity.id}`}>
+                    Nome da oportunidade
+                  </Label>
+                  <Input
+                    id={`opportunity-name-${opportunity.id}`}
+                    className={cn(errorFor("opportunityName") && INVALID_FIELD_CLASS)}
+                    aria-invalid={Boolean(errorFor("opportunityName"))}
+                    aria-describedby={errorFor("opportunityName") ? `opportunity-name-${opportunity.id}-error` : undefined}
+                    value={draft.opportunityName}
+                    onChange={(event) =>
+                      updateDraft({ opportunityName: event.target.value })
+                    }
+                    placeholder="Nome da oportunidade"
+                  />
+                  <FieldError
+                    id={`opportunity-name-${opportunity.id}-error`}
+                    message={errorFor("opportunityName")}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor={`seller-${opportunity.id}`}>Vendedor</Label>
+                  <Input
+                    id={`seller-${opportunity.id}`}
+                    className={cn(errorFor("seller") && INVALID_FIELD_CLASS)}
+                    aria-invalid={Boolean(errorFor("seller"))}
+                    aria-describedby={errorFor("seller") ? `seller-${opportunity.id}-error` : undefined}
+                    value={draft.seller}
+                    onChange={(event) =>
+                      updateDraft({ seller: event.target.value })
+                    }
+                    placeholder="Nome do vendedor"
+                  />
+                  <FieldError
+                    id={`seller-${opportunity.id}-error`}
+                    message={errorFor("seller")}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor={`order-type-${opportunity.id}`}>Tipo de pedido</Label>
                   <Select

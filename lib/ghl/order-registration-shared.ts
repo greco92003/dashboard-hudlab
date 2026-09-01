@@ -66,6 +66,7 @@ export type OrderRegistrationModelValue = {
 export type OrderRegistrationOpportunity = {
   id: string;
   name: string;
+  seller: string;
   monetaryValue: number | null;
   source: string | null;
   status: string | null;
@@ -105,6 +106,8 @@ const gradeSchema = z.record(z.string(), z.string().max(12));
 
 export const orderRegistrationDraftSchema = z.object({
   updatedAt: z.string().nullable(),
+  opportunityName: z.string().trim().min(1, "Nome da oportunidade é obrigatório.").max(500),
+  seller: z.string().trim().min(1, "Vendedor é obrigatório.").max(255),
   monetaryValue: z.string().trim(),
   orderType: z.string().trim(),
   embarkDate: z.string().trim(),
@@ -216,6 +219,8 @@ export function validateOrderRegistrationDraft(
   paymentProofCount: number,
 ): string[] {
   const issues: string[] = [];
+  if (!draft.opportunityName) issues.push("Nome da oportunidade é obrigatório.");
+  if (!draft.seller) issues.push("Vendedor é obrigatório.");
   if (!config.orderTypes.includes(draft.orderType)) {
     issues.push("Selecione um tipo de pedido válido.");
   }
@@ -389,6 +394,8 @@ function validationFieldFromMessage(
     return `models.${modelNumber}.artUrl`;
   }
   if (normalized.includes("tipo de pedido")) return "orderType";
+  if (normalized.includes("nome da oportunidade")) return "opportunityName";
+  if (normalized.includes("vendedor")) return "seller";
   if (normalized.includes("data de embarque")) return "embarkDate";
   if (normalized.includes("designer responsável")) return "designer";
   if (normalized.includes("valor do pedido")) return "monetaryValue";
@@ -436,6 +443,8 @@ export function createOrderRegistrationDraft(
 ): OrderRegistrationDraft {
   return {
     updatedAt: opportunity.updatedAt,
+    opportunityName: opportunity.name,
+    seller: opportunity.seller,
     monetaryValue:
       opportunity.monetaryValue === null ? "" : String(opportunity.monetaryValue),
     orderType: opportunity.orderType,

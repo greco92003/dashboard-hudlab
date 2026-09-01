@@ -132,6 +132,8 @@ export interface GhlPipeline {
 }
 
 export type GhlOpportunityUpdate = {
+  /** Nome exibido da oportunidade no GHL. */
+  name?: string;
   monetaryValue?: number;
   /** Avança o negócio de etapa. Usado pelo botão Concluir da /producao. */
   pipelineStageId?: string;

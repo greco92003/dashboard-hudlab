@@ -64,6 +64,7 @@ import {
 import { SETORES, type Setor } from "@/lib/ncts";
 import type { Database } from "@/types/supabase";
 import { usePermissions } from "@/hooks/usePermissions";
+import { StableAvatar } from "@/components/StableAvatar";
 
 type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 type AdminProfileUpdate = Pick<
@@ -560,7 +561,24 @@ export function UserManagement({}: UserManagementProps) {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.email}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <StableAvatar
+                          src={user.avatar_url}
+                          fallback={(
+                            user.first_name?.[0] ||
+                            user.last_name?.[0] ||
+                            user.email?.[0] ||
+                            "U"
+                          ).toUpperCase()}
+                          alt={`Avatar de ${user.email}`}
+                          size="md"
+                          updatedAt={user.updated_at}
+                          className="shrink-0"
+                        />
+                        <span>{user.email}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {user.first_name || user.last_name
                         ? `${user.first_name || ""} ${

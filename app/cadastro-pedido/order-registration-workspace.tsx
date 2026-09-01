@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
+import {
+  parseAsJson,
+  parseAsString,
+  parseAsStringLiteral,
+  useQueryStates,
+} from "nuqs";
 import {
   ArrowLeft,
   ClipboardCheck,
@@ -23,12 +28,51 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import type {
+  OrderRegistrationDraft,
   OrderRegistrationOpportunity,
   OrderRegistrationResponse,
 } from "@/lib/ghl/order-registration-shared";
+import { orderRegistrationDraftSchema } from "@/lib/ghl/order-registration-shared";
 import { OrderRegistrationCard } from "./order-registration-card";
 
 const ORDER_REGISTRATION_TABS = ["oportunidades", "editar"] as const;
+
+type PersistedOrderRegistrationDraft = {
+  opportunityId: string;
+  draft: OrderRegistrationDraft;
+};
+
+const persistedDraftParser = parseAsJson<PersistedOrderRegistrationDraft>(
+  (value) => {
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    if (typeof record.opportunityId !== "string") return null;
+    const parsedDraft = orderRegistrationDraftSchema.safeParse(record.draft);
+    if (!parsedDraft.success) return null;
+    return {
+      opportunityId: record.opportunityId,
+      draft: parsedDraft.data,
+    };
+  },
+);
+
+function compactDraftForUrl(
+  draft: OrderRegistrationDraft,
+): OrderRegistrationDraft {
+  const filledValues = (values: Record<string, string>) =>
+    Object.fromEntries(
+      Object.entries(values).filter(([, value]) => value.trim() !== ""),
+    );
+
+  return {
+    ...draft,
+    models: draft.models.map((model) => ({
+      ...model,
+      adultGrade: filledValues(model.adultGrade),
+      childGrade: filledValues(model.childGrade),
+    })),
+  };
+}
 
 function LoadingCard() {
   return (
@@ -87,12 +131,16 @@ function MissingOpportunity({
 }
 
 export default function OrderRegistrationWorkspace() {
-  const [{ tab, opportunity: opportunityId }, setQuery] = useQueryStates(
+  const [
+    { tab, opportunity: opportunityId, draft: persistedDraft },
+    setQuery,
+  ] = useQueryStates(
     {
       tab: parseAsStringLiteral(ORDER_REGISTRATION_TABS).withDefault(
         "oportunidades",
       ),
       opportunity: parseAsString,
+      draft: persistedDraftParser,
     },
     { history: "push" },
   );
@@ -104,7 +152,11 @@ export default function OrderRegistrationWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (refresh = false) => {
-    refresh ? setRefreshing(true) : setLoading(true);
+    if (refresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const response = await fetch("/api/cadastro-pedido", {
@@ -157,7 +209,7 @@ export default function OrderRegistrationWorkspace() {
 
   const returnToList = useCallback(() => {
     void setQuery(
-      { tab: "oportunidades", opportunity: null },
+      { tab: "oportunidades", opportunity: null, draft: null },
       { scroll: true },
     );
   }, [setQuery]);
@@ -165,7 +217,7 @@ export default function OrderRegistrationWorkspace() {
   const editOpportunity = useCallback(
     (id: string) => {
       void setQuery(
-        { tab: "editar", opportunity: id },
+        { tab: "editar", opportunity: id, draft: null },
         { scroll: true },
       );
     },
@@ -178,6 +230,22 @@ export default function OrderRegistrationWorkspace() {
       returnToList();
     },
     [returnToList, updateOpportunity],
+  );
+
+  const persistDraft = useCallback(
+    (draft: OrderRegistrationDraft) => {
+      if (!opportunityId) return;
+      void setQuery(
+        {
+          draft: {
+            opportunityId,
+            draft: compactDraftForUrl(draft),
+          },
+        },
+        { history: "replace", shallow: true, scroll: false },
+      );
+    },
+    [opportunityId, setQuery],
   );
 
   const changeTab = (value: string) => {
@@ -194,6 +262,12 @@ export default function OrderRegistrationWorkspace() {
     snapshot?.opportunities.find(
       (opportunity) => opportunity.id === opportunityId,
     ) ?? null;
+  const restoredDraft =
+    selectedOpportunity &&
+    persistedDraft?.opportunityId === selectedOpportunity.id &&
+    persistedDraft.draft.updatedAt === selectedOpportunity.updatedAt
+      ? persistedDraft.draft
+      : null;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -322,9 +396,12 @@ export default function OrderRegistrationWorkspace() {
                 </p>
               </div>
               <OrderRegistrationCard
+                key={selectedOpportunity.id}
                 opportunity={selectedOpportunity}
                 config={snapshot.config}
                 mode="editor"
+                restoredDraft={restoredDraft}
+                onDraftChange={persistDraft}
                 onSaved={handleSaved}
                 onCancel={returnToList}
               />

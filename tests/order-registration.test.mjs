@@ -32,6 +32,8 @@ const config = {
 function validDraft() {
   return {
     updatedAt: "2026-08-21T12:00:00.000Z",
+    opportunityName: "Pedido Cliente Exemplo",
+    seller: "Maria",
     monetaryValue: "529",
     orderType: "Pedido",
     embarkDate: "2026-09-11",
@@ -109,6 +111,8 @@ test("requires at least one payment proof", () => {
 
 test("associates required validation messages with their fields", () => {
   const draft = validDraft();
+  draft.opportunityName = "";
+  draft.seller = "";
   draft.orderType = "";
   draft.designer = "";
   draft.models[0].artUrl = "";
@@ -118,6 +122,8 @@ test("associates required validation messages with their fields", () => {
   const fields = new Set(issues.map((issue) => issue.field));
 
   assert.ok(fields.has("orderType"));
+  assert.ok(fields.has("opportunityName"));
+  assert.ok(fields.has("seller"));
   assert.ok(fields.has("designer"));
   assert.ok(fields.has("models.1.artUrl"));
   assert.ok(fields.has("carrier"));
