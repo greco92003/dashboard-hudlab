@@ -10,8 +10,6 @@ import {
   publicoDaNumeracao,
   SOLADO_PARAMETROS_PADRAO,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
-  SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO,
-  SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
 } from "../lib/estoque/solados.ts";
 
@@ -381,93 +379,49 @@ test("completar não mexe em nada quando não há peso nenhum", () => {
   const itens = [{ pares: 0, peso: 0 }];
   assert.deepEqual(completarGrade(itens, 240, 40), [0]);
 });
+// ── curva e janela ──────────────────────────────────────────────────────────
 
-// ── curva: abertos + faturados ──────────────────────────────────────────────
-
-const faturado = (over = {}) =>
-  negocio({ etapa: "Recebido Pedido", ...over });
-
-test("o pedido faturado engrossa a curva sem entrar na necessidade", () => {
-  const resumo = montarResumo({
-    skus: [sku("Preto", "40/41", 100), sku("Branco", "36/37", 100)],
-    negocios: [
-      negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
-    ],
-    faturados: [
-      faturado({ itens: [{ cor: "Branco", numeracao: "36/37", pares: 10 }] }),
-    ],
-    parametros: { ...comCobertura, tetoInfluenciaPedido: 1 },
-  });
-
-  // O faturado pesa na curva...
-  assert.equal(linha(resumo, "Branco", "36/37").minimo, 497);
-  // ...mas o Tiny já o baixou, então não pode reaparecer como necessidade.
-  assert.equal(linha(resumo, "Branco", "36/37").necessidade, 0);
-  assert.equal(linha(resumo, "Branco", "36/37").projetado, 100);
-  assert.equal(resumo.totalNecessidade, 10);
-});
-
-test("pedido legado fica fora da curva, não só da necessidade", () => {
-  // O MANYCHAT é um dos 28 já baixados no cadastro do ERP. Ele saiu da
-  // necessidade desde o começo, mas ao voltar como "faturado" virou 90% da
-  // curva e reescreveu a política sozinho — pedido de 500 pares que, ainda por
-  // cima, quase saiu branco em vez de preto.
-  const manychat = faturado({
-    dealId: [...NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP][0],
-    itens: [{ cor: "Preto", numeracao: "38/39", pares: 500 }],
-  });
-  const resumo = montarResumo({
-    skus: [sku("Preto", "38/39", 0), sku("Preto", "40/41", 0)],
-    negocios: [
-      negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
-    ],
-    faturados: [manychat],
-    parametros: { ...comCobertura, tetoInfluenciaPedido: 1 },
-  });
-
-  assert.equal(resumo.curva.pedidosFaturados, 0, "o legado não conta na curva");
-  assert.equal(linha(resumo, "Preto", "38/39").minimo, 20, "só a trava");
-  // A cobertura inteira fica com quem é real.
-  assert.equal(linha(resumo, "Preto", "40/41").minimo, 993);
-});
-
-test("o resumo mostra sobre quanto a curva se apoia", () => {
+test("a curva sai dos pedidos da janela e o resumo diz quantos são", () => {
   const resumo = montarResumo({
     skus: [sku("Preto", "40/41", 0)],
     negocios: [
       negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
       negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
     ],
-    faturados: [
-      faturado({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 30 }] }),
-    ],
     parametros: comCobertura,
   });
-  assert.equal(resumo.curva.pedidosAbertos, 2);
-  assert.equal(resumo.curva.pedidosFaturados, 1);
-  assert.equal(resumo.curva.paresFaturados, 30);
+  assert.equal(resumo.curva.pedidos, 2);
 });
 
-test("a janela e as etapas de faturado nunca se cruzam", () => {
-  // Se uma etapa aparecesse nas duas listas, o mesmo pedido entraria como
-  // necessidade E como histórico ao mesmo tempo.
-  const cruzamento = (janela, faturados) =>
-    janela.filter((etapa) => faturados.includes(etapa));
+test("pedido legado não pesa na curva nem na necessidade", () => {
+  // O MANYCHAT é um dos 28 já baixados no cadastro do ERP. Ele tem 500 pares e
+  // reescreveria a política sozinho se entrasse.
+  const resumo = montarResumo({
+    skus: [sku("Preto", "38/39", 0), sku("Preto", "40/41", 0)],
+    negocios: [
+      negocio({
+        dealId: [...NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP][0],
+        itens: [{ cor: "Preto", numeracao: "38/39", pares: 500 }],
+      }),
+      negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
+    ],
+    parametros: { ...comCobertura, tetoInfluenciaPedido: 1 },
+  });
+  assert.equal(resumo.curva.pedidos, 1);
+  assert.equal(linha(resumo, "Preto", "38/39").minimo, 20, "só a trava");
+  assert.equal(linha(resumo, "Preto", "40/41").minimo, 993);
+});
 
-  assert.deepEqual(
-    cruzamento(
-      SOLADO_STAGE_TITLES_ATENDIMENTO,
-      SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO,
-    ),
-    [],
-  );
-  assert.deepEqual(
-    cruzamento(
-      SOLADO_STAGE_TITLES_REPRESENTANTES,
-      SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES,
-    ),
-    [],
-  );
+test("a janela vai até a Fiscal e para na Coleta", () => {
+  // A nota sai na Fiscal e o card só vai para a Coleta depois dela. Parar antes
+  // da Fiscal deixava o pedido fora da necessidade enquanto o Tiny ainda não
+  // tinha baixado — invisível dos dois lados, comprando de menos.
+  assert.ok(SOLADO_STAGE_TITLES_ATENDIMENTO.includes("Fiscal"));
+  assert.ok(!SOLADO_STAGE_TITLES_ATENDIMENTO.includes("Coleta"));
+  assert.ok(!SOLADO_STAGE_TITLES_ATENDIMENTO.includes("Recebido Pedido"));
+
+  assert.ok(SOLADO_STAGE_TITLES_REPRESENTANTES.includes("Fiscal/Cobrança"));
+  assert.ok(!SOLADO_STAGE_TITLES_REPRESENTANTES.includes("Coleta"));
 });
 
 test("o teto deixa de morder quando a amostra engorda", () => {
@@ -477,17 +431,4 @@ test("o teto deixa de morder quando a amostra engorda", () => {
     negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
   );
   assert.equal(curvaDeDemanda(muitos, 0.1).get("Preto|40/41"), 200);
-});
-
-test("a janela vai até a Fiscal e para na Coleta", () => {
-  // A nota sai na Fiscal e o card só vai para a Coleta depois dela. Parar
-  // antes da Fiscal deixava o pedido fora da necessidade enquanto o Tiny ainda
-  // não tinha baixado — invisível dos dois lados, comprando de menos.
-  assert.ok(SOLADO_STAGE_TITLES_ATENDIMENTO.includes("Fiscal"));
-  assert.ok(SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO.includes("Coleta"));
-  assert.ok(!SOLADO_STAGE_TITLES_ATENDIMENTO.includes("Coleta"));
-
-  assert.ok(SOLADO_STAGE_TITLES_REPRESENTANTES.includes("Fiscal/Cobrança"));
-  assert.ok(SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES.includes("Coleta"));
-  assert.ok(!SOLADO_STAGE_TITLES_REPRESENTANTES.includes("Coleta"));
 });

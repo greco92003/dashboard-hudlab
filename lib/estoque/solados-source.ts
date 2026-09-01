@@ -12,7 +12,6 @@ import {
   fetchGhlPipelines,
   fetchOpportunityById,
   searchGhlOpportunitiesByStage,
-  searchAllGhlOpportunitiesByStage,
   type GhlCustomFieldDef,
   type GhlOpportunity,
 } from "@/lib/ghl/api";
@@ -22,15 +21,10 @@ import { paresACaminho } from "./ordem-compra";
 import { listarOrdensCompra } from "./ordem-compra-source";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
-  curvaDeDemanda,
-  GRADE_DISPONIVEL_DESDE,
   montarResumo,
-  NOVO_SISTEMA_DESDE,
   parseSoladoDescricao,
   SOLADO_PARAMETROS_PADRAO,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
-  SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO,
-  SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
   type SoladoCor,
   type SoladoItemDemanda,
@@ -47,13 +41,6 @@ type BaseSolados = {
   negocios: SoladoNegocio[];
   skus: SoladoSkuTiny[];
   consumoMensalMedio: number;
-  /**
-   * Pedidos que já faturaram, só para engrossar a curva do estoque mínimo.
-   *
-   * O TAMANHO do mínimo continua vindo do `consumoMensalMedio`; daqui sai só a
-   * PROPORÇÃO entre numeração e cor.
-   */
-  faturados: SoladoNegocio[];
 };
 
 let cache: { base: BaseSolados; lidoEm: string; expiraEm: number } | null =
@@ -261,127 +248,6 @@ async function lerNegociosGhl(
   });
 }
 
-/**
- * A curva do estoque mínimo: o que já foi faturado, por cor e numeração.
- *
- * O pedido só chega aqui depois de sair da janela, então entrar na curva e
- * sair da necessidade é o mesmo movimento — nunca as duas coisas ao mesmo
- * tempo. É isso que faz o pedido novo mexer só no projetado.
- *
- * O corte por `updatedAt` é o que segura o custo: sem ele a leitura buscaria o
- * detalhe dos ~930 negócios migrados do CRM antigo, todos sem grade. Ele começa
- * na data em que a grade passou a existir e vira uma janela móvel de seis meses
- * quando o histórico ultrapassar isso.
- */
-/**
- * O histórico MELHORA a curva; ele não é condição para a tela existir.
- *
- * `searchAllGhlOpportunitiesByStage` usa o coletor de snapshot completo, que
- * recusa a página se a contagem mudar no meio da paginação — e "Recebido
- * Pedido" tem quase mil negócios num CRM que mexe o dia inteiro, então essa
- * recusa é normal, não excepcional. Deixar o erro subir derrubava o estoque
- * inteiro por causa da parte opcional da conta.
- *
- * Sem histórico a curva usa só os pedidos abertos, que é exatamente o que ela
- * faz hoje de qualquer forma. A tela mostra `pedidosFaturados: 0` e segue.
- */
-async function lerCurvaDeFaturadosTolerante(
-  definicoes: DefinicoesGhl,
-  pipelines: Awaited<ReturnType<typeof fetchGhlPipelines>>,
-): Promise<SoladoNegocio[]> {
-  try {
-    return await lerCurvaDeFaturados(definicoes, pipelines);
-  } catch (error) {
-    console.error(
-      "Estoque de solados: histórico de faturados indisponível, seguindo só com os pedidos abertos.",
-      error,
-    );
-    return [];
-  }
-}
-
-async function lerCurvaDeFaturados(
-  definicoes: DefinicoesGhl,
-  pipelines: Awaited<ReturnType<typeof fetchGhlPipelines>>,
-): Promise<SoladoNegocio[]> {
-  const seisMesesAtras = new Date();
-  seisMesesAtras.setMonth(seisMesesAtras.getMonth() - 6);
-  // Vale o mais recente entre os três: a grade precisa existir, o pedido
-  // precisa ser do sistema novo, e o histórico é uma janela móvel de 6 meses.
-  //
-  // O corte é por `createdAt`, nunca por `updatedAt`: um pedido antigo que
-  // alguém abriu hoje tem `updatedAt` de hoje e entraria como se fosse novo.
-  const corte = [
-    seisMesesAtras.toISOString().slice(0, 10),
-    GRADE_DISPONIVEL_DESDE,
-    NOVO_SISTEMA_DESDE,
-  ].sort()[2];
-
-  const etapas: EtapaAlvo[] = [];
-  for (const pipeline of pipelines) {
-    const nome = normalizeStageTitle(pipeline.name);
-    // A Fábrica de Mockups não fatura: ela não tem etapa de pós-venda.
-    const permitidas = nome.includes("atendimento")
-      ? SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO
-      : nome.includes("representante")
-        ? SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES
-        : null;
-    if (!permitidas) continue;
-    const alvo = new Set(permitidas.map(normalizeStageTitle));
-    for (const etapa of pipeline.stages ?? []) {
-      if (!alvo.has(normalizeStageTitle(etapa.name))) continue;
-      etapas.push({
-        pipeline: pipeline.name,
-        etapa: etapa.name,
-        pipelineId: pipeline.id,
-        stageId: etapa.id,
-      });
-    }
-  }
-
-  const resumos = await emLotes(etapas, LOTE_GHL, async (etapa) => {
-    const oportunidades = await searchAllGhlOpportunitiesByStage(
-      etapa.pipelineId,
-      etapa.stageId,
-      "won",
-    );
-    return oportunidades
-      .filter((o) => (o.createdAt ?? "") >= corte)
-      .map((o) => ({ etapa, id: o.id }));
-  });
-  const porId = new Map(
-    resumos.flat().map((item) => [item.id, item.etapa] as const),
-  );
-
-  // Como na janela: a grade é TEXTBOX_LIST e só vem na leitura por id.
-  const detalhes = await emLotes(
-    [...porId.keys()],
-    LOTE_GHL,
-    fetchOpportunityById,
-  );
-
-  // Devolve negócios, não uma curva pronta: quem monta a curva é o
-  // `montarResumo`, que junta estes aos abertos e aplica o mesmo filtro de
-  // legados aos dois. Foi exatamente isso que faltou da primeira vez — os 28
-  // pedidos já baixados no Tiny voltaram por aqui e viraram 99% da curva.
-  return detalhes.flatMap((oportunidade) => {
-    const { itens, paresSemSolado } = extrairItens(oportunidade, definicoes);
-    if (itens.length === 0) return [];
-    const etapa = porId.get(oportunidade.id)!;
-    return [
-      {
-        dealId: oportunidade.id,
-        nome: oportunidade.name.trim(),
-        pipeline: etapa.pipeline,
-        etapa: etapa.etapa,
-        dataEmbarque: campoTexto(oportunidade, definicoes, "data_de_embarque"),
-        itens,
-        paresSemSolado,
-      },
-    ];
-  });
-}
-
 // ── Tiny ────────────────────────────────────────────────────────────────────
 
 type TinyProdutoItem = { id: number; descricao?: string | null };
@@ -493,9 +359,8 @@ async function lerBaseCacheada(): Promise<{
   ]);
   const definicoes = new Map(definicoesLista.map((d) => [d.id, d]));
 
-  const [negocios, faturados, skus, consumoMensalMedio] = await Promise.all([
+  const [negocios, skus, consumoMensalMedio] = await Promise.all([
     lerNegociosGhl(definicoes, pipelines),
-    lerCurvaDeFaturadosTolerante(definicoes, pipelines),
     lerSkusTiny(),
     lerConsumoMensalMedio(),
   ]);
@@ -504,7 +369,6 @@ async function lerBaseCacheada(): Promise<{
     negocios,
     skus,
     consumoMensalMedio,
-    faturados,
   };
   cache = { base, lidoEm, expiraEm: Date.now() + CACHE_MS };
   return { base, lidoEm };
@@ -540,7 +404,6 @@ export async function getResumoSolados(
       negocios: base.negocios,
       skus: base.skus,
       aCaminho: paresACaminho(await ordens),
-      faturados: base.faturados,
       parametros: {
         ...SOLADO_PARAMETROS_PADRAO,
         consumoMensalMedio: base.consumoMensalMedio,

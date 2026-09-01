@@ -92,55 +92,15 @@ export const SOLADO_STAGE_TITLES_REPRESENTANTES = [
 ];
 
 /**
- * Etapas de DEPOIS do faturamento — o histórico que forma o estoque mínimo.
+ * Não existe leitura das etapas de depois do faturamento, e é de propósito.
  *
- * Cada pedido vive duas fases e serve a uma metade diferente da conta em cada
- * uma. Enquanto está aberto, é **necessidade**: vai sair e o Tiny ainda não
- * baixou. Depois de faturado, já foi abatido do saldo e vira **curva**: é
- * consumo que aconteceu.
+ * Chegamos a ler "Coleta", "Em Trânsito" e "Recebido Pedido" para engrossar a
+ * curva com o histórico. Não paga: o pedido novo já é lido aqui na janela,
+ * muito antes de chegar lá, e o que está parado naquelas etapas é a migração do
+ * CRM antigo — sem grade e sem cor de solado (numa amostra de 30, 1 tinha).
  *
- * As duas listas são disjuntas de propósito, e há teste garantindo isso. É o
- * que impede o pedido de ser contado duas vezes — e é também o que faz o
- * pedido novo não mexer mais no próprio ponto de recompra, porque ele só entra
- * na curva no dia em que sai da necessidade.
+ * Custava ~1.000 leituras de negócio por atualização para devolver zero.
  */
-export const SOLADO_STAGE_TITLES_FATURADOS_ATENDIMENTO = [
-  "Coleta",
-  "Em Trânsito (Link Rastreio)",
-  "Recebido Amostra",
-  "Recebido Pedido",
-];
-
-export const SOLADO_STAGE_TITLES_FATURADOS_REPRESENTANTES = [
-  "Coleta",
-  "Recebido Pedido",
-];
-
-/**
- * Data em que os campos de grade passaram a existir no GHL.
- *
- * Antes disso não há o que ler: os negócios anteriores vieram migrados do CRM
- * antigo em 03/08/2026 sem grade nenhuma — numa amostra de 30 em "Recebido
- * Pedido", 1 tinha. Este corte não é só higiene de dado, é o que segura o
- * custo: sem ele a leitura buscaria os ~930 negócios da migração, todos para
- * devolver zero.
- *
- * O CRM é novo e vai engordar sozinho. Quando o histórico passar de seis meses,
- * a janela móvel assume e este corte deixa de morder.
- */
-export const GRADE_DISPONIVEL_DESDE = "2026-08-21";
-
-/**
- * Data em que o Tiny passou a baixar o solado só no faturamento.
- *
- * Pedido anterior a isto já foi contabilizado no cadastro do ERP e está fora do
- * sistema novo inteiro — não sai do estoque de novo no fiscal, e também não
- * conta na curva. `NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP` não serve para esse
- * corte: ela só listou os que ainda estavam na janela quando foi montada, e
- * quem já tinha faturado antes disso nunca precisou entrar nela. Pela data,
- * todos ficam de fora — inclusive os que a lista não conhece.
- */
-export const NOVO_SISTEMA_DESDE = "2026-08-27";
 
 /**
  * Parâmetros da política de estoque. Ficam aqui, e não no Tiny, porque o mínimo
@@ -299,17 +259,12 @@ export type SoladoResumo = {
    */
   legadosForaDaConta: number;
   /**
-   * Sobre quanto a curva do estoque mínimo se apoia.
+   * Quantos pedidos sustentam a curva do estoque mínimo.
    *
-   * Quanto maior a parcela de faturados, menos um pedido novo desloca o mínimo
-   * dos outros. O CRM é novo — histórico desde 21/08/2026 — então isso é
-   * informação de tela, não detalhe interno: é o que diz o quanto confiar.
+   * Amostra pequena significa mínimo que se mexe quando entra pedido novo, e
+   * quem lê a tela precisa saber disso — é informação, não detalhe interno.
    */
-  curva: {
-    pedidosAbertos: number;
-    pedidosFaturados: number;
-    paresFaturados: number;
-  };
+  curva: { pedidos: number };
 };
 
 const CHAVE = (cor: string, numeracao: string) => `${cor}|${numeracao}`;
@@ -463,36 +418,29 @@ export function completarGrade(
 /**
  * Cruza a necessidade da janela com o saldo do Tiny e diz o que comprar.
  *
- * As duas metades da conta vêm de lugares diferentes de propósito:
+ * As duas metades saem da mesma janela, e isso tem uma consequência que
+ * precisa ser entendida antes de mexer aqui:
  *
- * - **O projetado** (`saldo + a caminho − necessidade`) olha a janela aberta.
- *   É o que vai sair e ainda não saiu.
- * - **O mínimo** olha o passado, por `curvaHistorica`. É a reserva para a
- *   demanda que ainda nem existe.
+ * - **O projetado** (`saldo + a caminho − necessidade`) é o que vai sair e
+ *   ainda não saiu.
+ * - **O mínimo** é a reserva para a demanda que ainda nem existe, repartida
+ *   entre numeração e cor pela curva dos mesmos pedidos.
  *
- * Misturar as duas foi o erro que este parâmetro corrige: com o mínimo saindo
- * da janela, um pedido novo derrubava o projetado E levantava o próprio ponto
- * de recompra, contando duas vezes — e ainda roubava mínimo das outras
- * numerações, porque a soma é fixa.
+ * Como a soma dos mínimos é fixa, pedido novo não só derruba o projetado dele:
+ * também puxa mínimo das outras numerações para a dele. Um pedido de 50 pares
+ * no 40/41 baixou o mínimo do 42/43 de 127 para 116 sem que o estoque de 42/43
+ * tivesse mexido.
+ *
+ * Isso encolhe conforme a janela cresce, e o teto por pedido é o que segura o
+ * caso extremo. A saída "certa" seria a curva vir de histórico de consumo, mas
+ * ele não existe: o CRM é novo, os pedidos antigos vieram migrados sem grade, e
+ * o pedido novo já é lido aqui muito antes de faturar.
  */
 export function montarResumo(input: {
   negocios: SoladoNegocio[];
   skus: SoladoSkuTiny[];
   aCaminho?: SoladoItemDemanda[];
   parametros: SoladoParametros;
-  /**
-   * Pedidos que JÁ faturaram, para engrossar a curva.
-   *
-   * Não entram na necessidade — o Tiny já os baixou. Entram só como história:
-   * é assim que a curva deixa de depender dos pedidos abertos com o tempo, e
-   * com ela o pedido novo para de mexer no próprio ponto de recompra.
-   *
-   * Passam pelo MESMO filtro de legados que a janela. Sem isso os 28 pedidos
-   * excluídos por já terem baixado no cadastro do ERP voltariam por aqui: o
-   * MANYCHAT sozinho seria 90% da curva, e ele é justamente o pedido que quase
-   * saiu branco.
-   */
-  faturados?: SoladoNegocio[];
 }): SoladoResumo {
   const p = input.parametros;
   const skuPorChave = new Map(
@@ -518,18 +466,7 @@ export function montarResumo(input: {
     aCaminho.set(chave, (aCaminho.get(chave) ?? 0) + item.pares);
   }
 
-  // A curva junta os pedidos reais do Cadastro ERP em diante: os abertos de
-  // hoje e os que já faturaram. Hoje é quase só janela, porque o CRM é novo e o
-  // histórico começou em 21/08/2026 — e é por isso que um pedido novo ainda
-  // desloca um pouco o mínimo dos outros. A cada pedido faturado esse peso cai
-  // sozinho, sem ninguém mexer em nada.
-  const faturados = (input.faturados ?? []).filter(
-    (negocio) => !NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP.has(negocio.dealId),
-  );
-  const curva = curvaDeDemanda(
-    [...negocios, ...faturados],
-    p.tetoInfluenciaPedido,
-  );
+  const curva = curvaDeDemanda(negocios, p.tetoInfluenciaPedido);
   const somaCurva = [...curva.values()].reduce((a, b) => a + b, 0);
   const coberturaEmPares = Math.round(
     (p.consumoMensalMedio / p.diasUteisPorMes) * p.diasUteisCobertura,
@@ -599,14 +536,6 @@ export function montarResumo(input: {
     coberturaEmPares,
     parametros: p,
     legadosForaDaConta,
-    curva: {
-      pedidosAbertos: negocios.length,
-      pedidosFaturados: faturados.length,
-      paresFaturados: faturados.reduce(
-        (total, negocio) =>
-          total + negocio.itens.reduce((soma, item) => soma + item.pares, 0),
-        0,
-      ),
-    },
+    curva: { pedidos: negocios.length },
   };
 }
