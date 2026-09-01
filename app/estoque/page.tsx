@@ -35,7 +35,15 @@ export default function EstoquePage() {
         `/api/estoque/solados${forcar ? "?refresh=1" : ""}`,
       );
       const corpo = await resposta.json();
-      if (!resposta.ok) throw new Error(corpo.error ?? "Falha na leitura.");
+      if (!resposta.ok) {
+        // A causa entra na mensagem: sem ela a falha some num texto genérico e
+        // só resta caçar log, que nem sempre chega.
+        throw new Error(
+          [corpo.error ?? "Falha na leitura.", corpo.detalhe]
+            .filter(Boolean)
+            .join(" — "),
+        );
+      }
       setDados(corpo as Resposta);
       if (forcar) toast.success("Estoque atualizado.");
     } catch (e) {

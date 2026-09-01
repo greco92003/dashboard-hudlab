@@ -273,6 +273,33 @@ async function lerNegociosGhl(
  * na data em que a grade passou a existir e vira uma janela móvel de seis meses
  * quando o histórico ultrapassar isso.
  */
+/**
+ * O histórico MELHORA a curva; ele não é condição para a tela existir.
+ *
+ * `searchAllGhlOpportunitiesByStage` usa o coletor de snapshot completo, que
+ * recusa a página se a contagem mudar no meio da paginação — e "Recebido
+ * Pedido" tem quase mil negócios num CRM que mexe o dia inteiro, então essa
+ * recusa é normal, não excepcional. Deixar o erro subir derrubava o estoque
+ * inteiro por causa da parte opcional da conta.
+ *
+ * Sem histórico a curva usa só os pedidos abertos, que é exatamente o que ela
+ * faz hoje de qualquer forma. A tela mostra `pedidosFaturados: 0` e segue.
+ */
+async function lerCurvaDeFaturadosTolerante(
+  definicoes: DefinicoesGhl,
+  pipelines: Awaited<ReturnType<typeof fetchGhlPipelines>>,
+): Promise<SoladoNegocio[]> {
+  try {
+    return await lerCurvaDeFaturados(definicoes, pipelines);
+  } catch (error) {
+    console.error(
+      "Estoque de solados: histórico de faturados indisponível, seguindo só com os pedidos abertos.",
+      error,
+    );
+    return [];
+  }
+}
+
 async function lerCurvaDeFaturados(
   definicoes: DefinicoesGhl,
   pipelines: Awaited<ReturnType<typeof fetchGhlPipelines>>,
@@ -468,7 +495,7 @@ async function lerBaseCacheada(): Promise<{
 
   const [negocios, faturados, skus, consumoMensalMedio] = await Promise.all([
     lerNegociosGhl(definicoes, pipelines),
-    lerCurvaDeFaturados(definicoes, pipelines),
+    lerCurvaDeFaturadosTolerante(definicoes, pipelines),
     lerSkusTiny(),
     lerConsumoMensalMedio(),
   ]);
