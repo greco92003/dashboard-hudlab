@@ -15,7 +15,7 @@
 // evaluation/insight record stores which version produced it, so old
 // records keep their original meaning.
 
-export const MANUAL_VERSION = "1.0 — Julho/2026";
+export const MANUAL_VERSION = "1.1 — Setembro/2026";
 
 export const MANUAL_COMERCIAL_TEXT = `# Manual Comercial e Agente de Vendas — Hud Lab
 
@@ -78,7 +78,7 @@ Os valores acima seguem a quantidade total do pedido. A técnica de personaliza�
 | Técnica | Mínimo | Aplicação conhecida | Observação comercial |
 |---|---|---|---|
 | Hud Lab Start | 12 pares | Serigrafia Silk em 1 cor | Entrada para pedidos menores |
-| Silk | 24 pares | Até 3 cores de serigrafia | Boa relação entre impacto visual e escala |
+| Silk | 24 pares | Até 3 cores de serigrafia entre 24 e 35 pares; até 4 cores a partir de 36 pares | Boa relação entre impacto visual e escala |
 | Silk Relevo | 60 pares | Serigrafia com relevo + 1 cor de Silk | Maior percepção tátil e visual |
 | 3D | 132 pares | Logo em 3D + 1 cor de Silk | Solução premium e de alto impacto |
 | Sola colorida | 100 pares | Adicional ao projeto | Acréscimo de R$ 5,00 por par |
@@ -151,7 +151,7 @@ A abordagem comercial deve ser consultiva, objetiva e orientada ao avanço da ne
 |---|---|---|
 | Responder | Entregar primeiro a informação objetiva pedida. | "O mínimo começa em 12 pares." |
 | Entender | Descobrir a aplicação e o contexto. | "Seria para revenda, equipe, empresa ou evento?" |
-| Recomendar | Indicar a solução adequada. | "Para essa quantidade, o Silk atende bem e permite até 3 cores." |
+| Recomendar | Indicar a solução adequada. | "Para 40 pares, o Silk atende bem e permite até 4 cores." |
 | Avançar | Conduzir para um próximo passo claro. | "Pode me enviar o logo para prepararmos a Amostra Digital?" |
 
 ### 4.2 Princípios
@@ -241,7 +241,7 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 ### 6.2 Personalização e Amostra Digital
 
 **Explicar as personalizações:**
-"Temos Silk em 1 cor a partir de 12 pares, Silk com até 3 cores a partir de 24, Silk Relevo a partir de 60 e aplicação 3D a partir de 132 pares. O preço varia pela quantidade do pedido, não pela técnica. Qual efeito combina mais com a identidade de vocês?"
+"Temos Silk em 1 cor a partir de 12 pares; de 24 a 35 pares, Silk com até 3 cores; e, a partir de 36 pares, Silk com até 4 cores. Silk Relevo começa em 60 pares e aplicação 3D em 132 pares. O preço varia pela quantidade do pedido, não pela técnica. Qual efeito combina mais com a identidade de vocês?"
 
 **Prazo da Amostra Digital:**
 "A primeira Amostra Digital é preparada em até 24 horas úteis. Depois você pode pedir os ajustes necessários antes de aprovar e realizar o pagamento."

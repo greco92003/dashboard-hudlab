@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -25,24 +24,25 @@ import {
   Timer,
   BarChart3,
   MessageSquare,
-  Bot,
-  User,
   Loader2,
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  ArrowLeft,
+  ChevronRight,
+  Lightbulb,
+  History,
+  RotateCcw,
+  Sparkles,
+  Target,
 } from "lucide-react";
-import { IconArrowUp } from "@tabler/icons-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
+import { Gauge } from "@/components/charts/gauge";
 import {
-  Label,
-  PolarGrid,
-  PolarRadiusAxis,
-  RadialBar,
-  RadialBarChart,
-} from "recharts";
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+  TrainingChat,
+  type TrainingChatMessage,
+} from "@/components/sellers-v2/training-chat";
 
 // Types
 interface SellerRanking {
@@ -67,11 +67,29 @@ interface TrainingRanking {
   avatarUrl: string | null;
 }
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  /** When this message was actually sent/received (ISO). Feeds the same response-gap stats the real Auditor uses, so training pacing signals are real, not synthetic. */
-  timestamp: string;
+interface CurrentUserTraining {
+  todayScore: number | null;
+  daysTrained: number;
+  totalDays: number;
+  elapsedDays: number;
+  trainedWeekdays: number[];
+}
+
+interface TrainingSessionSnapshot {
+  id: string;
+  status: "active" | "evaluating" | "completed" | "expired" | "failed";
+  startedAt: string;
+  deadlineAt: string;
+  endedAt: string | null;
+  messages: TrainingChatMessage[];
+  evaluation: {
+    report: AuditorReport & { naoAvaliavel?: boolean; motivoNaoAvaliavel?: string };
+    score: number | null;
+    classification: string | null;
+    hasCriticalError: boolean;
+  } | null;
+  score: number | null;
+  completionReason: string | null;
 }
 
 interface AuditorReport {
@@ -150,23 +168,121 @@ const medalIcons = [
   <Crown key="bronze" className="h-5 w-5 text-amber-700" />,
 ];
 
-const TAB_SESSION_KEY = "sellers_v2_active_tab";
+const SELLERS_TABS = ["rankings", "training", "real"] as const;
 
-export default function SellersV2Page() {
-  // Tab persistence — hasMounted prevents rendering Tabs before sessionStorage is read,
-  // avoiding a flash of the wrong tab on refresh.
-  const [activeTab, setActiveTab] = useState<string>("rankings");
-  const [hasMounted, setHasMounted] = useState(false);
+function TrainingCountdown({
+  deadline,
+  onExpire,
+}: {
+  deadline: number;
+  onExpire: () => void;
+}) {
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+  const [seconds, setSeconds] = useState(() =>
+    Math.max(0, Math.ceil((deadline - Date.now()) / 1000)),
+  );
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(TAB_SESSION_KEY);
-    if (stored) setActiveTab(stored);
-    setHasMounted(true);
-  }, []);
+    let expirationSent = false;
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((deadline - Date.now()) / 1000),
+      );
+      setSeconds(remaining);
+      if (remaining === 0 && !expirationSent) {
+        expirationSent = true;
+        onExpireRef.current();
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [deadline]);
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return (
+    <>
+      {minutes.toString().padStart(2, "0")}:
+      {remainingSeconds.toString().padStart(2, "0")}
+    </>
+  );
+}
+
+function scoreColor(score: number) {
+  if (score >= 90) return "var(--primary)";
+  if (score >= 80) return "var(--chart-5)";
+  if (score >= 70) return "var(--chart-3)";
+  if (score >= 60) return "oklch(0.75 0.17 65)";
+  return "var(--destructive)";
+}
+
+function TrainingGauge({
+  value,
+  label,
+  footer,
+  size = 190,
+  color,
+}: {
+  value: number;
+  label: string;
+  footer?: string;
+  size?: number;
+  color?: string;
+}) {
+  const normalizedValue = Math.max(0, Math.min(100, value));
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 text-center">
+      <Gauge
+        value={normalizedValue}
+        centerValue={value}
+        defaultLabel={label}
+        startAngle={135}
+        endAngle={405}
+        totalNotches={30}
+        spacing={13}
+        notchCornerRadius={12}
+        notchLengthPercent={100}
+        useGradient={false}
+        inactiveFillOpacity={0.35}
+        activeFillOpacity={1}
+        activeFill={color ?? "var(--primary)"}
+        formatOptions={{ style: "decimal", maximumFractionDigits: 0 }}
+        enterTransition={{
+          type: "tween",
+          duration: 1.1,
+          ease: [0.85, 0, 0.15, 1],
+        }}
+        enterStaggerScale={1}
+        width={size}
+        height={size}
+        centerValueClassName="text-[clamp(2.5rem,32cqw,4.25rem)] font-bold tracking-[-0.06em] leading-none"
+        centerLabelClassName="mt-1 text-[clamp(0.7rem,9cqw,0.8rem)] font-medium text-muted-foreground"
+      />
+      {footer && (
+        <p className="-mt-2 text-xs font-medium text-muted-foreground">
+          {footer}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function SellersV2Page() {
+  const [{ tab: activeTab, trainingSession: trainingSessionId }, setRouteState] =
+    useQueryStates(
+      {
+        tab: parseAsStringLiteral(SELLERS_TABS).withDefault("rankings"),
+        trainingSession: parseAsString,
+      },
+      { history: "push" },
+    );
 
   const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    sessionStorage.setItem(TAB_SESSION_KEY, value);
+    void setRouteState({ tab: value as (typeof SELLERS_TABS)[number] });
   };
 
   // Rankings state
@@ -175,19 +291,33 @@ export default function SellersV2Page() {
   >([]);
   const [recordRanking, setRecordRanking] = useState<RecordRanking[]>([]);
   const [trainingRanking, setTrainingRanking] = useState<TrainingRanking[]>([]);
+  const [currentUserTraining, setCurrentUserTraining] =
+    useState<CurrentUserTraining>({
+      todayScore: null,
+      daysTrained: 0,
+      totalDays: 0,
+      elapsedDays: 0,
+      trainedWeekdays: [],
+    });
   const [currentMonth, setCurrentMonth] = useState(0);
   const [currentYear, setCurrentYear] = useState(0);
   const [loadingRankings, setLoadingRankings] = useState(true);
 
   // Chat state
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<TrainingChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
-  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(900);
+  const [sessionDeadlineTime, setSessionDeadlineTime] = useState<number | null>(null);
   const [evaluating, setEvaluating] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(false);
+  const [loadingFeedbackHistory, setLoadingFeedbackHistory] = useState(false);
+  const [feedbackHistory, setFeedbackHistory] = useState<
+    TrainingSessionSnapshot[] | null
+  >(null);
+  const [viewingHistoricalFeedback, setViewingHistoricalFeedback] =
+    useState(false);
   // Same shape runAuditor produces for real negotiations (lib/ghl/sales-agent/agent.ts)
   // — training reuses the exact same scoring function/criteria so the two
   // notes are genuinely comparable, not just similarly-labeled.
@@ -300,11 +430,7 @@ export default function SellersV2Page() {
     }
   };
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<HTMLTextAreaElement>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  // Ref to always have the latest chatMessages in stale closures (e.g. timer)
-  const chatMessagesRef = useRef<ChatMessage[]>([]);
+  const endingSessionRef = useRef(false);
 
   // Fetch rankings
   const fetchRankings = useCallback(async () => {
@@ -317,6 +443,15 @@ export default function SellersV2Page() {
       setCurrentMonthRanking(data.currentMonthRanking || []);
       setRecordRanking(data.recordRanking || []);
       setTrainingRanking(data.trainingRanking || []);
+      setCurrentUserTraining(
+        data.currentUserTraining || {
+          todayScore: null,
+          daysTrained: 0,
+          totalDays: 0,
+          elapsedDays: 0,
+          trainedWeekdays: [],
+        },
+      );
       setCurrentMonth(data.currentMonth);
       setCurrentYear(data.currentYear);
     } catch (error) {
@@ -359,94 +494,121 @@ export default function SellersV2Page() {
     };
   }, [fetchRankings]);
 
-  // Keep ref in sync with latest chatMessages (fixes stale closure in timer)
-  useEffect(() => {
-    chatMessagesRef.current = chatMessages;
-  }, [chatMessages]);
+  const applyTrainingSession = useCallback((session: TrainingSessionSnapshot) => {
+    const deadline = new Date(session.deadlineAt).getTime();
+    setFeedbackHistory(null);
+    setViewingHistoricalFeedback(false);
+    setChatMessages(session.messages ?? []);
+    setSessionDeadlineTime(deadline);
+    setSessionActive(session.status === "active" && deadline > Date.now());
+    setEvaluating(session.status === "evaluating");
+    setEvaluation(session.evaluation);
+  }, []);
 
-  // Auto-scroll chat
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
-
-  // Timer countdown
-  useEffect(() => {
-    if (!sessionActive || !sessionStartTime) return;
-    timerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-      const remaining = Math.max(900 - elapsed, 0);
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
-        endSession();
+    if (activeTab !== "training") return;
+    const controller = new AbortController();
+    const restore = async () => {
+      setRestoringSession(true);
+      try {
+        const query = trainingSessionId
+          ? `?sessionId=${encodeURIComponent(trainingSessionId)}`
+          : "";
+        const response = await fetch(`/api/sellers-v2/training${query}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Falha ao restaurar sessão.");
+        if (data.session) {
+          applyTrainingSession(data.session);
+          if (data.session.id !== trainingSessionId) {
+            void setRouteState({ tab: "training", trainingSession: data.session.id });
+          }
+        } else if (trainingSessionId) {
+          void setRouteState({ trainingSession: null });
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.error("Error restoring training:", error);
+          setChatError("Não foi possível restaurar o treinamento.");
+        }
+      } finally {
+        setRestoringSession(false);
       }
-    }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [sessionActive, sessionStartTime]);
+    void restore();
+    return () => controller.abort();
+  }, [activeTab, applyTrainingSession, setRouteState, trainingSessionId]);
 
-  // Start training session
-  const startSession = () => {
-    setSessionActive(true);
-    setSessionStartTime(Date.now());
-    setTimeLeft(900);
-    setChatMessages([]);
-    setEvaluation(null);
-    // Send initial message from "client"
-    sendBotGreeting();
-  };
-
-  // These are the SELLER's opening messages — the model (AI customer) responds to them
-  const GREETING_OPENERS = [
-    "Oi! Obrigado por entrar em contato com a HUDLAB. Você tem interesse nos nossos chinelos personalizados?",
-    "Olá! Tudo bem? Vi que você se interessou pelos nossos chinelos personalizados. Posso te ajudar?",
-    "Oi! Boa tarde! Seja bem-vindo à HUDLAB. Como posso te ajudar hoje?",
-    "Olá! Que bom ter você aqui. Você tá buscando um chinelo personalizado?",
-    "Oi! Seja bem-vindo à HUDLAB! Você viu nosso anúncio de chinelos personalizados?",
-  ];
-
-  const sendBotGreeting = async () => {
+  const startSession = async () => {
     setChatLoading(true);
     setChatError(null);
-    const opener =
-      GREETING_OPENERS[Math.floor(Math.random() * GREETING_OPENERS.length)];
+    setEvaluation(null);
+    setFeedbackHistory(null);
+    setViewingHistoricalFeedback(false);
     try {
-      const res = await fetch("/api/sellers-v2/training", {
+      const response = await fetch("/api/sellers-v2/training", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "chat",
-          messages: [
-            {
-              role: "user",
-              content: opener,
-            },
-          ],
-        }),
+        body: JSON.stringify({ action: "start" }),
       });
-      const data = await res.json();
-      if (data.code === "QUOTA_EXCEEDED" || res.status === 429) {
-        setChatError(data.error || "Cota da API de IA excedida.");
-        setSessionActive(false);
-        return;
-      }
-      if (data.success) {
-        setChatMessages([
-          { role: "assistant", content: data.response, timestamp: new Date().toISOString() },
-        ]);
-      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível iniciar.");
+      applyTrainingSession(data.session);
+      await setRouteState({ tab: "training", trainingSession: data.session.id });
     } catch (error) {
       console.error("Error starting session:", error);
-      setChatError("Erro de conexão. Tente novamente.");
+      setChatError((error as Error).message || "Erro de conexão. Tente novamente.");
     } finally {
       setChatLoading(false);
     }
   };
 
+  const viewFeedbackHistory = async () => {
+    setLoadingFeedbackHistory(true);
+    setChatError(null);
+    try {
+      const response = await fetch(
+        "/api/sellers-v2/training?feedbackHistory=1",
+        { cache: "no-store" },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Não foi possível buscar os feedbacks.");
+      }
+      if (!data.sessions?.length) {
+        setChatError("Nenhum feedback de treinamento foi encontrado ainda.");
+        return;
+      }
+      setFeedbackHistory(data.sessions);
+    } catch (error) {
+      setChatError(
+        (error as Error).message || "Não foi possível buscar os feedbacks.",
+      );
+    } finally {
+      setLoadingFeedbackHistory(false);
+    }
+  };
+
+  const openHistoricalFeedback = (session: TrainingSessionSnapshot) => {
+    if (!session.evaluation) return;
+    setEvaluation(session.evaluation);
+    setViewingHistoricalFeedback(true);
+    setFeedbackHistory(null);
+  };
+
+  const returnToActiveTraining = () => {
+    setEvaluation(null);
+    setViewingHistoricalFeedback(false);
+  };
+
   // Send chat message
   const sendMessage = async () => {
     if (!chatInput.trim() || chatLoading || !sessionActive) return;
-    const userMsg: ChatMessage = {
+    if (!trainingSessionId) return;
+    const userMsg: TrainingChatMessage = {
+      id: crypto.randomUUID(),
       role: "user",
       content: chatInput.trim(),
       timestamp: new Date().toISOString(),
@@ -463,7 +625,8 @@ export default function SellersV2Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "chat",
-          messages: updatedMessages,
+          sessionId: trainingSessionId,
+          message: userMsg,
         }),
       });
       const data = await res.json();
@@ -471,11 +634,11 @@ export default function SellersV2Page() {
         setChatError(data.error || "Cota da API de IA excedida.");
         return;
       }
-      if (data.success) {
-        setChatMessages([
-          ...updatedMessages,
-          { role: "assistant", content: data.response, timestamp: new Date().toISOString() },
-        ]);
+      if (data.session) {
+        applyTrainingSession(data.session);
+      }
+      if (!res.ok) {
+        setChatError(data.error || "Não foi possível enviar a mensagem.");
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -512,39 +675,28 @@ export default function SellersV2Page() {
     hasCriticalError: false,
   });
 
-  // End session and get evaluation
-  const endSession = async () => {
-    if (timerRef.current) clearInterval(timerRef.current);
+  // End session and persist its evaluation. The absolute deadline makes reloads stable.
+  const endSession = useCallback(async (reason: "manual" | "timer" = "manual") => {
+    if (!trainingSessionId || endingSessionRef.current) return;
+    endingSessionRef.current = true;
     setSessionActive(false);
     setEvaluating(true);
     setChatError(null);
 
     try {
-      const currentMessages = chatMessagesRef.current;
-
-      // If conversation is too short, show a fallback evaluation instead of erroring
-      if (!currentMessages || currentMessages.length < 2) {
-        setEvaluation(
-          buildNaoAvaliavelEvaluation(
-            "A sessão foi muito curta para avaliar. Inicie uma nova sessão e tente conversar mais com o cliente.",
-          ),
-        );
-        return;
-      }
-
       const res = await fetch("/api/sellers-v2/training", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "evaluate",
-          messages: currentMessages,
+          sessionId: trainingSessionId,
+          completionReason: reason,
         }),
       });
       const data = await res.json();
       if (data.success) {
-        setEvaluation(data.evaluation);
-        // Refresh rankings to include new training
-        fetchRankings();
+        applyTrainingSession(data.session);
+        await fetchRankings();
       } else {
         // API returned an error — show a fallback so the UI doesn't get stuck
         setEvaluation(
@@ -560,14 +712,9 @@ export default function SellersV2Page() {
       );
     } finally {
       setEvaluating(false);
+      endingSessionRef.current = false;
     }
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
+  }, [applyTrainingSession, fetchRankings, trainingSessionId]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 sm:gap-6">
@@ -582,15 +729,10 @@ export default function SellersV2Page() {
         </p>
       </div>
 
-      {!hasMounted ? (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </div>
-      ) : null}
       <Tabs
         value={activeTab}
         onValueChange={handleTabChange}
-        className={hasMounted ? "w-full" : "invisible h-0 overflow-hidden"}
+        className="w-full"
       >
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="rankings" className="flex items-center gap-2">
@@ -917,186 +1059,146 @@ export default function SellersV2Page() {
         <TabsContent value="training" className="space-y-6 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-[650px] lg:grid-rows-1">
             {/* Chat Area */}
-            <Card className="lg:col-span-2 flex flex-col h-full min-h-[400px]">
-              <CardHeader className="pb-3 shrink-0">
+            <Card className="lg:col-span-2 flex h-full min-h-[400px] flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none dark:border-white/10">
+              <CardHeader className="shrink-0 border-b border-border/60 px-5 pt-4 [.border-b]:pb-4 dark:border-white/10">
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-blue-500" />
                   Simulador de Vendas
-                  {sessionActive && (
-                    <Badge
-                      variant="destructive"
-                      className="ml-auto flex items-center gap-1"
-                    >
-                      <Timer className="h-3 w-3" />
-                      {formatTime(timeLeft)}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-hidden flex flex-col min-h-0 pt-0">
-                {/* Error Alert */}
-                {chatError && (
-                  <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
-                    <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-destructive">
-                        {chatError}
-                      </p>
-                    </div>
+                  <div className="ml-auto flex items-center gap-2">
                     <Button
+                      type="button"
+                      onClick={() => void viewFeedbackHistory()}
                       variant="ghost"
                       size="sm"
-                      onClick={() => setChatError(null)}
-                      className="text-destructive hover:text-destructive"
+                      disabled={loadingFeedbackHistory}
+                      className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
                     >
-                      ✕
+                      {loadingFeedbackHistory ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <History className="size-3.5" />
+                      )}
+                      <span className="hidden sm:inline">Ver últimos feedbacks</span>
+                      <span className="sm:hidden">Feedbacks</span>
                     </Button>
+                    {sessionActive && (
+                      <>
+                      <Badge
+                        variant="destructive"
+                        className="flex items-center gap-1"
+                      >
+                        <Timer className="h-3 w-3" />
+                        {sessionDeadlineTime && (
+                          <TrainingCountdown
+                            deadline={sessionDeadlineTime}
+                            onExpire={() => void endSession("timer")}
+                          />
+                        )}
+                      </Badge>
+                      <Button
+                        onClick={() => void endSession("manual")}
+                        variant="ghost"
+                        size="sm"
+                        disabled={evaluating}
+                        className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        Finalizar
+                      </Button>
+                      </>
+                    )}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden px-0">
+                {restoringSession && (
+                  <div className="flex flex-1 items-center justify-center">
+                    <Loader2 className="size-8 animate-spin text-primary" />
                   </div>
                 )}
+                {!restoringSession && !evaluating && !evaluation && !feedbackHistory && (
+                  <TrainingChat
+                    messages={chatMessages}
+                    input={chatInput}
+                    onInputChange={setChatInput}
+                    onSend={sendMessage}
+                    isLoading={chatLoading}
+                    isActive={sessionActive}
+                    error={chatError}
+                    onDismissError={() => setChatError(null)}
+                    onStart={startSession}
+                    onViewFeedbackHistory={viewFeedbackHistory}
+                    isLoadingFeedbackHistory={loadingFeedbackHistory}
+                  />
+                )}
 
-                {!sessionActive &&
-                  !evaluating &&
-                  !evaluation &&
-                  !chatError &&
-                  chatMessages.length === 0 && (
-                    <div className="flex flex-col flex-1 items-center justify-center space-y-4">
-                      <Bot className="h-16 w-16 text-muted-foreground/50" />
-                      <h3 className="text-lg font-semibold">
-                        Treinamento com IA
-                      </h3>
-                      <p className="text-sm text-muted-foreground text-center max-w-md">
-                        Simule uma conversa com um cliente difícil. Você terá 15
-                        minutos para convencê-lo. Ao final, receberá uma nota de
-                        0 a 100.
-                      </p>
-                      <Button onClick={startSession}>
-                        Iniciar Treinamento
+                {!restoringSession && !evaluating && feedbackHistory && (
+                  <div className="flex flex-1 flex-col overflow-y-auto p-4 sm:p-6">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <h3 className="text-base font-semibold">Últimos feedbacks</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Selecione um treinamento para ver a avaliação completa.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFeedbackHistory(null)}
+                        className="shrink-0 gap-1.5"
+                      >
+                        <ArrowLeft className="size-4" />
+                        {sessionActive ? "Voltar ao treino" : "Fechar"}
                       </Button>
                     </div>
-                  )}
 
-                {(sessionActive || chatMessages.length > 0) &&
-                  !evaluating &&
-                  !evaluation && (
-                    <div className="flex flex-col flex-1 min-h-0">
-                      {/* Messages Area */}
-                      <ScrollArea className="flex-1 min-h-0 pr-4">
-                        <div className="space-y-4 pb-4">
-                          {chatMessages.map((msg, idx) => (
+                    <div className="space-y-3">
+                      {feedbackHistory.map((session, index) => {
+                        const score = session.evaluation?.score;
+                        const feedbackDate = new Date(
+                          session.endedAt ?? session.startedAt,
+                        );
+                        return (
+                          <button
+                            key={session.id}
+                            type="button"
+                            onClick={() => openHistoricalFeedback(session)}
+                            className="group flex w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left transition-colors hover:border-primary/30 hover:bg-muted/30 sm:p-5"
+                          >
                             <div
-                              key={idx}
-                              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                            >
-                              {msg.role === "assistant" && (
-                                <Avatar className="h-8 w-8 shrink-0">
-                                  <AvatarFallback className="bg-red-100 text-red-700 text-xs">
-                                    <Bot className="h-4 w-4" />
-                                  </AvatarFallback>
-                                </Avatar>
-                              )}
-                              <div
-                                className={cn(
-                                  "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
-                                  msg.role === "user"
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted",
-                                )}
-                              >
-                                {msg.content}
-                              </div>
-                              {msg.role === "user" && (
-                                <Avatar className="h-8 w-8 shrink-0">
-                                  <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">
-                                    <User className="h-4 w-4" />
-                                  </AvatarFallback>
-                                </Avatar>
-                              )}
-                            </div>
-                          ))}
-                          {chatLoading && (
-                            <div className="flex gap-3 justify-start">
-                              <Avatar className="h-8 w-8 shrink-0">
-                                <AvatarFallback className="bg-red-100 text-red-700 text-xs">
-                                  <Bot className="h-4 w-4" />
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="bg-muted rounded-2xl px-4 py-2.5 text-sm">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="animate-bounce [animation-delay:-0.3s]">
-                                    ●
-                                  </span>
-                                  <span className="animate-bounce [animation-delay:-0.15s]">
-                                    ●
-                                  </span>
-                                  <span className="animate-bounce">●</span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          <div ref={messagesEndRef} />
-                        </div>
-                      </ScrollArea>
-
-                      {/* ai-02 Style Input Area */}
-                      <div className="pt-3 border-t shrink-0">
-                        <div className="flex min-h-[56px] flex-col rounded-2xl cursor-text bg-card border border-border shadow-sm">
-                          <div className="flex-1 relative overflow-y-auto max-h-[120px]">
-                            <Textarea
-                              ref={chatInputRef}
-                              value={chatInput}
-                              onChange={(e) => setChatInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                  e.preventDefault();
-                                  sendMessage();
-                                }
+                              className="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-bold tabular-nums"
+                              style={{
+                                color: score == null ? undefined : scoreColor(score),
+                                backgroundColor: "color-mix(in oklch, currentColor 10%, transparent)",
                               }}
-                              placeholder="Digite sua resposta..."
-                              disabled={!sessionActive || chatLoading}
-                              className="w-full border-0 p-3 transition-[padding] duration-200 ease-in-out min-h-[44px] outline-none text-sm text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent! whitespace-pre-wrap break-words"
-                            />
-                          </div>
-                          <div className="flex min-h-[40px] items-center gap-2 p-2 pb-1">
-                            <Button
-                              onClick={endSession}
-                              variant="ghost"
-                              size="sm"
-                              disabled={!sessionActive || evaluating}
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs"
                             >
-                              Finalizar
-                            </Button>
-                            <div className="ml-auto">
-                              <Button
-                                onClick={sendMessage}
-                                disabled={
-                                  !sessionActive ||
-                                  chatLoading ||
-                                  !chatInput.trim()
-                                }
-                                size="icon"
-                                className={cn(
-                                  "rounded-full h-8 w-8 transition-colors duration-100 ease-out cursor-pointer",
-                                  chatInput.trim()
-                                    ? "bg-primary hover:bg-primary/90"
-                                    : "bg-muted",
-                                )}
-                              >
-                                <IconArrowUp
-                                  className={cn(
-                                    "h-4 w-4",
-                                    chatInput.trim()
-                                      ? "text-primary-foreground"
-                                      : "text-muted-foreground",
-                                  )}
-                                />
-                              </Button>
+                              {score ?? "—"}
                             </div>
-                          </div>
-                        </div>
-                      </div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold">
+                                  Treinamento {index + 1}
+                                </span>
+                                {session.evaluation?.classification && (
+                                  <Badge variant="secondary" className="text-[11px]">
+                                    {session.evaluation.classification}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {feedbackDate.toLocaleString("pt-BR", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })}
+                              </p>
+                            </div>
+                            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                          </button>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
+                )}
 
                 {evaluating && (
                   <div className="flex flex-col flex-1 items-center justify-center space-y-4">
@@ -1107,363 +1209,229 @@ export default function SellersV2Page() {
                   </div>
                 )}
 
-                {evaluation && (
-                  <div className="flex flex-col flex-1 overflow-y-auto px-1 py-4 space-y-4">
+                {!evaluating && !feedbackHistory && evaluation && (
+                  <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4 sm:p-6">
                     {evaluation.score == null ? (
-                      <div className="flex flex-col items-center gap-3 py-8 text-center">
-                        <AlertTriangle className="h-10 w-10 text-muted-foreground" />
-                        <p className="text-lg font-semibold">Conversa não avaliável</p>
-                        <p className="text-sm text-muted-foreground max-w-md">
-                          {evaluation.report.motivoNaoAvaliavel ||
-                            "Poucas trocas para avaliar com segurança — treine um pouco mais nessa sessão."}
-                        </p>
+                      <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed bg-muted/20 px-6 py-10 text-center">
+                        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                          <AlertTriangle className="size-6 text-muted-foreground" />
+                        </div>
+                        <div className="max-w-md space-y-1.5">
+                          <p className="text-lg font-semibold">Conversa não avaliável</p>
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            {evaluation.report.motivoNaoAvaliavel ||
+                              "Poucas trocas para avaliar com segurança — treine um pouco mais nessa sessão."}
+                          </p>
+                        </div>
                       </div>
                     ) : (
                       <>
-                        {/* Score header — same anchors as the real Auditor (manual, seção 7.2) */}
-                        <div className="flex flex-col items-center gap-2">
-                          <div
-                            className={`text-5xl font-bold ${
-                              evaluation.score >= 90
-                                ? "text-green-500"
-                                : evaluation.score >= 80
-                                  ? "text-emerald-500"
-                                  : evaluation.score >= 70
-                                    ? "text-yellow-500"
-                                    : evaluation.score >= 60
-                                      ? "text-orange-500"
-                                      : "text-red-500"
-                            }`}
-                          >
-                            {evaluation.score}/100
+                        <section className="grid items-center gap-3 rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/10 via-background to-background p-4 sm:grid-cols-[210px_1fr] sm:gap-6 sm:p-5">
+                          <TrainingGauge
+                            value={evaluation.score}
+                            label="/ 100"
+                            size={205}
+                            color={scoreColor(evaluation.score)}
+                          />
+                          <div className="space-y-3 text-center sm:text-left">
+                            <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                              <Badge
+                                variant={evaluation.score >= 70 ? "default" : "secondary"}
+                                className="px-3 py-1 text-sm"
+                              >
+                                <Sparkles className="mr-1 size-3.5" />
+                                {evaluation.classification}
+                              </Badge>
+                              <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                                Resultado do treinamento
+                              </span>
+                            </div>
+                            <p className="text-sm leading-6 text-foreground/85">
+                              {evaluation.report.resumo}
+                            </p>
+                            {evaluation.hasCriticalError && (
+                              <div className="inline-flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-left text-xs font-medium text-destructive">
+                                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                Erro crítico de política identificado; a nota foi limitada a 69.
+                              </div>
+                            )}
                           </div>
-                          <Badge
-                            variant={evaluation.score >= 70 ? "default" : "secondary"}
-                            className="text-sm"
-                          >
-                            {evaluation.classification}
-                          </Badge>
-                          {evaluation.hasCriticalError && (
-                            <div className="flex items-center gap-1 text-xs text-destructive">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              Erro crítico de política identificado (nota limitada a 69)
-                            </div>
-                          )}
-                        </div>
+                        </section>
 
-                        {/* Breakdown by criteria — os 5 critérios reais do Manual Comercial (seção 7.1) */}
-                        <div className="w-full space-y-2">
-                          {[
-                            {
-                              label: "Precisão das informações",
-                              value: evaluation.report.notasPorCriterio.precisaoInformacoes,
-                              max: 25,
-                            },
-                            {
-                              label: "Entendimento da necessidade",
-                              value: evaluation.report.notasPorCriterio.entendimentoNecessidade,
-                              max: 20,
-                            },
-                            {
-                              label: "Construção de valor",
-                              value: evaluation.report.notasPorCriterio.construcaoValor,
-                              max: 20,
-                            },
-                            {
-                              label: "Condução para o próximo passo",
-                              value: evaluation.report.notasPorCriterio.conducaoProximoPasso,
-                              max: 20,
-                            },
-                            {
-                              label: "Clareza e comunicação",
-                              value: evaluation.report.notasPorCriterio.clarezaComunicacao,
-                              max: 15,
-                            },
-                          ].map(({ label, value, max }) => (
-                            <div key={label} className="space-y-1">
-                              <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>{label}</span>
-                                <span className="font-medium">
-                                  {value}/{max}
-                                </span>
+                        <section className="space-y-4 rounded-2xl border bg-card p-4 sm:p-5">
+                          <div className="flex items-center gap-2">
+                            <Target className="size-4 text-primary" />
+                            <h3 className="text-sm font-semibold">Desempenho por critério</h3>
+                          </div>
+                          <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                            {[
+                              { label: "Precisão das informações", value: evaluation.report.notasPorCriterio.precisaoInformacoes, max: 25 },
+                              { label: "Entendimento da necessidade", value: evaluation.report.notasPorCriterio.entendimentoNecessidade, max: 20 },
+                              { label: "Construção de valor", value: evaluation.report.notasPorCriterio.construcaoValor, max: 20 },
+                              { label: "Condução para o próximo passo", value: evaluation.report.notasPorCriterio.conducaoProximoPasso, max: 20 },
+                              { label: "Clareza e comunicação", value: evaluation.report.notasPorCriterio.clarezaComunicacao, max: 15 },
+                            ].map(({ label, value, max }) => (
+                              <div key={label} className="space-y-2">
+                                <div className="flex items-start justify-between gap-3 text-xs">
+                                  <span className="font-medium leading-5 text-foreground/80">{label}</span>
+                                  <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                                    {value}<span className="text-muted-foreground">/{max}</span>
+                                  </span>
+                                </div>
+                                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-700",
+                                      value / max >= 0.8
+                                        ? "bg-primary"
+                                        : value / max >= 0.5
+                                          ? "bg-yellow-500"
+                                          : "bg-destructive",
+                                    )}
+                                    style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
+                                  />
+                                </div>
                               </div>
-                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    value / max >= 0.8
-                                      ? "bg-green-500"
-                                      : value / max >= 0.5
-                                        ? "bg-yellow-500"
-                                        : "bg-red-500"
-                                  }`}
-                                  style={{ width: `${(value / max) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {evaluation.report.resumo}
-                        </p>
+                            ))}
+                          </div>
+                        </section>
 
                         {evaluation.report.errosCriticos.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium text-destructive">Erros críticos</p>
-                            <ul className="list-disc list-inside text-sm text-muted-foreground">
-                              {evaluation.report.errosCriticos.map((e, i) => (
-                                <li key={i}>{e}</li>
+                          <section className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 sm:p-5">
+                            <div className="mb-3 flex items-center gap-2 text-destructive">
+                              <AlertTriangle className="size-4" />
+                              <h3 className="text-sm font-semibold">Erros críticos</h3>
+                            </div>
+                            <ul className="space-y-2 text-sm leading-6 text-foreground/75">
+                              {evaluation.report.errosCriticos.map((item, index) => (
+                                <li key={index} className="flex gap-2">
+                                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-destructive" />
+                                  <span>{item}</span>
+                                </li>
                               ))}
                             </ul>
-                          </div>
+                          </section>
                         )}
 
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">Acertos</p>
-                          <ul className="list-disc list-inside text-sm text-muted-foreground">
-                            {evaluation.report.acertos.map((a, i) => (
-                              <li key={i}>{a}</li>
-                            ))}
-                          </ul>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
+                            <div className="mb-3 flex items-center gap-2">
+                              <CheckCircle2 className="size-4 text-primary" />
+                              <h3 className="text-sm font-semibold">O que você fez bem</h3>
+                            </div>
+                            <ul className="space-y-2.5 text-sm leading-6 text-foreground/75">
+                              {evaluation.report.acertos.map((item, index) => (
+                                <li key={index} className="flex gap-2.5">
+                                  <CheckCircle2 className="mt-1 size-3.5 shrink-0 text-primary" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+
+                          <section className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 sm:p-5">
+                            <div className="mb-3 flex items-center gap-2">
+                              <Lightbulb className="size-4 text-yellow-600 dark:text-yellow-400" />
+                              <h3 className="text-sm font-semibold">Onde melhorar</h3>
+                            </div>
+                            <ul className="space-y-2.5 text-sm leading-6 text-foreground/75">
+                              {evaluation.report.falhas.map((item, index) => (
+                                <li key={index} className="flex gap-2.5">
+                                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-yellow-500" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
                         </div>
 
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">Falhas e oportunidades perdidas</p>
-                          <ul className="list-disc list-inside text-sm text-muted-foreground">
-                            {evaluation.report.falhas.map((f, i) => (
-                              <li key={i}>{f}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">Exemplo de resposta melhor</p>
-                          <p className="text-sm text-muted-foreground">
-                            {evaluation.report.exemploRespostaMelhor}
-                          </p>
-                        </div>
+                        <section className="rounded-2xl border border-blue-500/15 bg-blue-500/5 p-4 sm:p-5">
+                          <div className="mb-3 flex items-center gap-2">
+                            <MessageSquare className="size-4 text-blue-500" />
+                            <h3 className="text-sm font-semibold">Uma resposta melhor seria</h3>
+                          </div>
+                          <blockquote className="border-l-2 border-blue-500/50 pl-4 text-sm italic leading-6 text-foreground/75">
+                            “{evaluation.report.exemploRespostaMelhor}”
+                          </blockquote>
+                        </section>
                       </>
                     )}
 
                     <Button
                       onClick={() => {
-                        setEvaluation(null);
-                        setChatMessages([]);
+                        if (viewingHistoricalFeedback && sessionActive) {
+                          returnToActiveTraining();
+                          return;
+                        }
+                        void startSession();
                       }}
                       variant="outline"
-                      className="w-full"
+                      className="min-h-10 w-full shrink-0 gap-2"
+                      disabled={chatLoading}
                     >
-                      Treinar Novamente
+                      {chatLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : viewingHistoricalFeedback && sessionActive ? (
+                        <ArrowLeft className="size-4" />
+                      ) : (
+                        <RotateCcw className="size-4" />
+                      )}
+                      {viewingHistoricalFeedback && sessionActive
+                        ? "Voltar ao treinamento"
+                        : "Treinar novamente"}
                     </Button>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Radial Charts Sidebar */}
+            {/* Training gauges sidebar */}
             <div className="flex flex-col gap-6 h-full min-h-[400px]">
-              {/* Chart 1: Average Score */}
-              <Card className="flex flex-col flex-1">
-                <CardHeader className="pb-2">
+              <Card className="flex flex-1 flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none dark:border-white/10">
+                <CardHeader className="border-b border-border/60 px-4 pt-4 [.border-b]:pb-4 dark:border-white/10">
                   <CardTitle className="text-sm font-medium text-center">
-                    Nota Média em Treinamentos
+                    Nota do Treinamento de Hoje
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-1 items-center justify-center pb-4">
+                <CardContent className="flex flex-1 items-center justify-center px-4 py-4">
                   {loadingRankings ? (
                     <Skeleton className="w-[180px] h-[180px] rounded-full" />
-                  ) : trainingRanking.length > 0 ? (
-                    (() => {
-                      const avgAll = Math.round(
-                        trainingRanking.reduce(
-                          (sum, s) => sum + s.avgScore,
-                          0,
-                        ) / trainingRanking.length,
-                      );
-                      const scoreConfig: ChartConfig = {
-                        score: { label: "Nota", color: "var(--chart-1)" },
-                      };
-                      return (
-                        <ChartContainer
-                          config={scoreConfig}
-                          className="w-[180px] h-[180px]"
-                        >
-                          <RadialBarChart
-                            data={[
-                              { score: avgAll, fill: "var(--color-score)" },
-                            ]}
-                            startAngle={0}
-                            endAngle={(avgAll / 100) * 360}
-                            innerRadius={80}
-                            outerRadius={110}
-                          >
-                            <PolarGrid
-                              gridType="circle"
-                              radialLines={false}
-                              stroke="none"
-                              className="first:fill-muted last:fill-background"
-                              polarRadius={[86, 74]}
-                            />
-                            <RadialBar
-                              dataKey="score"
-                              background
-                              cornerRadius={10}
-                              isAnimationActive={false}
-                            />
-                            <PolarRadiusAxis
-                              tick={false}
-                              tickLine={false}
-                              axisLine={false}
-                            >
-                              <Label
-                                content={({ viewBox }) => {
-                                  if (
-                                    viewBox &&
-                                    "cx" in viewBox &&
-                                    "cy" in viewBox
-                                  ) {
-                                    return (
-                                      <text
-                                        x={viewBox.cx}
-                                        y={viewBox.cy}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                      >
-                                        <tspan
-                                          x={viewBox.cx}
-                                          y={viewBox.cy}
-                                          className="fill-foreground text-4xl font-bold"
-                                        >
-                                          {avgAll}
-                                        </tspan>
-                                        <tspan
-                                          x={viewBox.cx}
-                                          y={(viewBox.cy || 0) + 24}
-                                          className="fill-muted-foreground"
-                                        >
-                                          / 100
-                                        </tspan>
-                                      </text>
-                                    );
-                                  }
-                                }}
-                              />
-                            </PolarRadiusAxis>
-                          </RadialBarChart>
-                        </ChartContainer>
-                      );
-                    })()
+                  ) : currentUserTraining.todayScore != null ? (
+                    <TrainingGauge
+                      value={currentUserTraining.todayScore}
+                      label="/ 100"
+                      size={190}
+                      color={scoreColor(currentUserTraining.todayScore)}
+                    />
                   ) : (
                     <p className="text-sm text-muted-foreground py-8 text-center">
-                      Sem dados
+                      Sem nota hoje
                     </p>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Chart 2: Training Consistency */}
-              <Card className="flex flex-col flex-1">
-                <CardHeader className="pb-2">
+              <Card className="flex flex-1 flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none dark:border-white/10">
+                <CardHeader className="border-b border-border/60 px-4 pt-4 [.border-b]:pb-4 dark:border-white/10">
                   <CardTitle className="text-sm font-medium text-center">
-                    Aproveitamento de Dias Treinados
+                    Dias Treinados na Semana
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-1 items-center justify-center pb-4">
+                <CardContent className="flex flex-1 items-center justify-center px-4 py-4">
                   {loadingRankings ? (
                     <Skeleton className="w-[180px] h-[180px] rounded-full" />
-                  ) : trainingRanking.length > 0 ? (
-                    (() => {
-                      const totalDaysTrained = trainingRanking.reduce(
-                        (sum, s) => sum + s.daysTrained,
-                        0,
-                      );
-                      const totalPossibleDays = trainingRanking.reduce(
-                        (sum, s) => sum + s.totalDays,
-                        0,
-                      );
-                      const consistency =
-                        totalPossibleDays > 0
-                          ? Math.round(
-                              (totalDaysTrained / totalPossibleDays) * 100,
-                            )
-                          : 0;
-                      const daysConfig: ChartConfig = {
-                        days: {
-                          label: "Aproveitamento",
-                          color: "var(--chart-2)",
-                        },
-                      };
-                      return (
-                        <ChartContainer
-                          config={daysConfig}
-                          className="w-[180px] h-[180px]"
-                        >
-                          <RadialBarChart
-                            data={[
-                              { days: consistency, fill: "var(--color-days)" },
-                            ]}
-                            startAngle={0}
-                            endAngle={(consistency / 100) * 360}
-                            innerRadius={80}
-                            outerRadius={110}
-                          >
-                            <PolarGrid
-                              gridType="circle"
-                              radialLines={false}
-                              stroke="none"
-                              className="first:fill-muted last:fill-background"
-                              polarRadius={[86, 74]}
-                            />
-                            <RadialBar
-                              dataKey="days"
-                              background
-                              cornerRadius={10}
-                              isAnimationActive={false}
-                            />
-                            <PolarRadiusAxis
-                              tick={false}
-                              tickLine={false}
-                              axisLine={false}
-                            >
-                              <Label
-                                content={({ viewBox }) => {
-                                  if (
-                                    viewBox &&
-                                    "cx" in viewBox &&
-                                    "cy" in viewBox
-                                  ) {
-                                    return (
-                                      <text
-                                        x={viewBox.cx}
-                                        y={viewBox.cy}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                      >
-                                        <tspan
-                                          x={viewBox.cx}
-                                          y={viewBox.cy}
-                                          className="fill-foreground text-4xl font-bold"
-                                        >
-                                          {consistency}%
-                                        </tspan>
-                                        <tspan
-                                          x={viewBox.cx}
-                                          y={(viewBox.cy || 0) + 24}
-                                          className="fill-muted-foreground"
-                                        >
-                                          {totalDaysTrained}/{totalPossibleDays}{" "}
-                                          dias
-                                        </tspan>
-                                      </text>
-                                    );
-                                  }
-                                }}
-                              />
-                            </PolarRadiusAxis>
-                          </RadialBarChart>
-                        </ChartContainer>
-                      );
-                    })()
+                  ) : currentUserTraining.elapsedDays > 0 ? (
+                    <TrainingGauge
+                      value={Math.round(
+                        (currentUserTraining.daysTrained /
+                          currentUserTraining.elapsedDays) *
+                          100,
+                      )}
+                      label="% da semana"
+                      footer={`${currentUserTraining.daysTrained}/${currentUserTraining.totalDays} dias treinados`}
+                      size={190}
+                      color="var(--chart-2)"
+                    />
                   ) : (
                     <p className="text-sm text-muted-foreground py-8 text-center">
                       Sem dados

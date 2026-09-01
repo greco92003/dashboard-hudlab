@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import {
+  createClient,
+  createSupabaseServerForSync,
+} from "@/lib/supabase/server";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 export async function GET(request: NextRequest) {
@@ -12,6 +15,7 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
+    const trainingAdmin = await createSupabaseServerForSync();
 
     // Brasília is UTC-3. Shift Date so getUTC* methods return BRT local values.
     const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -170,6 +174,44 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => b.recordSales - a.recordSales);
 
+    // Training days run from 01:00 through 23:59:59.999 in Brasília time.
+    // Sessions abandoned past their deadline count as a poor (zero) result.
+    const expiredAt = new Date().toISOString();
+    const abandonedBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    await trainingAdmin
+      .from("seller_training_sessions")
+      .update({
+        ended_at: expiredAt,
+        score: 0,
+        status: "expired",
+        completion_reason: "timeout",
+        evaluation: {
+          score: 0,
+          classification: "Crítico",
+          hasCriticalError: false,
+          report: {
+            naoAvaliavel: false,
+            motivoNaoAvaliavel: "",
+            resumo: "Treinamento abandonado antes da conclusão.",
+            notasPorCriterio: {
+              precisaoInformacoes: 0,
+              entendimentoNecessidade: 0,
+              construcaoValor: 0,
+              conducaoProximoPasso: 0,
+              clarezaComunicacao: 0,
+            },
+            evidencias: [],
+            acertos: [],
+            falhas: ["Treinamento abandonado antes da conclusão."],
+            errosCriticos: [],
+            exemploRespostaMelhor: "Conclua os 15 minutos do treinamento.",
+          },
+        },
+        updated_at: expiredAt,
+      })
+      .eq("status", "active")
+      .lte("deadline_at", abandonedBefore);
+
     // Fetch training sessions for weekly ranking (Monday–Friday in BRT)
     const brtDayOfWeek = nowBRT.getUTCDay(); // 0=Sun, 1=Mon...6=Sat in BRT
     const daysToMonday = brtDayOfWeek === 0 ? -6 : 1 - brtDayOfWeek;
@@ -177,11 +219,11 @@ export async function GET(request: NextRequest) {
       nowBRT.getUTCFullYear(),
       nowBRT.getUTCMonth(),
       nowBRT.getUTCDate() + daysToMonday,
+      1,
       0,
       0,
       0,
-      0,
-    ); // Monday 00:00 BRT → 03:00 UTC
+    );
     const fridayBRT = brtToUTC(
       nowBRT.getUTCFullYear(),
       nowBRT.getUTCMonth(),
@@ -192,19 +234,48 @@ export async function GET(request: NextRequest) {
       999,
     ); // Friday 23:59:59 BRT → Saturday 02:59:59 UTC
 
-    const { data: trainingSessions } = await supabase
+    const { data: trainingSessions, error: trainingError } = await trainingAdmin
       .from("seller_training_sessions")
-      .select("seller_name, score, started_at")
+      .select("id, user_id, seller_name, score, started_at, ended_at, status")
       .gte("started_at", mondayBRT.toISOString())
       .lte("started_at", fridayBRT.toISOString())
       .not("score", "is", null);
+    if (trainingError) throw trainingError;
+
+    type TrainingRow = NonNullable<typeof trainingSessions>[number];
+    const bestBySellerDay = new Map<string, TrainingRow>();
+    trainingSessions?.forEach((session) => {
+      const sessionBRT = new Date(
+        new Date(session.started_at).getTime() - BRT_OFFSET_MS,
+      );
+      if (sessionBRT.getUTCHours() < 1) return;
+      const day = `${sessionBRT.getUTCFullYear()}-${String(sessionBRT.getUTCMonth() + 1).padStart(2, "0")}-${String(sessionBRT.getUTCDate()).padStart(2, "0")}`;
+      const sellerKey = session.user_id || normalizeName(session.seller_name);
+      const key = `${sellerKey}:${day}`;
+      const current = bestBySellerDay.get(key);
+      const currentScore = Number(current?.score ?? -1);
+      const candidateScore = Number(session.score ?? -1);
+      const currentTime = current
+        ? new Date(current.ended_at || current.started_at).getTime()
+        : 0;
+      const candidateTime = new Date(
+        session.ended_at || session.started_at,
+      ).getTime();
+      if (
+        !current ||
+        candidateScore > currentScore ||
+        (candidateScore === currentScore && candidateTime >= currentTime)
+      ) {
+        bestBySellerDay.set(key, session);
+      }
+    });
 
     // Calculate weekly training ranking — all dates/days in BRT
     const trainingMap: Record<
       string,
       { scores: number[]; days: Set<string>; trainedWeekdays: Set<number> }
     > = {};
-    trainingSessions?.forEach((s) => {
+    bestBySellerDay.forEach((s) => {
       const name = s.seller_name;
       // Convert UTC started_at to BRT local date/weekday
       const sessionBRT = new Date(
@@ -218,20 +289,20 @@ export async function GET(request: NextRequest) {
           days: new Set(),
           trainedWeekdays: new Set(),
         };
-      trainingMap[name].scores.push(s.score);
+      trainingMap[name].scores.push(Number(s.score));
       trainingMap[name].days.add(day);
       if (weekday >= 1 && weekday <= 5) {
         trainingMap[name].trainedWeekdays.add(weekday);
       }
     });
 
-    // Count business days elapsed this week (up to today) in BRT
-    const businessDaysElapsed = Math.min(
+    const workdaysInWeek = 5;
+    const workdaysElapsed = Math.min(
       Math.max(
         brtDayOfWeek === 0 ? 5 : brtDayOfWeek === 6 ? 5 : brtDayOfWeek,
         1,
       ),
-      5,
+      workdaysInWeek,
     );
 
     const trainingRanking = Object.entries(trainingMap)
@@ -240,17 +311,45 @@ export async function GET(request: NextRequest) {
         avgScore: Math.round(
           data.scores.reduce((a, b) => a + b, 0) / data.scores.length,
         ),
-        daysTrained: data.days.size,
-        totalDays: businessDaysElapsed,
+        daysTrained: data.trainedWeekdays.size,
+        totalDays: workdaysInWeek,
         trainedWeekdays: Array.from(data.trainedWeekdays), // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
         avatarUrl: avatarMap[name.toLowerCase()] || null,
       }))
       .sort((a, b) => b.avgScore - a.avgScore);
 
+    const todayKey = `${nowBRT.getUTCFullYear()}-${String(nowBRT.getUTCMonth() + 1).padStart(2, "0")}-${String(nowBRT.getUTCDate()).padStart(2, "0")}`;
+    const currentUserSessions = Array.from(bestBySellerDay.entries()).filter(
+      ([key, session]) => session.user_id === user.id || key.startsWith(`${user.id}:`),
+    );
+    const todaySession = currentUserSessions.find(([key]) =>
+      key.endsWith(`:${todayKey}`),
+    )?.[1];
+    const currentUserWeekdays = Array.from(
+      new Set(
+        currentUserSessions
+          .map(([, session]) => {
+            const local = new Date(
+              new Date(session.started_at).getTime() - BRT_OFFSET_MS,
+            );
+            return local.getUTCDay();
+          })
+          .filter((weekday) => weekday >= 1 && weekday <= 5),
+      ),
+    );
+    const currentUserTraining = {
+      todayScore: todaySession?.score ?? null,
+      daysTrained: currentUserWeekdays.length,
+      totalDays: workdaysInWeek,
+      elapsedDays: workdaysElapsed,
+      trainedWeekdays: currentUserWeekdays,
+    };
+
     return NextResponse.json({
       currentMonthRanking,
       recordRanking,
       trainingRanking,
+      currentUserTraining,
       currentMonth,
       currentYear,
     });
