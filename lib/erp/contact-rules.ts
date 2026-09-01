@@ -3,6 +3,27 @@ import type { GhlContactDetail, GhlCustomFieldDef } from "@/lib/ghl/api";
 export const TINY_CONTRIBUTOR_VALUES = ["0", "1", "2", "9"] as const;
 export type TinyContributor = (typeof TINY_CONTRIBUTOR_VALUES)[number];
 
+// Tiny API 2.0 — contato.incluir/alterar. Keep these limits shared by the
+// form and the API so imported GHL values cannot fail with a generic error.
+export const TINY_CONTACT_LIMITS = {
+  name: 50,
+  fantasy: 60,
+  document: 18,
+  stateRegistration: 18,
+  municipalRegistration: 18,
+  address: 50,
+  number: 10,
+  complement: 50,
+  neighborhood: 30,
+  postalCode: 10,
+  city: 30,
+  state: 2,
+  country: 50,
+  phone: 40,
+  email: 50,
+  emailNfe: 50,
+} as const;
+
 export type ErpContactDraft = {
   ghlContactId: string;
   name: string;
