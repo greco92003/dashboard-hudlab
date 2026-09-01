@@ -60,6 +60,83 @@ export type OrdemCompra = {
   itens: OrdemCompraItem[];
 };
 
+export type NotaEntrada = {
+  id: number;
+  numero: string | null;
+  /** "AAAA-MM-DD". */
+  dataEmissao: string;
+  itens: Array<{ produtoId: number; quantidade: number }>;
+};
+
+/**
+ * Distribui o que as notas de entrada trouxeram entre as ordens abertas,
+ * **da mais antiga para a mais nova**.
+ *
+ * O desenho original lia `ordem-compra.notaFiscal`, apostando que o Tiny
+ * amarraria a nota à OC. O campo nunca preencheu — numa OC criada por API não
+ * há como amarrar uma nota de entrada avulsa — e a primeira entrega parcial de
+ * verdade (nota 017905, 85 pares) apareceu contando duas vezes: já no saldo do
+ * Tiny e ainda como "a caminho". Aquele campo também é singular, então nem
+ * preenchido à mão aguentaria: a segunda nota apagaria a primeira.
+ *
+ * Aqui não há vínculo nenhum a manter. O casamento é por `produtoId`, que é o
+ * que a nota e a OC têm em comum — a descrição não serve, o fornecedor emite
+ * "SOLADO MICRO MC180 PRETO 42" para o nosso "SOLA SLIDE - PRETO 42/43".
+ *
+ * **A nota só abate ordem que já existia quando ela chegou.** Sem esse corte a
+ * nota 017903 (17/08, 1.050 pares — remessa antiga, já absorvida na contagem
+ * física) abateria a OC 2 (criada em 19/08) e apagaria 1.050 pares de "a
+ * caminho" que são reais.
+ */
+export function aplicarRecebimentos(
+  ordens: OrdemCompra[],
+  notas: NotaEntrada[],
+): OrdemCompra[] {
+  const saida = ordens.map((ordem) => ({
+    ...ordem,
+    itens: ordem.itens.map((item) => ({ ...item, recebido: 0 })),
+  }));
+
+  // Nota mais antiga primeiro: ela consome a ordem mais antiga.
+  const cronologica = [...notas].sort((a, b) =>
+    a.dataEmissao.localeCompare(b.dataEmissao),
+  );
+
+  for (const nota of cronologica) {
+    const candidatas = saida
+      .filter(
+        (ordem) =>
+          ordem.situacao !== OC_SITUACAO.cancelado &&
+          // Sem data não dá para saber se a ordem precede a nota; fica de fora
+          // em vez de arriscar abater uma ordem que ainda nem existia.
+          ordem.data !== null &&
+          ordem.data <= nota.dataEmissao,
+      )
+      .sort((a, b) => (a.data ?? "").localeCompare(b.data ?? ""));
+
+    for (const item of nota.itens) {
+      let restante = item.quantidade;
+      for (const ordem of candidatas) {
+        if (restante <= 0) break;
+        for (const linha of ordem.itens) {
+          if (linha.produtoId !== item.produtoId) continue;
+          const cabe = linha.quantidade - linha.recebido;
+          if (cabe <= 0) continue;
+          const usado = Math.min(cabe, restante);
+          linha.recebido += usado;
+          restante -= usado;
+          if (restante <= 0) break;
+        }
+      }
+      // Sobra é recebimento sem ordem correspondente — entrada avulsa, ou nota
+      // maior que o pedido. O saldo do Tiny já a registrou; aqui ela só não
+      // tem o que abater.
+    }
+  }
+
+  return saida;
+}
+
 /**
  * Pares pedidos e ainda não cobertos por nota, somados por cor × numeração.
  * É a coluna "a caminho" da tela.
@@ -67,12 +144,15 @@ export type OrdemCompra = {
 export function paresACaminho(ordens: OrdemCompra[]): SoladoItemDemanda[] {
   const acumulado = new Map<string, SoladoItemDemanda>();
   for (const ordem of ordens) {
-    if (
-      ordem.situacao === OC_SITUACAO.cancelado ||
-      ordem.situacao === OC_SITUACAO.atendido
-    ) {
-      continue;
-    }
+    // Só cancelada sai fora. "Atendida" NÃO serve de corte: o Tiny marca a
+    // ordem como atendida quando se vincula uma nota a ela, mesmo numa entrega
+    // parcial. Foi o que aconteceu com a OC 2 — 85 pares recebidos de 1.100, e
+    // os 1.015 que faltavam sumiram de "a caminho" sem nenhum aviso.
+    //
+    // Quem responde o que ainda vem é `quantidade - recebido`, calculado das
+    // notas de entrada do fornecedor. Se uma ordem for encerrada com menos do
+    // que foi pedido, o jeito de tirá-la da conta é cancelar.
+    if (ordem.situacao === OC_SITUACAO.cancelado) continue;
     for (const item of ordem.itens) {
       if (!item.cor || !item.numeracao) continue;
       const faltando = item.quantidade - item.recebido;
