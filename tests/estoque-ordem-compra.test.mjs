@@ -1,26 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  aplicarRecebimentos,
-  OC_SITUACAO,
-  paresACaminho,
-} from "../lib/estoque/ordem-compra.ts";
+import { OC_SITUACAO, paresACaminho } from "../lib/estoque/ordem-compra.ts";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-/** Ids reais dos SKUs de solado no Tiny, para o teste falar a mesma língua. */
-const P38 = 728159255;
-const P40 = 728159280;
-const P42 = 728159353;
-
-const item = (produtoId, cor, numeracao, quantidade) => ({
-  produtoId,
+const item = (cor, numeracao, quantidade, recebido = 0) => ({
+  produtoId: `${cor}${numeracao}`.length,
   descricao: `SOLA SLIDE - ${cor.toUpperCase()} ${numeracao}`,
   cor,
   numeracao,
   quantidade,
   preco: 12.6,
-  recebido: 0,
+  recebido,
 });
 
 const ordem = (over = {}) => ({
@@ -35,170 +26,87 @@ const ordem = (over = {}) => ({
   ...over,
 });
 
-const nota = (over = {}) => ({
-  id: 1,
-  numero: "017905",
-  dataEmissao: "2026-08-28",
-  itens: [],
-  ...over,
-});
-
-const linha = (ordens, id, produtoId) =>
-  ordens.find((o) => o.id === id).itens.find((i) => i.produtoId === produtoId);
-
-// ── abatimento ──────────────────────────────────────────────────────────────
-
-test("a nota abate a ordem mais antiga primeiro", () => {
-  const antiga = ordem({ id: 2, data: "2026-08-19", itens: [item(P42, "Preto", "42/43", 120)] });
-  const nova = ordem({ id: 3, data: "2026-08-27", itens: [item(P42, "Preto", "42/43", 213)] });
-
-  const saida = aplicarRecebimentos(
-    [nova, antiga],
-    [nota({ itens: [{ produtoId: P42, quantidade: 75 }] })],
+const ordenado = (lista) =>
+  [...lista].sort((a, b) =>
+    `${a.cor}${a.numeracao}`.localeCompare(`${b.cor}${b.numeracao}`),
   );
 
-  assert.equal(linha(saida, 2, P42).recebido, 75, "a de 19/08 recebe");
-  assert.equal(linha(saida, 3, P42).recebido, 0, "a de 27/08 não");
-});
+// ── "a caminho" ─────────────────────────────────────────────────────────────
 
-test("o que passa da ordem mais antiga transborda para a seguinte", () => {
-  const antiga = ordem({ id: 2, data: "2026-08-19", itens: [item(P42, "Preto", "42/43", 120)] });
-  const nova = ordem({ id: 3, data: "2026-08-27", itens: [item(P42, "Preto", "42/43", 213)] });
-
-  const saida = aplicarRecebimentos(
-    [antiga, nova],
-    [nota({ itens: [{ produtoId: P42, quantidade: 200 }] })],
-  );
-
-  assert.equal(linha(saida, 2, P42).recebido, 120, "enche a primeira");
-  assert.equal(linha(saida, 3, P42).recebido, 80, "o resto vai para a segunda");
-});
-
-test("nota anterior à ordem não a abate", () => {
-  // Caso real: a nota 017903 (17/08, 1.050 pares) é a remessa antiga, já
-  // absorvida na contagem física. Sem este corte ela apagaria 1.050 pares de
-  // "a caminho" da OC 2, criada só em 19/08.
-  const oc2 = ordem({ id: 2, data: "2026-08-19", itens: [item(P40, "Preto", "40/41", 120)] });
-
-  const saida = aplicarRecebimentos(
-    [oc2],
-    [nota({ dataEmissao: "2026-08-17", itens: [{ produtoId: P40, quantidade: 330 }] })],
-  );
-
-  assert.equal(linha(saida, 2, P40).recebido, 0);
-  assert.deepEqual(paresACaminho(saida), [
-    { cor: "Preto", numeracao: "40/41", pares: 120 },
+test("soma o que falta de cada ordem, por cor e numeração", () => {
+  const ordens = [
+    ordem({ id: 2, itens: [item("Preto", "40/41", 120), item("Branco", "36/37", 120)] }),
+    ordem({ id: 3, itens: [item("Preto", "40/41", 346)] }),
+  ];
+  assert.deepEqual(ordenado(paresACaminho(ordens)), [
+    { cor: "Branco", numeracao: "36/37", pares: 120 },
+    { cor: "Preto", numeracao: "40/41", pares: 466 },
   ]);
 });
 
-test("entrega parcial deixa o resto em 'a caminho'", () => {
-  // O caso que motivou tudo: 85 pares de 1.100. Vincular a nota no Tiny marca
-  // a OC como atendida e faria os outros 1.015 sumirem da conta.
-  const oc2 = ordem({
-    id: 2,
+test("o recebido da nota vinculada abate a linha", () => {
+  const ordens = [ordem({ id: 4, itens: [item("Preto", "42/43", 120, 75)] })];
+  assert.deepEqual(paresACaminho(ordens), [
+    { cor: "Preto", numeracao: "42/43", pares: 45 },
+  ]);
+});
+
+test("ordem cancelada não traz nada", () => {
+  const ordens = [
+    ordem({ id: 2, situacao: OC_SITUACAO.cancelado, itens: [item("Preto", "40/41", 120)] }),
+  ];
+  assert.deepEqual(paresACaminho(ordens), []);
+});
+
+test("ordem atendida e completa some pela aritmética, não pelo status", () => {
+  // Processo acordado com o time: o recebido vira uma OC própria, com a nota
+  // vinculada, e o Tiny a marca como atendida. Aqui ela zera porque
+  // quantidade == recebido — não porque o status diz "atendida".
+  const oc4 = ordem({
+    id: 4,
+    data: "2026-09-02",
+    situacao: OC_SITUACAO.atendido,
     itens: [
-      item(P38, "Preto", "38/39", 100),
-      item(P40, "Preto", "40/41", 120),
-      item(P42, "Preto", "42/43", 120),
+      item("Preto", "38/39", 5, 5),
+      item("Preto", "40/41", 5, 5),
+      item("Preto", "42/43", 75, 75),
     ],
   });
-
-  const saida = aplicarRecebimentos(
-    [oc2],
-    [
-      nota({
-        itens: [
-          { produtoId: P38, quantidade: 5 },
-          { produtoId: P40, quantidade: 5 },
-          { produtoId: P42, quantidade: 75 },
-        ],
-      }),
-    ],
-  );
-
-  assert.deepEqual(
-    paresACaminho(saida).sort((a, b) => a.numeracao.localeCompare(b.numeracao)),
-    [
-      { cor: "Preto", numeracao: "38/39", pares: 95 },
-      { cor: "Preto", numeracao: "40/41", pares: 115 },
-      { cor: "Preto", numeracao: "42/43", pares: 45 },
-    ],
-  );
+  assert.deepEqual(paresACaminho([oc4]), []);
 });
 
-test("reaplicar as mesmas notas não abate duas vezes", () => {
-  // `recebido` é sempre recalculado do zero: a leitura roda a cada atualização
-  // da tela e não pode acumular sobre o resultado anterior.
-  const oc = ordem({ id: 2, itens: [item(P42, "Preto", "42/43", 120)] });
-  const notas = [nota({ itens: [{ produtoId: P42, quantidade: 75 }] })];
-
-  const uma = aplicarRecebimentos([oc], notas);
-  const outra = aplicarRecebimentos(uma, notas);
-
-  assert.equal(linha(outra, 2, P42).recebido, 75);
-});
-
-test("ordem cancelada não absorve recebimento", () => {
-  const cancelada = ordem({
-    id: 2,
-    data: "2026-08-19",
-    situacao: OC_SITUACAO.cancelado,
-    itens: [item(P42, "Preto", "42/43", 120)],
-  });
-  const viva = ordem({ id: 3, data: "2026-08-27", itens: [item(P42, "Preto", "42/43", 213)] });
-
-  const saida = aplicarRecebimentos(
-    [cancelada, viva],
-    [nota({ itens: [{ produtoId: P42, quantidade: 50 }] })],
-  );
-
-  assert.equal(linha(saida, 2, P42).recebido, 0);
-  assert.equal(linha(saida, 3, P42).recebido, 50);
-});
-
-test("recebimento sem ordem correspondente não vira crédito", () => {
-  // Entrada avulsa, ou nota maior que o pedido. O saldo do Tiny já a
-  // registrou; aqui ela só não tem o que abater — e não pode virar negativo.
-  const oc = ordem({ id: 2, itens: [item(P42, "Preto", "42/43", 120)] });
-
-  const saida = aplicarRecebimentos(
-    [oc],
-    [nota({ itens: [{ produtoId: P42, quantidade: 500 }] })],
-  );
-
-  assert.equal(linha(saida, 2, P42).recebido, 120);
-  assert.deepEqual(paresACaminho(saida), []);
-});
-
-test("ordem sem data fica de fora do abatimento", () => {
-  // Sem data não dá para saber se ela precede a nota. Ficar de fora mantém os
-  // pares em "a caminho", que erra para o lado de comprar — não de faltar.
-  const oc = ordem({ id: 2, data: null, itens: [item(P42, "Preto", "42/43", 120)] });
-
-  const saida = aplicarRecebimentos(
-    [oc],
-    [nota({ itens: [{ produtoId: P42, quantidade: 75 }] })],
-  );
-
-  assert.equal(linha(saida, 2, P42).recebido, 0);
-});
-
-test("ordem marcada como atendida não some de 'a caminho'", () => {
-  // O Tiny marca a ordem como atendida quando se vincula uma nota, mesmo numa
-  // entrega parcial. Aconteceu de verdade com a OC 2: 85 recebidos de 1.100,
-  // situacao virou "1", e os 1.015 restantes sumiram da conta.
-  const oc = ordem({
+test("ordem atendida com entrega parcial NÃO some da conta", () => {
+  // O Tiny marca a ordem como atendida ao vincular a nota, mesmo parcial.
+  // Aconteceu com a OC 2: 85 recebidos de 1.100, status virou "atendida", e os
+  // 1.015 restantes sumiram de "a caminho" sem nenhum aviso.
+  const parcial = ordem({
     id: 2,
     situacao: OC_SITUACAO.atendido,
-    itens: [item(P42, "Preto", "42/43", 120)],
+    itens: [item("Preto", "42/43", 120, 75)],
   });
-
-  const saida = aplicarRecebimentos(
-    [oc],
-    [nota({ itens: [{ produtoId: P42, quantidade: 75 }] })],
-  );
-
-  assert.deepEqual(paresACaminho(saida), [
+  assert.deepEqual(paresACaminho([parcial]), [
     { cor: "Preto", numeracao: "42/43", pares: 45 },
+  ]);
+});
+
+test("recebido acima do pedido não vira crédito negativo", () => {
+  const ordens = [ordem({ id: 2, itens: [item("Preto", "42/43", 120, 500)] })];
+  assert.deepEqual(paresACaminho(ordens), []);
+});
+
+test("item sem cor ou numeração reconhecida fica de fora", () => {
+  // Produto novo cadastrado fora do padrão "SOLA SLIDE - COR NUM" não vira
+  // linha da matriz: melhor não aparecer do que aparecer no lugar errado.
+  const ordens = [
+    ordem({
+      id: 2,
+      itens: [
+        { ...item("Preto", "40/41", 120), cor: null, numeracao: null },
+        item("Preto", "42/43", 40),
+      ],
+    }),
+  ];
+  assert.deepEqual(paresACaminho(ordens), [
+    { cor: "Preto", numeracao: "42/43", pares: 40 },
   ]);
 });
