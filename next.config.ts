@@ -83,6 +83,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/designers-ghl",
+        destination: "/designers",
+        permanent: true,
+      },
+    ];
+  },
   // Configure external packages for better API performance
   serverExternalPackages: ["@supabase/supabase-js"],
   // Optimize for production

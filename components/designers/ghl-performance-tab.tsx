@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowDown,
@@ -81,7 +87,7 @@ function SortableHeader({
   );
 }
 
-export default function DesignersGhlPage() {
+export function DesignersPerformanceTab() {
   const [actions, setActions] = useState<DesignerAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,14 +143,18 @@ export default function DesignersGhlPage() {
         accessorKey: "email",
         header: "E-mail",
         cell: ({ row }) => (
-          <div className="max-w-[240px] truncate">{row.original.email || "-"}</div>
+          <div className="max-w-[240px] truncate">
+            {row.original.email || "-"}
+          </div>
         ),
       },
       {
         accessorKey: "utm2",
         header: "UTM2",
         cell: ({ row }) => (
-          <div className="max-w-[220px] truncate">{row.original.utm2 || "-"}</div>
+          <div className="max-w-[220px] truncate">
+            {row.original.utm2 || "-"}
+          </div>
         ),
       },
       {
@@ -176,10 +186,13 @@ export default function DesignersGhlPage() {
         }
         if (forceRefresh) params.set("refresh", "1");
 
-        const response = await fetch(`/api/designers-ghl?${params.toString()}`, {
-          cache: "no-store",
-          signal,
-        });
+        const response = await fetch(
+          `/api/designers-ghl?${params.toString()}`,
+          {
+            cache: "no-store",
+            signal,
+          },
+        );
         const result = await response.json();
 
         if (!response.ok) {
@@ -188,7 +201,10 @@ export default function DesignersGhlPage() {
 
         setActions(result.actions || []);
       } catch (fetchError) {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+        if (
+          fetchError instanceof DOMException &&
+          fetchError.name === "AbortError"
+        ) {
           return;
         }
         console.error("Error fetching GHL designer data:", fetchError);
@@ -240,7 +256,8 @@ export default function DesignersGhlPage() {
 
   const totals = useMemo(
     () => ({
-      mockups: actions.filter((action) => action.actionType === "mockup").length,
+      mockups: actions.filter((action) => action.actionType === "mockup")
+        .length,
       alterations: actions.filter(
         (action) => action.actionType === "alteration",
       ).length,
@@ -252,7 +269,9 @@ export default function DesignersGhlPage() {
     <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold sm:text-2xl">Designers GHL</h1>
+          <h2 className="text-xl font-bold sm:text-2xl">
+            Desempenho dos designers
+          </h2>
           <p className="text-sm text-muted-foreground">
             Ações de mockup e alteração registradas no GHL
           </p>
@@ -263,7 +282,9 @@ export default function DesignersGhlPage() {
           disabled={loading || refreshing}
           className="w-full gap-2 sm:w-auto"
         >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+          />
           {refreshing ? "Atualizando..." : "Atualizar dados"}
         </Button>
       </div>
@@ -273,7 +294,9 @@ export default function DesignersGhlPage() {
           {[30, 60, 90].map((days) => (
             <Button
               key={days}
-              variant={!useCustomPeriod && period === days ? "default" : "outline"}
+              variant={
+                !useCustomPeriod && period === days ? "default" : "outline"
+              }
               onClick={() => handlePeriodChange(days)}
               className="w-full sm:w-auto"
             >
@@ -290,10 +313,15 @@ export default function DesignersGhlPage() {
           <Label className="whitespace-nowrap text-sm sm:text-base">
             Selecione o período desejado:
           </Label>
-          <div className="w-full sm:w-auto sm:min-w-[250px]" suppressHydrationWarning>
+          <div
+            className="w-full sm:w-auto sm:min-w-[250px]"
+            suppressHydrationWarning
+          >
             <Calendar23
               value={dateRange}
-              onChange={(range: DateRange | undefined) => handleDateRangeChange(range)}
+              onChange={(range: DateRange | undefined) =>
+                handleDateRangeChange(range)
+              }
               hideLabel
             />
           </div>
@@ -316,14 +344,20 @@ export default function DesignersGhlPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card className="gap-2 py-5">
             <CardHeader className="flex-row items-center justify-between pb-0">
-              <CardTitle className="text-sm text-muted-foreground">Total de ações</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">
+                Total de ações
+              </CardTitle>
               <Palette className="h-5 w-5 text-primary" />
             </CardHeader>
-            <CardContent className="text-3xl font-bold">{actions.length}</CardContent>
+            <CardContent className="text-3xl font-bold">
+              {actions.length}
+            </CardContent>
           </Card>
           <Card className="gap-2 py-5">
             <CardHeader className="flex-row items-center justify-between pb-0">
-              <CardTitle className="text-sm text-muted-foreground">Mockups prontos</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">
+                Mockups prontos
+              </CardTitle>
               <FileText className="h-5 w-5 text-green-600" />
             </CardHeader>
             <CardContent className="text-3xl font-bold text-green-600">
@@ -332,7 +366,9 @@ export default function DesignersGhlPage() {
           </Card>
           <Card className="gap-2 py-5">
             <CardHeader className="flex-row items-center justify-between pb-0">
-              <CardTitle className="text-sm text-muted-foreground">Alterações prontas</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">
+                Alterações prontas
+              </CardTitle>
               <FileText className="h-5 w-5 text-orange-600" />
             </CardHeader>
             <CardContent className="text-3xl font-bold text-orange-600">
@@ -343,7 +379,9 @@ export default function DesignersGhlPage() {
       )}
 
       <section className="mt-2">
-        <h2 className="mb-4 text-lg font-semibold sm:text-xl">Desempenho por designer</h2>
+        <h2 className="mb-4 text-lg font-semibold sm:text-xl">
+          Desempenho por designer
+        </h2>
         {loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Skeleton className="h-36 w-full" />
@@ -364,18 +402,26 @@ export default function DesignersGhlPage() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Mockups prontos</span>
-                    <span className="font-semibold text-green-600">{designer.mockups}</span>
+                    <span className="text-muted-foreground">
+                      Mockups prontos
+                    </span>
+                    <span className="font-semibold text-green-600">
+                      {designer.mockups}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Alterações prontas</span>
+                    <span className="text-muted-foreground">
+                      Alterações prontas
+                    </span>
                     <span className="font-semibold text-orange-600">
                       {designer.alterations}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t pt-2 text-sm">
                     <span className="font-semibold">Total</span>
-                    <span className="font-bold text-primary">{designer.total}</span>
+                    <span className="font-bold text-primary">
+                      {designer.total}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -395,7 +441,17 @@ export default function DesignersGhlPage() {
           <CardTitle className="text-lg sm:text-xl">Ações detalhadas</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? <Skeleton className="h-64 w-full" /> : <DataTable columns={columns} data={actions} />}
+          {loading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : (
+            <DataTable
+              columns={columns}
+              data={actions}
+              pagination
+              initialPageSize={10}
+              pageSizeOptions={[10, 20, 50]}
+            />
+          )}
         </CardContent>
       </Card>
     </div>
