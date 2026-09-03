@@ -51,3 +51,35 @@ export async function claimWebhookEvent(input: {
   });
   throw new Error("Webhook replay protection is unavailable");
 }
+
+/**
+ * Remove somente a reserva recém-criada quando o processamento falha.
+ * Sem isso, a primeira tentativa com erro envenena a chave e toda tentativa
+ * posterior do provedor é descartada como replay.
+ */
+export async function releaseWebhookEvent(input: {
+  provider: WebhookProvider;
+  idempotencyKey: string;
+  payloadSha256: string;
+}): Promise<void> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) throw new Error("Supabase URL is not configured");
+
+  const supabase = createClient(supabaseUrl, getSupabaseSecretKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { error } = await supabase
+    .from("webhook_idempotency")
+    .delete()
+    .eq("provider", input.provider)
+    .eq("idempotency_key", input.idempotencyKey)
+    .eq("payload_sha256", input.payloadSha256);
+
+  if (error) {
+    console.error("Webhook idempotency release failed", {
+      provider: input.provider,
+      code: error.code,
+    });
+    throw new Error("Webhook replay claim could not be released");
+  }
+}

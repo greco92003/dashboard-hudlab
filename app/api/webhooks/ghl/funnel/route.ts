@@ -14,6 +14,7 @@ import {
 import {
   buildWebhookIdempotencyKey,
   claimWebhookEvent,
+  releaseWebhookEvent,
 } from "@/lib/security/webhook-idempotency";
 
 type JsonRecord = Record<string, unknown>;
@@ -208,7 +209,7 @@ export async function POST(request: NextRequest) {
     customData.webhook_id,
     customData.event_id,
   );
-  const claim = await claimWebhookEvent({
+  const claimInput = {
     provider: "ghl",
     idempotencyKey: buildWebhookIdempotencyKey(
       "ghl",
@@ -217,11 +218,12 @@ export async function POST(request: NextRequest) {
     ),
     payloadSha256: sha256Hex(rawBody),
     requestTimestamp,
-  });
+  } as const;
+  const claim = await claimWebhookEvent(claimInput);
   if (!claim.claimed) {
     return NextResponse.json(
-      { received: false, error: "Replay rejected" },
-      { status: 409 },
+      { received: true, duplicate: true },
+      { status: 200 },
     );
   }
 
@@ -277,6 +279,11 @@ export async function POST(request: NextRequest) {
       message: error.message,
       stage,
     });
+    try {
+      await releaseWebhookEvent(claimInput);
+    } catch (releaseError) {
+      console.error("[GHL Funnel] Failed to release retry claim", releaseError);
+    }
     return NextResponse.json(
       { received: false, error: "Failed to persist webhook" },
       { status: 500 },

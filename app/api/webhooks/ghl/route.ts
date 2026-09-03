@@ -9,6 +9,5 @@ export async function POST(request: NextRequest) {
 }
 
 export const GET = getGhlOpportunityWebhookStatus;
-
 export const runtime = "nodejs";
 export const maxDuration = 300;

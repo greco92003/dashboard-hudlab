@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
@@ -8,6 +9,7 @@ import {
   searchGhlOpportunitiesByStage,
 } from "@/lib/ghl/api";
 import { fetchMessagesSince } from "@/lib/ghl/mockup-instructions/ghl-client";
+import { processMockupInstructionWebhook } from "@/lib/ghl/mockup-instructions/processor";
 
 const TARGET_PIPELINE = "fábrica de mockups";
 const TARGET_STAGES = [
@@ -117,6 +119,9 @@ export async function GET(request: Request) {
           const fieldEntry = opportunity.customFields?.find(
             (field) => field.id === summaryFieldId,
           );
+          const latestCompletedSummary = history.find(
+            (run) => run.status === "completed" && Boolean(run.summary),
+          )?.summary;
           return {
             id: opportunity.id,
             name: opportunity.name,
@@ -128,10 +133,9 @@ export async function GET(request: Request) {
             stageId: stage.id,
             stageName: stage.name,
             updatedAt: opportunity.updatedAt,
-            currentSummary: fieldEntry
-              ? extractOpportunityFieldValue(fieldEntry)
-              : (history.find((run) => run.status === "completed")?.summary ??
-                null),
+            currentSummary:
+              latestCompletedSummary ??
+              (fieldEntry ? extractOpportunityFieldValue(fieldEntry) : null),
             conversationId: cache?.conversation_id ?? null,
             anchorMessageAt: cache?.anchor_message_at ?? null,
             cacheUpdatedAt: cache?.updated_at ?? null,
@@ -204,5 +208,39 @@ export async function GET(request: Request) {
   }
 }
 
+export async function POST(request: Request) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+
+  try {
+    const body = (await request.json()) as { dealId?: unknown };
+    const dealId = typeof body.dealId === "string" ? body.dealId.trim() : "";
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(dealId)) {
+      return NextResponse.json(
+        { error: "ID do negócio inválido." },
+        { status: 400 },
+      );
+    }
+
+    const result = await processMockupInstructionWebhook({
+      opportunityId: dealId,
+      customData: { reprocess_key: randomUUID() },
+    });
+    return NextResponse.json(result, {
+      status: result.accepted && result.status !== "failed" ? 200 : 422,
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("Mockup instruction manual reprocessing failed", error);
+    return NextResponse.json(
+      {
+        error: "Não foi possível regenerar a instrução de mockup.",
+        details: error instanceof Error ? error.message : "Erro desconhecido",
+      },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+}
+
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;

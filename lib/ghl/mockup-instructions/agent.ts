@@ -6,12 +6,18 @@ import {
   downloadGhlMedia,
   type MockupConversationMessage,
 } from "@/lib/ghl/mockup-instructions/ghl-client";
+import {
+  formatBriefing,
+  previousBriefingReferences,
+  type BriefingParagraph,
+  type BriefingReference,
+} from "@/lib/ghl/mockup-instructions/briefing";
 
 export const MOCKUP_AGENT_MODEL =
   process.env.GHL_MOCKUP_AGENT_MODEL || "gpt-5.6-terra";
 export const MOCKUP_TRANSCRIPTION_MODEL =
   process.env.GHL_MOCKUP_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe";
-export const MOCKUP_PROMPT_VERSION = "2026-09-02.1";
+export const MOCKUP_PROMPT_VERSION = "2026-09-03.1";
 
 const resultSchema = z.object({
   resumo: z.string().min(20).max(5000),
@@ -23,6 +29,13 @@ const resultSchema = z.object({
   restricoes: z.array(z.string().max(500)).max(20),
   referencias: z.array(z.string().max(1000)).max(30),
   duvidasParaDesigner: z.array(z.string().max(500)).max(20),
+  narrativa: z.array(z.object({
+    texto: z.string().min(10).max(900),
+    referencias: z.array(z.object({
+      id: z.string().max(80),
+      legenda: z.string().max(160),
+    })).max(4),
+  })).min(1).max(5),
 });
 
 export type MockupAgentResult = z.infer<typeof resultSchema>;
@@ -40,6 +53,26 @@ const jsonSchema = {
     restricoes: { type: "array", items: { type: "string" } },
     referencias: { type: "array", items: { type: "string" } },
     duvidasParaDesigner: { type: "array", items: { type: "string" } },
+    narrativa: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          texto: { type: "string" },
+          referencias: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { id: { type: "string" }, legenda: { type: "string" } },
+              required: ["id", "legenda"],
+            },
+          },
+        },
+        required: ["texto", "referencias"],
+      },
+    },
   },
   required: [
     "resumo",
@@ -51,6 +84,7 @@ const jsonSchema = {
     "restricoes",
     "referencias",
     "duvidasParaDesigner",
+    "narrativa",
   ],
 } as const;
 
@@ -82,9 +116,10 @@ async function buildMediaContent(
   client: OpenAI,
   messages: MockupConversationMessage[],
   sourceFields: SourceFields,
-): Promise<{ content: any[]; stats: MediaStats }> {
+): Promise<{ content: any[]; stats: MediaStats; references: BriefingReference[] }> {
   const content: any[] = [];
   const stats = { images: 0, audios: 0 };
+  const references: BriefingReference[] = [];
   const messageAttachments = messages.flatMap((message) =>
     message.attachments.map((url) => ({ url, message })),
   );
@@ -96,18 +131,29 @@ async function buildMediaContent(
 
   // Mais recentes primeiro. O limite evita que conversas longas explodam
   // latência/custo sem perder as referências relevantes da rodada atual.
-  const candidates = [...messageAttachments, ...directFieldUrls].reverse();
+  const candidates = [...messageAttachments, ...directFieldUrls]
+    .reverse()
+    .filter((candidate, index, all) =>
+      all.findIndex((item) => item.url === candidate.url) === index,
+    );
   for (const candidate of candidates) {
-    if (stats.images >= 12 && stats.audios >= 8) break;
+    if (stats.images >= 12 && stats.audios >= 8 && candidate.message) continue;
     const media = await downloadGhlMedia(candidate.url);
-    if (!media) continue;
+    const referenceId = `ref-${references.length + 1}`;
+    if (!media) {
+      if (!candidate.message) {
+        references.push({ id: referenceId, url: candidate.url, isImage: false });
+      }
+      continue;
+    }
 
     if (media.mimeType.startsWith("image/") && stats.images < 12) {
+      references.push({ id: referenceId, url: candidate.url, isImage: true });
       content.push({
         type: "input_text",
         text: candidate.message
-          ? `Imagem anexada à mensagem ${candidate.message.id} (${candidate.message.dateAdded}):`
-          : `Imagem obtida de um campo do GHL (${candidate.url}):`,
+          ? `Imagem de referência ${referenceId}, anexada à mensagem ${candidate.message.id} (${candidate.message.dateAdded}):`
+          : `Imagem de referência ${referenceId}, obtida de um campo do GHL:`,
       });
       content.push({
         type: "input_image",
@@ -139,9 +185,13 @@ async function buildMediaContent(
         });
       }
     }
+
+    if (!candidate.message && !media.mimeType.startsWith("image/")) {
+      references.push({ id: referenceId, url: candidate.url, isImage: false });
+    }
   }
 
-  return { content, stats };
+  return { content, stats, references };
 }
 
 export async function runMockupInstructionAgent(input: {
@@ -160,6 +210,12 @@ export async function runMockupInstructionAgent(input: {
     input.messages,
     input.sourceFields,
   );
+  const references = [
+    ...media.references,
+    ...previousBriefingReferences(input.previousSummary).filter(
+      (previous) => !media.references.some((item) => item.url === previous.url),
+    ),
+  ];
   const links = uniqueUrls([
     ...input.sourceFields.mockupLogotipo,
     ...input.sourceFields.linkMockup,
@@ -169,7 +225,7 @@ export async function runMockupInstructionAgent(input: {
   const content: any[] = [
     {
       type: "input_text",
-      text: `NEGÓCIO: ${input.opportunityName}\nETAPA: ${input.stageName}\nTIPO: ${input.instructionType === "initial" ? "criação inicial" : "alteração"}\n\nRESUMO ANTERIOR (pode estar vazio):\n${input.previousSummary || "Sem resumo anterior."}\n\nLINKS/CAMPOS GHL:\n${links.length ? links.join("\n") : "Nenhum link preenchido."}\n\nMENSAGENS NOVAS DESDE O CACHE/INÍCIO DAS INSTRUÇÕES:\n${transcriptText(input.messages) || "Nenhuma mensagem textual nova; use as imagens e o contexto anterior."}`,
+      text: `NEGÓCIO: ${input.opportunityName}\nETAPA: ${input.stageName}\nTIPO: ${input.instructionType === "initial" ? "criação inicial" : "alteração"}\n\nRESUMO ANTERIOR (pode estar vazio):\n${input.previousSummary || "Sem resumo anterior."}\n\nCATÁLOGO DE REFERÊNCIAS PERMITIDAS (use somente estes IDs em narrativa.referencias):\n${references.length ? references.map((item) => `${item.id}: ${item.isImage ? "imagem" : "link"}`).join("\n") : "Nenhuma referência disponível."}\n\nLINKS/CAMPOS GHL:\n${links.length ? links.join("\n") : "Nenhum link preenchido."}\n\nMENSAGENS NOVAS DESDE O CACHE/INÍCIO DAS INSTRUÇÕES:\n${transcriptText(input.messages) || "Nenhuma mensagem textual nova; use as imagens e o contexto anterior."}`,
     },
     ...media.content,
   ];
@@ -185,7 +241,9 @@ Regras:
 - Diferencie com precisão texto impresso, logotipo, etiqueta física e outros elementos.
 - Nunca invente cor, material, técnica, posição ou texto. Coloque ambiguidades em duvidasParaDesigner.
 - Considere apenas a parte da conversa a partir da escolha sobre dar instruções. Mensagens de automação anteriores não são briefing.
-- O campo resumo deve ser autocontido e pronto para ser colado no GHL, com seções curtas: OBJETIVO, EXECUÇÃO, REFERÊNCIAS, RESTRIÇÕES e DÚVIDAS (omita se vazia).
+- Mantenha resumo para compatibilidade, mas escreva narrativa como o briefing principal: texto corrido, natural, conciso, em estilo de pequeno texto de blog, sem títulos, tópicos ou seções. Use entre 1 e 5 parágrafos e no máximo 220 palavras no total.
+- Em cada parágrafo de narrativa, associe as imagens ou links que comprovam aquele trecho usando seus IDs no catálogo. Dê a cada referência uma legenda curta e específica, como "Logo enviado pelo cliente". Não invente IDs e não repita uma referência.
+- Inclua apenas detalhes úteis à execução. Se houver uma dúvida indispensável, incorpore-a brevemente ao fim do texto.
 - Links de pastas do Google Drive podem não abrir como imagem no modelo; trate-os como referências e use as imagens anexadas/conteúdo visual realmente recebido para descrever o visual.`,
     input: [{ role: "user", content }],
     text: {
@@ -201,5 +259,9 @@ Regras:
   });
 
   const parsed = resultSchema.parse(JSON.parse(response.output_text));
+  parsed.resumo = formatBriefing(
+    parsed.narrativa as BriefingParagraph[],
+    references,
+  );
   return { result: parsed, stats: media.stats };
 }

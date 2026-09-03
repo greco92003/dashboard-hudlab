@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { briefingPreview, mockupStageStyle } from "@/lib/ghl/mockup-instructions/briefing";
 
 type InstructionRun = {
   id: string;
@@ -66,16 +67,6 @@ function formatMoney(value: number | null) {
   }).format(value);
 }
 
-function stageAccent(stage: string) {
-  const normalized = stage
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  if (normalized === "mockup prioridade") return "border-l-emerald-500";
-  if (normalized === "alteracao prioridade") return "border-l-rose-500";
-  return "border-l-amber-500";
-}
-
 function statusBadge(run: InstructionRun | undefined) {
   if (!run) return <Badge variant="outline">Aguardando automação</Badge>;
   if (run.status === "completed") {
@@ -95,7 +86,8 @@ export function MockupInstructionsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (refresh = false) => {
-    refresh ? setRefreshing(true) : setLoading(true);
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       const response = await fetch("/api/designers/mockup-instructions", {
@@ -200,6 +192,7 @@ export function MockupInstructionsTab() {
           <div className="grid gap-3 lg:grid-cols-2">
             {snapshot.deals.map((deal) => {
               const latestRun = deal.history[0];
+              const stageStyle = mockupStageStyle(deal.stageName);
               return (
                 <Link
                   key={deal.id}
@@ -209,7 +202,7 @@ export function MockupInstructionsTab() {
                   <Card
                     className={cn(
                       "gap-3 border-l-4 py-4 transition-colors hover:bg-muted/30",
-                      stageAccent(deal.stageName),
+                      stageStyle.accent,
                     )}
                   >
                     <CardHeader className="flex-row items-start justify-between gap-3 pb-0">
@@ -228,7 +221,9 @@ export function MockupInstructionsTab() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline">{deal.stageName}</Badge>
+                        <Badge variant="outline" className={stageStyle.badge}>
+                          {deal.stageName}
+                        </Badge>
                         <Badge variant="secondary">
                           {formatMoney(deal.monetaryValue)}
                         </Badge>
@@ -238,7 +233,7 @@ export function MockupInstructionsTab() {
                         </Badge>
                       </div>
                       <p className="line-clamp-3 text-sm text-muted-foreground">
-                        {deal.currentSummary ||
+                        {(deal.currentSummary && briefingPreview(deal.currentSummary)) ||
                           "O resumo ainda não foi gerado para este deal."}
                       </p>
                     </CardContent>

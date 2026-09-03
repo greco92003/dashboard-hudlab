@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { parseAsString, useQueryState } from "nuqs";
 import {
   ArrowLeft,
@@ -29,6 +30,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { mockupStageStyle } from "@/lib/ghl/mockup-instructions/briefing";
 
 type InstructionRun = {
   id: string;
@@ -227,7 +229,8 @@ function BriefingSections({
   function toggle(title: string) {
     setOpenSections((current) => {
       const next = new Set(current);
-      next.has(title) ? next.delete(title) : next.add(title);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
       return next;
     });
   }
@@ -302,16 +305,91 @@ function BriefingSections({
   );
 }
 
+function BlogBriefing({
+  summary,
+  headline,
+}: {
+  summary: string;
+  headline?: string | null;
+}) {
+  // Resumos antigos tinham cabeçalhos; apresentamos o conteúdo como narrativa
+  // enquanto as próximas execuções já chegam no novo formato.
+  const narrative = summary
+    .replace(/^(OBJETIVO|EXECUÇÃO|REFERÊNCIAS|RESTRIÇÕES|DÚVIDAS)\s*:?[ \t]*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return (
+    <article className="overflow-hidden rounded-xl border bg-background">
+      {headline ? (
+        <header className="bg-primary/[0.04] px-4 py-5 sm:px-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            Alteração resumida
+          </p>
+          <p className="mt-2 text-base font-medium leading-7 text-foreground sm:text-lg">
+            {headline}
+          </p>
+        </header>
+      ) : null}
+      <div className="px-4 py-1 sm:px-5">
+        <ReactMarkdown
+          components={{
+          p: ({ children }) => (
+            <p className="my-4 text-sm leading-7 text-foreground/90 first:mt-0 last:mb-0">
+              {children}
+            </p>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              {children}
+            </a>
+          ),
+          img: ({ src, alt }) => (
+            <span className="my-4 block max-w-full">
+              <span className="mb-2 block text-sm font-semibold text-foreground">
+                {alt || "Referência visual do briefing"}
+              </span>
+              <a
+                href={typeof src === "string" ? src : undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block max-w-full"
+              >
+                {/* A imagem abre na URL original que também foi salva no GHL. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={typeof src === "string" ? src : undefined}
+                  alt={alt || "Referência visual do briefing"}
+                  className="h-44 w-auto max-w-full rounded-xl border bg-muted object-cover shadow-sm transition hover:border-primary/50 hover:shadow-md sm:h-52"
+                />
+              </a>
+            </span>
+          ),
+          }}
+        >
+          {narrative}
+        </ReactMarkdown>
+      </div>
+    </article>
+  );
+}
+
 export function MockupInstructionDetail() {
   const [dealId] = useQueryState("deal", parseAsString);
   const [snapshot, setSnapshot] = useState<MockupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     async (refresh = false) => {
-      refresh ? setRefreshing(true) : setLoading(true);
+      if (refresh) setRefreshing(true);
+      else setLoading(true);
       setError(null);
       try {
         const response = await fetch(
@@ -341,6 +419,32 @@ export function MockupInstructionDetail() {
     void load();
   }, [load]);
 
+  const regenerate = useCallback(async () => {
+    if (!dealId) return;
+    setRegenerating(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/designers/mockup-instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.details || result.reason || result.error);
+      }
+      await load(true);
+    } catch (regenerateError) {
+      setError(
+        regenerateError instanceof Error
+          ? regenerateError.message
+          : "Não foi possível regenerar a instrução.",
+      );
+    } finally {
+      setRegenerating(false);
+    }
+  }, [dealId, load]);
+
   const deal = useMemo(
     () => snapshot?.deals.find((item) => item.id === dealId) ?? null,
     [dealId, snapshot],
@@ -354,6 +458,7 @@ export function MockupInstructionDetail() {
       ),
     [deal],
   );
+  const stageStyle = deal ? mockupStageStyle(deal.stageName) : null;
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6">
@@ -371,16 +476,28 @@ export function MockupInstructionDetail() {
             Resumo vigente e histórico completo da automação no GHL.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={refreshing}
-          onClick={() => void load(true)}
-        >
-          {refreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            disabled={!dealId || regenerating}
+            onClick={() => void regenerate()}
+          >
+            {regenerating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Regenerar briefing
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={() => void load(true)}
+          >
+            {refreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -433,7 +550,9 @@ export function MockupInstructionDetail() {
                       "Contato não informado"}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="outline">{deal.stageName}</Badge>
+                    <Badge variant="outline" className={stageStyle?.badge}>
+                      {deal.stageName}
+                    </Badge>
                     <Badge variant="secondary">
                       {formatMoney(deal.monetaryValue)}
                     </Badge>
@@ -456,10 +575,8 @@ export function MockupInstructionDetail() {
                   Instrução vigente no GHL
                 </p>
                 {deal.currentSummary ? (
-                  <BriefingSections
+                  <BlogBriefing
                     summary={deal.currentSummary}
-                    media={deal.conversationMedia}
-                    openObjective
                     headline={currentHeadline}
                   />
                 ) : (
@@ -510,7 +627,7 @@ export function MockupInstructionDetail() {
                         </div>
                         {run.summary ? (
                           <div className="mt-3">
-                            <BriefingSections
+                            <BlogBriefing
                               summary={run.summary}
                               headline={summarizedChange(run)}
                             />

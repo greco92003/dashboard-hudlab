@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import {
+  alterationHeadline,
+  formatGhlBriefing,
+  shouldSkipMockupInstruction,
+} from "./briefing";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   extractOpportunityFieldValue,
@@ -144,6 +149,10 @@ export async function processMockupInstructionWebhook(
   const payloadOpportunity = record(payload.opportunity);
   const payloadContact = record(payload.contact);
   const customData = record(payload.customData);
+  const reprocessKey = firstString(
+    customData.reprocess_key,
+    customData.reprocessKey,
+  );
   const eventType = firstString(payload.type, payload.eventType);
   let opportunityId = firstString(
     payload.opportunityId,
@@ -223,9 +232,11 @@ export async function processMockupInstructionWebhook(
     "mockup-instruction",
     opportunity.id,
     opportunity.pipelineStageId,
-    opportunity.lastStageChangeAt ||
-      firstString(payload.timestamp, customData.timestamp) ||
-      jsonHash(payload),
+    reprocessKey
+      ? `reprocess:${reprocessKey}`
+      : opportunity.lastStageChangeAt ||
+        firstString(payload.timestamp, customData.timestamp) ||
+        jsonHash(payload),
   ].join(":");
   const supabase = createServiceClient() as any;
 
@@ -247,22 +258,26 @@ export async function processMockupInstructionWebhook(
   const { data: inserted, error: insertError } = await supabase
     .from("ghl_mockup_instruction_runs")
     .insert(runInsert)
-    .select("id,status,summary")
+    .select("id,status,summary,prompt_version")
     .single();
 
   let run = inserted as {
     id: string;
     status: string;
     summary: string | null;
+    prompt_version?: string | null;
   } | null;
   if (insertError?.code === "23505") {
     const { data: existing, error } = await supabase
       .from("ghl_mockup_instruction_runs")
-      .select("id,status,summary")
+      .select("id,status,summary,prompt_version")
       .eq("event_key", eventKey)
       .single();
     if (error) throw error;
-    if (existing.status === "completed" || existing.status === "skipped") {
+    if (
+      (existing.status === "completed" || existing.status === "skipped") &&
+      existing.prompt_version === MOCKUP_PROMPT_VERSION
+    ) {
       return {
         accepted: true,
         duplicate: true,
@@ -276,6 +291,7 @@ export async function processMockupInstructionWebhook(
       .from("ghl_mockup_instruction_runs")
       .update({
         status: "processing",
+        prompt_version: MOCKUP_PROMPT_VERSION,
         error_message: null,
         updated_at: new Date().toISOString(),
       })
@@ -315,12 +331,12 @@ export async function processMockupInstructionWebhook(
         opportunityValues.get(normalize("Quer dar Instrução de Mockup?")) ?? "",
       ),
     );
-    if (instructionType === "initial" && wantsInstructions !== "sim") {
+    if (shouldSkipMockupInstruction(instructionType, wantsInstructions)) {
       await supabase
         .from("ghl_mockup_instruction_runs")
         .update({
           status: "skipped",
-          skip_reason: "quer_dar_instrucao_nao_e_sim",
+          skip_reason: "quer_dar_instrucao_nao",
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -340,11 +356,16 @@ export async function processMockupInstructionWebhook(
       throw new Error("No GHL conversation found for contact");
     const fetched = await fetchMessagesSince(
       conversationId,
-      cache?.last_message_id ?? null,
+      reprocessKey ? null : (cache?.last_message_id ?? null),
     );
     let messages = fetched.messages.filter(isConversationContent);
     let anchor = null as MockupConversationMessage | null;
-    if (!cache) {
+    if (reprocessKey && cache?.anchor_message_at) {
+      const anchorTimestamp = Date.parse(cache.anchor_message_at);
+      messages = messages.filter(
+        (message) => Date.parse(message.dateAdded) >= anchorTimestamp,
+      );
+    } else if (!cache) {
       const trimmed = trimToInstructionAnchor(messages);
       messages = trimmed.messages;
       anchor = trimmed.anchor;
@@ -403,8 +424,12 @@ export async function processMockupInstructionWebhook(
     );
     if (!summaryField)
       throw new Error("GHL field 'Instrução Mockup Resumo IA' was not found");
+    const ghlSummary = formatGhlBriefing(
+      agent.result.resumo,
+      alterationHeadline(agent.result),
+    );
     await updateGhlOpportunity(opportunity.id, {
-      customFields: [{ id: summaryField.id, fieldValue: agent.result.resumo }],
+      customFields: [{ id: summaryField.id, fieldValue: ghlSummary }],
     });
 
     const marker = `[HUDLAB_MOCKUP_IA:${eventKey}]`;
@@ -413,7 +438,7 @@ export async function processMockupInstructionWebhook(
       noteId = await createContactNote({
         contactId: opportunity.contactId,
         title: `Instrução Mockup IA — ${stageName}`,
-        body: `${agent.result.resumo}\n\nGerado automaticamente em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.\nNegócio: ${opportunity.name} (${opportunity.id})\n${marker}`,
+        body: `${ghlSummary}\n\nGerado automaticamente em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.\nNegócio: ${opportunity.name} (${opportunity.id})\n${marker}`,
       });
     }
 
