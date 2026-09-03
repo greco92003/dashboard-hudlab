@@ -190,32 +190,55 @@ async function fetchVariantTagContacts(): Promise<Map<string, number>> {
  * este evento sintético o braço inteiro seria invisível no funil, mesmo com
  * os leads circulando normalmente.
  *
- * A âncora é a evidência mais antiga da tag, que é o mais perto que dá para
- * chegar do momento em que o contato entrou no braço.
+ * A ÂNCORA É A ENTRADA DO CONTATO NO FUNIL, não a primeira vez que a tag foi
+ * vista. O braço é atribuído na mensagem de boas-vindas do WhatsApp, junto
+ * com o lead -- é assim que os braços com webhook próprio se comportam, e por
+ * isso eles mostram 100% na etapa marcadora. Já a evidência da tag depende do
+ * sync diário e do próximo webhook do contato: medido em 02/09/2026, ela
+ * chegava em média 5,3 h depois do lead (até 21,8 h) e caía em outro dia do
+ * calendário em 26% dos casos. Ancorar nela fazia a etapa marcadora contar
+ * gente cujo lead ficou fora do período -- o funil chegou a exibir 57
+ * marcadores para 46 leads, 124%, num intervalo de três dias.
  */
 function buildVariantTagEvents(
   rows: FunnelEventRowComTags[],
   tagContacts: Map<string, number>,
 ): GhlFunnelEventRow[] {
-  const primeiroPorContato = new Map<string, { at: number; variante: GhlFunnelVariant }>();
+  const varianteDoContato = new Map<string, GhlFunnelVariant>();
+  // Quando o contato entrou no funil: o evento de lead, ou o mais antigo que
+  // ele tiver. É esta a âncora do marcador.
+  const entradaDoContato = new Map<string, { at: number; ehLead: boolean }>();
+  // Evidência da tag, guardada só como último recurso para contato que não
+  // tem nenhum evento de webhook.
+  const evidenciaDaTag = new Map<string, number>();
 
-  const registrar = (
-    contactId: string,
-    at: number,
-    variante: GhlFunnelVariant,
-  ) => {
-    const atual = primeiroPorContato.get(contactId);
-    if (atual === undefined || at < atual.at) {
-      primeiroPorContato.set(contactId, { at, variante });
-    }
+  const registrarEvidencia = (contactId: string, at: number) => {
+    const atual = evidenciaDaTag.get(contactId);
+    if (atual === undefined || at < atual) evidenciaDaTag.set(contactId, at);
   };
 
   for (const row of rows) {
     const at = parseGhlFunnelTimestamp(row.received_at);
     if (at === null) continue;
+
+    const ehLead = row.stage_slug === "lead";
+    const entrada = entradaDoContato.get(row.contact_id);
+    // Evento de lead sempre ganha de qualquer outra etapa; entre dois do
+    // mesmo tipo, vale o mais antigo.
+    if (
+      entrada === undefined ||
+      (ehLead && !entrada.ehLead) ||
+      (ehLead === entrada.ehLead && at < entrada.at)
+    ) {
+      entradaDoContato.set(row.contact_id, { at, ehLead });
+    }
+
     for (const tag of row.tags ?? []) {
       const variante = GHL_FUNNEL_VARIANT_TAGS[tag];
-      if (variante) registrar(row.contact_id, at, variante);
+      if (variante) {
+        varianteDoContato.set(row.contact_id, variante);
+        registrarEvidencia(row.contact_id, at);
+      }
     }
   }
 
@@ -224,15 +247,26 @@ function buildVariantTagEvents(
   const [variantePadrao] = Object.values(GHL_FUNNEL_VARIANT_TAGS);
   if (variantePadrao) {
     for (const [contactId, at] of tagContacts) {
-      registrar(contactId, at, variantePadrao);
+      if (!varianteDoContato.has(contactId)) {
+        varianteDoContato.set(contactId, variantePadrao);
+      }
+      registrarEvidencia(contactId, at);
     }
   }
 
-  return Array.from(primeiroPorContato, ([contact_id, { at, variante }]) => ({
-    contact_id,
-    stage_slug: GHL_FUNNEL_VARIANT_MARKER[variante],
-    received_at: new Date(at).toISOString(),
-  }));
+  const eventos: GhlFunnelEventRow[] = [];
+  for (const [contact_id, variante] of varianteDoContato) {
+    const at = entradaDoContato.get(contact_id)?.at ?? evidenciaDaTag.get(contact_id);
+    if (at === undefined) continue;
+
+    eventos.push({
+      contact_id,
+      stage_slug: GHL_FUNNEL_VARIANT_MARKER[variante],
+      received_at: new Date(at).toISOString(),
+    });
+  }
+
+  return eventos;
 }
 
 async function fetchWonSales(): Promise<GhlWonDealRow[]> {
