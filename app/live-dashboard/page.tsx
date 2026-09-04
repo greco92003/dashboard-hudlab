@@ -36,10 +36,13 @@ interface DashboardData {
   month: number;
   year: number;
   todayDay: number;
+  todayDate: string;
   startDay: number;
   totalDaysInMonth: number;
   countedDays: number;
   elapsedDays: number;
+  startDate: string;
+  endDate: string;
   monthlyTarget: number;
   totalRevenue: number;
   totalForecast: number;
@@ -140,8 +143,8 @@ export default function LiveDashboardPage() {
   }, [fetchData]);
 
   const formatDay = (dateStr: string) => {
-    const day = parseInt(dateStr.split("-")[2]);
-    return day.toString();
+    const [, month, day] = dateStr.split("-");
+    return day === "01" ? `${day}/${month}` : String(Number(day));
   };
 
   const currentPace = data
@@ -292,7 +295,9 @@ function LiveChart({
       <CardHeader className="py-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <CardTitle className="text-base sm:text-lg">
-            Performance do Mês — {MONTH_NAMES[data.month - 1]} {data.year}
+            Performance do Ciclo — {data.startDate.slice(8, 10)}/
+            {data.startDate.slice(5, 7)} a {data.endDate.slice(8, 10)}/
+            {data.endDate.slice(5, 7)}
           </CardTitle>
           {/* Forecast overflow badge — only shown when forecast exceeds chart scale */}
           {forecastOverflow && (
@@ -332,7 +337,9 @@ function LiveChart({
                   const d = payload[0]?.payload;
                   return (
                     <div className="border-border/50 bg-background rounded-lg border px-3 py-2 text-sm shadow-xl space-y-1">
-                      <p className="font-medium">Dia {d.day}</p>
+                      <p className="font-medium">
+                        {d.date.slice(8, 10)}/{d.date.slice(5, 7)}
+                      </p>
                       {d.revenue !== null && (
                         <p className="text-green-500">
                           Faturamento: {formatCurrency(d.revenue)}

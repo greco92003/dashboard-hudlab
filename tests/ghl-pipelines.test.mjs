@@ -10,7 +10,12 @@ import {
 test("considera etapas pós-venda da Fábrica de Mockups como ganho", () => {
   const productionStageId = Array.from(GHL_MOCKUP_FACTORY_WON_STAGE_IDS)[0];
   assert.equal(
-    isGhlWonDeal(GHL_MOCKUP_FACTORY_PIPELINE_ID, productionStageId, "open"),
+    isGhlWonDeal(
+      GHL_MOCKUP_FACTORY_PIPELINE_ID,
+      productionStageId,
+      "open",
+      100,
+    ),
     true,
   );
   assert.equal(
@@ -18,6 +23,7 @@ test("considera etapas pós-venda da Fábrica de Mockups como ganho", () => {
       GHL_MOCKUP_FACTORY_PIPELINE_ID,
       productionStageId,
       "open",
+      100,
     ),
     "won",
   );

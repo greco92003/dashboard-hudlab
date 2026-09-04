@@ -20,12 +20,14 @@ export async function GET() {
       year,
       monthIndex: month,
       todayDay,
+      todayDate,
       startDay,
       totalDaysInMonth,
       countedDays,
       elapsedDays,
       startDate,
       endDate,
+      dates,
     } = getLiveDashboardPeriod();
 
     // Fetch won deals (status "1" or "won") with closing_date in current month
@@ -123,11 +125,11 @@ export async function GET() {
     const dailyMetaIncrement = countedDays > 0 ? monthlyTarget / countedDays : 0;
 
     // Build daily aggregations
-    const dailyRevenue: Record<number, number> = {};
-    const dailyForecast: Record<number, number> = {};
-    for (let d = startDay; d <= totalDaysInMonth; d++) {
-      dailyRevenue[d] = 0;
-      dailyForecast[d] = 0;
+    const dailyRevenue: Record<string, number> = {};
+    const dailyForecast: Record<string, number> = {};
+    for (const date of dates) {
+      dailyRevenue[date] = 0;
+      dailyForecast[date] = 0;
     }
 
     // Revenue: won deals accumulated by closing_date day
@@ -136,13 +138,9 @@ export async function GET() {
     (wonDeals || []).forEach((deal) => {
       const dateStr = deal.closing_date?.split("T")[0];
       if (!dateStr) return;
-      const [dealYear, dealMonth, day] = dateStr.split("-").map(Number);
-
-      // Only count deals from the current month
-      if (dealYear !== year || dealMonth !== month + 1) return;
-      if (day < startDay || day > totalDaysInMonth) return;
+      if (!(dateStr in dailyRevenue)) return;
       // AC stores values in centavos, divide by 100
-      dailyRevenue[day] += (parseFloat(deal.value) || 0) / 100;
+      dailyRevenue[dateStr] += (parseFloat(deal.value) || 0) / 100;
     });
 
     // Forecast: open deals accumulated by last_synced_at day (UTC-3)
@@ -150,15 +148,14 @@ export async function GET() {
       const syncDate = new Date(deal.last_synced_at);
       // Adjust to UTC-3
       const syncDateUTC3 = new Date(syncDate.getTime() - 3 * 60 * 60 * 1000);
-      const dealYear = syncDateUTC3.getUTCFullYear();
-      const dealMonth = syncDateUTC3.getUTCMonth();
-      const day = syncDateUTC3.getUTCDate();
-
-      // Only count deals from the current month
-      if (dealYear !== year || dealMonth !== month) return;
-      if (day < startDay || day > totalDaysInMonth) return;
+      const syncDateStr = [
+        syncDateUTC3.getUTCFullYear(),
+        String(syncDateUTC3.getUTCMonth() + 1).padStart(2, "0"),
+        String(syncDateUTC3.getUTCDate()).padStart(2, "0"),
+      ].join("-");
+      if (!(syncDateStr in dailyForecast)) return;
       // AC stores values in centavos, divide by 100
-      dailyForecast[day] += (parseFloat(deal.value) || 0) / 100;
+      dailyForecast[syncDateStr] += (parseFloat(deal.value) || 0) / 100;
     });
 
     // Build cumulative chart data
@@ -166,16 +163,18 @@ export async function GET() {
     let cumulativeForecast = 0;
     const chartData = [];
 
-    for (let d = startDay; d <= totalDaysInMonth; d++) {
-      cumulativeRevenue += dailyRevenue[d];
+    for (const [index, dateStr] of dates.entries()) {
+      const day = Number(dateStr.slice(-2));
+      const isElapsed = dateStr <= todayDate;
+      cumulativeRevenue += dailyRevenue[dateStr];
       // Forecast accumulates up to today, then stays flat
-      if (d <= todayDay) {
-        cumulativeForecast += dailyForecast[d];
+      if (isElapsed) {
+        cumulativeForecast += dailyForecast[dateStr];
       }
 
-      const elapsedThroughDay = d - startDay + 1;
+      const elapsedThroughDay = index + 1;
       const pace =
-        d <= todayDay
+        isElapsed
           ? (cumulativeRevenue / elapsedThroughDay) * countedDays
           : null;
 
@@ -183,16 +182,14 @@ export async function GET() {
       const metaForDay =
         Math.round(dailyMetaIncrement * elapsedThroughDay * 100) / 100;
 
-      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
       chartData.push({
         date: dateStr,
-        day: d,
+        day,
         revenue:
-          d <= todayDay ? Math.round(cumulativeRevenue * 100) / 100 : null,
+          isElapsed ? Math.round(cumulativeRevenue * 100) / 100 : null,
         meta: metaForDay,
         forecast:
-          d <= todayDay ? Math.round(cumulativeForecast * 100) / 100 : null,
+          isElapsed ? Math.round(cumulativeForecast * 100) / 100 : null,
         pace: pace !== null ? Math.round(pace * 100) / 100 : null,
       });
     }
@@ -204,10 +201,13 @@ export async function GET() {
       month: month + 1,
       year,
       todayDay,
+      todayDate,
       startDay,
       totalDaysInMonth,
       countedDays,
       elapsedDays,
+      startDate,
+      endDate,
       monthlyTarget,
       totalRevenue: Math.round(cumulativeRevenue * 100) / 100,
       totalForecast: finalForecast,

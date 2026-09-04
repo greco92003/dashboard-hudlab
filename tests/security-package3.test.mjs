@@ -86,6 +86,15 @@ test("validates a GHL funnel timestamp when supplied", () => {
   );
 });
 
+test("accepts the timestamp format rendered by GHL Right Now fields", () => {
+  const valid = validateOptionalWebhookTimestamp(
+    "9/4/2026 14:20:33 -03:00",
+    Date.parse("2026-09-04T17:20:34.000Z"),
+  );
+  assert.equal(valid.ok, true);
+  assert.equal(valid.timestamp?.toISOString(), "2026-09-04T17:20:33.000Z");
+});
+
 test("binds Tiny OAuth state to user, nonce and expiration", () => {
   process.env.TINY_OAUTH_STATE_SECRET =
     "test-only-oauth-state-secret-with-sufficient-entropy";
