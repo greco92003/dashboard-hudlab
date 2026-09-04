@@ -20,6 +20,10 @@ function tinyV2Price(value: number | null | undefined) {
   return value.toFixed(2);
 }
 
+function tinyV2Decimal(value: number | null | undefined) {
+  return Number.isFinite(value) && value != null ? value.toFixed(3) : undefined;
+}
+
 export function prepareTinyManufacturedVariations(
   product: TinyClonerDetail,
   cloner: TinyClonerDetail,
@@ -58,6 +62,7 @@ export function prepareTinyManufacturedVariations(
           ...(targetVariation.precos ?? product.precos),
           ...(unitPrice != null ? { preco: unitPrice } : {}),
         },
+        dimensoes: source.dimensoes ?? targetVariation.dimensoes ?? product.dimensoes,
         grade: targetVariation.grade,
         variacoes: undefined,
       },
@@ -95,6 +100,8 @@ export function buildTinyV2ManufacturedProduct(
       `A variação ${source.sku ?? source.id ?? "do cloner"} é Fabricada, mas não possui estrutura ou etapa de produção.`,
     );
   }
+  const netWeight = tinyV2Decimal(target.dimensoes?.pesoLiquido);
+  const grossWeight = tinyV2Decimal(target.dimensoes?.pesoBruto);
 
   return {
     produto: {
@@ -106,6 +113,8 @@ export function buildTinyV2ManufacturedProduct(
       preco: tinyV2Price(target.precos?.preco ?? source.precos?.preco),
       ncm: target.ncm?.trim() ?? "",
       origem: String(target.origem ?? 0),
+      ...(netWeight !== undefined ? { peso_liquido: netWeight } : {}),
+      ...(grossWeight !== undefined ? { peso_bruto: grossWeight } : {}),
       situacao: "A",
       tipo: "P",
       classe_produto: "F",

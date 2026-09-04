@@ -75,6 +75,7 @@ export type TinyClonerDetail = {
     sku?: string | null;
     gtin?: string | null;
     precos?: { preco?: number | null; precoPromocional?: number | null } | null;
+    dimensoes?: TinyClonerDetail["dimensoes"];
     grade?: TinyGrade[];
     producao?: {
       produtos?: Array<{
