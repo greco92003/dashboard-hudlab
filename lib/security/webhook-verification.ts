@@ -6,6 +6,27 @@ import {
 } from "node:crypto";
 
 export const WEBHOOK_MAX_BODY_BYTES = 1_000_000;
+
+/**
+ * Impressão do cabeçalho Authorization recebido, para diagnóstico de recusa
+ * sem vazamento.
+ *
+ * Guarda só um prefixo do hash do valor RECEBIDO -- nunca o esperado nem
+ * nada derivado dele. Serve para responder "o remetente está mandando sempre
+ * o mesmo token?" e para comparar com o hash do que está configurado do outro
+ * lado, calculado lá.
+ */
+export function impressaoDaAutorizacao(
+  authorization: string | null,
+): Record<string, unknown> {
+  if (!authorization) return { autorizacao_presente: false };
+
+  return {
+    autorizacao_presente: true,
+    autorizacao_tamanho: authorization.length,
+    autorizacao_hash: sha256Hex(authorization).slice(0, 12),
+  };
+}
 export const WEBHOOK_MAX_AGE_MS = 10 * 60 * 1000;
 
 export type WebhookVerificationError =

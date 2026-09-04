@@ -19,6 +19,7 @@ import {
   sha256Hex,
   WEBHOOK_MAX_BODY_BYTES,
 } from "@/lib/security/webhook-verification";
+import { logWebhookRejection } from "@/lib/security/webhook-rejections";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -194,6 +195,18 @@ export async function handleGhlOpportunityWebhook(request: NextRequest) {
   // Confirmá-los com 2xx evita que um evento fora do escopo derrube a saúde de
   // todos os webhooks da aplicação no circuit breaker do GHL.
   if (!isGhlOpportunityEvent(parsed.eventType) && !parsed.opportunityId) {
+    // Confirma com 200 pelo circuit breaker, mas deixa rastro: se algum dia os
+    // workflows de TAG do funil forem repontados para cá, os eventos sumiriam
+    // em silêncio absoluto -- sem evento, sem reserva de idempotência (que só
+    // acontece depois deste ponto) e sem erro, com o GHL vendo 200 e achando
+    // que está tudo certo.
+    void logWebhookRejection({
+      provider: "ghl",
+      rota: "/api/webhooks/ghl",
+      motivo: "evento_ignorado",
+      status: 200,
+      detalhe: { tipo_de_evento: parsed.eventType },
+    });
     return NextResponse.json({ accepted: true, ignored: true }, { status: 200 });
   }
   if (!parsed.opportunityId) {

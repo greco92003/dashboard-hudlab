@@ -16,6 +16,34 @@ import {
   claimWebhookEvent,
   releaseWebhookEvent,
 } from "@/lib/security/webhook-idempotency";
+import {
+  impressaoDaAutorizacao,
+  logWebhookRejection,
+  type WebhookRejectionReason,
+} from "@/lib/security/webhook-rejections";
+
+const ROTA = "/api/webhooks/ghl/funnel";
+
+/**
+ * Recusa registrada. Toda saída de erro daqui passa por esta função: um 401
+ * silencioso deixou o funil 42 h sem dado em 02-04/09/2026 enquanto o GHL
+ * seguia disparando 103 requisições por dia.
+ */
+function recusar(
+  motivo: WebhookRejectionReason,
+  status: number,
+  corpo: Record<string, unknown>,
+  detalhe?: Record<string, unknown>,
+) {
+  void logWebhookRejection({
+    provider: "ghl",
+    rota: ROTA,
+    motivo,
+    status,
+    detalhe,
+  });
+  return NextResponse.json({ received: false, ...corpo }, { status });
+}
 
 type JsonRecord = Record<string, unknown>;
 
@@ -111,42 +139,36 @@ function dispararSyncGhl() {
 export async function POST(request: NextRequest) {
   if (!process.env.GHL_WEBHOOK_SECRET) {
     console.error("[GHL Funnel] GHL_WEBHOOK_SECRET is not configured");
-    return NextResponse.json(
-      { received: false, error: "Webhook receiver is not configured" },
-      { status: 503 },
-    );
+    return recusar("nao_configurado", 503, {
+      error: "Webhook receiver is not configured",
+    });
   }
 
   if (!isAuthorized(request)) {
     console.warn("[GHL Funnel] Rejected request with invalid authorization");
-    return NextResponse.json(
-      { received: false, error: "Unauthorized" },
-      { status: 401 },
+    return recusar(
+      "autorizacao_invalida",
+      401,
+      { error: "Unauthorized" },
+      impressaoDaAutorizacao(request.headers.get("authorization")),
     );
   }
 
   const rawBody = await request.text();
   if (!rawBody) {
-    return NextResponse.json(
-      { received: false, error: "Empty payload" },
-      { status: 400 },
-    );
+    return recusar("corpo_vazio", 400, { error: "Empty payload" });
   }
   if (Buffer.byteLength(rawBody, "utf8") > WEBHOOK_MAX_BODY_BYTES) {
-    return NextResponse.json(
-      { received: false, error: "Payload too large" },
-      { status: 413 },
-    );
+    return recusar("corpo_grande_demais", 413, { error: "Payload too large" }, {
+      bytes: Buffer.byteLength(rawBody, "utf8"),
+    });
   }
 
   let payload: JsonRecord;
   try {
     payload = asRecord(JSON.parse(rawBody));
   } catch {
-    return NextResponse.json(
-      { received: false, error: "Invalid JSON payload" },
-      { status: 400 },
-    );
+    return recusar("json_invalido", 400, { error: "Invalid JSON payload" });
   }
 
   const customData = asRecord(payload.customData);
@@ -156,15 +178,12 @@ export async function POST(request: NextRequest) {
     customData.timestamp ?? payload.timestamp ?? payload.event_timestamp;
   const timestampValidation = validateOptionalWebhookTimestamp(suppliedTimestamp);
   if (!timestampValidation.ok) {
-    return NextResponse.json(
-      {
-        received: false,
-        error:
-          timestampValidation.error === "stale_timestamp"
-            ? "Stale webhook rejected"
-            : "Invalid timestamp",
-      },
-      { status: timestampValidation.error === "stale_timestamp" ? 409 : 400 },
+    const antigo = timestampValidation.error === "stale_timestamp";
+    return recusar(
+      antigo ? "timestamp_antigo" : "timestamp_invalido",
+      antigo ? 409 : 400,
+      { error: antigo ? "Stale webhook rejected" : "Invalid timestamp" },
+      { timestamp_recebido: String(suppliedTimestamp ?? "") },
     );
   }
   const requestTimestamp = timestampValidation.timestamp;
@@ -179,28 +198,28 @@ export async function POST(request: NextRequest) {
 
   if (!stage) {
     console.warn("[GHL Funnel] Rejected unknown stage", { rawStage });
-    return NextResponse.json(
-      { received: false, error: "Unknown funnel stage", stage: rawStage },
-      { status: 422 },
+    return recusar(
+      "etapa_desconhecida",
+      422,
+      { error: "Unknown funnel stage", stage: rawStage },
+      { etapa_recebida: rawStage },
     );
   }
 
   const contactId = firstString(customData.contact_id, payload.contact_id);
   if (!contactId) {
-    return NextResponse.json(
-      { received: false, error: "Missing contact_id" },
-      { status: 422 },
-    );
+    return recusar("sem_contact_id", 422, { error: "Missing contact_id" }, {
+      etapa: stage,
+    });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = getSupabaseSecretKey();
   if (!supabaseUrl || !serviceRoleKey) {
     console.error("[GHL Funnel] Supabase persistence is not configured");
-    return NextResponse.json(
-      { received: false, error: "Persistence is not configured" },
-      { status: 503 },
-    );
+    return recusar("persistencia_indisponivel", 503, {
+      error: "Persistence is not configured",
+    });
   }
 
   const explicitEventId = firstString(
@@ -284,10 +303,11 @@ export async function POST(request: NextRequest) {
     } catch (releaseError) {
       console.error("[GHL Funnel] Failed to release retry claim", releaseError);
     }
-    return NextResponse.json(
-      { received: false, error: "Failed to persist webhook" },
-      { status: 500 },
-    );
+    return recusar("falha_ao_gravar", 500, { error: "Failed to persist webhook" }, {
+      etapa: stage,
+      codigo: error.code,
+      mensagem: error.message,
+    });
   }
 
   if (stage === "negociofechado") {
