@@ -175,7 +175,10 @@ export async function POST(request: NextRequest) {
   const location = asRecord(payload.location);
   const workflow = asRecord(payload.workflow);
   const suppliedTimestamp =
-    customData.timestamp ?? payload.timestamp ?? payload.event_timestamp;
+    customData.event_timestamp ??
+    customData.timestamp ??
+    payload.timestamp ??
+    payload.event_timestamp;
   const timestampValidation = validateOptionalWebhookTimestamp(suppliedTimestamp);
   if (!timestampValidation.ok) {
     const antigo = timestampValidation.error === "stale_timestamp";

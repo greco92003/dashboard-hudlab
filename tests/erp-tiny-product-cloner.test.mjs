@@ -284,3 +284,61 @@ test("aplica o valor unitário do GHL ao lote Fabricado existente", () => {
 
   assert.equal(record.produto.preco, "49.54");
 });
+
+test("leva os pesos do cloner para cada variação Fabricada", () => {
+  const record = buildTinyV2ManufacturedProduct({
+    target: {
+      id: 11,
+      sku: "NOVO-3435",
+      descricao: "Produto novo 34/35",
+      unidade: "PR",
+      precos: { preco: 59.9 },
+      dimensoes: {
+        pesoLiquido: 0.42,
+        pesoBruto: 0.5,
+      },
+    },
+    source: {
+      id: 20,
+      sku: "CLONER-3435",
+      tipo: "F",
+      producao: { etapas: ["Montagem"] },
+    },
+  }, 1);
+
+  assert.equal(record.produto.peso_liquido, "0.420");
+  assert.equal(record.produto.peso_bruto, "0.500");
+});
+
+test("prioriza o peso específico da numeração sobre o peso do produto pai", () => {
+  const cloner = {
+    dimensoes: { pesoLiquido: 0.5, pesoBruto: 0.7 },
+    variacoes: [{
+      id: 20,
+      sku: "CLONER-3435",
+      tipo: "F",
+      grade: [{ chave: "Tamanho", valor: "34/35" }],
+      dimensoes: { pesoLiquido: 0.6, pesoBruto: 0.65 },
+      producao: { etapas: ["Montagem"] },
+    }],
+  };
+  const product = {
+    id: 10,
+    sku: "NOVO",
+    descricao: "Produto novo",
+    unidade: "PR",
+    precos: { preco: 59.9 },
+    dimensoes: { pesoLiquido: 0.5, pesoBruto: 0.7 },
+    variacoes: [{
+      id: 11,
+      sku: "NOVO-3435",
+      grade: [{ chave: "Tamanho", valor: "34/35" }],
+    }],
+  };
+
+  const prepared = prepareTinyManufacturedVariations(product, cloner);
+  const record = buildTinyV2ManufacturedProduct(prepared.pairs[0], 1);
+
+  assert.equal(record.produto.peso_liquido, "0.600");
+  assert.equal(record.produto.peso_bruto, "0.650");
+});

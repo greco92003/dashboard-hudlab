@@ -214,6 +214,7 @@ async function hydrateClonerManufacturing(cloner: TinyClonerDetail) {
         preco: detail.precos?.preco ?? variation.precos?.preco,
         precoPromocional: detail.precos?.precoPromocional ?? variation.precos?.precoPromocional,
       },
+      dimensoes: detail.dimensoes ?? variation.dimensoes,
       producao: production,
     });
   }
