@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 import {
-  calculateBrazilDateRange,
+  calculateBrazilDayRange,
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
@@ -61,9 +61,10 @@ export async function GET(request: NextRequest) {
         formattedEnd: formatDateToLocal(endDate),
       });
     } else {
-      // Calculate date range in Brazilian timezone - Month-based logic (same day of previous months)
+      // Calculate date range in Brazilian timezone - contagem estrita de dias,
+      // alinhada com o resto do app (ver deals-cache/route.ts).
       logTimezoneDebug("pairs-sold-total API");
-      const brazilDateRange = calculateBrazilDateRange(period);
+      const brazilDateRange = calculateBrazilDayRange(period);
       startDate = brazilDateRange.startDate;
       endDate = brazilDateRange.endDate;
 

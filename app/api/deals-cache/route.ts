@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 import {
-  calculateBrazilDateRange,
+  calculateBrazilDayRange,
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
@@ -68,9 +68,13 @@ export async function GET(request: NextRequest) {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
     } else {
-      // Calculate date range in Brazilian timezone - Month-based logic (same day of previous months)
+      // Calculate date range in Brazilian timezone - strict day count, matching
+      // the Meta Marketing module's "últimos N dias" (calculateBrazilDateRange
+      // used to shift by calendar months instead, so "30 dias" silently became
+      // 31-32 days in longer months and diverged from every other "N dias"
+      // reading in the app -- ver memória "Preferir a solução simples").
       logTimezoneDebug("deals-cache API");
-      const brazilDateRange = calculateBrazilDateRange(period);
+      const brazilDateRange = calculateBrazilDayRange(period);
       startDate = brazilDateRange.startDate;
       endDate = brazilDateRange.endDate;
 

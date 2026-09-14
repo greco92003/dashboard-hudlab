@@ -3,7 +3,7 @@ import { readGoogleSheet } from "@/lib/google-sheets";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 import {
-  calculateBrazilDateRange,
+  calculateBrazilDayRange,
   formatBrazilDateToLocal,
 } from "@/lib/utils/timezone";
 
@@ -117,8 +117,10 @@ export async function GET(request: NextRequest) {
       startDate = startDateParam;
       endDate = endDateParam;
     } else {
+      // Contagem estrita de dias, alinhada com o resto do app -- ver
+      // deals-cache/route.ts pro histórico do porquê da troca.
       const safePeriod = [30, 60, 90].includes(period) ? period : 30;
-      const range = calculateBrazilDateRange(safePeriod);
+      const range = calculateBrazilDayRange(safePeriod);
       startDate = formatBrazilDateToLocal(range.startDate);
       endDate = formatBrazilDateToLocal(range.endDate);
     }
