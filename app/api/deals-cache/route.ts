@@ -90,11 +90,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch deals from cache (updated by cron) - include all custom fields
+    // Fetch deals from cache (updated by cron) - include all custom fields.
+    // Lê da view enriquecida, não da tabela: o sync do GHL só traz os custom
+    // fields da *oportunidade*, e a automação que copia contato -> oportunidade
+    // não dispara em todos os fluxos (cadastro manual, por exemplo). A view
+    // preenche estado/segmento/intenção/UTM com o dado do contato, que é o que
+    // o cliente preencheu (ver migration deals_cache_enriquecido_com_contato).
     const deals = await fetchAllSupabaseRows<any>(
       (from, to) =>
         supabase
-          .from("deals_cache")
+          .from("v_deals_cache_enriquecido")
           .select(
             `
         id, deal_id, title, value, currency, status, stage_id,
