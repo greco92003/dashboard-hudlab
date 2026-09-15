@@ -288,19 +288,24 @@ export function ChartPieEstados({
     hasTabs && activeTab === "previous" ? prevYearData! : currentYearData;
 
   return (
-    <Widget className="gap-0">
+    <Widget className="h-full gap-0">
+      {/* Título sempre em uma linha: se quebrasse em duas, a divisória do
+          cabeçalho cairia numa altura diferente da dos cards vizinhos. */}
       <WidgetHeader className="border-b">
-        <WidgetTitle className="text-lg">{title}</WidgetTitle>
-        <WidgetTitle className="text-lg">
+        <WidgetTitle className="min-w-0 truncate text-lg" title={title}>
+          {title}
+        </WidgetTitle>
+        {/* Contador em escala menor: é informação secundária e, no text-lg
+            original, não sobrava largura para o título ao lado. */}
+        <WidgetTitle className="text-muted-foreground shrink-0 whitespace-nowrap text-sm font-medium">
           {activeData.chartData.length} estados
         </WidgetTitle>
       </WidgetHeader>
 
-      <WidgetContent className="flex-col justify-start py-2">
-        <ChartContainer
-          config={activeData.chartConfig}
-          className="size-full max-h-44"
-        >
+      {/* Altura fixa: o gráfico não pode absorver a sobra do card, senão a
+          divisória de baixo sobe e desce conforme o tamanho da legenda. */}
+      <WidgetContent className="flex-none flex-col justify-center py-2">
+        <ChartContainer config={activeData.chartConfig} className="h-44 w-full">
           <PieChart>
             <ChartTooltip
               cursor={false}
@@ -323,9 +328,10 @@ export function ChartPieEstados({
         </ChartContainer>
       </WidgetContent>
 
-      <WidgetFooter className="gap-3 border-t">
-        {/* Legend */}
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <WidgetFooter className="flex-1 gap-3 border-t">
+        {/* Legend — ocupa a sobra e centraliza nela, para que as abas fiquem
+            coladas na base e alinhadas entre os cards. */}
+        <div className="flex flex-1 flex-wrap content-center items-center justify-center gap-x-4 gap-y-2">
           {activeData.legendData.map((item) => (
             <div key={item.estado} className="flex items-center gap-1.5">
               <div
@@ -351,12 +357,14 @@ export function ChartPieEstados({
             onValueChange={(v) => setActiveTab(v as "current" | "previous")}
             className="w-full"
           >
+            {/* O TabsTrigger é nowrap por padrão: em card estreito o rótulo
+                escapava para fora do botão. O span interno é que apara. */}
             <TabsList className="w-full">
-              <TabsTrigger value="current" className="flex-1 text-xs">
-                Ano Atual
+              <TabsTrigger value="current" className="min-w-0 flex-1 text-xs">
+                <span className="truncate">Ano Atual</span>
               </TabsTrigger>
-              <TabsTrigger value="previous" className="flex-1 text-xs">
-                Ano Anterior
+              <TabsTrigger value="previous" className="min-w-0 flex-1 text-xs">
+                <span className="truncate">Ano Anterior</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>

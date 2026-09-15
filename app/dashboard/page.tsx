@@ -636,7 +636,10 @@ export default function DashboardPage() {
         <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 mb-4 mt-2 lg:items-center">
+      {/* flex-wrap: em linha única a partir de lg, os três botões de período +
+          o seletor + o "Sincronizar Dados" não cabiam e o último furava a
+          viewport, criando rolagem horizontal na página inteira. */}
+      <div className="flex flex-col lg:flex-row lg:flex-wrap gap-2 lg:gap-4 mb-4 mt-2 lg:items-center">
         {/* 3 botões de período */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button
@@ -700,17 +703,21 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
         {/* Primeira linha: Total de Pares, Faturamento Total e Lead Time */}
         <Card>
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-shrink-0">
-                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
+          {/* Container query, não breakpoint de tela: o que aperta é a largura
+              do CARD (224px em 1024px de viewport, contra 430px em 1640px).
+              Abaixo de ~288px não cabe rótulo + número lado a lado — some
+              seria espremer o rótulo até ele vazar —, então empilha. */}
+          <CardContent className="@container py-3 px-4">
+            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
+              <div className="min-w-0">
+                <CardTitle className="text-sm sm:text-base">
                   Total de Pares Vendidos
                 </CardTitle>
               </div>
               {loading ? (
                 <Skeleton className="h-6 sm:h-8 w-[150px]" />
               ) : (
-                <div className="text-right">
+                <div className="shrink-0 text-left @2xs:text-right">
                   <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
                     {totalPairsSold}
                   </p>
@@ -724,17 +731,17 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-shrink-0">
-                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
+          <CardContent className="@container py-3 px-4">
+            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
+              <div className="min-w-0">
+                <CardTitle className="text-sm sm:text-base">
                   Faturamento Total
                 </CardTitle>
               </div>
               {loading ? (
                 <Skeleton className="h-6 sm:h-8 w-[150px]" />
               ) : (
-                <div className="text-right">
+                <div className="shrink-0 text-left @2xs:text-right">
                   <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
                     {formatCurrency(totalValue, "BRL")}
                   </p>
@@ -749,20 +756,18 @@ export default function DashboardPage() {
 
         {/* Card 3: Lead Time */}
         <Card>
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-shrink-0">
-                <CardTitle className="text-sm sm:text-base whitespace-nowrap">
-                  Lead Time
-                </CardTitle>
-                <p className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">
+          <CardContent className="@container py-3 px-4">
+            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
+              <div className="min-w-0">
+                <CardTitle className="text-sm sm:text-base">Lead Time</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Tempo médio de fechamento
                 </p>
               </div>
               {loading ? (
                 <Skeleton className="h-6 sm:h-8 w-[120px]" />
               ) : (
-                <div className="text-right">
+                <div className="shrink-0 text-left @2xs:text-right">
                   <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
                     {avgLeadTime !== null ? `${avgLeadTime} dias` : "—"}
                   </p>
