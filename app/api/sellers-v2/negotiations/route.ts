@@ -38,7 +38,7 @@ export async function GET() {
     const { data: openOpportunities, error: openError } = contactIds.length
       ? await supabase
           .from("ghl_opportunities")
-          .select("id, contact_id, stage_name")
+          .select("id, contact_id, stage_name, monetary_value")
           .in("contact_id", contactIds)
           .eq("status", "open")
       : { data: [], error: null };
@@ -48,34 +48,66 @@ export async function GET() {
     const { data: latestInsights, error: insightsError } = openOppIds.length
       ? await supabase
           .from("ghl_negotiation_insights")
-          .select("opportunity_id, report, created_at")
+          .select("opportunity_id, report, created_at, last_message_at")
           .in("opportunity_id", openOppIds)
           .order("created_at", { ascending: false })
       : { data: [], error: null };
     if (insightsError) throw insightsError;
 
-    const latestInsightByOpportunity = new Map<string, { report: unknown; createdAt: string }>();
+    const latestInsightByOpportunity = new Map<
+      string,
+      { report: unknown; createdAt: string; lastMessageAt: string | null }
+    >();
     for (const insight of latestInsights || []) {
       if (!latestInsightByOpportunity.has(insight.opportunity_id)) {
         latestInsightByOpportunity.set(insight.opportunity_id, {
           report: insight.report,
           createdAt: insight.created_at,
+          lastMessageAt: insight.last_message_at,
         });
       }
     }
 
-    const active = (openOpportunities || []).map((opp) => {
-      const started = startedAtByContact.get(opp.contact_id);
-      const latestInsight = latestInsightByOpportunity.get(opp.id) || null;
-      return {
-        opportunityId: opp.id,
-        contactId: opp.contact_id,
-        contactName: started?.name ?? null,
-        stageName: opp.stage_name,
-        negotiationStartedAt: started?.startedAt ?? null,
-        latestInsight,
-      };
-    });
+    // Priority tiers for the list order: situations where the seller's own
+    // action would unstick the deal come first (em_risco/estagnada/blocked
+    // on us), then waiting-on-client, then already-advancing deals last;
+    // negotiations with no insight yet (e.g. tagged after this morning's
+    // batch) sort after every classified one. Within a tier, biggest deal
+    // value first — the point is "most money at stake, needing action now"
+    // at the top, not a flat list ordered by when the tag fired.
+    const SITUATION_PRIORITY: Record<string, number> = {
+      em_risco: 0,
+      estagnada: 1,
+      aguardando_acao_interna: 2,
+      aguardando_cliente: 3,
+      avancando: 4,
+    };
+    const NO_INSIGHT_PRIORITY = 5;
+
+    const active = (openOpportunities || [])
+      .map((opp) => {
+        const started = startedAtByContact.get(opp.contact_id);
+        const latestInsight = latestInsightByOpportunity.get(opp.id) || null;
+        return {
+          opportunityId: opp.id,
+          contactId: opp.contact_id,
+          contactName: started?.name ?? null,
+          stageName: opp.stage_name,
+          monetaryValue: opp.monetary_value,
+          negotiationStartedAt: started?.startedAt ?? null,
+          latestInsight,
+        };
+      })
+      .sort((a, b) => {
+        const situacaoA = (a.latestInsight?.report as { situacaoAtual?: string } | null)
+          ?.situacaoAtual;
+        const situacaoB = (b.latestInsight?.report as { situacaoAtual?: string } | null)
+          ?.situacaoAtual;
+        const priorityA = situacaoA ? SITUATION_PRIORITY[situacaoA] ?? NO_INSIGHT_PRIORITY : NO_INSIGHT_PRIORITY;
+        const priorityB = situacaoB ? SITUATION_PRIORITY[situacaoB] ?? NO_INSIGHT_PRIORITY : NO_INSIGHT_PRIORITY;
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        return (b.monetaryValue ?? -Infinity) - (a.monetaryValue ?? -Infinity);
+      });
 
     const { data: closedRows, error: closedError } = await supabase
       .from("ghl_negotiation_evaluations")

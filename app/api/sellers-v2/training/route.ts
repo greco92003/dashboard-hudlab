@@ -15,10 +15,8 @@ import { TRAINING_CUSTOMER_KNOWLEDGE } from "@/lib/ghl/sales-agent/training-know
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 const TRAINING_MODEL = "gpt-5.6-terra";
 
-// The "evaluate" action runs runAuditor (agent.ts) with "high" reasoning
-// effort on the OpenAI Responses API, which can take up to ~1-2 minutes —
-// well past Vercel's default function timeout.
-export const maxDuration = 180;
+// maxDuration for this route is set in vercel.json (functions block), same
+// convention as the other cron/agent routes in this project.
 
 // Grounded in the real Manual Comercial Hud Lab (lib/ghl/sales-agent/manual.ts,
 // seções 1-3) — kept as a short, chat-latency-friendly excerpt here rather

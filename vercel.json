@@ -19,11 +19,24 @@
     {
       "path": "/api/cron/evaluate-negotiations",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-negotiation-priorities",
+      "schedule": "*/15 * * * *"
     }
   ],
   "functions": {
     "app/api/cron/evaluate-negotiations/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/refresh-negotiation-priorities/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/sellers-v2/negotiation-insight/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/sellers-v2/training/route.ts": {
+      "maxDuration": 180
     },
     "app/api/test/robust-deals-sync/route.ts": {
       "maxDuration": 300
