@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AlertCircle, ArrowLeft, FileText, Plus, Truck } from "lucide-react";
 import { toast } from "sonner";
-import type { OrdemCompra } from "@/lib/estoque/ordem-compra";
+import type { ConsolidadoCompra, OrdemCompra } from "@/lib/estoque/ordem-compra";
 import { OC_SITUACAO } from "@/lib/estoque/ordem-compra";
 import { NovaOrdemDialog } from "@/components/estoque/nova-ordem-dialog";
 
@@ -23,6 +23,85 @@ const SITUACAO_ROTULO: Record<string, string> = {
   [OC_SITUACAO.emAndamento]: "Em andamento",
 };
 
+/**
+ * O que falta chegar, por numeração.
+ *
+ * Consolidado e não por ordem de propósito: ao receber uma nota o Tiny
+ * desmembra a ordem — reduz a original e cria uma filha com o que entrou —,
+ * então "quanto esta OC já recebeu" não é uma pergunta que os dados respondam.
+ * O total é exato; o rateio entre ordens seria chute.
+ */
+function TabelaConsolidada({ linhas }: { linhas: ConsolidadoCompra[] }) {
+  const ordenadas = [...linhas].sort(
+    (a, b) =>
+      a.cor.localeCompare(b.cor) || a.numeracao.localeCompare(b.numeracao),
+  );
+  const total = (campo: "pedido" | "recebido" | "faltando") =>
+    ordenadas.reduce((soma, l) => soma + l[campo], 0);
+
+  return (
+    <div className="rounded-lg border">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h2 className="font-semibold">Situação por numeração</h2>
+        <Badge variant={total("faltando") > 0 ? "secondary" : "outline"}>
+          {total("faltando")} a caminho
+        </Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-muted-foreground">
+              <th className="px-3 py-2 text-left font-medium">Numeração</th>
+              <th className="px-3 py-2 text-right font-medium">Pedido</th>
+              <th className="px-3 py-2 text-right font-medium">Recebido</th>
+              <th className="border-l px-3 py-2 text-right font-medium">
+                A caminho
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordenadas.map((linha) => (
+              <tr key={linha.produtoId} className="border-b last:border-0">
+                <td className="px-3 py-1.5">
+                  {linha.cor} {linha.numeracao}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums">
+                  {linha.pedido}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                  {linha.recebido || "—"}
+                </td>
+                <td className="border-l px-3 py-1.5 text-right tabular-nums">
+                  {linha.faltando ? (
+                    <span className="font-medium">{linha.faltando}</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-muted/40 font-medium">
+              <td className="px-3 py-2">Total</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {total("pedido")}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {total("recebido")}
+              </td>
+              <td className="border-l px-3 py-2 text-right tabular-nums">
+                {total("faltando")}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Uma ordem como ela está no Tiny — o que foi pedido, e nada além disso. */
 function CardOrdem({
   ordem,
   onMudou,
@@ -32,17 +111,7 @@ function CardOrdem({
 }) {
   const [ocupado, setOcupado] = useState(false);
   const pedidos = ordem.itens.reduce((t, i) => t + i.quantidade, 0);
-  const encerrada =
-    ordem.situacao === OC_SITUACAO.cancelado ||
-    ordem.situacao === OC_SITUACAO.atendido;
-  // Ordem encerrada não traz mais nada, mesmo com item sem nota vinculada.
-  // Tem de bater com `paresACaminho`, que também as ignora.
-  const faltando = encerrada
-    ? 0
-    : ordem.itens.reduce(
-        (t, i) => t + Math.max(0, i.quantidade - i.recebido),
-        0,
-      );
+  const cancelada = ordem.situacao === OC_SITUACAO.cancelado;
 
   const cancelar = async () => {
     if (!confirm(`Cancelar a ordem ${ordem.numeroPedido ?? ordem.id}?`)) return;
@@ -67,9 +136,7 @@ function CardOrdem({
   return (
     <div className="rounded-lg border">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-3">
-        <h2 className="font-semibold">
-          OC {ordem.numeroPedido ?? ordem.id}
-        </h2>
+        <h2 className="font-semibold">OC {ordem.numeroPedido ?? ordem.id}</h2>
         <span className="text-sm text-muted-foreground">
           emitida {data(ordem.data)} · prevista {data(ordem.dataPrevista)}
         </span>
@@ -80,12 +147,13 @@ function CardOrdem({
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <Badge variant={faltando > 0 ? "secondary" : "outline"}>
-            {faltando > 0
-              ? `${faltando} a caminho`
-              : (SITUACAO_ROTULO[ordem.situacao ?? ""] ?? "Sem saldo")}
+          <Badge variant="outline">
+            {SITUACAO_ROTULO[ordem.situacao ?? ""] ?? "—"}
           </Badge>
-          {!encerrada && (
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {pedidos} pares
+          </span>
+          {!cancelada && (
             <Button
               variant="ghost"
               size="sm"
@@ -100,51 +168,20 @@ function CardOrdem({
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="px-3 py-2 text-left font-medium">Item</th>
-              <th className="px-3 py-2 text-right font-medium">Pedido</th>
-              <th className="px-3 py-2 text-right font-medium">Recebido</th>
-              <th className="border-l px-3 py-2 text-right font-medium">
-                A caminho
-              </th>
-            </tr>
-          </thead>
           <tbody>
-            {ordem.itens.map((item) => {
-              const falta = encerrada
-                ? 0
-                : Math.max(0, item.quantidade - item.recebido);
-              return (
-                <tr key={item.produtoId} className="border-b last:border-0">
-                  <td className="px-3 py-1.5">
-                    {item.cor && item.numeracao
-                      ? `${item.cor} ${item.numeracao}`
-                      : item.descricao}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
-                    {item.quantidade}
-                  </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                    {item.recebido || "—"}
-                  </td>
-                  <td className="border-l px-3 py-1.5 text-right tabular-nums">
-                    {falta || "—"}
-                  </td>
-                </tr>
-              );
-            })}
+            {ordem.itens.map((item) => (
+              <tr key={item.produtoId} className="border-b last:border-0">
+                <td className="px-3 py-1.5">
+                  {item.cor && item.numeracao
+                    ? `${item.cor} ${item.numeracao}`
+                    : item.descricao}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums">
+                  {item.quantidade}
+                </td>
+              </tr>
+            ))}
           </tbody>
-          <tfoot>
-            <tr className="bg-muted/40 font-medium">
-              <td className="px-3 py-2">Total</td>
-              <td className="px-3 py-2 text-right tabular-nums">{pedidos}</td>
-              <td />
-              <td className="border-l px-3 py-2 text-right tabular-nums">
-                {faltando}
-              </td>
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>
@@ -152,7 +189,10 @@ function CardOrdem({
 }
 
 export default function OrdensPage() {
-  const [ordens, setOrdens] = useState<OrdemCompra[] | null>(null);
+  const [dados, setDados] = useState<{
+    ordens: OrdemCompra[];
+    consolidado: ConsolidadoCompra[];
+  } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
@@ -161,7 +201,7 @@ export default function OrdensPage() {
       const resposta = await fetch("/api/estoque/ordens");
       const corpo = await resposta.json();
       if (!resposta.ok) throw new Error(corpo.error ?? "Falha na leitura.");
-      setOrdens(corpo.ordens as OrdemCompra[]);
+      setDados({ ordens: corpo.ordens, consolidado: corpo.consolidado });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha na leitura.");
     }
@@ -171,12 +211,12 @@ export default function OrdensPage() {
     void carregar();
   }, [carregar]);
 
-  const abertas = (ordens ?? []).filter(
-    (o) =>
-      o.situacao !== OC_SITUACAO.cancelado &&
-      o.itens.some((i) => i.quantidade > i.recebido),
+  const vivas = (dados?.ordens ?? []).filter(
+    (o) => o.situacao !== OC_SITUACAO.cancelado,
   );
-  const encerradas = (ordens ?? []).filter((o) => !abertas.includes(o));
+  const canceladas = (dados?.ordens ?? []).filter(
+    (o) => o.situacao === OC_SITUACAO.cancelado,
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
@@ -201,8 +241,10 @@ export default function OrdensPage() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        As ordens ficam no Tiny. O recebimento vem da nota fiscal vinculada à
-        ordem — não se lança aqui.
+        As ordens ficam no Tiny, e o recebimento vem das notas de entrada do
+        fornecedor. Ao receber, o Tiny divide a ordem em duas — por isso o que
+        falta é mostrado por numeração, somando todas as ordens, e não uma a
+        uma.
       </p>
 
       {erro && (
@@ -212,24 +254,33 @@ export default function OrdensPage() {
         </Alert>
       )}
 
-      {!ordens && !erro && <Skeleton className="h-64" />}
+      {!dados && !erro && <Skeleton className="h-64" />}
 
-      {ordens && ordens.length === 0 && (
+      {dados && dados.consolidado.length > 0 && (
+        <TabelaConsolidada linhas={dados.consolidado} />
+      )}
+
+      {dados && dados.ordens.length === 0 && (
         <p className="text-sm text-muted-foreground">
           Nenhuma ordem de compra no Tiny para este fornecedor.
         </p>
       )}
 
-      {abertas.map((ordem) => (
+      {vivas.length > 0 && (
+        <h2 className="pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Ordens no Tiny
+        </h2>
+      )}
+      {vivas.map((ordem) => (
         <CardOrdem key={ordem.id} ordem={ordem} onMudou={carregar} />
       ))}
 
-      {encerradas.length > 0 && (
+      {canceladas.length > 0 && (
         <>
           <h2 className="pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Encerradas
+            Canceladas
           </h2>
-          {encerradas.map((ordem) => (
+          {canceladas.map((ordem) => (
             <CardOrdem key={ordem.id} ordem={ordem} onMudou={carregar} />
           ))}
         </>

@@ -7,15 +7,19 @@
  *
  * As ordens são armazenadas no Tiny, operadas pelo dashboard.
  *
- * A OC vive no Tiny e não numa tabela nossa porque é lá que ela encontra a nota
- * fiscal: `GET /ordem-compra/{id}` devolve `notaFiscal` com o documento
- * vinculado. Esse vínculo é o que torna o abatimento exato — sem ele seria
- * preciso adivinhar de qual OC veio cada entrada.
+ * **Não dá para saber, pelo Tiny, quanto cada ordem já recebeu.** O item da OC
+ * não tem quantidade recebida, e ao aplicar uma nota o Tiny DESMEMBRA a ordem:
+ * reduz a original para o saldo em aberto e gera uma filha com o que entrou. A
+ * nota fica apontando para a mãe e os itens recebidos vão para a filha, então
+ * as duas metades nunca se encontram.
  *
- * O que está "a caminho" é **itens da OC menos itens das notas vinculadas**. O
- * item da OC no Tiny não tem quantidade recebida, e entrega parcial é o caso
- * normal (a nota 17904 do INPU entregou 220 de 1.100), então a `situacao` da
- * OC sozinha não basta.
+ * Por isso a conta é feita no agregado, por produto:
+ *
+ *     a caminho = total pedido em todas as ordens − total recebido nas notas
+ *
+ * Isso é imune ao desmembramento: a filha duplicada sempre vem acompanhada da
+ * nota que a gerou, uma soma e a outra subtrai, e o líquido fica certo sozinho.
+ * O preço é não saber o detalhe POR ORDEM — e a tela deixou de afirmar isso.
  */
 
 import type { SoladoCor, SoladoItemDemanda } from "./solados";
@@ -45,8 +49,6 @@ export type OrdemCompraItem = {
   numeracao: string | null;
   quantidade: number;
   preco: number;
-  /** Pares desta linha já cobertos por nota vinculada. */
-  recebido: number;
 };
 
 export type OrdemCompra = {
@@ -60,33 +62,92 @@ export type OrdemCompra = {
   itens: OrdemCompraItem[];
 };
 
+export type NotaEntrada = {
+  id: number;
+  numero: string | null;
+  /** "AAAA-MM-DD". */
+  dataEmissao: string;
+  itens: Array<{ produtoId: number; quantidade: number }>;
+};
+
+/** Uma numeração × cor: quanto foi pedido, quanto chegou, quanto falta. */
+export type ConsolidadoCompra = {
+  produtoId: number;
+  cor: SoladoCor;
+  numeracao: string;
+  pedido: number;
+  recebido: number;
+  faltando: number;
+};
+
 /**
- * Pares pedidos e ainda não cobertos por nota, somados por cor × numeração.
- * É a coluna "a caminho" da tela.
+ * Junta todas as ordens e todas as notas do fornecedor numa linha por produto.
+ *
+ * Só a ordem CANCELADA fica de fora. "Atendida" e "em andamento" não servem de
+ * corte: o Tiny usa os dois estados no desmembramento, e a filha que guarda o
+ * material recebido nasce "em andamento" sem nota nenhuma. Quem responde o que
+ * ainda vem é a subtração.
+ *
+ * `notas` já deve vir recortada pelo período válido — ver
+ * `lerRecebimentosDoFornecedor`.
  */
-export function paresACaminho(ordens: OrdemCompra[]): SoladoItemDemanda[] {
-  const acumulado = new Map<string, SoladoItemDemanda>();
+export function consolidarCompras(
+  ordens: OrdemCompra[],
+  notas: NotaEntrada[],
+): ConsolidadoCompra[] {
+  const linhas = new Map<number, ConsolidadoCompra>();
+
   for (const ordem of ordens) {
-    // Só cancelada sai fora. "Atendida" não serve de corte sozinha: o Tiny
-    // marca a ordem como atendida ao vincular uma nota, mesmo que a entrega
-    // tenha sido parcial. Quem responde o que ainda vem é
-    // `quantidade - recebido`; se a ordem estiver de fato completa, a conta dá
-    // zero por si.
     if (ordem.situacao === OC_SITUACAO.cancelado) continue;
     for (const item of ordem.itens) {
       if (!item.cor || !item.numeracao) continue;
-      const faltando = item.quantidade - item.recebido;
-      if (faltando <= 0) continue;
-      const chave = `${item.cor}|${item.numeracao}`;
-      const atual = acumulado.get(chave);
-      if (atual) atual.pares += faltando;
+      const atual = linhas.get(item.produtoId);
+      if (atual) atual.pedido += item.quantidade;
       else
-        acumulado.set(chave, {
+        linhas.set(item.produtoId, {
+          produtoId: item.produtoId,
           cor: item.cor,
           numeracao: item.numeracao,
-          pares: faltando,
+          pedido: item.quantidade,
+          recebido: 0,
+          faltando: 0,
         });
     }
+  }
+
+  for (const nota of notas) {
+    for (const item of nota.itens) {
+      // Nota com produto que nenhuma ordem pediu é entrada avulsa: o saldo do
+      // Tiny já a registrou e aqui ela não tem o que abater.
+      const linha = linhas.get(item.produtoId);
+      if (linha) linha.recebido += item.quantidade;
+    }
+  }
+
+  for (const linha of linhas.values()) {
+    linha.faltando = Math.max(0, linha.pedido - linha.recebido);
+  }
+  return [...linhas.values()];
+}
+
+/**
+ * Pares ainda por chegar, por cor × numeração. É a coluna "a caminho" da tela.
+ */
+export function paresACaminho(
+  consolidado: ConsolidadoCompra[],
+): SoladoItemDemanda[] {
+  const acumulado = new Map<string, SoladoItemDemanda>();
+  for (const linha of consolidado) {
+    if (linha.faltando <= 0) continue;
+    const chave = `${linha.cor}|${linha.numeracao}`;
+    const atual = acumulado.get(chave);
+    if (atual) atual.pares += linha.faltando;
+    else
+      acumulado.set(chave, {
+        cor: linha.cor,
+        numeracao: linha.numeracao,
+        pares: linha.faltando,
+      });
   }
   return [...acumulado.values()];
 }

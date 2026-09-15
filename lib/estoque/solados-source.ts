@@ -18,7 +18,7 @@ import {
 import { normalizeStageTitle } from "@/lib/ghl/programacao-stages";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { paresACaminho } from "./ordem-compra";
-import { listarOrdensCompra } from "./ordem-compra-source";
+import { lerCompras } from "./ordem-compra-source";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
   montarResumo,
@@ -383,12 +383,12 @@ export async function getResumoSolados(
   // e são criadas direto no Tiny com frequência, sem passar pela nossa rota.
   // Cacheá-las junto fazia a tela mostrar "a caminho" zerado por até cinco
   // minutos depois de uma OC nova — sem ninguém entender por quê.
-  const ordens = listarOrdensCompra();
+  const compras = lerCompras();
 
   if (valido) {
     const resumo = montarResumo({
       ...cache!.base,
-      aCaminho: paresACaminho(await ordens),
+      aCaminho: paresACaminho((await compras).consolidado),
       parametros: {
         ...SOLADO_PARAMETROS_PADRAO,
         consumoMensalMedio: cache!.base.consumoMensalMedio,
@@ -403,7 +403,7 @@ export async function getResumoSolados(
     const resumo = montarResumo({
       negocios: base.negocios,
       skus: base.skus,
-      aCaminho: paresACaminho(await ordens),
+      aCaminho: paresACaminho((await compras).consolidado),
       parametros: {
         ...SOLADO_PARAMETROS_PADRAO,
         consumoMensalMedio: base.consumoMensalMedio,

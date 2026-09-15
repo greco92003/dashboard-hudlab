@@ -1,19 +1,22 @@
 /**
  * Leitura e escrita das ordens de compra no Tiny.
  *
- * O que está "a caminho" é **itens da OC menos itens das notas vinculadas**. O
- * item da OC no Tiny não tem quantidade recebida, e entrega parcial é o caso
- * normal (a nota 17904 do INPU entregou 220 de 1.100), então a  da
- * OC sozinha não basta.
+ * O que está "a caminho" sai do AGREGADO: total pedido em todas as ordens menos
+ * total recebido nas notas do fornecedor, por produto. Ver `consolidarCompras`
+ * em ordem-compra.ts para o porquê — em resumo, o Tiny desmembra a ordem ao
+ * receber e separa a nota dos itens que ela abateu.
  */
 
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import { parseSoladoDescricao } from "./solados";
 
 import {
+  consolidarCompras,
   FORNECEDOR_SOLADO_ID,
   FORNECEDOR_SOLADO_NOME,
   OC_SITUACAO,
+  type ConsolidadoCompra,
+  type NotaEntrada,
   type NovaOrdemCompra,
   type OrdemCompra,
 } from "./ordem-compra";
@@ -45,9 +48,22 @@ type TinyNotaDetalhe = {
   itens?: Array<{ idProduto?: number | null; quantidade?: number | null }>;
 };
 
+type TinyNotaLista = {
+  itens?: Array<{
+    id: number;
+    numero?: string | null;
+    dataEmissao?: string | null;
+    situacao?: string | null;
+    cliente?: { nome?: string | null } | null;
+  }>;
+};
+
+/** `situacao` de nota cancelada. Ela não entregou nada. */
+const NOTA_CANCELADA = "3";
+
 /**
- * OCs do fornecedor de solado que ainda podem trazer material.
- * Cancelada e atendida não entram no "a caminho".
+ * Todas as OCs do fornecedor de solado, como estão no Tiny. Quem decide o que
+ * ainda vem é `consolidarCompras`, não esta leitura.
  */
 export async function listarOrdensCompra(): Promise<OrdemCompra[]> {
   const lista = await tinyV3Request<TinyOcLista>("/ordem-compra", {
@@ -60,23 +76,6 @@ export async function listarOrdensCompra(): Promise<OrdemCompra[]> {
     const detalhe = await tinyV3Request<TinyOcDetalhe>(
       `/ordem-compra/${resumo.id}`,
     );
-
-    // Itens da nota vinculada abatem a OC linha a linha, por id de produto.
-    const recebidoPorProduto = new Map<number, number>();
-    if (detalhe.notaFiscal?.id) {
-      const nota = await tinyV3Request<TinyNotaDetalhe>(
-        `/notas/${detalhe.notaFiscal.id}`,
-      );
-      for (const item of nota.itens ?? []) {
-        if (typeof item.idProduto !== "number") continue;
-        const quantidade = Number(item.quantidade ?? 0);
-        if (!Number.isFinite(quantidade) || quantidade <= 0) continue;
-        recebidoPorProduto.set(
-          item.idProduto,
-          (recebidoPorProduto.get(item.idProduto) ?? 0) + quantidade,
-        );
-      }
-    }
 
     ordens.push({
       id: detalhe.id,
@@ -106,13 +105,80 @@ export async function listarOrdensCompra(): Promise<OrdemCompra[]> {
             numeracao: parsed?.numeracao ?? null,
             quantidade: Number(item.quantidade ?? 0),
             preco: Number(item.preco ?? 0),
-            recebido: recebidoPorProduto.get(produtoId) ?? 0,
           },
         ];
       }),
     });
   }
   return ordens;
+}
+
+/**
+ * Notas de entrada do fornecedor que abatem as ordens.
+ *
+ * A janela começa na ordem NÃO CANCELADA mais antiga. Isso não é só economia de
+ * chamada: a nota 017903, de 17/08, trouxe 1.050 pares de uma remessa anterior
+ * ao nosso controle, que já foram absorvidos na contagem física de 26/08.
+ * Contá-la abateria 1.050 pares que estão de pé.
+ */
+async function lerRecebimentosDoFornecedor(
+  ordens: OrdemCompra[],
+): Promise<NotaEntrada[]> {
+  const datas = ordens
+    .filter((ordem) => ordem.situacao !== OC_SITUACAO.cancelado)
+    .map((ordem) => ordem.data)
+    .filter((data): data is string => Boolean(data))
+    .sort();
+  if (datas.length === 0) return [];
+
+  const lista = await tinyV3Request<TinyNotaLista>("/notas", {
+    params: {
+      tipo: "E",
+      dataInicial: datas[0],
+      dataFinal: new Date().toISOString().slice(0, 10),
+      limit: "100",
+    },
+  });
+
+  const doFornecedor = (lista.itens ?? []).filter(
+    (nota) =>
+      nota.situacao !== NOTA_CANCELADA &&
+      new RegExp(FORNECEDOR_SOLADO_NOME, "i").test(nota.cliente?.nome ?? ""),
+  );
+
+  const notas: NotaEntrada[] = [];
+  // Sequencial: o Tiny devolve 429 quando as leituras vão em paralelo.
+  for (const resumo of doFornecedor) {
+    const detalhe = await tinyV3Request<TinyNotaDetalhe>(`/notas/${resumo.id}`);
+    notas.push({
+      id: resumo.id,
+      numero: resumo.numero ?? null,
+      dataEmissao: (resumo.dataEmissao ?? "").slice(0, 10),
+      itens: (detalhe.itens ?? []).flatMap((item) => {
+        const quantidade = Number(item.quantidade ?? 0);
+        return typeof item.idProduto === "number" &&
+          Number.isFinite(quantidade) &&
+          quantidade > 0
+          ? [{ produtoId: item.idProduto, quantidade }]
+          : [];
+      }),
+    });
+  }
+  return notas;
+}
+
+/**
+ * As ordens e o consolidado por numeração numa leitura só. É o que a tela de
+ * ordens e o cálculo de "a caminho" precisam, e evita ler o Tiny duas vezes.
+ */
+export async function lerCompras(): Promise<{
+  ordens: OrdemCompra[];
+  notas: NotaEntrada[];
+  consolidado: ConsolidadoCompra[];
+}> {
+  const ordens = await listarOrdensCompra();
+  const notas = await lerRecebimentosDoFornecedor(ordens);
+  return { ordens, notas, consolidado: consolidarCompras(ordens, notas) };
 }
 
 export async function criarOrdemCompra(

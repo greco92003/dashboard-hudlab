@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   criarOrdemCompra,
-  listarOrdensCompra,
+  lerCompras,
 } from "@/lib/estoque/ordem-compra-source";
 import { invalidarCacheSolados } from "@/lib/estoque/solados-source";
 import { requireApprovedUser, requireRole } from "@/lib/security/route-guards";
@@ -37,7 +37,8 @@ export async function GET() {
   if (!acesso.ok) return acesso.response;
 
   try {
-    return NextResponse.json({ ordens: await listarOrdensCompra() });
+    const { ordens, consolidado } = await lerCompras();
+    return NextResponse.json({ ordens, consolidado });
   } catch (error) {
     console.error("Falha ao listar ordens de compra no Tiny", error);
     return NextResponse.json(
