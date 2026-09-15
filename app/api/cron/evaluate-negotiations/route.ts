@@ -18,7 +18,15 @@ import { runAuditor } from "@/lib/ghl/sales-agent/agent";
 import { MANUAL_VERSION } from "@/lib/ghl/sales-agent/manual";
 
 const MIN_MESSAGES_TO_EVALUATE = 2;
-const MAX_OPPORTUNITIES_PER_RUN = 25; // keep each run well under the Vercel maxDuration
+// The OpenAI migration (agent.ts) trades speed for quality — a single
+// high-effort Auditor call on a full conversation with media now takes
+// ~50-110s (vs. a few seconds on Gemini), so both of these dropped hard
+// from their old Gemini-era values to keep a run safely under the 300s
+// Vercel maxDuration below. CONCURRENCY runs items in parallel within a
+// run; MAX_OPPORTUNITIES_PER_RUN caps total items (2 sequential waves of 3
+// worst-case ~110s each ≈ 220s, leaving margin under the 300s ceiling).
+const CONCURRENCY = 3;
+const MAX_OPPORTUNITIES_PER_RUN = 6;
 
 export async function GET(request: NextRequest) {
   const authError = requireCronSecret(request);
@@ -77,11 +85,9 @@ export async function GET(request: NextRequest) {
     .filter((o) => !evaluatedIds.has(o.id))
     .slice(0, MAX_OPPORTUNITIES_PER_RUN);
 
-  let evaluated = 0;
-  let skipped = 0;
-  let errors = 0;
+  type PendingOpportunity = (typeof pending)[number];
 
-  for (const opportunity of pending) {
+  async function evaluateOne(opportunity: PendingOpportunity): Promise<"evaluated" | "error"> {
     try {
       const negotiationStartedAt = startedAtByContact.get(opportunity.contact_id)!;
       const [vendedor, transcript] = await Promise.all([
@@ -177,13 +183,25 @@ export async function GET(request: NextRequest) {
           `evaluate-negotiations: failed to save evaluation for ${opportunity.id}`,
           insertError,
         );
-        errors++;
-      } else {
-        evaluated++;
+        return "error";
       }
+      return "evaluated";
     } catch (err) {
       console.error(`evaluate-negotiations: failed to evaluate ${opportunity.id}`, err);
-      errors++;
+      return "error";
+    }
+  }
+
+  let evaluated = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (let i = 0; i < pending.length; i += CONCURRENCY) {
+    const chunk = pending.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(chunk.map(evaluateOne));
+    for (const result of results) {
+      if (result === "evaluated") evaluated++;
+      else errors++;
     }
   }
 

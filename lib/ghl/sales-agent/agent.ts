@@ -2,20 +2,22 @@
 //
 // Runs the Hud Lab "Agente Comercial" (manual.ts section 8) in its two
 // modes: Auditor (final score for a resolved negotiation) and Copiloto
-// (coaching for a negotiation still open). Same Gemini setup as
-// app/api/sellers-v2/training/route.ts (gemini-2.5-flash, responseSchema
-// for guaranteed JSON) but grounded in the real commercial manual instead
-// of generic sales criteria.
-import { GoogleGenAI, Type, type Part } from "@google/genai";
+// (coaching for a negotiation still open). Same OpenAI Responses API setup
+// as app/api/sellers-v2/training/route.ts (gpt-5.6-terra, json_schema for
+// guaranteed structured output) but grounded in the real commercial manual
+// instead of generic sales criteria. Migrated off Gemini 2.5 Flash for
+// evaluation quality — same model already used for the training chat.
+import OpenAI, { toFile } from "openai";
 import { MANUAL_COMERCIAL_TEXT, MANUAL_VERSION } from "./manual";
 import type {
   NegotiationMessage,
   ResponseGapStats,
 } from "@/lib/ghl/negotiation-conversations";
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+const AGENT_MODEL = "gpt-5.6-terra";
 
-const AGENT_BASE_INSTRUCTION = `Você é o Agente Comercial Hud Lab. Use apenas as políticas vigentes descritas no manual abaixo. Avalie ou oriente apenas o que estava sob controle do vendedor. Responda de forma objetiva, cite evidências da conversa e proponha um único próximo passo quando aplicável. Nunca invente condições comerciais (preço, prazo, frete, desconto ou política). Se uma regra estiver marcada como "pendente de decisão" no manual, sinalize a dúvida em vez de decidir por conta própria. Se a conversa não tiver dados suficientes, marque-a como não avaliável em vez de inventar uma nota. Você pode receber imagens (mockups, fotos de produto/defeito) e áudios (notas de voz) anexados à conversa — considere o conteúdo real deles como faria com qualquer mensagem de texto.`;
+const AGENT_BASE_INSTRUCTION = `Você é o Agente Comercial Hud Lab. Use apenas as políticas vigentes descritas no manual abaixo. Avalie ou oriente apenas o que estava sob controle do vendedor. Responda de forma objetiva, cite evidências da conversa e proponha um único próximo passo quando aplicável. Nunca invente condições comerciais (preço, prazo, frete, desconto ou política). Se uma regra estiver marcada como "pendente de decisão" no manual, sinalize a dúvida em vez de decidir por conta própria. Se a conversa não tiver dados suficientes, marque-a como não avaliável em vez de inventar uma nota. Você pode receber imagens (mockups, fotos de produto/defeito) anexadas à conversa, e notas de voz já transcritas em texto — considere o conteúdo real de ambas como faria com qualquer mensagem de texto.`;
 
 function buildSystemPrompt(modeInstructions: string): string {
   return `${AGENT_BASE_INSTRUCTION}
@@ -59,24 +61,65 @@ function formatResponseGapStats(stats: ResponseGapStats): string {
 }
 
 // Only these mimetypes are actually sent to the model as media; anything
-// else (video, pdf, vcard, etc.) is left as a text note only — Gemini
-// supports more than this, but images/audio cover what shows up in a Hud
-// Lab sales conversation (mockups, product/defect photos, voice notes).
+// else (video, pdf, vcard, etc.) is left as a text note only — images/audio
+// cover what shows up in a Hud Lab sales conversation (mockups, product/
+// defect photos, voice notes).
 function isSupportedAttachmentMimeType(mimeType: string): boolean {
   return mimeType.startsWith("image/") || mimeType.startsWith("audio/");
 }
 
-async function fetchAttachmentPart(url: string): Promise<Part | null> {
+type ImageContentPart = { type: "input_image"; image_url: string; detail: "auto" };
+type TextContentPart = { type: "input_text"; text: string };
+type ContentPart = TextContentPart | ImageContentPart;
+
+type AttachmentContent =
+  | { kind: "image"; part: ImageContentPart }
+  | { kind: "audio"; transcript: string };
+
+const TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
+const KNOWN_AUDIO_EXTENSIONS = new Set([
+  "flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm",
+]);
+
+function audioFileNameForMimeType(mimeType: string): string {
+  const ext = mimeType.split("/")[1]?.split(";")[0]?.toLowerCase() || "";
+  // WhatsApp voice notes (verified live against real GHL attachments) are
+  // audio/ogg — default to that extension for anything unrecognized.
+  return `audio.${KNOWN_AUDIO_EXTENSIONS.has(ext) ? ext : "ogg"}`;
+}
+
+/**
+ * Downloads a supported attachment and turns it into model-ready content.
+ * Images become an input_image content part (base64 data URL). Audio is
+ * transcribed instead of sent as raw bytes: the Responses API's input_audio
+ * content type only documents mp3/wav, but real GHL voice notes are
+ * audio/ogg (verified live) — transcription (which does accept ogg
+ * directly) is the reliable path, and the transcript also doubles as
+ * readable evidence text in the report.
+ */
+async function fetchAttachmentContent(url: string): Promise<AttachmentContent | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
     const mimeType = (response.headers.get("content-type") || "").split(";")[0].trim();
     if (!isSupportedAttachmentMimeType(mimeType)) return null;
-    const buffer = await response.arrayBuffer();
-    const data = Buffer.from(buffer).toString("base64");
-    return { inlineData: { mimeType, data } };
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (mimeType.startsWith("image/")) {
+      const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+      return { kind: "image", part: { type: "input_image", image_url: dataUrl, detail: "auto" } };
+    }
+
+    const file = await toFile(buffer, audioFileNameForMimeType(mimeType), { type: mimeType });
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: TRANSCRIPTION_MODEL,
+      language: "pt",
+    });
+    const transcript = transcription.text?.trim();
+    return transcript ? { kind: "audio", transcript } : null;
   } catch (err) {
-    console.error(`negotiation agent: failed to fetch attachment ${url}`, err);
+    console.error(`negotiation agent: failed to fetch/process attachment ${url}`, err);
     return null;
   }
 }
@@ -106,7 +149,7 @@ interface AttachmentRef {
  */
 async function selectIncludedAttachments(
   messages: NegotiationMessage[],
-): Promise<Map<number, Part[]>> {
+): Promise<Map<number, AttachmentContent[]>> {
   const refsNewestFirst: AttachmentRef[] = [];
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
     for (const url of messages[messageIndex].attachments) {
@@ -114,14 +157,14 @@ async function selectIncludedAttachments(
     }
   }
 
-  const includedByMessage = new Map<number, Part[]>();
+  const includedByMessage = new Map<number, AttachmentContent[]>();
   let includedCount = 0;
   for (const ref of refsNewestFirst) {
     if (includedCount >= MAX_ATTACHMENTS_PER_CALL) break;
-    const part = await fetchAttachmentPart(ref.url);
-    if (!part) continue; // unsupported type or fetch failure — doesn't consume a slot
+    const content = await fetchAttachmentContent(ref.url);
+    if (!content) continue; // unsupported type or fetch/transcription failure — doesn't consume a slot
     const list = includedByMessage.get(ref.messageIndex) ?? [];
-    list.push(part);
+    list.push(content);
     includedByMessage.set(ref.messageIndex, list);
     includedCount++;
   }
@@ -129,35 +172,45 @@ async function selectIncludedAttachments(
 }
 
 /**
- * Turns the transcript into Gemini `contents` parts: one text part per
- * message (chronological), with the actual downloaded image/audio parts for
- * the most recent MAX_ATTACHMENTS_PER_CALL usable attachments inlined right
- * after the message that carries them. The per-message note is derived from
- * what actually got included (not just which URLs were in range), so the
- * model is never told media follows when it doesn't.
+ * Turns the transcript into Responses API content parts: one text part per
+ * message (chronological) — with any transcribed audio folded into that
+ * same text — followed by the actual downloaded image parts for the most
+ * recent MAX_ATTACHMENTS_PER_CALL usable attachments. The per-message note
+ * is derived from what actually got included (not just which URLs were in
+ * range), so the model is never told media follows when it doesn't.
  */
 async function buildTranscriptParts(
   messages: NegotiationMessage[],
-): Promise<Part[]> {
+): Promise<ContentPart[]> {
   const includedByMessage = await selectIncludedAttachments(messages);
 
-  const parts: Part[] = [];
+  const parts: ContentPart[] = [];
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const who = m.direction === "outbound" ? "VENDEDOR" : "CLIENTE";
-    const includedParts = includedByMessage.get(i) ?? [];
-    const skipped = m.attachments.length - includedParts.length;
+    const included = includedByMessage.get(i) ?? [];
+    const imageParts = included
+      .filter((c): c is Extract<AttachmentContent, { kind: "image" }> => c.kind === "image")
+      .map((c) => c.part);
+    const audioTranscripts = included
+      .filter((c): c is Extract<AttachmentContent, { kind: "audio" }> => c.kind === "audio")
+      .map((c) => c.transcript);
+    const skipped = m.attachments.length - included.length;
     const attachmentNote =
       m.attachments.length === 0
         ? ""
-        : includedParts.length > 0
-          ? ` [anexo incluído abaixo${skipped > 0 ? `; +${skipped} anexo(s) desta mensagem não incluído(s)` : ""}]`
+        : included.length > 0
+          ? ` [anexo incluído${imageParts.length > 0 ? " abaixo" : ""}${skipped > 0 ? `; +${skipped} anexo(s) desta mensagem não incluído(s)` : ""}]`
           : ` [${m.attachments.length} anexo(s) não incluído(s) — não suportado(s) (ex.: vídeo) ou fora do limite de anexos recentes]`;
+    const audioNote = audioTranscripts
+      .map((t) => `\n  [Áudio transcrito]: "${t}"`)
+      .join("");
 
     parts.push({
-      text: `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto)"}${attachmentNote}`,
+      type: "input_text",
+      text: `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto)"}${attachmentNote}${audioNote}`,
     });
-    parts.push(...includedParts);
+    parts.push(...imageParts);
   }
   return parts;
 }
@@ -195,25 +248,25 @@ segurança, defina naoAvaliavel=true e explique o motivo em
 motivoNaoAvaliavel; nesse caso os demais campos podem vir vazios/zerados.`;
 
 const AUDITOR_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
+  type: "object",
   properties: {
     naoAvaliavel: {
-      type: Type.BOOLEAN,
+      type: "boolean",
       description: "true se a conversa não tem dados suficientes para avaliar",
     },
     motivoNaoAvaliavel: {
-      type: Type.STRING,
+      type: "string",
       description: "Motivo quando naoAvaliavel=true; string vazia caso contrário",
     },
-    resumo: { type: Type.STRING, description: "Resumo objetivo da conversa" },
+    resumo: { type: "string", description: "Resumo objetivo da conversa" },
     notasPorCriterio: {
-      type: Type.OBJECT,
+      type: "object",
       properties: {
-        precisaoInformacoes: { type: Type.INTEGER, description: "0 a 25" },
-        entendimentoNecessidade: { type: Type.INTEGER, description: "0 a 20" },
-        construcaoValor: { type: Type.INTEGER, description: "0 a 20" },
-        conducaoProximoPasso: { type: Type.INTEGER, description: "0 a 20" },
-        clarezaComunicacao: { type: Type.INTEGER, description: "0 a 15" },
+        precisaoInformacoes: { type: "integer", description: "0 a 25" },
+        entendimentoNecessidade: { type: "integer", description: "0 a 20" },
+        construcaoValor: { type: "integer", description: "0 a 20" },
+        conducaoProximoPasso: { type: "integer", description: "0 a 20" },
+        clarezaComunicacao: { type: "integer", description: "0 a 15" },
       },
       required: [
         "precisaoInformacoes",
@@ -222,15 +275,16 @@ const AUDITOR_RESPONSE_SCHEMA = {
         "conducaoProximoPasso",
         "clarezaComunicacao",
       ],
+      additionalProperties: false,
     },
     justificativasPorCriterio: {
-      type: Type.OBJECT,
+      type: "object",
       properties: {
-        precisaoInformacoes: { type: Type.STRING },
-        entendimentoNecessidade: { type: Type.STRING },
-        construcaoValor: { type: Type.STRING },
-        conducaoProximoPasso: { type: Type.STRING },
-        clarezaComunicacao: { type: Type.STRING },
+        precisaoInformacoes: { type: "string" },
+        entendimentoNecessidade: { type: "string" },
+        construcaoValor: { type: "string" },
+        conducaoProximoPasso: { type: "string" },
+        clarezaComunicacao: { type: "string" },
       },
       required: [
         "precisaoInformacoes",
@@ -239,12 +293,13 @@ const AUDITOR_RESPONSE_SCHEMA = {
         "conducaoProximoPasso",
         "clarezaComunicacao",
       ],
+      additionalProperties: false,
     },
-    evidencias: { type: Type.ARRAY, items: { type: Type.STRING } },
-    acertos: { type: Type.ARRAY, items: { type: Type.STRING } },
-    falhas: { type: Type.ARRAY, items: { type: Type.STRING } },
-    errosCriticos: { type: Type.ARRAY, items: { type: Type.STRING } },
-    exemploRespostaMelhor: { type: Type.STRING },
+    evidencias: { type: "array", items: { type: "string" } },
+    acertos: { type: "array", items: { type: "string" } },
+    falhas: { type: "array", items: { type: "string" } },
+    errosCriticos: { type: "array", items: { type: "string" } },
+    exemploRespostaMelhor: { type: "string" },
   },
   required: [
     "naoAvaliavel",
@@ -258,7 +313,8 @@ const AUDITOR_RESPONSE_SCHEMA = {
     "errosCriticos",
     "exemploRespostaMelhor",
   ],
-};
+  additionalProperties: false,
+} as const;
 
 export interface AuditorContext {
   vendedor: string | null;
@@ -340,29 +396,33 @@ ${formatResponseGapStats(responseGapStats)}
 
 Avalie a condução do vendedor na conversa inteira, de ponta a ponta (o resultado acima é contexto para o relatório, não deve influenciar a nota por si só, conforme a seção 7.4 do manual). "Negociação iniciada em" é só informativo — na prática a tag costuma ser aplicada depois que a conversa relevante já começou, então NÃO descarte nem trate como "só pano de fundo" as mensagens anteriores a essa data: se fazem parte do atendimento que levou a essa negociação, contam para a nota normalmente. Segue o histórico completo de WhatsApp com esse cliente, do início do relacionamento até agora:`;
 
-  const contents: Part[] = [
-    { text: introText },
+  const content: ContentPart[] = [
+    { type: "input_text", text: introText },
     ...(await buildTranscriptParts(messages)),
   ];
 
-  const result = await genAI.models.generateContent({
-    model: "gemini-2.5-flash",
-    config: {
-      systemInstruction: buildSystemPrompt(AUDITOR_MODE_INSTRUCTIONS),
-      temperature: 0.2,
-      // gemini-2.5-flash spends a variable, sometimes large chunk of this
-      // budget on internal "thinking" tokens before writing the actual JSON
-      // (observed 1200-2000 thinking tokens once the full manual + a full
-      // conversation history + images are in context) — too tight a limit
-      // here causes MAX_TOKENS truncation mid-JSON, not just a short answer.
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-      responseSchema: AUDITOR_RESPONSE_SCHEMA,
+  const response = await openai.responses.create({
+    model: AGENT_MODEL,
+    instructions: buildSystemPrompt(AUDITOR_MODE_INSTRUCTIONS),
+    input: [{ role: "user", content }],
+    // High effort: this runs in the background batch cron, not blocking a
+    // user, so the extra reasoning latency is worth it for score quality.
+    reasoning: { effort: "high", context: "current_turn" },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "auditor_report",
+        schema: AUDITOR_RESPONSE_SCHEMA,
+        strict: true,
+      },
     },
-    contents,
+    // Reasoning tokens for a "high" effort call on a full manual + full
+    // conversation history + images can be substantial — same truncation
+    // risk documented when this ran on Gemini, so keep a generous budget.
+    max_output_tokens: 16000,
   });
 
-  const report = JSON.parse(result.text || "{}") as AuditorReport;
+  const report = JSON.parse(response.output_text || "{}") as AuditorReport;
 
   if (report.naoAvaliavel) {
     return { report, score: null, classification: null, hasCriticalError: false };
@@ -397,11 +457,10 @@ em vez de sempre sugerir uma mensagem imediata. Se for o vendedor que está
 demorando a responder o cliente, sinalize isso como o bloqueio principal.`;
 
 const COPILOTO_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
+  type: "object",
   properties: {
     situacaoAtual: {
-      type: Type.STRING,
-      format: "enum",
+      type: "string",
       enum: [
         "avancando",
         "estagnada",
@@ -410,13 +469,13 @@ const COPILOTO_RESPONSE_SCHEMA = {
         "aguardando_acao_interna",
       ],
     },
-    objetivoProvavelCliente: { type: Type.STRING },
-    sinaisCompra: { type: Type.ARRAY, items: { type: Type.STRING } },
-    objecoesAbertas: { type: Type.ARRAY, items: { type: Type.STRING } },
-    informacoesNecessarias: { type: Type.ARRAY, items: { type: Type.STRING } },
-    proximaAcao: { type: Type.STRING },
-    mensagemSugerida: { type: Type.STRING },
-    evitar: { type: Type.STRING },
+    objetivoProvavelCliente: { type: "string" },
+    sinaisCompra: { type: "array", items: { type: "string" } },
+    objecoesAbertas: { type: "array", items: { type: "string" } },
+    informacoesNecessarias: { type: "array", items: { type: "string" } },
+    proximaAcao: { type: "string" },
+    mensagemSugerida: { type: "string" },
+    evitar: { type: "string" },
   },
   required: [
     "situacaoAtual",
@@ -428,7 +487,8 @@ const COPILOTO_RESPONSE_SCHEMA = {
     "mensagemSugerida",
     "evitar",
   ],
-};
+  additionalProperties: false,
+} as const;
 
 export interface CopilotoContext {
   vendedor: string | null;
@@ -470,26 +530,29 @@ ${formatResponseGapStats(responseGapStats)}
 
 Analise esta negociação em andamento e diga o próximo passo. Segue o histórico completo de WhatsApp com esse cliente, desde o início do relacionamento:`;
 
-  const contents: Part[] = [
-    { text: introText },
+  const content: ContentPart[] = [
+    { type: "input_text", text: introText },
     ...(await buildTranscriptParts(messages)),
   ];
 
-  const result = await genAI.models.generateContent({
-    model: "gemini-2.5-flash",
-    config: {
-      systemInstruction: buildSystemPrompt(COPILOTO_MODE_INSTRUCTIONS),
-      temperature: 0.3,
-      // See the comment on runAuditor's maxOutputTokens — same
-      // thinking-token headroom issue, reproduced live: MAX_TOKENS
-      // truncation mid-JSON in 2 of 3 real calls at the old 2048 limit
-      // once the full manual + full history + images were in context.
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-      responseSchema: COPILOTO_RESPONSE_SCHEMA,
+  const response = await openai.responses.create({
+    model: AGENT_MODEL,
+    instructions: buildSystemPrompt(COPILOTO_MODE_INSTRUCTIONS),
+    input: [{ role: "user", content }],
+    // Medium effort: this is the on-demand "Gerar Insight" click — a user
+    // is waiting on the response, so it trades some reasoning depth for
+    // latency (unlike the background Auditor cron above).
+    reasoning: { effort: "medium", context: "current_turn" },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "copiloto_report",
+        schema: COPILOTO_RESPONSE_SCHEMA,
+        strict: true,
+      },
     },
-    contents,
+    max_output_tokens: 16000,
   });
 
-  return JSON.parse(result.text || "{}") as CopilotoReport;
+  return JSON.parse(response.output_text || "{}") as CopilotoReport;
 }

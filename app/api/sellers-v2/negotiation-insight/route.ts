@@ -14,6 +14,11 @@ import { MANUAL_VERSION } from "@/lib/ghl/sales-agent/manual";
 
 const MIN_MESSAGES_TO_EVALUATE = 2;
 
+// runCopiloto now calls OpenAI's Responses API with "medium" reasoning
+// effort (agent.ts) instead of Gemini — real calls take up to ~30-40s on a
+// conversation with media, well past Vercel's default function timeout.
+export const maxDuration = 120;
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();

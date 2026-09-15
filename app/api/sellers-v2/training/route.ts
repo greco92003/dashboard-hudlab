@@ -15,6 +15,11 @@ import { TRAINING_CUSTOMER_KNOWLEDGE } from "@/lib/ghl/sales-agent/training-know
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 const TRAINING_MODEL = "gpt-5.6-terra";
 
+// The "evaluate" action runs runAuditor (agent.ts) with "high" reasoning
+// effort on the OpenAI Responses API, which can take up to ~1-2 minutes —
+// well past Vercel's default function timeout.
+export const maxDuration = 180;
+
 // Grounded in the real Manual Comercial Hud Lab (lib/ghl/sales-agent/manual.ts,
 // seções 1-3) — kept as a short, chat-latency-friendly excerpt here rather
 // than the full manual (which the Auditor uses for the one-shot evaluation
@@ -412,7 +417,6 @@ function trainingErrorResponse(error: any) {
     status: error?.status,
     code: error?.code,
     openaiKeyConfigured: Boolean(process.env.OPENAI_API_KEY),
-    geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
   });
 
   if (
