@@ -267,7 +267,7 @@ export interface AuditorContext {
   qtyPares: number | null;
   /** Omit for a simulated training session — there's no real deal outcome to report. */
   outcome?: "won" | "lost";
-  /** ISO timestamp marking where the scored portion of the conversation begins — for a real negotiation, when it entered "Em Negociação" (messages before it are context only); for a training session, the first message (the whole exercise is in scope). */
+  /** ISO timestamp of when the deal entered "Em Negociação" (or, for a training session, the first message) — informational only. The tag is a trailing marker applied once a conversation already got serious, so it is NOT a scoring boundary: the whole transcript is in scope for the score. */
   negociacaoIniciadaEm: string;
 }
 
@@ -338,7 +338,7 @@ ${contextBlock({
 
 ${formatResponseGapStats(responseGapStats)}
 
-Avalie a condução do vendedor nesta conversa (o resultado acima é contexto para o relatório, não deve influenciar a nota por si só, conforme a seção 7.4 do manual). Segue o histórico completo de WhatsApp com esse cliente, do início do relacionamento até agora — mas a NOTA deve considerar apenas a condução do vendedor a partir de "Negociação iniciada em" (informado acima). Mensagens anteriores a essa data são só contexto (o que já foi combinado, orçamento, mockup etc.), não devem pesar na avaliação — trate-as como pano de fundo, não como parte do desempenho avaliado:`;
+Avalie a condução do vendedor na conversa inteira, de ponta a ponta (o resultado acima é contexto para o relatório, não deve influenciar a nota por si só, conforme a seção 7.4 do manual). "Negociação iniciada em" é só informativo — na prática a tag costuma ser aplicada depois que a conversa relevante já começou, então NÃO descarte nem trate como "só pano de fundo" as mensagens anteriores a essa data: se fazem parte do atendimento que levou a essa negociação, contam para a nota normalmente. Segue o histórico completo de WhatsApp com esse cliente, do início do relacionamento até agora:`;
 
   const contents: Part[] = [
     { text: introText },

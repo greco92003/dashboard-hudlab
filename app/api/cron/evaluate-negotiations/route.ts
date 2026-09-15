@@ -91,34 +91,30 @@ export async function GET(request: NextRequest) {
 
       const outcome: "won" | "lost" = opportunity.status === "won" ? "won" : "lost";
 
-      // The transcript now covers the full WhatsApp history (context for
-      // the agent), not just messages after the negotiation tag — so
-      // "enough to evaluate" has to be judged on messages from
-      // negotiationStartedAt onward specifically, not the whole array
-      // (which will almost always be non-trivial once there's any history
-      // at all). The opportunity is already resolved (won/lost), so this
-      // count will never grow — if it's too short to evaluate now, it
-      // never will be. Record it as "não avaliável" once instead of
-      // leaving it pending forever.
-      const negotiationStartedAtMs = Date.parse(negotiationStartedAt);
-      const messagesDuringNegotiation = transcript.messages.filter(
-        (m) => Date.parse(m.dateAdded) >= negotiationStartedAtMs,
-      );
-
+      // Evaluate the conversation end-to-end once the negotiation tag has
+      // fired — not just messages after the tag. In practice the tag is a
+      // trailing marker (applied once a real conversation already got
+      // serious), so cutting the transcript at negotiationStartedAt was
+      // throwing away the actual negotiation in most cases, leaving the
+      // majority of evaluations "não avaliável" with zero messages. The
+      // opportunity is already resolved (won/lost), so this count will
+      // never grow — if it's too short to evaluate now, it never will be.
+      // Record it as "não avaliável" once instead of leaving it pending
+      // forever.
       let result: {
         score: number | null;
         classification: string | null;
         hasCriticalError: boolean;
         report: unknown;
       };
-      if (messagesDuringNegotiation.length < MIN_MESSAGES_TO_EVALUATE) {
+      if (transcript.messages.length < MIN_MESSAGES_TO_EVALUATE) {
         result = {
           score: null,
           classification: null,
           hasCriticalError: false,
           report: {
             naoAvaliavel: true,
-            motivoNaoAvaliavel: `Conversa com apenas ${messagesDuringNegotiation.length} mensagem(ns) de WhatsApp após o início da negociação — sem dados suficientes.`,
+            motivoNaoAvaliavel: `Conversa com apenas ${transcript.messages.length} mensagem(ns) de WhatsApp no total — sem dados suficientes.`,
             resumo: "",
             notasPorCriterio: {
               precisaoInformacoes: 0,
@@ -144,10 +140,10 @@ export async function GET(request: NextRequest) {
       } else {
         result = await runAuditor(
           transcript.messages,
-          // Scoped to the negotiation window, not the full history: the
-          // Auditor scores conduct only from negotiationStartedAt onward,
-          // so a pre-negotiation silence gap shouldn't surface as a signal.
-          computeResponseGapStats(messagesDuringNegotiation),
+          // Full history, matching the transcript scope above — a
+          // pre-negotiation silence gap or slow first reply is legitimate
+          // conduct to flag too, not noise to filter out.
+          computeResponseGapStats(transcript.messages),
           {
             vendedor,
             etapaCrm: opportunity.stage_name,
@@ -171,7 +167,7 @@ export async function GET(request: NextRequest) {
           has_critical_error: result.hasCriticalError,
           report: result.report,
           manual_version: MANUAL_VERSION,
-          message_count: messagesDuringNegotiation.length,
+          message_count: transcript.messages.length,
           negotiation_started_at: negotiationStartedAt,
           resolved_at: opportunity.updated_at,
         });
