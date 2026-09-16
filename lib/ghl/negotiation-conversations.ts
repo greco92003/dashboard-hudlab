@@ -102,6 +102,8 @@ interface GhlRawMessage {
   dateAdded: string;
   userId?: string;
   attachments?: string[];
+  /** "workflow" for GHL automation/campaign sends, "app" for a human typing in GHL — verified live against real conversations (intake bot + weekly promo blasts both come back "workflow", real seller replies "app"). */
+  source?: string;
 }
 
 interface GhlMessagesPage {
@@ -148,6 +150,8 @@ export interface NegotiationMessage {
   dateAdded: string;
   userId: string | null;
   attachments: string[];
+  /** True for a GHL workflow/campaign send (intake bot, weekly promo blast) — never true for inbound. Lets the agent tell automated outreach apart from a seller actually typing, instead of scoring/coaching on the blended stream. */
+  isAutomated: boolean;
 }
 
 export interface NegotiationTranscript {
@@ -187,6 +191,7 @@ export async function getNegotiationTranscript(
         dateAdded: m.dateAdded,
         userId: m.userId ? m.userId : null,
         attachments: m.attachments ?? [],
+        isAutomated: m.source === "workflow",
       }),
     )
     // API returns newest-first; the agent needs a chronological transcript.
@@ -223,7 +228,11 @@ export function computeResponseGapStats(
     if (messages[i].direction !== "inbound") continue;
     const clientAt = Date.parse(messages[i].dateAdded);
     for (let j = i + 1; j < messages.length; j++) {
-      if (messages[j].direction === "outbound") {
+      // Skip automated sends when looking for "the seller's reply" — an
+      // instant workflow/campaign message isn't a signal of human
+      // responsiveness, and counting it would make a seller who never
+      // personally engaged look fast.
+      if (messages[j].direction === "outbound" && !messages[j].isAutomated) {
         const sellerAt = Date.parse(messages[j].dateAdded);
         const minutes = (sellerAt - clientAt) / 60000;
         responseTimesMinutes.push(minutes);

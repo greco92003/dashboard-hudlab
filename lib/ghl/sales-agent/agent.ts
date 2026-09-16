@@ -17,7 +17,9 @@ import type {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 const AGENT_MODEL = "gpt-5.6-terra";
 
-const AGENT_BASE_INSTRUCTION = `Você é o Agente Comercial Hud Lab. Use apenas as políticas vigentes descritas no manual abaixo. Avalie ou oriente apenas o que estava sob controle do vendedor. Responda de forma objetiva, cite evidências da conversa e proponha um único próximo passo quando aplicável. Nunca invente condições comerciais (preço, prazo, frete, desconto ou política). Se uma regra estiver marcada como "pendente de decisão" no manual, sinalize a dúvida em vez de decidir por conta própria. Se a conversa não tiver dados suficientes, marque-a como não avaliável em vez de inventar uma nota. Você pode receber imagens (mockups, fotos de produto/defeito) anexadas à conversa, e notas de voz já transcritas em texto — considere o conteúdo real de ambas como faria com qualquer mensagem de texto.`;
+const AGENT_BASE_INSTRUCTION = `Você é o Agente Comercial Hud Lab. Use apenas as políticas vigentes descritas no manual abaixo. Avalie ou oriente apenas o que estava sob controle do vendedor. Responda de forma objetiva, cite evidências da conversa e proponha um único próximo passo quando aplicável. Nunca invente condições comerciais (preço, prazo, frete, desconto ou política). Se uma regra estiver marcada como "pendente de decisão" no manual, sinalize a dúvida em vez de decidir por conta própria. Se a conversa não tiver dados suficientes, marque-a como não avaliável em vez de inventar uma nota. Você pode receber imagens (mockups, fotos de produto/defeito) anexadas à conversa, e notas de voz já transcritas em texto — considere o conteúdo real de ambas como faria com qualquer mensagem de texto.
+
+Algumas mensagens do vendedor no histórico são marcadas "AUTOMAÇÃO" em vez de "VENDEDOR" — são envios automáticos do sistema (GHL workflow), não digitados por uma pessoa: o bot de intake inicial (recebe o cliente, cria a Amostra Digital básica, coleta quantidade/CEP) e campanhas periódicas de desconto (ex.: promoção semanal com vantagem crescente, tipicamente às quintas). NUNCA credite nem penalize o vendedor pelo conteúdo dessas mensagens — elas não são conduta dele. Mas considere-as como contexto real da negociação: se uma automação já ofereceu desconto ou já tentou reengajar o cliente e não houve resposta, isso é informação relevante (o vendedor não precisa repetir manualmente o que a automação acabou de fazer).`;
 
 function buildSystemPrompt(modeInstructions: string): string {
   return `${AGENT_BASE_INSTRUCTION}
@@ -187,7 +189,12 @@ async function buildTranscriptParts(
   const parts: ContentPart[] = [];
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
-    const who = m.direction === "outbound" ? "VENDEDOR" : "CLIENTE";
+    const who =
+      m.direction === "inbound"
+        ? "CLIENTE"
+        : m.isAutomated
+          ? "AUTOMAÇÃO (mensagem automática do sistema, não é o vendedor)"
+          : "VENDEDOR";
     const included = includedByMessage.get(i) ?? [];
     const imageParts = included
       .filter((c): c is Extract<AttachmentContent, { kind: "image" }> => c.kind === "image")
@@ -454,7 +461,15 @@ Use os sinais de tempo de resposta informados no contexto: se o cliente
 está demorando a responder, a melhor ação pode ser uma pausa estratégica
 (não insistir) ou um follow-up específico (D1/D3/D7, seção 6.5 do manual)
 em vez de sempre sugerir uma mensagem imediata. Se for o vendedor que está
-demorando a responder o cliente, sinalize isso como o bloqueio principal.`;
+demorando a responder o cliente, sinalize isso como o bloqueio principal.
+
+Se a mensagem mais recente foi AUTOMAÇÃO (não o vendedor) e o cliente
+ainda assim não respondeu, NÃO classifique como "aguardando_acao_interna"
+nem proponha repetir manualmente o que a automação já enviou (ex.: o
+mesmo desconto, a mesma pergunta de reengajamento) — trate como
+"aguardando_cliente" ou "em_risco" conforme o tempo de silêncio, e
+proponha algo que a automação não cobre (ex.: contato mais pessoal,
+endereçar uma objeção específica já levantada antes).`;
 
 const COPILOTO_RESPONSE_SCHEMA = {
   type: "object",

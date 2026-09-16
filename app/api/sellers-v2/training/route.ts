@@ -260,6 +260,7 @@ function toNegotiationMessages(messages: TrainingChatMessage[]): NegotiationMess
     dateAdded: message.timestamp || new Date().toISOString(),
     userId: null,
     attachments: [],
+    isAutomated: false,
   }));
 }
 
