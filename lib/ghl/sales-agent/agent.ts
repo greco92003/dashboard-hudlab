@@ -19,7 +19,11 @@ const AGENT_MODEL = "gpt-5.6-terra";
 
 const AGENT_BASE_INSTRUCTION = `Você é o Agente Comercial Hud Lab. Use apenas as políticas vigentes descritas no manual abaixo. Avalie ou oriente apenas o que estava sob controle do vendedor. Responda de forma objetiva, cite evidências da conversa e proponha um único próximo passo quando aplicável. Nunca invente condições comerciais (preço, prazo, frete, desconto ou política). Se uma regra estiver marcada como "pendente de decisão" no manual, sinalize a dúvida em vez de decidir por conta própria. Se a conversa não tiver dados suficientes, marque-a como não avaliável em vez de inventar uma nota. Você pode receber imagens (mockups, fotos de produto/defeito) anexadas à conversa, e notas de voz já transcritas em texto — considere o conteúdo real de ambas como faria com qualquer mensagem de texto.
 
-Algumas mensagens do vendedor no histórico são marcadas "AUTOMAÇÃO" em vez de "VENDEDOR" — são envios automáticos do sistema (GHL workflow), não digitados por uma pessoa: o bot de intake inicial (recebe o cliente, cria a Amostra Digital básica, coleta quantidade/CEP) e campanhas periódicas de desconto (ex.: promoção semanal com vantagem crescente, tipicamente às quintas). NUNCA credite nem penalize o vendedor pelo conteúdo dessas mensagens — elas não são conduta dele. Mas considere-as como contexto real da negociação: se uma automação já ofereceu desconto ou já tentou reengajar o cliente e não houve resposta, isso é informação relevante (o vendedor não precisa repetir manualmente o que a automação acabou de fazer).`;
+Algumas mensagens do vendedor no histórico são marcadas "AUTOMAÇÃO" em vez de "VENDEDOR" — são envios automáticos do sistema (GHL workflow), não digitados por uma pessoa: o bot de intake inicial (recebe o cliente, cria a Amostra Digital básica, coleta quantidade/CEP) e campanhas periódicas de desconto (ex.: promoção semanal com vantagem crescente, tipicamente às quintas). NUNCA credite nem penalize o vendedor pelo conteúdo dessas mensagens — elas não são conduta dele. Mas considere-as como contexto real da negociação: se uma automação já ofereceu desconto ou já tentou reengajar o cliente e não houve resposta, isso é informação relevante (o vendedor não precisa repetir manualmente o que a automação acabou de fazer).
+
+Nunca atribua ao cliente (ou ao vendedor) uma informação específica — data, quantidade, citação — que a pessoa não disse literalmente na conversa. Isso vale para TODOS os campos da resposta, não só a mensagem sugerida: se um detalhe relevante (ex.: uma data-limite de um evento) não foi dito explicitamente, não afirme isso como fato em nenhum campo (resumo, objetivoProvavelCliente, objecoesAbertas etc.) nem invente uma data — use linguagem genérica ("o prazo que vocês combinaram", "o evento que você mencionou") em vez de uma citação inventada.
+
+O "Valor no CRM" do contexto é só o orçamento automático da primeira interação (gerado pelo bot de intake com a quantidade que o cliente digitou naquele momento) — o sistema não atualiza esse valor conforme o vendedor negocia quantidade, modelo ou condições depois. NÃO trate uma diferença entre esse valor e o que foi combinado depois na conversa como erro do vendedor ou inconsistência a apontar — é o comportamento normal do sistema, não um problema.`;
 
 function buildSystemPrompt(modeInstructions: string): string {
   return `${AGENT_BASE_INSTRUCTION}
@@ -29,6 +33,14 @@ ${MANUAL_COMERCIAL_TEXT}
 ===== FIM DO MANUAL =====
 
 ${modeInstructions}`;
+}
+
+/** Today's date in Brazil (UTC-3 year-round) as dd/mm/yyyy, so the agent can reason about whether a date the client mentioned (an event, a deadline) has already passed instead of only seeing relative "hours since" figures. */
+function todayBRDateString(): string {
+  const brNow = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const dd = String(brNow.getUTCDate()).padStart(2, "0");
+  const mm = String(brNow.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${brNow.getUTCFullYear()}`;
 }
 
 function contextBlock(fields: Record<string, string>): string {
@@ -386,9 +398,11 @@ export async function runAuditor(
 ): Promise<AuditorResult> {
   const introText = `Contexto da negociação:
 ${contextBlock({
+  "Data de hoje": todayBRDateString(),
   Vendedor: context.vendedor ?? "não identificado",
   "Etapa atual do CRM": context.etapaCrm ?? "desconhecida",
-  "Valor da negociação": context.valorNegociacao != null ? `R$ ${context.valorNegociacao.toFixed(2)}` : "não definido",
+  "Valor no CRM (orçamento automático inicial, NÃO reflete ajustes feitos depois na conversa)":
+    context.valorNegociacao != null ? `R$ ${context.valorNegociacao.toFixed(2)}` : "não definido",
   "Quantidade de pares": context.qtyPares != null ? String(context.qtyPares) : "não definida",
   Resultado:
     context.outcome === "won"
@@ -469,7 +483,17 @@ nem proponha repetir manualmente o que a automação já enviou (ex.: o
 mesmo desconto, a mesma pergunta de reengajamento) — trate como
 "aguardando_cliente" ou "em_risco" conforme o tempo de silêncio, e
 proponha algo que a automação não cobre (ex.: contato mais pessoal,
-endereçar uma objeção específica já levantada antes).`;
+endereçar uma objeção específica já levantada antes).
+
+Compare "Data de hoje" (contexto) com qualquer data de evento que o
+cliente tenha mencionado como motivo da compra (casamento, formatura,
+evento corporativo etc.) — inclusive vinda de áudio transcrito. Se essa
+data já passou e não há sinal de que o cliente queira o produto para
+outra ocasião, classifique como "em_risco" e deixe isso explícito em
+proximaAcao: a compra provavelmente perdeu o propósito original: sugira
+uma única mensagem breve e sem pressão perguntando se ainda faz sentido
+para outra finalidade, em vez de insistir como se o prazo original ainda
+valesse.`;
 
 const COPILOTO_RESPONSE_SCHEMA = {
   type: "object",
@@ -535,9 +559,11 @@ export async function runCopiloto(
 ): Promise<CopilotoReport> {
   const introText = `Contexto da negociação:
 ${contextBlock({
+  "Data de hoje": todayBRDateString(),
   Vendedor: context.vendedor ?? "não identificado",
   "Etapa atual do CRM": context.etapaCrm ?? "desconhecida",
-  "Valor da negociação": context.valorNegociacao != null ? `R$ ${context.valorNegociacao.toFixed(2)}` : "não definido",
+  "Valor no CRM (orçamento automático inicial, NÃO reflete ajustes feitos depois na conversa)":
+    context.valorNegociacao != null ? `R$ ${context.valorNegociacao.toFixed(2)}` : "não definido",
   "Quantidade de pares": context.qtyPares != null ? String(context.qtyPares) : "não definida",
 })}
 

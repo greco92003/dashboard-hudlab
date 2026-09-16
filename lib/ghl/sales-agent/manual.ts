@@ -83,6 +83,8 @@ Os valores acima seguem a quantidade total do pedido. A técnica de personaliza�
 | 3D | 132 pares | Logo em 3D + 1 cor de Silk | Solução premium e de alto impacto |
 | Sola colorida | 100 pares | Adicional ao projeto | Acréscimo de R$ 5,00 por par |
 
+"Hud Lab Start" NÃO é uma técnica diferente de Silk — é o nome comercial da faixa de 12 a 23 pares, que já é execução em Serigrafia Silk (limitada a 1 cor nessa faixa). Um vendedor que se refere à técnica como "Silk" para um pedido de 12 a 23 pares está correto tecnicamente; o único ponto a validar é a quantidade de cores (1 cor nessa faixa, até 3 a partir de 24 pares) — não é erro de técnica, então não conte como erosCriticos nem como falha de precisão.
+
 ### 2.4 Materiais e elementos do produto
 
 - Sola Micro Expandida Comfort.
