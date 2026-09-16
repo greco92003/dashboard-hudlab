@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
-import { fetchBoardDeals, type BoardDeal } from "@/lib/ghl/board-deals";
+import {
+  fetchBoardDeals,
+  semValorParaProducao,
+  type BoardDeal,
+} from "@/lib/ghl/board-deals";
 import {
   CONCLUIDO_STAGE_TITLES,
   EXPEDICAO_STAGE_TITLES,
@@ -19,19 +23,22 @@ export const SEM_DATA_GROUP_ID = "sem-data";
  * renomeada no CRM apareça neste board em vez de desaparecer das duas telas.
  */
 export async function GET() {
-  // A /producao lê estes dois boards; nenhum deles expõe faturamento.
+  // A /producao lê este board; para ela o valor sai zerado (ver abaixo).
   const access = await requireApprovedUser({ permitirProducao: true });
   if (!access.ok) return access.response;
 
   try {
     const supabase = await createClient();
 
-    const deals = await fetchBoardDeals(supabase, {
-      excludeStageTitles: [
-        ...EXPEDICAO_STAGE_TITLES,
-        ...CONCLUIDO_STAGE_TITLES,
-      ],
-    });
+    const deals = semValorParaProducao(
+      await fetchBoardDeals(supabase, {
+        excludeStageTitles: [
+          ...EXPEDICAO_STAGE_TITLES,
+          ...CONCLUIDO_STAGE_TITLES,
+        ],
+      }),
+      access.profile?.role,
+    );
 
     // Agrupa por Data de Embarque. O split de "Em atraso" fica no cliente, que
     // conhece o fuso do usuário e recalcula ao filtrar.
