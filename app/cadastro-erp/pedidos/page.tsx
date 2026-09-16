@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { TinyOrderSummary } from "@/lib/erp/tiny-order-documents";
 import { OrderDocumentButtons } from "@/components/erp/order-document-buttons";
+import { ProductionLabelsButton } from "@/components/erp/production-labels-button";
 
 type OrdersResponse = { orders: TinyOrderSummary[]; page: number; pageSize: number; total: number };
 
@@ -56,7 +57,7 @@ export default function PedidosErpPage() {
             <ReceiptText className="h-4 w-4" /> ERP · Pedidos do Tiny
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Gere o talão de produção e o romaneio de despacho de cada pedido.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Gere o talão de produção, o romaneio de despacho e as etiquetas de cada pedido.</p>
         </div>
         <Button asChild variant="outline">
           <Link href="/cadastro-erp"><ArrowLeft /> Voltar ao cadastro</Link>
@@ -91,7 +92,7 @@ export default function PedidosErpPage() {
                     <TableHead className="w-24 pl-6">Pedido</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead className="w-40">Status</TableHead>
-                    <TableHead className="w-64 pr-6"><span className="sr-only">Documentos</span></TableHead>
+                    <TableHead className="pr-6"><span className="sr-only">Documentos</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -100,7 +101,7 @@ export default function PedidosErpPage() {
                       <TableCell className="pl-6">{order.number}</TableCell>
                       <TableCell className="max-w-md truncate">{order.customer}</TableCell>
                       <TableCell>{order.status}</TableCell>
-                      <TableCell className="pr-6"><OrderDocumentButtons baseHref={`/api/erp/tiny/orders/${order.id}`} /></TableCell>
+                      <TableCell className="whitespace-nowrap pr-6"><OrderDocumentButtons baseHref={`/api/erp/tiny/orders/${order.id}`}><ProductionLabelsButton href={`/api/erp/tiny/orders/${order.id}/etiquetas`} /></OrderDocumentButtons></TableCell>
                     </TableRow>
                   ))}
                   {data && data.orders.length === 0 && (
