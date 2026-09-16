@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/refresh-negotiation-priorities",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-fluxo-caixa",
+      "schedule": "*/15 * * * *"
     }
   ],
   "functions": {
@@ -61,6 +65,12 @@
     },
     "app/api/cron/sync-designer-mockups/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/sync-fluxo-caixa/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/fluxo-caixa/sync/route.ts": {
+      "maxDuration": 300
     }
   },
   "headers": [
