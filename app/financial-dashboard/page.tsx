@@ -1,348 +1,269 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Link, Plus, RefreshCw, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SummaryCards } from "@/components/financial-dashboard/summary-cards";
-import { FinancialComposedChart } from "@/components/financial-dashboard/financial-composed-chart";
-import { AccountsPayableTable } from "@/components/financial-dashboard/accounts-payable-table";
-import { AccountsReceivableTable } from "@/components/financial-dashboard/accounts-receivable-table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CartoesFluxo } from "@/components/fluxo-caixa/cartoes-fluxo";
+import { GraficoFluxo } from "@/components/fluxo-caixa/grafico-fluxo";
+import { TabelaContas } from "@/components/fluxo-caixa/tabela-contas";
+import { DialogoBaixa, type OpcoesFluxo } from "@/components/fluxo-caixa/dialogo-baixa";
+import { DialogoNovaSaida } from "@/components/fluxo-caixa/dialogo-nova-saida";
+import { DialogoSaldoInicial } from "@/components/fluxo-caixa/dialogo-saldo-inicial";
 import {
-  FinancialFilters,
-  type FinancialFilterState,
-} from "@/components/financial-dashboard/financial-filters";
-import { Link, Wallet } from "lucide-react";
-import type {
-  FinancialDashboardSummaryResponse,
-  FinancialPayable,
-  FinancialReceivable,
-  FinancialTimelinePoint,
-} from "@/lib/tiny/types";
+  PeriodoFluxo,
+  periodoDoAtalho,
+  type Periodo,
+} from "@/components/fluxo-caixa/periodo-fluxo";
+import { agrupamentoAutomatico, type Agrupamento, type ContaComStatus, type RespostaFluxo } from "@/lib/fluxo-caixa/regras";
 
-// -------------------------------------------------------------------------
-// Build timeline points client-side from already-fetched payables/receivables.
-// This ensures the chart always uses the SAME data as the tables.
-// -------------------------------------------------------------------------
-function buildTimelinePoints(
-  payables: FinancialPayable[],
-  receivables: FinancialReceivable[],
-  granularity: FinancialFilterState["granularity"],
-): FinancialTimelinePoint[] {
-  const parseParts = (dateStr: string) => {
-    if (!dateStr) return null;
-    if (dateStr.includes("-")) {
-      const [y, m, d] = dateStr.split("-");
-      return { year: y, month: m, day: d };
-    }
-    const [d, m, y] = dateStr.split("/");
-    return { year: y, month: m, day: d };
-  };
+const REGEX_OAUTH = /oauth não configurado|token expirado|conectar tiny/i;
 
-  const periodInfo = (dateStr: string): { sortKey: string; label: string } => {
-    if (!dateStr) return { sortKey: "0000-00-00", label: "Sem data" };
-    const parts = parseParts(dateStr);
-    if (!parts) return { sortKey: "0000-00-00", label: "Sem data" };
-    const { year, month, day } = parts;
-    if (granularity === "day") {
-      return {
-        sortKey: `${year}-${month}-${day}`,
-        label: `${day}/${month}/${year}`,
-      };
-    }
-    if (granularity === "week") {
-      const d2 = new Date(Number(year), Number(month) - 1, Number(day));
-      const week = Math.ceil(d2.getDate() / 7);
-      return {
-        sortKey: `${year}-${month}-W${String(week).padStart(2, "0")}`,
-        label: `Sem ${week} ${month}/${year}`,
-      };
-    }
-    return { sortKey: `${year}-${month}`, label: `${month}/${year}` };
-  };
-
-  type Bucket = FinancialTimelinePoint & { _sortKey: string };
-  const empty = (label: string, sortKey: string): Bucket => ({
-    period: label,
-    payable: 0,
-    receivable: 0,
-    realizedIn: 0,
-    realizedOut: 0,
-    predictedIn: 0,
-    predictedOut: 0,
-    cashBalance: 0,
-    realizedBalance: 0,
-    _sortKey: sortKey,
-  });
-
-  const pointMap = new Map<string, Bucket>();
-  const bucketFor = (date: string): Bucket => {
-    const { sortKey, label } = periodInfo(date);
-    let b = pointMap.get(sortKey);
-    if (!b) {
-      b = empty(label, sortKey);
-      pointMap.set(sortKey, b);
-    }
-    return b;
-  };
-
-  for (const p of payables) {
-    if (p.status === "canceled") continue;
-    const b = bucketFor(p.dueDate);
-    b.payable += p.amount;
-    if (p.status === "paid") b.realizedOut += p.amount;
-    else b.predictedOut += p.amount;
-  }
-
-  for (const r of receivables) {
-    if (r.status === "canceled") continue;
-    const b = bucketFor(r.dueDate);
-    b.receivable += r.amount;
-    if (r.status === "received") b.realizedIn += r.amount;
-    else b.predictedIn += r.amount;
-  }
-
-  const sorted = Array.from(pointMap.values()).sort((a, b) =>
-    a._sortKey.localeCompare(b._sortKey),
-  );
-
-  let runningAll = 0;
-  let runningRealized = 0;
-  return sorted.map(({ _sortKey: _, ...rest }) => {
-    runningAll += rest.receivable - rest.payable;
-    runningRealized += rest.realizedIn - rest.realizedOut;
-    return {
-      ...rest,
-      cashBalance: runningAll,
-      realizedBalance: runningRealized,
-    };
-  });
+function formatarDataHora(iso: string): string {
+  const d = new Date(iso);
+  const data = d.toLocaleDateString("pt-BR");
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${data} ${hora}`;
 }
 
-// -------------------------------------------------------------------------
-// Default filter: last 6 months (monthly granularity needs multiple points)
-// -------------------------------------------------------------------------
-function defaultFilters(): FinancialFilterState {
-  const now = new Date();
-  const endY = now.getFullYear();
-  const endM = now.getMonth(); // 0-indexed
-  const lastDay = new Date(endY, endM + 1, 0).getDate();
-
-  // Start: first day of 5 months ago (gives 6 months total including current)
-  const startDate = new Date(endY, endM - 5, 1);
-  const startY = startDate.getFullYear();
-  const startM = String(startDate.getMonth() + 1).padStart(2, "0");
-
-  return {
-    startDate: `${startY}-${startM}-01`,
-    endDate: `${endY}-${String(endM + 1).padStart(2, "0")}-${lastDay}`,
-    status: "all",
-    granularity: "month",
-    viewMode: "both",
-  };
-}
-
-function buildQS(
-  filters: FinancialFilterState,
-  extra?: Record<string, string>,
-) {
-  const p = new URLSearchParams();
-  if (filters.startDate) p.set("startDate", filters.startDate);
-  if (filters.endDate) p.set("endDate", filters.endDate);
-  if (filters.status && filters.status !== "all")
-    p.set("status", filters.status);
-  if (extra) Object.entries(extra).forEach(([k, v]) => p.set(k, v));
-  return p.toString();
-}
-
-// -------------------------------------------------------------------------
-// Auto-granularity: pick the best granularity for a given date range
-// -------------------------------------------------------------------------
-function autoGranularity(
-  startDate: string,
-  endDate: string,
-): FinancialFilterState["granularity"] {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffDays = Math.ceil(
-    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  if (diffDays <= 31) return "day";
-  if (diffDays <= 90) return "week";
-  return "month";
-}
-
-// -------------------------------------------------------------------------
-// Page
-// -------------------------------------------------------------------------
 export default function FinancialDashboardPage() {
-  const [filters, setFilters] = useState<FinancialFilterState>(defaultFilters);
-  const [summary, setSummary] = useState<FinancialDashboardSummaryResponse>();
-  const [timeline, setTimeline] = useState<FinancialTimelinePoint[]>();
-  const [payables, setPayables] = useState<FinancialPayable[]>();
-  const [receivables, setReceivables] = useState<FinancialReceivable[]>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>();
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoDoAtalho("30d"));
+  const [agrupamento, setAgrupamento] = useState<Agrupamento>("dia");
+  const [dados, setDados] = useState<RespostaFluxo | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [erro, setErro] = useState<string | undefined>();
+  const [opcoes, setOpcoes] = useState<OpcoesFluxo | null>(null);
+  const [carregandoOpcoes, setCarregandoOpcoes] = useState(false);
 
-  // When dates change → auto-adjust granularity.
-  // When granularity is explicitly changed by the user → keep it as-is.
-  const handleFilterChange = useCallback(
-    (next: FinancialFilterState) => {
-      const datesChanged =
-        next.startDate !== filters.startDate ||
-        next.endDate !== filters.endDate;
-      const granularityExplicitlyChanged =
-        next.granularity !== filters.granularity;
+  const [contaBaixa, setContaBaixa] = useState<ContaComStatus | null>(null);
+  const [novaSaidaAberta, setNovaSaidaAberta] = useState(false);
+  const [saldoAberto, setSaldoAberto] = useState(false);
 
-      if (
-        datesChanged &&
-        !granularityExplicitlyChanged &&
-        next.startDate &&
-        next.endDate
-      ) {
-        setFilters({
-          ...next,
-          granularity: autoGranularity(next.startDate, next.endDate),
-        });
-      } else {
-        setFilters(next);
-      }
-    },
-    [filters.startDate, filters.endDate, filters.granularity],
-  );
-
-  // viewMode is intentionally NOT a fetch dep — it only affects display
-  const { startDate, endDate, status, granularity } = filters;
-
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    setErro(undefined);
     try {
-      const qs = buildQS({
-        startDate,
-        endDate,
-        status,
-        granularity,
-        viewMode: "both",
+      const qs = new URLSearchParams({
+        inicio: periodo.inicio,
+        fim: periodo.fim,
+        agrupamento,
       });
-
-      const [summaryRes, payablesRes, receivablesRes] = await Promise.all([
-        fetch(`/api/financial-dashboard/summary?${qs}`),
-        fetch(`/api/financial-dashboard/payables?${qs}`),
-        fetch(`/api/financial-dashboard/receivables?${qs}`),
-      ]);
-
-      const [s, p, r] = await Promise.all([
-        summaryRes.json(),
-        payablesRes.json(),
-        receivablesRes.json(),
-      ]);
-
-      if (!summaryRes.ok) throw new Error(s.error);
-
-      const fetchedPayables: FinancialPayable[] = p.data ?? [];
-      const fetchedReceivables: FinancialReceivable[] = r.data ?? [];
-
-      setSummary(s);
-      setPayables(fetchedPayables);
-      setReceivables(fetchedReceivables);
-      setTimeline(
-        buildTimelinePoints(fetchedPayables, fetchedReceivables, granularity),
-      );
+      const res = await fetch(`/api/fluxo-caixa?${qs.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro inesperado");
+      setDados(json as RespostaFluxo);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro inesperado");
+      setErro(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
-      setLoading(false);
+      setCarregando(false);
     }
-  }, [startDate, endDate, status, granularity]);
+  }, [periodo.inicio, periodo.fim, agrupamento]);
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    carregar();
+  }, [carregar]);
+
+  function handlePeriodo(next: Periodo) {
+    setPeriodo(next);
+    setAgrupamento(agrupamentoAutomatico(next.inicio, next.fim));
+  }
+
+  async function garantirOpcoes() {
+    if (opcoes || carregandoOpcoes) return;
+    setCarregandoOpcoes(true);
+    try {
+      const res = await fetch("/api/fluxo-caixa/opcoes");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro inesperado");
+      setOpcoes(json as OpcoesFluxo);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível carregar as opções.");
+    } finally {
+      setCarregandoOpcoes(false);
+    }
+  }
+
+  async function sincronizar() {
+    setSincronizando(true);
+    try {
+      const res = await fetch("/api/fluxo-caixa/sync", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        const mensagem = json.error ?? "Não foi possível sincronizar.";
+        if (REGEX_OAUTH.test(mensagem)) setErro(mensagem);
+        toast.error(mensagem);
+        return;
+      }
+      toast.success(`${json.contasLidas} contas lidas do Tiny.`);
+      if (json.detalhesPendentes > 0) {
+        toast.info(
+          `${json.detalhesPendentes} contas ainda sem categoria/data de pagamento; completam nas próximas sincronizações.`,
+        );
+      }
+      await carregar();
+    } catch {
+      toast.error("Não foi possível sincronizar.");
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
+  const subtitulo = dados?.ultimaSyncOk
+    ? `Dados do Tiny de ${formatarDataHora(dados.ultimaSyncOk)}`
+    : "Ainda não sincronizado";
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Dashboard Financeiro</h1>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold">Fluxo de caixa</h1>
+          <p className="text-sm text-muted-foreground">{subtitulo}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <PeriodoFluxo
+            periodo={periodo}
+            agrupamento={agrupamento}
+            onPeriodo={handlePeriodo}
+            onAgrupamento={setAgrupamento}
+          />
+          <Button variant="outline" onClick={sincronizar} disabled={sincronizando}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${sincronizando ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setSaldoAberto(true)}
+          >
+            Saldo inicial
+          </Button>
+          <Button
+            onClick={() => {
+              garantirOpcoes();
+              setNovaSaidaAberta(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nova saída
+          </Button>
+        </div>
+      </div>
 
-      {/* Filters */}
-      <FinancialFilters
-        filters={filters}
-        onChange={handleFilterChange}
-        onReset={() => setFilters(defaultFilters())}
-      />
-
-      {/* OAuth banner – shown for any auth-related error */}
-      {error &&
-        /oauth não configurado|token expirado|conectar tiny/i.test(error) && (
-          <div className="rounded-xl border bg-muted/50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <Wallet className="h-8 w-8 text-muted-foreground shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium">
-                {error.includes("expirado")
-                  ? "Sessão do Tiny ERP expirada"
-                  : "Conecte o Tiny ERP para ver seus dados financeiros"}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {error.includes("expirado")
-                  ? 'O token de acesso expirou. Clique em "Reconectar Tiny" para renovar a autorização.'
-                  : 'O app Tiny está configurado. Clique em "Conectar Tiny" para autorizar o acesso.'}
-              </p>
-            </div>
-            <Button asChild>
-              <a href="/api/financial-dashboard/oauth">
-                <Link className="h-4 w-4 mr-2" />
-                {error.includes("expirado")
-                  ? "Reconectar Tiny"
-                  : "Conectar Tiny"}
-              </a>
-            </Button>
+      {erro && REGEX_OAUTH.test(erro) && (
+        <div className="rounded-xl border bg-muted/50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <Wallet className="h-8 w-8 text-muted-foreground shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium">
+              {erro.includes("expirado")
+                ? "Sessão do Tiny ERP expirada"
+                : "Conecte o Tiny ERP para ver seus dados financeiros"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {erro.includes("expirado")
+                ? 'O token de acesso expirou. Clique em "Reconectar Tiny" para renovar a autorização.'
+                : 'O app Tiny está configurado. Clique em "Conectar Tiny" para autorizar o acesso.'}
+            </p>
           </div>
-        )}
+          <Button asChild>
+            <a href="/api/financial-dashboard/oauth">
+              <Link className="h-4 w-4 mr-2" />
+              {erro.includes("expirado") ? "Reconectar Tiny" : "Conectar Tiny"}
+            </a>
+          </Button>
+        </div>
+      )}
 
-      {/* Generic error banner */}
-      {error &&
-        !/oauth não configurado|token expirado|conectar tiny/i.test(error) && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+      {erro && !REGEX_OAUTH.test(erro) && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {erro}
+        </div>
+      )}
 
-      {/* Summary cards */}
-      <SummaryCards
-        data={summary}
-        loading={loading}
-        viewMode={filters.viewMode}
-      />
+      {dados?.ultimaSync?.status === "erro" && (
+        <div className="rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          Última sincronização falhou: {dados.ultimaSync.erro}
+        </div>
+      )}
 
-      {/* Composed chart */}
+      {!dados?.ultimaSyncOk && !carregando && !erro && (
+        <div className="rounded-md border px-4 py-3 text-sm text-muted-foreground">
+          Espelho vazio: clique em Atualizar para trazer as contas do Tiny.
+        </div>
+      )}
+
+      <CartoesFluxo resumo={dados?.resumo ?? null} carregando={carregando} />
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Fluxo de Caixa — Previsto e Realizado
-          </CardTitle>
+          <CardTitle className="text-base">Entradas, saídas e fechamento</CardTitle>
         </CardHeader>
         <CardContent>
-          <FinancialComposedChart
-            data={timeline}
-            loading={loading}
-            viewMode={filters.viewMode}
-          />
+          {dados ? <GraficoFluxo pontos={dados.pontos} /> : <Skeleton className="h-72 w-full" />}
         </CardContent>
       </Card>
 
-      {/* Tables */}
-      <Tabs defaultValue="payables">
+      <Tabs defaultValue="pagar">
         <TabsList>
-          <TabsTrigger value="payables">Contas a Pagar</TabsTrigger>
-          <TabsTrigger value="receivables">Contas a Receber</TabsTrigger>
+          <TabsTrigger value="pagar">A pagar</TabsTrigger>
+          <TabsTrigger value="receber">A receber</TabsTrigger>
         </TabsList>
-        <TabsContent value="payables" className="mt-4">
-          <AccountsPayableTable data={payables} loading={loading} />
+        <TabsContent value="pagar" className="mt-4">
+          <TabelaContas
+            tipo="pagar"
+            contas={dados?.contas ?? []}
+            onBaixar={(conta) => {
+              garantirOpcoes();
+              setContaBaixa(conta);
+            }}
+          />
         </TabsContent>
-        <TabsContent value="receivables" className="mt-4">
-          <AccountsReceivableTable data={receivables} loading={loading} />
+        <TabsContent value="receber" className="mt-4">
+          <TabelaContas
+            tipo="receber"
+            contas={dados?.contas ?? []}
+            onBaixar={(conta) => {
+              garantirOpcoes();
+              setContaBaixa(conta);
+            }}
+          />
         </TabsContent>
       </Tabs>
+
+      <DialogoBaixa
+        conta={contaBaixa}
+        hoje={dados?.hoje ?? new Date().toISOString().slice(0, 10)}
+        opcoes={opcoes}
+        onFechar={() => setContaBaixa(null)}
+        onConcluido={() => {
+          setContaBaixa(null);
+          carregar();
+        }}
+      />
+
+      <DialogoNovaSaida
+        aberto={novaSaidaAberta}
+        hoje={dados?.hoje ?? new Date().toISOString().slice(0, 10)}
+        opcoes={opcoes}
+        onFechar={() => setNovaSaidaAberta(false)}
+        onConcluido={() => {
+          setNovaSaidaAberta(false);
+          carregar();
+        }}
+      />
+
+      <DialogoSaldoInicial
+        aberto={saldoAberto}
+        saldo={dados?.saldoInicial ?? null}
+        hoje={dados?.hoje ?? new Date().toISOString().slice(0, 10)}
+        onFechar={() => setSaldoAberto(false)}
+        onConcluido={() => {
+          setSaldoAberto(false);
+          carregar();
+        }}
+      />
     </div>
   );
 }
