@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { parseAsString, useQueryStates } from "nuqs";
 import {
   ArrowRight,
@@ -9,6 +10,7 @@ import {
   FileImage,
   Loader2,
   PackagePlus,
+  ReceiptText,
   Search,
   TriangleAlert,
   UserRound,
@@ -560,9 +562,14 @@ export default function CadastroErpPage() {
             Escolha o contato e o deal, relacione cada modelo da ficha a um cloner e valide os produtos antes do cadastro.
           </p>
         </div>
-        <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-          Cadastro real habilitado
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            Cadastro real habilitado
+          </Badge>
+          <Button asChild variant="outline">
+            <Link href="/cadastro-erp/pedidos"><ReceiptText /> Pedidos</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

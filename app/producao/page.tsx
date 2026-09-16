@@ -27,6 +27,7 @@ import {
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
+import { OrderDocumentButtons } from "@/components/erp/order-document-buttons";
 import {
   TipoPedidoFilter,
   type TipoFilterValue,
@@ -415,13 +416,22 @@ export default function ProducaoPage() {
                 concluido={grupo.id === RECEBIDO_GROUP_ID}
                 footer={
                   aba === "programacao" && isEtapaConcluivel(deal.stageTitle) ? (
-                    <Button
-                      className="h-12 w-full text-base font-semibold"
-                      onClick={() => setDealParaConcluir(deal)}
-                    >
-                      <PackageCheck className="mr-2 h-5 w-5" />
-                      Concluir
-                    </Button>
+                    <div className="space-y-2">
+                      <OrderDocumentButtons
+                        baseHref={`/api/producao/documentos/${encodeURIComponent(deal.id)}`}
+                        talaoLabel="Talão"
+                        size="default"
+                        className="grid grid-cols-2"
+                        buttonClassName="h-11 w-full text-base"
+                      />
+                      <Button
+                        className="h-12 w-full text-base font-semibold"
+                        onClick={() => setDealParaConcluir(deal)}
+                      >
+                        <PackageCheck className="mr-2 h-5 w-5" />
+                        Concluir
+                      </Button>
+                    </div>
                   ) : undefined
                 }
               />

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createTinySalesOrder } from "@/lib/erp/tiny-order-v2";
+import { listTinyOrders } from "@/lib/erp/tiny-order-documents";
 import { extractGhlOrderSource, FREE_SAMPLE_NATURE, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
 
@@ -41,6 +42,27 @@ const schema = z.object({
   if (!data.dueDate) context.addIssue({ code: z.ZodIssueCode.custom, path: ["dueDate"], message: "Vencimento obrigatório." });
   if (data.items.some((item) => item.unitPrice <= 0)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["items"], message: "Preço obrigatório." });
 });
+
+const ORDERS_PAGE_SIZE = 20;
+
+export async function GET(request: Request) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+  const searchParams = new URL(request.url).searchParams;
+  const requestedPage = Number(searchParams.get("page"));
+  const search = (searchParams.get("q") ?? "").slice(0, 100);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  try {
+    const { orders, total } = await listTinyOrders(page, ORDERS_PAGE_SIZE, search);
+    return NextResponse.json(
+      { orders, page, pageSize: ORDERS_PAGE_SIZE, total },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    console.error("ERP Tiny order list failed", error);
+    return NextResponse.json({ error: "Não foi possível carregar os pedidos do Tiny." }, { status: 502 });
+  }
+}
 
 export async function POST(request: Request) {
   const access = await requireApprovedUser();

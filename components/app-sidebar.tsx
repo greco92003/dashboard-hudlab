@@ -113,6 +113,21 @@ const menuGroups: MenuGroup[] = [
         icon: DollarSign,
       },
       {
+        title: "Estoque",
+        url: "/estoque",
+        icon: Package,
+      },
+    ],
+  },
+  {
+    label: "Produção",
+    items: [
+      {
+        title: "Painel Produção",
+        url: "/producao",
+        icon: Factory,
+      },
+      {
         title: "Programação",
         url: "/programacao",
         icon: Clock,
@@ -121,16 +136,6 @@ const menuGroups: MenuGroup[] = [
         title: "Expedição",
         url: "/expedicao",
         icon: PackageCheck,
-      },
-      {
-        title: "Produção",
-        url: "/producao",
-        icon: Factory,
-      },
-      {
-        title: "Estoque",
-        url: "/estoque",
-        icon: Package,
       },
     ],
   },
