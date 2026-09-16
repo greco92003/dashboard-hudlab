@@ -87,3 +87,16 @@ export async function fetchBoardDeals(
 
   return rows.map(toBoardDeal);
 }
+
+/**
+ * Quem é da produção não recebe valor: zera antes de a resposta sair do
+ * servidor. Esconder só no card deixava o R$ no JSON — e o relatório da
+ * Expedição, que carrega o histórico inteiro, entregava mais de mil pedidos com
+ * valor a um papel que não pode ver número nenhum.
+ */
+export function semValorParaProducao(
+  deals: BoardDeal[],
+  role: string | null | undefined,
+): BoardDeal[] {
+  return role === "producao" ? deals.map((deal) => ({ ...deal, value: 0 })) : deals;
+}

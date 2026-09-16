@@ -1,20 +1,16 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatDate } from "./board-dates";
 import {
   AGRUPAMENTO_ROTULOS,
-  etapaDoDeal,
-  paresDoDeal,
-  tipoDoDeal,
-  vendedorDoDeal,
+  celulasDoDeal,
+  colunasDoRelatorio,
+  rotuloDoGrupo,
+  totaisDoRelatorio,
   type RelatorioAgrupamento,
   type RelatorioGrupo,
 } from "./relatorio";
 
 const MARGEM = 12;
-
-const moeda = (valor: number) =>
-  valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export type RelatorioPdfInput = {
   titulo: string;
@@ -23,6 +19,8 @@ export type RelatorioPdfInput = {
   grupos: RelatorioGrupo[];
   agrupamento: RelatorioAgrupamento;
   mostrarValor: boolean;
+  /** Coluna com os dias de atraso — usada pelo filtro rápido "em atraso". */
+  mostrarAtraso?: boolean;
   /** Linhas de texto descrevendo o recorte, impressas no cabeçalho. */
   resumoFiltros: string[];
 };
@@ -30,9 +28,11 @@ export type RelatorioPdfInput = {
 export function montarRelatorioPdf(input: RelatorioPdfInput) {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape", compress: true });
   const largura = doc.internal.pageSize.getWidth();
-  const deals = input.grupos.flatMap((grupo) => grupo.deals);
-  const totalPares = input.grupos.reduce((soma, grupo) => soma + grupo.pares, 0);
-  const totalValor = input.grupos.reduce((soma, grupo) => soma + grupo.valor, 0);
+  const colunas = colunasDoRelatorio({
+    mostrarValor: input.mostrarValor,
+    mostrarAtraso: Boolean(input.mostrarAtraso),
+  });
+  const totalPedidos = input.grupos.reduce((soma, grupo) => soma + grupo.deals.length, 0);
 
   // A logo fica à esquerda do título, com a altura fixa e a largura na
   // proporção da imagem.
@@ -57,21 +57,23 @@ export function montarRelatorioPdf(input: RelatorioPdfInput) {
     y += quebradas.length * 4.2;
   }
   doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(33);
-  doc.text(
-    [`${deals.length} pedido(s)`, `${totalPares} pares`, input.mostrarValor ? moeda(totalValor) : ""]
-      .filter(Boolean).join("   ·   "),
-    MARGEM,
-    y + 2,
-  );
+  doc.text(totaisDoRelatorio(input.grupos, input.mostrarValor), MARGEM, y + 2);
   y += 6;
 
-  const cabecalho = ["Embarque", "Pedido", "Tipo", "Etapa", "Vendedor", "Pares", ...(input.mostrarValor ? ["Valor"] : [])];
-  const colunaPares = 5;
-
-  if (deals.length === 0) {
+  if (totalPedidos === 0) {
     doc.setFont("helvetica", "normal").setFontSize(10);
     doc.text("Nenhum pedido encontrado com os filtros escolhidos.", MARGEM, y + 6);
   }
+
+  // Estilo por coluna montado a partir da definição compartilhada, e não por
+  // índice fixo: a coluna de atraso entra e sai conforme o filtro.
+  const columnStyles = Object.fromEntries(
+    colunas.flatMap((coluna, indice) =>
+      coluna.largura
+        ? [[indice, { cellWidth: coluna.largura, ...(coluna.direita ? { halign: "right" as const } : {}) }]]
+        : [],
+    ),
+  );
 
   for (const grupo of input.grupos) {
     autoTable(doc, {
@@ -83,30 +85,15 @@ export function montarRelatorioPdf(input: RelatorioPdfInput) {
       head: [
         ...(input.agrupamento !== "nenhum"
           ? [[{
-              content: `${grupo.titulo}  —  ${grupo.deals.length} pedido(s) · ${grupo.pares} pares${input.mostrarValor ? ` · ${moeda(grupo.valor)}` : ""}`,
-              colSpan: cabecalho.length,
+              content: rotuloDoGrupo(grupo, input.mostrarValor),
+              colSpan: colunas.length,
               styles: { fillColor: [229, 231, 235] as [number, number, number], fontSize: 9.5 },
             }]]
           : []),
-        cabecalho,
+        colunas.map((coluna) => coluna.rotulo),
       ],
-      body: grupo.deals.map((deal) => [
-        formatDate(deal.dataEmbarque) || "—",
-        deal.title,
-        tipoDoDeal(deal),
-        etapaDoDeal(deal),
-        vendedorDoDeal(deal),
-        String(paresDoDeal(deal)),
-        ...(input.mostrarValor ? [moeda((deal.value || 0) / 100)] : []),
-      ]),
-      columnStyles: {
-        0: { cellWidth: 22 },
-        2: { cellWidth: 22 },
-        3: { cellWidth: 45 },
-        4: { cellWidth: 38 },
-        [colunaPares]: { cellWidth: 16, halign: "right" },
-        ...(input.mostrarValor ? { 6: { cellWidth: 28, halign: "right" as const } } : {}),
-      },
+      body: grupo.deals.map((deal) => celulasDoDeal(deal, colunas)),
+      columnStyles,
     });
     y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 3;
   }
@@ -129,6 +116,7 @@ export function nomeDoRelatorio(titulo: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
-    .replace(/[^a-z0-9]+/g, "-");
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return `relatorio-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`;
 }

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@/utils/supabase/server";
-import { fetchBoardDeals, type BoardDeal } from "@/lib/ghl/board-deals";
+import {
+  fetchBoardDeals,
+  semValorParaProducao,
+  type BoardDeal,
+} from "@/lib/ghl/board-deals";
 import {
   CONCLUIDO_STAGE_TITLES,
   EXPEDICAO_COLUMNS,
@@ -28,7 +32,7 @@ const EM_ANDAMENTO_STAGE_TITLES = EXPEDICAO_COLUMNS.filter(
  * pela operação e escapou dessa distorção. `?recebidosDias=0` traz tudo.
  */
 export async function GET(request: NextRequest) {
-  // A /producao lê estes dois boards; nenhum deles expõe faturamento.
+  // A /producao lê este board; para ela o valor sai zerado (ver abaixo).
   const access = await requireApprovedUser({ permitirProducao: true });
   if (!access.ok) return access.response;
 
@@ -57,7 +61,10 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const deals = [...emAndamento, ...recebidos];
+    const deals = semValorParaProducao(
+      [...emAndamento, ...recebidos],
+      access.profile?.role,
+    );
 
     const dealsByColumn = new Map<string, BoardDeal[]>();
     for (const deal of deals) {
