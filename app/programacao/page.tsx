@@ -37,6 +37,7 @@ import {
   ForaDoBoard,
   type MotivoFora,
 } from "@/components/programacao/fora-do-board";
+import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
@@ -535,6 +536,7 @@ export default function ProgramacaoPage() {
             </div>
 
             <div className="flex w-full gap-2 sm:w-auto">
+              <RelatorioDialog titulo="Programação" endpoint="/api/programacao" />
               <Button asChild variant="ghost" size="sm">
                 <Link href="/expedicao">
                   <PackageCheck className="mr-2 h-4 w-4" />

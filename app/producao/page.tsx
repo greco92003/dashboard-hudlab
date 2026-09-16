@@ -24,6 +24,7 @@ import {
   ForaDoBoard,
   type MotivoFora,
 } from "@/components/programacao/fora-do-board";
+import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
 import { BoardColumns } from "@/components/programacao/board-columns";
 import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
@@ -314,6 +315,14 @@ export default function ProducaoPage() {
         >
           <RefreshCw className={cn("h-5 w-5", carregando && "animate-spin")} />
         </Button>
+
+        {/* A produção não vê valores; o relatório segue a aba aberta. */}
+        <RelatorioDialog
+          key={aba}
+          titulo={aba === "programacao" ? "Produção" : "Expedição"}
+          endpoint={aba === "programacao" ? "/api/programacao" : "/api/expedicao?recebidosDias=0"}
+          grande
+        />
 
         {mostrarVolta && (
           <Button asChild variant="ghost" className="h-11">

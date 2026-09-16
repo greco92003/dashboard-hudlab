@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { BoardColumns } from "@/components/programacao/board-columns";
+import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
 import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
 import {
@@ -385,6 +386,8 @@ export default function ExpedicaoPage() {
             </div>
 
             <div className="flex w-full gap-2 sm:w-auto">
+              {/* recebidosDias=0: o período do relatório pode ir além da janela da tela. */}
+              <RelatorioDialog titulo="Expedição" endpoint="/api/expedicao?recebidosDias=0" mostrarValor />
               <Button asChild variant="ghost" size="sm">
                 <Link href="/programacao">
                   <Clock className="mr-2 h-4 w-4" />
