@@ -86,10 +86,19 @@ export default async function Layout({
                       });
 
                       // Verifica atualização ao voltar para a aba e a cada 30 min.
+                      // update() rejeita quando o /sw-custom.js não responde (servidor
+                      // reiniciando, sem rede, troca de deploy). É só uma checagem: a
+                      // próxima tentativa resolve, então a falha não pode virar
+                      // unhandledRejection.
+                      function checkForUpdate() {
+                        registration.update().catch(function(error) {
+                          console.warn('SW update check failed: ', error);
+                        });
+                      }
                       document.addEventListener('visibilitychange', function() {
-                        if (document.visibilityState === 'visible') registration.update();
+                        if (document.visibilityState === 'visible') checkForUpdate();
                       });
-                      setInterval(function() { registration.update(); }, 30 * 60 * 1000);
+                      setInterval(checkForUpdate, 30 * 60 * 1000);
                     })
                     .catch(function(registrationError) {
                       console.log('❌ SW registration failed: ', registrationError);
