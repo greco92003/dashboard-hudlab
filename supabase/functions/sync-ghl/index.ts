@@ -19,6 +19,11 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 const BASE = "https://services.leadconnectorhq.com";
 const TIME_BUDGET_MS = 40_000; // margem folgada sob o limite do runtime
 const MAX_HOPS = 30; // trava de segurança contra encadeamento infinito
+// Contatos fora da régua só entram no fluxo diário enquanto o lead é novo
+// (ver runLinkedContacts).
+const NEW_LEAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// ...ou enquanto o negócio acabou de mudar de etapa.
+const RECENT_STAGE_CHANGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 // Escopo do BI (definido em 2026-07-21): apenas o pipeline
 // "Atendimento" (Fábrica de Mockups é passagem dos mesmos clientes)
@@ -239,30 +244,61 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
   const offset = state.offset ?? 0;
   try {
     const fieldMap = await fetchFieldMap(token, locationId);
-    const { data, error } = await supabase
-      .from("ghl_opportunities")
-      .select("contact_id, created_at, stage_name")
-      .not("contact_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(20000);
-    if (error) throw new Error(`Lista de contact_ids: ${error.message}`);
-
-    const linhas = data as {
+    // Paginado de verdade: o PostgREST corta qualquer resposta em 1.000
+    // linhas, e um `.limit(20000)` não muda isso. Até 17/09/2026 a lista
+    // parava nas 1.000 oportunidades mais novas (de ~16 mil), então a
+    // prioridade da régua só valia dentro desse recorte: 177 dos 270
+    // negócios abertos em Negociação ficavam dias sem sync, e a M2 aplicada
+    // neles não aparecia no dashboard.
+    const linhas: {
+      id: string;
       contact_id: string;
-      created_at: string;
       stage_name: string | null;
-    }[];
+      status: string | null;
+      created_at: string | null;
+      stage_changed_at: string | null;
+    }[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from("ghl_opportunities")
+        .select("id, contact_id, stage_name, status, created_at, stage_changed_at")
+        .not("contact_id", "is", null)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, from + 999);
+      if (error) throw new Error(`Lista de contact_ids: ${error.message}`);
+      linhas.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
 
-    // Contatos nas etapas da régua de follow-up vêm primeiro. Aqui cada
-    // contato custa uma chamada GET /contacts/{id}, então o orçamento de
-    // tempo acaba antes da lista e o backlog antigo nunca era alcançado --
-    // e tag aplicada em contato não sincronizado é medição perdida em
-    // silêncio, porque ghl_contact_tags só registra o que o sync enxerga.
-    // Dentro de cada grupo, mantém a ordem de sempre (oportunidade mais
-    // nova primeiro).
+    // Cada contato custa um GET /contacts/{id}, então só entra quem precisa:
+    //
+    // 1. TODO contato com negócio aberto em Atendimento ou Negociação, seja
+    //    qual for a idade da oportunidade -- é onde a régua de follow-up
+    //    aplica tags, e tag em contato não sincronizado é medição perdida em
+    //    silêncio (ghl_contact_tags só registra o que o sync enxerga).
+    // 2. Lead novo (oportunidade criada nos últimos 7 dias) em qualquer
+    //    etapa, porque o BI Meta x GHL lê UTM, UF e pares do CONTATO. Esses
+    //    campos nascem na entrada, então uma semana de janela basta; lead
+    //    antigo fora da régua não tem o que atualizar.
+    // 3. Negócio que mudou de etapa nos últimos 3 dias. Cobre quem recebeu
+    //    a mensagem e avançou (ou perdeu) antes do sync seguinte: na manhã
+    //    seguinte ele já saiu da régua, e sem isso a tag -- justamente a do
+    //    caso de sucesso -- nunca seria vista. O caminho e o faturamento
+    //    dele vêm de ghl_opportunities, que é sincronizada inteira.
+    //
+    // Até 17/09/2026 a fila eram os contatos das 1.000 oportunidades mais
+    // novas (~1.600 GETs/dia); assim fica em torno de 950.
+    const corteLeadNovo = Date.now() - NEW_LEAD_WINDOW_MS;
+    const corteMudouEtapa = Date.now() - RECENT_STAGE_CHANGE_MS;
+    const recente = (iso: string | null, corte: number) =>
+      iso != null && Date.parse(iso) >= corte;
     const emRegua = new Set<string>();
     for (const r of linhas) {
-      if (r.stage_name === "Atendimento" || r.stage_name === "Negociação") {
+      if (
+        r.status === "open" &&
+        (r.stage_name === "Atendimento" || r.stage_name === "Negociação")
+      ) {
         emRegua.add(r.contact_id);
       }
     }
@@ -272,8 +308,16 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
     const demais: string[] = [];
     for (const r of linhas) {
       if (seen.has(r.contact_id)) continue;
-      seen.add(r.contact_id);
-      (emRegua.has(r.contact_id) ? prioritarios : demais).push(r.contact_id);
+      if (emRegua.has(r.contact_id)) {
+        seen.add(r.contact_id);
+        prioritarios.push(r.contact_id);
+      } else if (
+        recente(r.created_at, corteLeadNovo) ||
+        recente(r.stage_changed_at, corteMudouEtapa)
+      ) {
+        seen.add(r.contact_id);
+        demais.push(r.contact_id);
+      }
     }
     const ids = [...prioritarios, ...demais];
 
@@ -592,7 +636,9 @@ Deno.serve(async (req: Request) => {
     // contatos vinculados às oportunidades (fluxo padrão)
     if (state.phase === "contacts") {
       const r = await runLinkedContacts(supabase, token, locationId, state, deadline);
-      if (r.next) {
+      // Perto do limite de hops, pula para o snapshot em vez de morrer sem
+      // ele: contato atrasado se recupera amanhã, foto de etapa perdida não.
+      if (r.next && hop < MAX_HOPS - 1) {
         chainNext({ phase: "contacts", ...r.next, hop });
         return json({ phase: "contacts", rows: r.rows, continua: true, hop });
       }
