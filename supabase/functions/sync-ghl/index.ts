@@ -1,6 +1,7 @@
 // Supabase Edge Function: sync-ghl (v4 — foco em oportunidades)
-// Fluxo padrão: opportunities -> contacts (SOMENTE os vinculados às
-// oportunidades, via GET /contacts/{id}) -> snapshot (SQL via RPC).
+// Fluxo padrão: opportunities -> tags (contatos com tag de follow-up, via
+// busca filtrada) -> contacts (SOMENTE os vinculados às oportunidades, via
+// GET /contacts/{id}) -> snapshot (SQL via RPC).
 // A base completa de contatos (24k+) NÃO é re-sincronizada no fluxo
 // diário; use {"phase":"contacts-all"} manualmente se precisar.
 //
@@ -19,11 +20,11 @@ declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 const BASE = "https://services.leadconnectorhq.com";
 const TIME_BUDGET_MS = 40_000; // margem folgada sob o limite do runtime
 const MAX_HOPS = 30; // trava de segurança contra encadeamento infinito
-// Contatos fora da régua só entram no fluxo diário enquanto o lead é novo
-// (ver runLinkedContacts).
+// A fase contacts só lê a ficha de lead novo (ver runLinkedContacts).
 const NEW_LEAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-// ...ou enquanto o negócio acabou de mudar de etapa.
-const RECENT_STAGE_CHANGE_MS = 3 * 24 * 60 * 60 * 1000;
+// Tags da régua de follow-up automatizado (follow_atendimento_d1,
+// follow_negociacao_m2_v2...). Ver runFollowUpTags.
+const FOLLOW_UP_TAG_PREFIX = "follow_";
 
 // Escopo do BI (definido em 2026-07-21): apenas o pipeline
 // "Atendimento" (Fábrica de Mockups é passagem dos mesmos clientes)
@@ -41,11 +42,12 @@ const MIN_OPP_CREATED_MS = Date.parse("2026-07-01T00:00:00-03:00");
 const EXCLUDED_OPPORTUNITY_IDS = new Set<string>(["5NxRNIoZI9NQpMflY3r7"]);
 
 interface ChainState {
-  phase: "opportunities" | "contacts" | "contacts-all" | "snapshot";
+  phase: "opportunities" | "tags" | "contacts" | "contacts-all" | "snapshot";
   startAfterId?: string;
   startAfter?: number;
   page?: number;
   offset?: number;
+  tagIndex?: number;
   hop?: number;
 }
 
@@ -61,6 +63,23 @@ async function ghlGet(url: string, token: string): Promise<Response> {
   let attempt = 0;
   while (true) {
     const res = await fetch(url, { headers: ghlHeaders(token) });
+    if (res.status === 429 && attempt < 3) {
+      attempt++;
+      await new Promise((r) => setTimeout(r, 2 ** attempt * 2000));
+      continue;
+    }
+    return res;
+  }
+}
+
+async function ghlPost(url: string, token: string, body: unknown): Promise<Response> {
+  let attempt = 0;
+  while (true) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { ...ghlHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (res.status === 429 && attempt < 3) {
       attempt++;
       await new Promise((r) => setTimeout(r, 2 ** attempt * 2000));
@@ -235,6 +254,10 @@ function mapContact(c: any, fieldMap: Map<string, string>) {
 // em silêncio, já que ghl_contact_tags só registra o que o sync vê.
 // Fix: contatos nas etapas da régua (Atendimento/Negociação) vão para
 // a frente da fila; o resto da base segue depois, na ordem de sempre.
+//
+// 17/09/2026: as tags da régua passaram a vir da fase tags (busca filtrada
+// no GHL), e esta fase voltou a ter um único papel -- ficha de lead novo
+// para o BI Meta x GHL. Ver o comentário da fila abaixo.
 // deno-lint-ignore no-explicit-any
 async function runLinkedContacts(supabase: any, token: string, locationId: string, state: ChainState, deadline: number) {
   const startedAt = new Date();
@@ -244,25 +267,29 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
   const offset = state.offset ?? 0;
   try {
     const fieldMap = await fetchFieldMap(token, locationId);
-    // Paginado de verdade: o PostgREST corta qualquer resposta em 1.000
-    // linhas, e um `.limit(20000)` não muda isso. Até 17/09/2026 a lista
-    // parava nas 1.000 oportunidades mais novas (de ~16 mil), então a
-    // prioridade da régua só valia dentro desse recorte: 177 dos 270
-    // negócios abertos em Negociação ficavam dias sem sync, e a M2 aplicada
-    // neles não aparecia no dashboard.
-    const linhas: {
-      id: string;
-      contact_id: string;
-      stage_name: string | null;
-      status: string | null;
-      created_at: string | null;
-      stage_changed_at: string | null;
-    }[] = [];
+    // Só lead novo: oportunidade criada nos últimos 7 dias, em qualquer
+    // etapa. O BI Meta x GHL lê UTM, UF e pares da FICHA do contato, e esses
+    // campos nascem na entrada -- uma semana de janela basta.
+    //
+    // O que NÃO precisa mais passar por aqui (cada contato custa um GET):
+    //   - tags da régua de follow-up: vêm da fase tags, que pergunta ao GHL
+    //     quem tem cada tag em vez de adivinhar pela etapa do negócio;
+    //   - caminho e faturamento do cliente: vêm de ghl_opportunities, que é
+    //     sincronizada inteira.
+    // Até 17/09/2026 esta fila tinha ~930 contatos/dia (todo negócio aberto
+    // em Atendimento/Negociação + mudou de etapa + lead novo), e antes disso
+    // ~1.600 por um corte de 1.000 linhas do PostgREST. Agora são ~180.
+    //
+    // O filtro de data vai na consulta; a paginação continua porque o
+    // PostgREST corta toda resposta em 1.000 linhas, sem avisar.
+    const desde = new Date(Date.now() - NEW_LEAD_WINDOW_MS).toISOString();
+    const linhas: { contact_id: string }[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase
         .from("ghl_opportunities")
-        .select("id, contact_id, stage_name, status, created_at, stage_changed_at")
+        .select("id, contact_id")
         .not("contact_id", "is", null)
+        .gte("created_at", desde)
         .order("created_at", { ascending: false })
         .order("id", { ascending: true })
         .range(from, from + 999);
@@ -271,55 +298,13 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
       if (!data || data.length < 1000) break;
     }
 
-    // Cada contato custa um GET /contacts/{id}, então só entra quem precisa:
-    //
-    // 1. TODO contato com negócio aberto em Atendimento ou Negociação, seja
-    //    qual for a idade da oportunidade -- é onde a régua de follow-up
-    //    aplica tags, e tag em contato não sincronizado é medição perdida em
-    //    silêncio (ghl_contact_tags só registra o que o sync enxerga).
-    // 2. Lead novo (oportunidade criada nos últimos 7 dias) em qualquer
-    //    etapa, porque o BI Meta x GHL lê UTM, UF e pares do CONTATO. Esses
-    //    campos nascem na entrada, então uma semana de janela basta; lead
-    //    antigo fora da régua não tem o que atualizar.
-    // 3. Negócio que mudou de etapa nos últimos 3 dias. Cobre quem recebeu
-    //    a mensagem e avançou (ou perdeu) antes do sync seguinte: na manhã
-    //    seguinte ele já saiu da régua, e sem isso a tag -- justamente a do
-    //    caso de sucesso -- nunca seria vista. O caminho e o faturamento
-    //    dele vêm de ghl_opportunities, que é sincronizada inteira.
-    //
-    // Até 17/09/2026 a fila eram os contatos das 1.000 oportunidades mais
-    // novas (~1.600 GETs/dia); assim fica em torno de 950.
-    const corteLeadNovo = Date.now() - NEW_LEAD_WINDOW_MS;
-    const corteMudouEtapa = Date.now() - RECENT_STAGE_CHANGE_MS;
-    const recente = (iso: string | null, corte: number) =>
-      iso != null && Date.parse(iso) >= corte;
-    const emRegua = new Set<string>();
-    for (const r of linhas) {
-      if (
-        r.status === "open" &&
-        (r.stage_name === "Atendimento" || r.stage_name === "Negociação")
-      ) {
-        emRegua.add(r.contact_id);
-      }
-    }
-
     const seen = new Set<string>();
-    const prioritarios: string[] = [];
-    const demais: string[] = [];
+    const ids: string[] = [];
     for (const r of linhas) {
       if (seen.has(r.contact_id)) continue;
-      if (emRegua.has(r.contact_id)) {
-        seen.add(r.contact_id);
-        prioritarios.push(r.contact_id);
-      } else if (
-        recente(r.created_at, corteLeadNovo) ||
-        recente(r.stage_changed_at, corteMudouEtapa)
-      ) {
-        seen.add(r.contact_id);
-        demais.push(r.contact_id);
-      }
+      seen.add(r.contact_id);
+      ids.push(r.contact_id);
     }
-    const ids = [...prioritarios, ...demais];
 
     let i = offset;
     let batch: ReturnType<typeof mapContact>[] = [];
@@ -362,6 +347,85 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
     throw err;
   } finally {
     await logSync(supabase, "ghl_contacts", startedAt, rows, errMsg ? "error" : "success", errMsg);
+  }
+}
+
+// Fase tags: registra quem tem cada tag de follow-up PERGUNTANDO AO GHL
+// ("quais contatos têm a tag X?"), em vez de ler contato por contato e
+// conferir.
+//
+// Antes (até 17/09/2026) as tags só eram vistas quando o contato caía na
+// fila da fase contacts, montada por regra indireta -- negócio aberto na
+// régua, lead novo, mudou de etapa. Toda regra deixava alguém de fora: 4 dos
+// 71 contatos com a M2 não apareciam no dashboard (2 negócios perdidos, 2
+// criados antes do corte de 01/07), e o mesmo acontecia com D1/D3/D7/M1.
+// Custava ~930 GETs por dia. A busca filtrada custa ~35 chamadas e bate com
+// o GHL por definição.
+//
+// A busca é por nome EXATO de tag, então a lista vem de
+// /locations/{id}/tags filtrada pelo prefixo -- versão nova de copy
+// (`_v2`) entra sozinha. Grava direto em ghl_contact_tags e não mexe em
+// ghl_contacts: o payload da busca não substitui o GET individual, e
+// regravar a ficha poderia apagar UTM de contato antigo.
+//
+// Cursor = (tagIndex, page), para a fase caber em mais de um hop se a base
+// crescer.
+// deno-lint-ignore no-explicit-any
+async function runFollowUpTags(supabase: any, token: string, locationId: string, state: ChainState, deadline: number) {
+  const startedAt = new Date();
+  let rows = 0;
+  let errMsg: string | undefined;
+  let tagIndex = state.tagIndex ?? 0;
+  let page = state.page ?? 1;
+  try {
+    const res = await ghlGet(`${BASE}/locations/${locationId}/tags`, token);
+    if (!res.ok) throw new Error(`GHL tags ${res.status}: ${await res.text()}`);
+    const body = await res.json();
+    const tags: string[] = (body.tags ?? [])
+      .map((t: { name?: string }) => String(t.name ?? ""))
+      .filter((name: string) => name.toLowerCase().startsWith(FOLLOW_UP_TAG_PREFIX))
+      .sort();
+
+    while (tagIndex < tags.length && Date.now() < deadline) {
+      const tag = tags[tagIndex];
+      const searchRes = await ghlPost(`${BASE}/contacts/search`, token, {
+        locationId,
+        page,
+        pageLimit: 100,
+        filters: [{ field: "tags", operator: "contains", value: tag }],
+      });
+      if (!searchRes.ok) {
+        throw new Error(`GHL contacts/search (${tag}) ${searchRes.status}: ${(await searchRes.text()).slice(0, 200)}`);
+      }
+      const found = (await searchRes.json()).contacts ?? [];
+
+      if (found.length > 0) {
+        const vistoEm = new Date().toISOString();
+        // Só contact_id, tag e ultimo_visto_em: no conflito o upsert atualiza
+        // apenas essas colunas, preservando primeiro_visto_em e a origem.
+        const linhas = found
+          .filter((c: { id?: string }) => c.id)
+          .map((c: { id: string }) => ({ contact_id: c.id, tag, ultimo_visto_em: vistoEm }));
+        const { error } = await supabase
+          .from("ghl_contact_tags")
+          .upsert(linhas, { onConflict: "contact_id,tag" });
+        if (error) throw new Error(`Upsert ghl_contact_tags (${tag}): ${error.message}`);
+        rows += linhas.length;
+      }
+
+      if (found.length < 100) {
+        tagIndex++;
+        page = 1;
+      } else {
+        page++;
+      }
+    }
+    return { rows, next: tagIndex < tags.length ? { tagIndex, page } : null };
+  } catch (err) {
+    errMsg = err instanceof Error ? err.message : String(err);
+    throw err;
+  } finally {
+    await logSync(supabase, "ghl_contact_tags", startedAt, rows, errMsg ? "error" : "success", errMsg);
   }
 }
 
@@ -629,8 +693,34 @@ Deno.serve(async (req: Request) => {
         chainNext({ phase: "opportunities", ...r.next, hop });
         return json({ phase: "opportunities", rows: r.rows, continua: true, hop });
       }
+      chainNext({ phase: "tags", hop });
+      return json({ phase: "opportunities", rows: r.rows, continua: false, proxima: "tags", hop });
+    }
+
+    // quem tem tag de follow-up, direto da busca filtrada do GHL
+    if (state.phase === "tags") {
+      // Falha aqui (API de busca fora, tag renomeada no meio) não pode
+      // derrubar contatos e snapshot: o erro já fica no sync_log e a cadeia
+      // segue. Tag não vista hoje é vista amanhã; foto de etapa perdida não.
+      let r: Awaited<ReturnType<typeof runFollowUpTags>>;
+      try {
+        r = await runFollowUpTags(supabase, token, locationId, state, deadline);
+      } catch (tagErr) {
+        chainNext({ phase: "contacts", hop });
+        return json({
+          phase: "tags",
+          error: tagErr instanceof Error ? tagErr.message : String(tagErr),
+          continua: false,
+          proxima: "contacts",
+          hop,
+        });
+      }
+      if (r.next && hop < MAX_HOPS - 1) {
+        chainNext({ phase: "tags", ...r.next, hop });
+        return json({ phase: "tags", rows: r.rows, continua: true, hop });
+      }
       chainNext({ phase: "contacts", hop });
-      return json({ phase: "opportunities", rows: r.rows, continua: false, proxima: "contacts", hop });
+      return json({ phase: "tags", rows: r.rows, continua: false, proxima: "contacts", hop });
     }
 
     // contatos vinculados às oportunidades (fluxo padrão)
