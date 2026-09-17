@@ -35,9 +35,41 @@ export interface FollowUpDegrau {
   valorEmNegociacao: number | null;
 }
 
+/**
+ * Campanhas de WhatsApp para a base de clientes (ver migration get_campanhas).
+ * Mesmo princípio da régua: tudo vem de tag, e o resultado é medido pelo
+ * CONTATO -- pedido novo abre oportunidade nova.
+ */
+interface CampanhaRow {
+  campanha: string;
+  inicio: string;
+  enviados: number;
+  quero_ver: number;
+  nao_quero: number;
+  quero_pedido: number;
+  agora_nao: number;
+  novos_negocios: number;
+  fecharam: number;
+  faturamento: string | number | null;
+}
+
+export interface Campanha {
+  campanha: string;
+  inicio: string;
+  enviados: number;
+  queroVer: number;
+  naoQuero: number;
+  queroPedido: number;
+  agoraNao: number;
+  novosNegocios: number;
+  fecharam: number;
+  faturamento: number | null;
+}
+
 export interface FollowUpReguaResponse {
   atendimento: FollowUpDegrau[];
   negociacao: FollowUpDegrau[];
+  campanhas: Campanha[];
   meta: {
     geradoEm: string;
     /** Nenhuma tag foi observada aparecendo ainda: tudo veio da carga inicial. */
@@ -49,6 +81,21 @@ function toNumber(value: string | number | null): number | null {
   if (value === null) return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toCampanha(row: CampanhaRow): Campanha {
+  return {
+    campanha: row.campanha,
+    inicio: row.inicio,
+    enviados: row.enviados,
+    queroVer: row.quero_ver,
+    naoQuero: row.nao_quero,
+    queroPedido: row.quero_pedido,
+    agoraNao: row.agora_nao,
+    novosNegocios: row.novos_negocios,
+    fecharam: row.fecharam,
+    faturamento: toNumber(row.faturamento),
+  };
 }
 
 function toDegrau(row: ReguaRow): FollowUpDegrau {
@@ -80,8 +127,9 @@ export async function GET() {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const [regua, observadas] = await Promise.all([
+    const [regua, campanhas, observadas] = await Promise.all([
       supabase.rpc("get_followup_regua"),
+      supabase.rpc("get_campanhas"),
       supabase
         .from("ghl_contact_tags")
         .select("contact_id", { count: "exact", head: true })
@@ -89,6 +137,11 @@ export async function GET() {
     ]);
 
     if (regua.error) throw new Error(regua.error.message);
+    // Campanha é acessório da página: se ela falhar, a régua continua
+    // aparecendo em vez de a tela inteira virar erro.
+    if (campanhas.error) {
+      console.error("[GHL Follow-up] Falha ao montar as campanhas", campanhas.error);
+    }
 
     const rows = (regua.data ?? []) as ReguaRow[];
 
@@ -97,6 +150,7 @@ export async function GET() {
         .filter((row) => row.bloco === "atendimento")
         .map(toDegrau),
       negociacao: rows.filter((row) => row.bloco === "negociacao").map(toDegrau),
+      campanhas: ((campanhas.data ?? []) as CampanhaRow[]).map(toCampanha),
       meta: {
         geradoEm: new Date().toISOString(),
         aguardandoPrimeiraObservacao: (observadas.count ?? 0) === 0,

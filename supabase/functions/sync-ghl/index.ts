@@ -22,9 +22,10 @@ const TIME_BUDGET_MS = 40_000; // margem folgada sob o limite do runtime
 const MAX_HOPS = 30; // trava de segurança contra encadeamento infinito
 // A fase contacts só lê a ficha de lead novo (ver runLinkedContacts).
 const NEW_LEAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-// Tags da régua de follow-up automatizado (follow_atendimento_d1,
-// follow_negociacao_m2_v2...). Ver runFollowUpTags.
-const FOLLOW_UP_TAG_PREFIX = "follow_";
+// Tags medidas no dashboard: régua de follow-up automatizado
+// (follow_atendimento_d1, follow_negociacao_m2_v2...) e campanhas para a base
+// de clientes (campanha_politica_enviado...). Ver runFollowUpTags.
+const TRACKED_TAG_PREFIXES = ["follow_", "campanha_"];
 
 // Escopo do BI (definido em 2026-07-21): apenas o pipeline
 // "Atendimento" (Fábrica de Mockups é passagem dos mesmos clientes)
@@ -368,6 +369,9 @@ async function runLinkedContacts(supabase: any, token: string, locationId: strin
 // ghl_contacts: o payload da busca não substitui o GET individual, e
 // regravar a ficha poderia apagar UTM de contato antigo.
 //
+// Desde 17/09/2026 também traz as tags de campanha (`campanha_*`), medidas
+// por get_campanhas.
+//
 // Cursor = (tagIndex, page), para a fase caber em mais de um hop se a base
 // crescer.
 // deno-lint-ignore no-explicit-any
@@ -383,7 +387,9 @@ async function runFollowUpTags(supabase: any, token: string, locationId: string,
     const body = await res.json();
     const tags: string[] = (body.tags ?? [])
       .map((t: { name?: string }) => String(t.name ?? ""))
-      .filter((name: string) => name.toLowerCase().startsWith(FOLLOW_UP_TAG_PREFIX))
+      .filter((name: string) =>
+        TRACKED_TAG_PREFIXES.some((prefixo) => name.toLowerCase().startsWith(prefixo))
+      )
       .sort();
 
     while (tagIndex < tags.length && Date.now() < deadline) {

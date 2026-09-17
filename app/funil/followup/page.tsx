@@ -40,9 +40,23 @@ interface FollowUpDegrau {
   valorEmNegociacao: number | null;
 }
 
+interface Campanha {
+  campanha: string;
+  inicio: string;
+  enviados: number;
+  queroVer: number;
+  naoQuero: number;
+  queroPedido: number;
+  agoraNao: number;
+  novosNegocios: number;
+  fecharam: number;
+  faturamento: number | null;
+}
+
 interface FollowUpReguaResponse {
   atendimento: FollowUpDegrau[];
   negociacao: FollowUpDegrau[];
+  campanhas: Campanha[];
   meta: { geradoEm: string; aguardandoPrimeiraObservacao: boolean };
 }
 
@@ -157,6 +171,123 @@ function BlocoRegua({
   );
 }
 
+/** Nome da tag vira título: campanha_politica_* -> "Política". */
+function tituloDaCampanha(nome: string) {
+  const limpo = nome.replace(/[_-]+/g, " ").trim();
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+}
+
+function fmtDia(iso: string) {
+  const [ano, mes, dia] = iso.split("-");
+  return dia && mes ? `${dia}/${mes}/${ano}` : iso;
+}
+
+/**
+ * Campanhas para a base de clientes (a primeira é a "Política"). O funil é
+ * lido de cima para baixo, e cada linha mostra a fatia de quem recebeu --
+ * assim dá para ver onde as pessoas param.
+ */
+function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Campanhas</CardTitle>
+        <CardDescription>
+          Disparos para a base de clientes. O resultado é medido pelo contato:
+          pedido novo abre uma oportunidade nova, e só conta o que foi criado
+          depois do envio.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {campanhas.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Nenhuma campanha disparada ainda. Assim que as tags{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              campanha_*
+            </code>{" "}
+            forem aplicadas no GHL, o funil aparece aqui sozinho.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-8">
+            {campanhas.map((c) => {
+              const etapas = [
+                { rotulo: "Receberam", valor: c.enviados },
+                { rotulo: "Quiseram ver o vídeo", valor: c.queroVer },
+                { rotulo: "Não quiseram ver", valor: c.naoQuero, secundaria: true },
+                { rotulo: "Quero fazer pedido", valor: c.queroPedido },
+                { rotulo: "Agora não", valor: c.agoraNao, secundaria: true },
+                { rotulo: "Abriram negócio novo", valor: c.novosNegocios },
+                { rotulo: "Fecharam pedido", valor: c.fecharam },
+              ];
+              return (
+                <div key={c.campanha}>
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-base font-semibold">
+                      {tituloDaCampanha(c.campanha)}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      desde {fmtDia(c.inicio)}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Etapa</TableHead>
+                          <TableHead className="text-right">Clientes</TableHead>
+                          <TableHead className="text-right">
+                            % de quem recebeu
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {etapas.map((e) => (
+                          <TableRow key={e.rotulo}>
+                            <TableCell
+                              className={
+                                e.secundaria
+                                  ? "text-muted-foreground"
+                                  : "font-medium"
+                              }
+                            >
+                              {e.rotulo}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {inteiro.format(e.valor)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-muted-foreground">
+                              {fmtTaxa(
+                                c.enviados > 0
+                                  ? (e.valor / c.enviados) * 100
+                                  : null,
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow>
+                          <TableCell className="font-medium">
+                            Faturamento
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-semibold tabular-nums"
+                            colSpan={2}
+                          >
+                            {fmtMoeda(c.faturamento)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function FollowUpPage() {
   const [data, setData] = useState<FollowUpReguaResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -262,6 +393,7 @@ export default function FollowUpPage() {
             vazio="Nenhuma promoção registrada ainda."
             comFaturamento
           />
+          <BlocoCampanhas campanhas={data.campanhas ?? []} />
           <p className="text-center text-xs text-muted-foreground">
             Cada disparo recebe o crédito do avanço porque a régua para quando o
             lead reage: a última mensagem que ele tem é a que estava valendo.
