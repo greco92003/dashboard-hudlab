@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readGoogleSheet } from "@/lib/google-sheets";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
-import {
-  calculateBrazilDayRange,
-  formatBrazilDateToLocal,
-} from "@/lib/utils/timezone";
+import { ultimosDias } from "@/lib/periodo";
 
 const SPREADSHEET_ID =
   process.env.GOOGLE_SHEETS_GHL_DESIGNERS_ID ||
@@ -117,12 +114,12 @@ export async function GET(request: NextRequest) {
       startDate = startDateParam;
       endDate = endDateParam;
     } else {
-      // Contagem estrita de dias, alinhada com o resto do app -- ver
-      // deals-cache/route.ts pro histórico do porquê da troca.
+      // Mesma definição de "últimos N dias" das demais telas (lib/periodo.ts;
+      // ver deals-cache/route.ts pro histórico).
       const safePeriod = [30, 60, 90].includes(period) ? period : 30;
-      const range = calculateBrazilDayRange(safePeriod);
-      startDate = formatBrazilDateToLocal(range.startDate);
-      endDate = formatBrazilDateToLocal(range.endDate);
+      const range = ultimosDias(safePeriod);
+      startDate = range.inicio;
+      endDate = range.fim;
     }
 
     const allActions = await getActions(forceRefresh);

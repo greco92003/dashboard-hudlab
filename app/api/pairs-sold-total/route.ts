@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { createClient } from "@supabase/supabase-js";
 import {
-  calculateBrazilDayRange,
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
+import { ultimosDias } from "@/lib/periodo";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
 // Helper function to format date as local YYYY-MM-DD without timezone conversion
@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
         formattedEnd: formatDateToLocal(endDate),
       });
     } else {
-      // Calculate date range in Brazilian timezone - contagem estrita de dias,
-      // alinhada com o resto do app (ver deals-cache/route.ts).
+      // Mesma definição de "últimos N dias" das demais telas (lib/periodo.ts;
+      // ver deals-cache/route.ts pro histórico).
       logTimezoneDebug("pairs-sold-total API");
-      const brazilDateRange = calculateBrazilDayRange(period);
-      startDate = brazilDateRange.startDate;
-      endDate = brazilDateRange.endDate;
+      const { inicio, fim } = ultimosDias(period);
+      startDate = new Date(`${inicio}T00:00:00`);
+      endDate = new Date(`${fim}T23:59:59.999`);
 
       console.log(
         "Pairs API: Period-based date range calculated in Brazil timezone:",

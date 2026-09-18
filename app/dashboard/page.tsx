@@ -19,6 +19,7 @@ import { useManualSync } from "@/hooks/useManualSync";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ultimosDias } from "@/lib/periodo";
 
 // Define the deal type based on the new flat API response
 interface Deal {
@@ -65,6 +66,19 @@ const shiftDateOneYearBack = (date: Date): Date => {
   const d = new Date(date);
   d.setFullYear(d.getFullYear() - 1);
   return d;
+};
+
+// Janela dos "últimos N dias" -- a MESMA definição do Meta Marketing e do
+// /funil (lib/periodo.ts). O botão antigo era "Último mês" e o gráfico/ano
+// anterior recuavam N *meses* de calendário, então "30 dias" aqui virava 31-32
+// e o faturamento não batia com as outras telas. Ao meio-dia pra nunca virar
+// de dia por fuso.
+const janelaUltimosDias = (dias: number): { start: Date; end: Date } => {
+  const { inicio, fim } = ultimosDias(dias);
+  return {
+    start: new Date(`${inicio}T12:00:00`),
+    end: new Date(`${fim}T12:00:00`),
+  };
 };
 
 export default function DashboardPage() {
@@ -157,21 +171,7 @@ export default function DashboardPage() {
       // Generate all dates in the period range
       const generateDateRange = (period: number) => {
         const dates: string[] = [];
-        const now = new Date();
-        const endDate = new Date(now);
-        endDate.setHours(23, 59, 59, 999);
-
-        const startDate = new Date(now);
-        // Calculate months to subtract based on period
-        let monthsToSubtract = 1; // default for 30 days
-        if (period === 60) {
-          monthsToSubtract = 2;
-        } else if (period === 90) {
-          monthsToSubtract = 3;
-        }
-
-        startDate.setMonth(startDate.getMonth() - monthsToSubtract);
-        startDate.setHours(0, 0, 0, 0);
+        const { start: startDate, end: endDate } = janelaUltimosDias(period);
 
         // Generate all dates from start to end
         const currentDate = new Date(startDate);
@@ -429,13 +429,9 @@ export default function DashboardPage() {
           url = `/api/deals-cache?startDate=${startDate}&endDate=${endDate}`;
         } else if (selectedPeriod) {
           // Calculate the same period but for one year ago
-          const now = new Date();
-          const prevYearEnd = shiftDateOneYearBack(now);
-          let monthsToSubtract = 1;
-          if (selectedPeriod === 60) monthsToSubtract = 2;
-          else if (selectedPeriod === 90) monthsToSubtract = 3;
-          const prevYearStart = new Date(prevYearEnd);
-          prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
+          const janela = janelaUltimosDias(selectedPeriod);
+          const prevYearStart = shiftDateOneYearBack(janela.start);
+          const prevYearEnd = shiftDateOneYearBack(janela.end);
           url = `/api/deals-cache?startDate=${formatDateToLocal(prevYearStart)}&endDate=${formatDateToLocal(prevYearEnd)}`;
         }
 
@@ -490,14 +486,11 @@ export default function DashboardPage() {
               shiftDateOneYearBack(customDateRange.to),
             );
           } else if (selectedPeriod) {
-            const now = new Date();
-            const prevYearEnd = shiftDateOneYearBack(now);
-            let monthsToSubtract = 1;
-            if (selectedPeriod === 60) monthsToSubtract = 2;
-            else if (selectedPeriod === 90) monthsToSubtract = 3;
-            const prevYearStart = new Date(prevYearEnd);
-            prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
-            dates = generateDates(prevYearStart, prevYearEnd);
+            const janela = janelaUltimosDias(selectedPeriod);
+            dates = generateDates(
+              shiftDateOneYearBack(janela.start),
+              shiftDateOneYearBack(janela.end),
+            );
           }
 
           setPrevChartData(
@@ -532,13 +525,9 @@ export default function DashboardPage() {
           );
           url = `/api/pairs-sold-total?startDate=${startDate}&endDate=${endDate}`;
         } else if (selectedPeriod) {
-          const now = new Date();
-          const prevYearEnd = shiftDateOneYearBack(now);
-          let monthsToSubtract = 1;
-          if (selectedPeriod === 60) monthsToSubtract = 2;
-          else if (selectedPeriod === 90) monthsToSubtract = 3;
-          const prevYearStart = new Date(prevYearEnd);
-          prevYearStart.setMonth(prevYearStart.getMonth() - monthsToSubtract);
+          const janela = janelaUltimosDias(selectedPeriod);
+          const prevYearStart = shiftDateOneYearBack(janela.start);
+          const prevYearEnd = shiftDateOneYearBack(janela.end);
           url = `/api/pairs-sold-total?startDate=${formatDateToLocal(prevYearStart)}&endDate=${formatDateToLocal(prevYearEnd)}`;
         }
 
@@ -647,21 +636,21 @@ export default function DashboardPage() {
             onClick={() => handlePeriodChangeLocal(30)}
             className="text-xs sm:text-sm"
           >
-            Último mês
+            Últimos 30 dias
           </Button>
           <Button
             variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
             onClick={() => handlePeriodChangeLocal(60)}
             className="text-xs sm:text-sm"
           >
-            Últimos 2 meses
+            Últimos 60 dias
           </Button>
           <Button
             variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
             onClick={() => handlePeriodChangeLocal(90)}
             className="text-xs sm:text-sm"
           >
-            Últimos 3 meses
+            Últimos 90 dias
           </Button>
         </div>
 

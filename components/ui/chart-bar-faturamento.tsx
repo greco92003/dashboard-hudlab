@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OTEMonthlyTarget } from "@/types/ote";
 import { DateRange } from "react-day-picker";
 import { formatCurrency } from "@/lib/utils";
+import { ultimosDias } from "@/lib/periodo";
 
 interface Deal {
   value: number;
@@ -146,15 +147,10 @@ export function ChartBarFaturamento({
       from = dateRange.from;
       to = dateRange.to;
     } else {
-      const now = new Date();
-      to = new Date(now);
-      to.setHours(23, 59, 59, 999);
-      from = new Date(now);
-      let monthsToSubtract = 1;
-      if (period === 60) monthsToSubtract = 2;
-      else if (period === 90) monthsToSubtract = 3;
-      from.setMonth(from.getMonth() - monthsToSubtract);
-      from.setHours(0, 0, 0, 0);
+      // Mesma definição de "últimos N dias" das demais telas (lib/periodo.ts).
+      const { inicio, fim } = ultimosDias(period);
+      from = new Date(`${inicio}T00:00:00`);
+      to = new Date(`${fim}T23:59:59.999`);
     }
     // Expand to full months
     const start = new Date(from.getFullYear(), from.getMonth(), 1);

@@ -4,10 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { requireAdmin, requireApprovedUser } from "@/lib/security/route-guards";
 import {
-  calculateBrazilDayRange,
   formatBrazilDateToLocal,
   logTimezoneDebug,
 } from "@/lib/utils/timezone";
+import { ultimosDias } from "@/lib/periodo";
 import { normalizeGhlDealStatus } from "@/lib/ghl/pipelines";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 
@@ -68,15 +68,15 @@ export async function GET(request: NextRequest) {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
     } else {
-      // Calculate date range in Brazilian timezone - strict day count, matching
-      // the Meta Marketing module's "últimos N dias" (calculateBrazilDateRange
-      // used to shift by calendar months instead, so "30 dias" silently became
-      // 31-32 days in longer months and diverged from every other "N dias"
-      // reading in the app -- ver memória "Preferir a solução simples").
+      // "Últimos N dias" vem da MESMA função que Meta Marketing e /funil usam
+      // (lib/periodo.ts). Antes eram 3 definições diferentes ("1 mês atrás",
+      // "hoje-N+1", "hoje-N") e o faturamento do mesmo período divergia entre
+      // as telas -- a data sem hora é interpretada como horário local, então
+      // formatBrazilDateToLocal devolve exatamente o mesmo dia.
       logTimezoneDebug("deals-cache API");
-      const brazilDateRange = calculateBrazilDayRange(period);
-      startDate = brazilDateRange.startDate;
-      endDate = brazilDateRange.endDate;
+      const { inicio, fim } = ultimosDias(period);
+      startDate = new Date(`${inicio}T00:00:00`);
+      endDate = new Date(`${fim}T23:59:59.999`);
 
       console.log(
         "API: Period-based date range calculated in Brazil timezone:",
