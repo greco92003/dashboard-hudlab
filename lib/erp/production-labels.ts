@@ -4,6 +4,8 @@
  * para dar destaque ao modelo e ao tamanho.
  */
 
+import { isProducedItem } from "./production-order-rules";
+
 export type ProductionLabel = {
   /** Descrição completa, usada quando o nome não segue o padrão. */
   description: string;
@@ -46,19 +48,22 @@ function sizeSortKey(label: ProductionLabel) {
   return Number.isFinite(first) ? first : Number.MAX_SAFE_INTEGER;
 }
 
-/** Uma etiqueta por item (numeração); itens repetidos no pedido viram uma só. */
+/** Uma etiqueta por par: cada par produzido leva a sua. */
 export function buildProductionLabels(items: LabelSourceItem[]): ProductionLabel[] {
-  const seen = new Map<string, ProductionLabel>();
+  const totals = new Map<string, { label: ProductionLabel; pairs: number }>();
   for (const item of items) {
     const description = item.description.trim();
-    if (!description || !(item.quantity > 0)) continue;
-    // Livro Digital e outros serviços entram no pedido, mas não na produção.
-    if (/livro digital/i.test(description)) continue;
+    if (!description || !(item.quantity > 0) || !isProducedItem(description)) continue;
     const label = parseLabelDescription(description);
-    if (!seen.has(label.description)) seen.set(label.description, label);
+    const current = totals.get(label.description);
+    if (current) current.pairs += item.quantity;
+    else totals.set(label.description, { label, pairs: item.quantity });
   }
-  return [...seen.values()].sort((a, b) =>
-    `${a.kind} ${a.code} ${a.model} ${a.color}`.localeCompare(`${b.kind} ${b.code} ${b.model} ${b.color}`, "pt-BR")
-    || sizeSortKey(a) - sizeSortKey(b)
-    || a.description.localeCompare(b.description, "pt-BR"));
+
+  return [...totals.values()]
+    .sort((a, b) =>
+      `${a.label.kind} ${a.label.code} ${a.label.model} ${a.label.color}`.localeCompare(`${b.label.kind} ${b.label.code} ${b.label.model} ${b.label.color}`, "pt-BR")
+      || sizeSortKey(a.label) - sizeSortKey(b.label)
+      || a.label.description.localeCompare(b.label.description, "pt-BR"))
+    .flatMap(({ label, pairs }) => Array.from({ length: Math.round(pairs) }, () => label));
 }

@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { buildProductionLabels } from "./production-labels";
 import {
   checkProductionOrder,
+  isProducedItem,
   parseGeneratedItems,
   type ProductionCheck,
 } from "./production-order-rules";
@@ -102,7 +103,7 @@ async function loadOrder(orderId: number) {
       description: item.produto?.descricao?.trim() ?? "",
       quantity: Number(item.quantidade ?? 0),
     }))
-    .filter((item) => item.quantity > 0 && !/livro digital/i.test(item.description));
+    .filter((item) => item.quantity > 0 && isProducedItem(item.description));
   return {
     orderId: order.id,
     orderNumber: String(order.numeroPedido ?? order.id),

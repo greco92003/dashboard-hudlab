@@ -141,6 +141,26 @@ function responseRecords(data: TinyV2Response) {
   return items.flatMap((item) => item.registro ? [item.registro] : []);
 }
 
+/**
+ * A v2 grava a estrutura arredondada em duas casas: um consumo de 0,0010 por
+ * par — etiqueta térmica e PVC Mônaco — virava zero, e o Tiny deixava de
+ * baixar esses materiais do estoque ao rodar a ordem de produção. A v3 aceita
+ * o valor cheio, então a estrutura é reescrita por ela logo depois.
+ */
+async function rewriteExactStructure(pair: TinyManufacturingPair) {
+  const components = (pair.source.producao?.produtos ?? []).flatMap((item) =>
+    item.produto?.id && item.quantidade != null
+      ? [{ produto: { id: item.produto.id, tipo: "P" }, quantidade: item.quantidade }]
+      : []);
+  if (components.length === 0 || !pair.target.id) return;
+  const etapas = (pair.source.producao?.etapas ?? [])
+    .flatMap((name) => name?.trim() ? [name.trim()] : []);
+  await tinyV3Request(`/produtos/${pair.target.id}/fabricado`, {
+    method: "PUT",
+    body: { produtos: components, etapas },
+  });
+}
+
 export async function setTinyVariationsAsManufactured(
   pairs: TinyManufacturingPair[],
 ) {
@@ -166,5 +186,8 @@ export async function setTinyVariationsAsManufactured(
           || `Tiny API v2 respondeu HTTP ${response.status} ao cadastrar as variações como Fabricadas.`,
       );
     }
+
+    // Sequencial: a v3 devolve 429 quando as escritas vão em paralelo.
+    for (const pair of chunk) await rewriteExactStructure(pair);
   }
 }
