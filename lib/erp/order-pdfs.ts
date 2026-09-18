@@ -27,6 +27,14 @@ function formatQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(4);
 }
 
+/**
+ * Consumo de material vai sempre com quatro casas: o PVC Mônaco é medido em
+ * 0,0030 por par e arredondar esconde a diferença entre os tamanhos.
+ */
+function formatMaterialQuantity(value: number) {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
+
 function lastY(doc: jsPDF) {
   return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 }
@@ -99,7 +107,7 @@ export async function buildTalaoPdf(order: OrderDocument) {
         ...baseTable,
         startY: lastY(doc) + 3,
         head: [["Material", "Total"]],
-        body: product.materials.map((material) => [material.name, formatQuantity(material.quantity)]),
+        body: product.materials.map((material) => [material.name, formatMaterialQuantity(material.quantity)]),
         columnStyles: { 1: { cellWidth: 30 } },
       });
     }

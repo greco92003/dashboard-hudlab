@@ -28,14 +28,15 @@ test("descrição fora do padrão cai no texto inteiro", () => {
   assert.equal(label.description, "Chinelo avulso sem código");
 });
 
-test("uma etiqueta por numeração, sem livro digital, ordenada por tamanho", () => {
+test("uma etiqueta por par, sem livro digital, ordenada por tamanho", () => {
   const labels = buildProductionLabels([
     { description: "Chinelo Slide Infantil 072601 - FIFTY FIGHT - Preto - 32/33", quantity: 4 },
-    { description: "Livro Digital", quantity: 1 },
+    { description: "LIVRO DIGITAL HUD LAB - Quantidade de Acessos", quantity: 13 },
     { description: "Chinelo Slide Infantil 072601 - FIFTY FIGHT - Preto - 28/29", quantity: 2 },
     { description: "Chinelo Slide Infantil 072601 - FIFTY FIGHT - Preto - 28/29", quantity: 1 },
   ]);
-  assert.deepEqual(labels.map((label) => label.size), ["28/29", "32/33"]);
+  assert.equal(labels.length, 7);
+  assert.deepEqual(labels.map((label) => label.size), ["28/29", "28/29", "28/29", "32/33", "32/33", "32/33", "32/33"]);
 });
 
 test("lê os itens da v2 nos dois formatos", () => {
@@ -43,6 +44,35 @@ test("lê os itens da v2 nos dois formatos", () => {
   const flat = parseGeneratedItems([{ codigo: "A-28", descricao: "A", quantidade: "5", quantidade_gerada: "3" }]);
   assert.deepEqual(wrapped, flat.map((item) => ({ ...item, message: "" })));
   assert.equal(wrapped[0].generated, 3);
+});
+
+test("pareia pela descrição quando um dos lados vem sem código", () => {
+  // Pedido 2046: a v2 devolveu os itens gerados sem `codigo`; sem cair na
+  // descrição, cada produto virava duas linhas divergentes.
+  const sold = [{ sku: "CH-SL-ANA-MESTRE-BRC-3637", description: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantity: 11 }];
+  const semCodigo = checkProductionOrder(sold, parseGeneratedItems([
+    { descricao: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantidade: "11.0000", quantidade_gerada: "11.0000" },
+  ]));
+  assert.equal(semCodigo.ok, true);
+  assert.equal(semCodigo.lines.length, 1);
+
+  const semSku = checkProductionOrder(
+    [{ sku: "", description: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantity: 11 }],
+    parseGeneratedItems([{ codigo: "CH-SL-ANA-MESTRE-BRC-3637", descricao: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantidade: "11", quantidade_gerada: "11" }]),
+  );
+  assert.equal(semSku.ok, true);
+  assert.equal(semSku.lines.length, 1);
+});
+
+test("item que o Tiny recusa por não ser fabricado não vira divergência", () => {
+  const sold = [{ sku: "", description: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantity: 11 }];
+  const check = checkProductionOrder(sold, parseGeneratedItems([
+    { descricao: "Chinelo Slide 092601 - ANA MESTRE - Branco - 36/37", quantidade: "11", quantidade_gerada: "11" },
+    { descricao: "LIVRO DIGITAL HUD LAB - Quantidade de Acessos", quantidade: "13", quantidade_gerada: "0", mensagem: "Não é possível gerar ordem de produção pois o produto não é do tipo 'Fabricado'." },
+    { codigo: "LIVRO-DIG-HUDLAB-1", descricao: "LIVRO DIGITAL HUD LAB - Quantidade de Acessos", quantidade: "13", quantidade_gerada: "0", mensagem: "Não é possível gerar ordem de produção pois o produto não é do tipo 'Fabricado'." },
+  ]));
+  assert.equal(check.ok, true);
+  assert.equal(check.lines.length, 1);
 });
 
 test("confere vendido contra gerado", () => {

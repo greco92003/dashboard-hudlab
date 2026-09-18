@@ -25,9 +25,18 @@ export type ProductionCheckLine = {
 
 export type ProductionCheck = { ok: boolean; lines: ProductionCheckLine[] };
 
+/** Serviços e acessos não são produzidos: nunca entram na conferência. */
+export function isProducedItem(description: string) {
+  return !/livro digital/i.test(description);
+}
+
 function toNumber(value: unknown) {
   const number = Number(String(value ?? "").replace(",", "."));
   return Number.isFinite(number) ? number : 0;
+}
+
+function normalize(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 type TinyV2Item = {
@@ -53,40 +62,53 @@ export function parseGeneratedItems(itens: unknown): GeneratedItem[] {
   });
 }
 
-function sumBySku<T extends { sku: string }>(items: T[], value: (item: T) => number) {
-  const totals = new Map<string, { item: T; total: number }>();
-  for (const item of items) {
-    const key = item.sku || `desc:${(item as { description?: string }).description ?? ""}`;
-    const current = totals.get(key);
-    totals.set(key, { item: current?.item ?? item, total: (current?.total ?? 0) + value(item) });
-  }
-  return totals;
-}
+type Bucket = { sku: string; description: string; sold: number; generated: number; message: string; matched: boolean };
 
+/**
+ * A v3 nem sempre traz o SKU do item do pedido, e a v2 sempre traz o código:
+ * por isso o pareamento tenta o SKU e cai para a descrição do produto.
+ */
 export function checkProductionOrder(sold: SoldItem[], generated: GeneratedItem[]): ProductionCheck {
-  const soldTotals = sumBySku(
-    sold.filter((item) => item.quantity > 0 && !/livro digital/i.test(item.description)),
-    (item) => item.quantity,
-  );
-  const generatedTotals = sumBySku(generated, (item) => item.generated);
-  const lines: ProductionCheckLine[] = [];
+  const buckets: Bucket[] = [];
+  const bySku = new Map<string, Bucket>();
+  const byDescription = new Map<string, Bucket>();
 
-  for (const [key, { item, total }] of soldTotals) {
-    const match = generatedTotals.get(key);
-    const generatedQuantity = match?.total ?? null;
-    lines.push({
-      sku: item.sku,
-      description: item.description,
-      sold: total,
-      generated: generatedQuantity,
-      message: match?.item.message ?? (match ? "" : "Item não apareceu na ordem de produção."),
-      ok: generatedQuantity === total,
-    });
+  for (const item of sold) {
+    if (!(item.quantity > 0) || !isProducedItem(item.description)) continue;
+    const existing = (item.sku && bySku.get(item.sku)) || byDescription.get(normalize(item.description));
+    if (existing) {
+      existing.sold += item.quantity;
+      continue;
+    }
+    const bucket: Bucket = { sku: item.sku, description: item.description, sold: item.quantity, generated: 0, message: "", matched: false };
+    buckets.push(bucket);
+    if (item.sku) bySku.set(item.sku, bucket);
+    if (item.description) byDescription.set(normalize(item.description), bucket);
   }
-  for (const [key, { item, total }] of generatedTotals) {
-    if (soldTotals.has(key)) continue;
-    lines.push({ sku: item.sku, description: item.description, sold: 0, generated: total, message: item.message || "Item não consta no pedido.", ok: false });
+
+  for (const item of generated) {
+    const bucket = (item.sku && bySku.get(item.sku)) || byDescription.get(normalize(item.description));
+    if (bucket) {
+      bucket.generated += item.generated;
+      bucket.matched = true;
+      if (item.message) bucket.message = item.message;
+      continue;
+    }
+    // O Tiny devolve todos os itens do pedido, inclusive os que ele mesmo
+    // recusa por não serem fabricados. Sem par no pedido e sem nada gerado,
+    // não é divergência: é um item que nunca deveria produzir.
+    if (item.generated === 0 || !isProducedItem(item.description)) continue;
+    buckets.push({ sku: item.sku, description: item.description, sold: 0, generated: item.generated, message: item.message || "Item não consta no pedido.", matched: true });
   }
+
+  const lines = buckets.map((bucket) => ({
+    sku: bucket.sku,
+    description: bucket.description,
+    sold: bucket.sold,
+    generated: bucket.matched ? bucket.generated : null,
+    message: bucket.matched ? bucket.message : "Item não apareceu na ordem de produção.",
+    ok: bucket.matched && bucket.generated === bucket.sold,
+  }));
 
   return { ok: lines.length > 0 && lines.every((line) => line.ok), lines };
 }
