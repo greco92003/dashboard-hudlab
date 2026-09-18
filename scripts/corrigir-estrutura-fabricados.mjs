@@ -12,6 +12,11 @@
 // Uso:
 //   node scripts/corrigir-estrutura-fabricados.mjs            (levantamento, não grava)
 //   node scripts/corrigir-estrutura-fabricados.mjs --aplicar  (corrige no Tiny)
+//
+// A lista de produtos dos pedidos fica em cache local, porque a varredura leva
+// minutos e o Tiny limita as chamadas. Apague node_modules/.cache para refazer.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local", quiet: true });
@@ -19,7 +24,8 @@ dotenv.config({ path: ".env.local", quiet: true });
 const APLICAR = process.argv.includes("--aplicar");
 const V3 = "https://api.tiny.com.br/public-api/v3";
 const OAUTH = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token";
-const PAUSA_MS = 350;
+const PAUSA_MS = 700;
+const CACHE = "node_modules/.cache/estrutura-fabricados.json";
 const CLONERS = ["Chinelo Slide CLONER", "Chinelo Slide Infantil CLONER"];
 
 const obrigatorias = ["NEXT_PUBLIC_SUPABASE_URL", "DASHBOARD_SECRET", "TINY_CLIENT_ID", "TINY_CLIENT_SECRET"];
@@ -64,15 +70,28 @@ async function acessoTiny() {
 }
 
 let token;
+
+/** O Tiny devolve 429 com frequência nessa varredura: espera o que ele pedir. */
+function esperaDo429(resposta, tentativa) {
+  const cabecalho = Number(resposta.headers.get("retry-after") ?? resposta.headers.get("x-ratelimit-reset"));
+  const pedido = Number.isFinite(cabecalho) && cabecalho > 0 ? Math.ceil(cabecalho * 1_000) : 0;
+  return Math.min(65_000, Math.max(pedido, 5_000 * 2 ** tentativa));
+}
+
 async function api(caminho, opcoes = {}) {
-  for (let tentativa = 0; tentativa < 5; tentativa += 1) {
+  for (let tentativa = 0; tentativa < 8; tentativa += 1) {
     const resposta = await fetch(`${V3}${caminho}`, {
       ...opcoes,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     });
     await espera(PAUSA_MS);
     if (resposta.status === 429) {
-      await espera(2_000 * (tentativa + 1));
+      await espera(esperaDo429(resposta, tentativa));
+      continue;
+    }
+    if (resposta.status === 401) {
+      // Varredura longa: o access token expira no meio do caminho.
+      token = await acessoTiny();
       continue;
     }
     if (resposta.status === 204) return null;
@@ -81,6 +100,28 @@ async function api(caminho, opcoes = {}) {
     return texto ? JSON.parse(texto) : null;
   }
   throw new Error(`${caminho}: excesso de 429 do Tiny.`);
+}
+
+/**
+ * A leitura dos pedidos leva minutos e não muda nada no Tiny: fica em cache
+ * para que uma nova rodada (ou o --aplicar) comece da estrutura dos produtos.
+ */
+function lerCache() {
+  try {
+    const dados = JSON.parse(readFileSync(CACHE, "utf8"));
+    return new Map(dados.produtos.map(([id, info]) => [Number(id), info]));
+  } catch {
+    return null;
+  }
+}
+
+function gravarCache(produtos) {
+  try {
+    mkdirSync(dirname(CACHE), { recursive: true });
+    writeFileSync(CACHE, JSON.stringify({ gravadoEm: new Date().toISOString(), produtos: [...produtos] }));
+  } catch (erro) {
+    console.warn(`Não consegui gravar o cache: ${erro.message}`);
+  }
 }
 
 const normalizar = (texto) => (texto ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -150,7 +191,10 @@ async function main() {
     `Referência do cloner: ${referencia.adulto.size} materiais (adulto), ${referencia.infantil.size} (infantil).`,
   );
 
-  const produtos = await lerProdutosDosPedidos();
+  const cache = lerCache();
+  const produtos = cache ?? await lerProdutosDosPedidos();
+  if (cache) console.log(`Produtos lidos do cache local: ${produtos.size}.`);
+  else gravarCache(produtos);
   const faltante = new Map();
   const corrigidos = [];
   const semReferencia = [];
