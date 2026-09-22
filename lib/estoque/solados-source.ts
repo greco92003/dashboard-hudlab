@@ -36,11 +36,29 @@ import {
 const CACHE_MS = 5 * 60 * 1_000;
 const LOTE_GHL = 5;
 
-/** O que vale a pena cachear: tudo menos as ordens de compra. */
+/**
+ * Uma leitura, um instante.
+ *
+ * **`skus` (saldo) e `aCaminho` TÊM de vir do mesmo momento.** Receber uma
+ * entrega move a mesma quantidade de um para o outro: a nota some de "a
+ * caminho" e aparece no saldo do Tiny. Lendo os dois em instantes diferentes,
+ * esse par de pares ou some das duas colunas ou aparece nas duas.
+ *
+ * Em 22/09 aconteceu o primeiro caso. As ordens ficavam fora do cache — para
+ * uma OC nova aparecer na hora — então o saldo vinha de cinco minutos atrás,
+ * sem a entrega, e "a caminho" já vinha zerado, com ela. Os 1.002 pares da OC 3
+ * ficaram invisíveis nas duas pontas e a tela mandou comprar 1.557 em vez de
+ * 767 — o dobro, do material que tinha acabado de chegar.
+ *
+ * OC nova criada pelo dashboard invalida o cache; criada direto no Tiny,
+ * aparece na próxima leitura ou no botão Atualizar. É uma espera visível e
+ * corrigível, diferente de um número errado que ninguém tem como desconfiar.
+ */
 type BaseSolados = {
   negocios: SoladoNegocio[];
   skus: SoladoSkuTiny[];
   consumoMensalMedio: number;
+  aCaminho: SoladoItemDemanda[];
 };
 
 let cache: { base: BaseSolados; lidoEm: string; expiraEm: number } | null =
@@ -335,8 +353,9 @@ async function lerConsumoMensalMedio(meses = 6): Promise<number> {
 
 /**
  * Descarta o cache. Chamado depois de mexer numa ordem de compra pela nossa
- * rota — mas note que ordem criada direto no Tiny não passa por aqui, e é por
- * isso que as OCs ficam fora do cache (ver `getResumoSolados`).
+ * rota, para a OC nova aparecer na hora. Ordem ou nota lançada direto no Tiny
+ * não passa por aqui: aparece na próxima leitura ou no botão Atualizar — ver
+ * `BaseSolados` para por que isso é melhor que ler as ordens fora do cache.
  */
 export function invalidarCacheSolados(): void {
   cache = null;
@@ -359,16 +378,18 @@ async function lerBaseCacheada(): Promise<{
   ]);
   const definicoes = new Map(definicoesLista.map((d) => [d.id, d]));
 
-  const [negocios, skus, consumoMensalMedio] = await Promise.all([
+  const [negocios, skus, consumoMensalMedio, compras] = await Promise.all([
     lerNegociosGhl(definicoes, pipelines),
     lerSkusTiny(),
     lerConsumoMensalMedio(),
+    lerCompras(),
   ]);
   const lidoEm = new Date().toISOString();
   const base = {
     negocios,
     skus,
     consumoMensalMedio,
+    aCaminho: paresACaminho(compras.consolidado),
   };
   cache = { base, lidoEm, expiraEm: Date.now() + CACHE_MS };
   return { base, lidoEm };
@@ -379,38 +400,20 @@ export async function getResumoSolados(
 ): Promise<{ resumo: SoladoResumo; lidoEm: string }> {
   const valido = !opcoes.forcar && cache && cache.expiraEm > Date.now();
 
-  // As ordens de compra ficam FORA do cache de propósito: são só duas chamadas
-  // e são criadas direto no Tiny com frequência, sem passar pela nossa rota.
-  // Cacheá-las junto fazia a tela mostrar "a caminho" zerado por até cinco
-  // minutos depois de uma OC nova — sem ninguém entender por quê.
-  const compras = lerCompras();
+  const { base, lidoEm } = valido
+    ? { base: cache!.base, lidoEm: cache!.lidoEm }
+    : await (emVoo ??= lerBaseCacheada().finally(() => {
+        emVoo = null;
+      }));
 
-  if (valido) {
-    const resumo = montarResumo({
-      ...cache!.base,
-      aCaminho: paresACaminho((await compras).consolidado),
-      parametros: {
-        ...SOLADO_PARAMETROS_PADRAO,
-        consumoMensalMedio: cache!.base.consumoMensalMedio,
-      },
-    });
-    return { resumo, lidoEm: cache!.lidoEm };
-  }
-
-  emVoo ??= lerBaseCacheada();
-  try {
-    const { base, lidoEm } = await emVoo;
-    const resumo = montarResumo({
-      negocios: base.negocios,
-      skus: base.skus,
-      aCaminho: paresACaminho((await compras).consolidado),
-      parametros: {
-        ...SOLADO_PARAMETROS_PADRAO,
-        consumoMensalMedio: base.consumoMensalMedio,
-      },
-    });
-    return { resumo, lidoEm };
-  } finally {
-    emVoo = null;
-  }
+  const resumo = montarResumo({
+    negocios: base.negocios,
+    skus: base.skus,
+    aCaminho: base.aCaminho,
+    parametros: {
+      ...SOLADO_PARAMETROS_PADRAO,
+      consumoMensalMedio: base.consumoMensalMedio,
+    },
+  });
+  return { resumo, lidoEm };
 }
