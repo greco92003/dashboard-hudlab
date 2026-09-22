@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cancelarOrdemCompra } from "@/lib/estoque/ordem-compra-source";
 import { invalidarCacheSolados } from "@/lib/estoque/solados-source";
-import { requireRole } from "@/lib/security/route-guards";
+import { COMPRAS_ROLES, requireRole } from "@/lib/security/route-guards";
 
-const PAPEIS_QUE_COMPRAM = ["owner", "admin"] as const;
 
 const acaoSchema = z.object({ cancelar: z.literal(true) });
 
@@ -16,7 +15,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const acesso = await requireRole(PAPEIS_QUE_COMPRAM);
+  const acesso = await requireRole(COMPRAS_ROLES);
   if (!acesso.ok) return acesso.response;
 
   const { id } = await params;

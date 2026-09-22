@@ -17,6 +17,20 @@ type UserRole =
 /** Quem opera o board de chão de fábrica e pode concluir pedidos. */
 export const PRODUCAO_ROLES = ["producao", "admin", "owner"] as const;
 
+/**
+ * Quem pode emitir e cancelar ordem de compra.
+ *
+ * É compromisso financeiro com fornecedor e sai direto para o Tiny, então não
+ * é para qualquer usuário aprovado — mas também não exige `admin`, que abre
+ * junto o fluxo de caixa e a gestão de usuários. Ler as ordens segue liberado
+ * para todo usuário aprovado.
+ */
+export const COMPRAS_ROLES = [
+  "team-leader",
+  "admin",
+  "owner",
+] as const;
+
 type UserProfile = {
   id: string;
   approved: boolean | null;

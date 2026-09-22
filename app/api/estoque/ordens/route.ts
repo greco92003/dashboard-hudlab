@@ -5,14 +5,11 @@ import {
   lerCompras,
 } from "@/lib/estoque/ordem-compra-source";
 import { invalidarCacheSolados } from "@/lib/estoque/solados-source";
-import { requireApprovedUser, requireRole } from "@/lib/security/route-guards";
-
-/**
- * Criar ordem de compra é compromisso financeiro com fornecedor, e sai daqui
- * direto para o Tiny. Fica restrito a quem responde por isso; ler é liberado
- * para qualquer usuário aprovado.
- */
-const PAPEIS_QUE_COMPRAM = ["owner", "admin"] as const;
+import {
+  COMPRAS_ROLES,
+  requireApprovedUser,
+  requireRole,
+} from "@/lib/security/route-guards";
 
 const novaOrdemSchema = z.object({
   dataPrevista: z
@@ -49,7 +46,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const acesso = await requireRole(PAPEIS_QUE_COMPRAM);
+  const acesso = await requireRole(COMPRAS_ROLES);
   if (!acesso.ok) return acesso.response;
 
   const corpo = novaOrdemSchema.safeParse(await request.json());
