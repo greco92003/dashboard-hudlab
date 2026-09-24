@@ -12,6 +12,7 @@ import {
 import {
   ORDER_REGISTRATION_ACCEPTED_FILE_TYPES,
   ORDER_REGISTRATION_MAX_FILE_BYTES,
+  ORDER_REGISTRATION_MAX_MODELS,
   ORDER_REGISTRATION_PIPELINE_NAME,
   ORDER_REGISTRATION_STAGE_NAME,
   type OrderRegistrationConfig,
@@ -153,7 +154,7 @@ function resolveFields(definitions: GhlCustomFieldDef[]): ResolvedFields {
 
   const models: ResolvedModelFields[] = [];
   const modelDefinitions: OrderRegistrationModelDefinition[] = [];
-  for (let modelNumber = 1; modelNumber <= 10; modelNumber++) {
+  for (let modelNumber = 1; modelNumber <= ORDER_REGISTRATION_MAX_MODELS; modelNumber++) {
     // Modelo 3 was created in GHL with a malformed fieldKey, so the visible
     // field name is the reliable fallback for all model slots.
     const sole =

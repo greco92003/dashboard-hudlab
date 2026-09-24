@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getOrderRegistrationValidationIssues,
+  orderRegistrationDraftSchema,
   validateOrderRegistrationDraft,
 } from "../lib/ghl/order-registration-shared.ts";
 
@@ -66,6 +67,30 @@ test("accepts a complete Pix order", () => {
     validateOrderRegistrationDraft(validDraft(), config, 1),
     [],
   );
+});
+
+test("accepts 24 sequential models and rejects a 25th", () => {
+  const draft = validDraft();
+  const modelDefinition = config.modelDefinitions[0];
+  const modelDefinitions = Array.from({ length: 24 }, (_, index) => ({
+    ...modelDefinition,
+    modelNumber: index + 1,
+  }));
+  draft.models = modelDefinitions.map((definition) => ({
+    ...draft.models[0],
+    modelNumber: definition.modelNumber,
+  }));
+  draft.quantityPairs = "240";
+  draft.monetaryValue = "12696";
+
+  assert.equal(orderRegistrationDraftSchema.safeParse(draft).success, true);
+  assert.deepEqual(
+    validateOrderRegistrationDraft(draft, { ...config, modelDefinitions }, 1),
+    [],
+  );
+
+  draft.models.push({ ...draft.models[0], modelNumber: 25 });
+  assert.equal(orderRegistrationDraftSchema.safeParse(draft).success, false);
 });
 
 test("detects grade and monetary total mismatches", () => {

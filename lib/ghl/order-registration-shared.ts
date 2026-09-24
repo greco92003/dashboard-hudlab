@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ORDER_REGISTRATION_PIPELINE_NAME = "Atendimento";
 export const ORDER_REGISTRATION_STAGE_NAME =
   "Pagamento Confirmado/Completar Dados";
-export const ORDER_REGISTRATION_MAX_MODELS = 10;
+export const ORDER_REGISTRATION_MAX_MODELS = 24;
 export const ORDER_REGISTRATION_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export const ORDER_REGISTRATION_ACCEPTED_FILE_TYPES = new Set([
