@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildContextText, buildSellerInstructions } from "../lib/ghl/ai-seller/prompt.ts";
-import { buildTranscriptParts } from "../lib/ghl/sales-agent/agent.ts";
+
+// agent.ts cria o cliente OpenAI ao ser importado e o SDK recusa chave vazia;
+// o teste não chama a API, então uma chave fictícia basta.
+process.env.OPENAI_API_KEY ||= "sk-teste-nao-usada";
+const { buildTranscriptParts } = await import("../lib/ghl/sales-agent/agent.ts");
 
 test("instruções levam persona, escalonamento, regras de preço e o manual", () => {
   const text = buildSellerInstructions({ persona: "Lia", escalationName: "Schay" });
