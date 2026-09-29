@@ -21,7 +21,7 @@
 - Persona padrão "Lia" (`AI_SELLER_PERSONA_NAME`). Escalonamento para a Schay: `AI_SELLER_ESCALATION_USER_ID=XdbufXkZKhQ5YeleSeCw`, `AI_SELLER_ESCALATION_NAME=Schay`.
 - IDs do GHL: pipeline Atendimento `xrsxNXLo0SIkWAxiHPf0`; pipeline Fábrica de Mockups `ShSCF8BTLIdKHAjq491X` (já em `lib/ghl/pipelines.ts` como `GHL_MOCKUP_FACTORY_PIPELINE_ID`).
 - Nunca enviar WhatsApp a cliente real durante o desenvolvimento. Escrita e envio ao vivo só no contato de teste da equipe indicado pelo Greco, com a autorização dele.
-- Migrações: aplicar com `apply_migration` do Supabase MCP (projeto `ubqervuhvwnztxmsodlg`). O conector estava sem credencial em 29/09; se continuar, o Greco cola o SQL no SQL Editor do Supabase.
+- Migrações e consultas de verificação: conexão direta pelo `DATABASE_URL` do `.env.local` (projeto `ubqervuhvwnztxmsodlg`, pacote `pg` já instalado), com `scripts/run-sql.mjs` criado na Task 7. O conector Supabase MCP estava sem credencial em 29/09 e não é necessário.
 - Commits em português, terminando com `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Ajustes em relação ao spec
@@ -2048,6 +2048,7 @@ git commit -m "refactor: cotação de frete sai da rota para lib/freight/quote.t
 ### Task 7: Registro das rodadas e exclusão das métricas
 
 **Files:**
+- Create: `scripts/run-sql.mjs`
 - Create: `supabase/migrations/ai_seller_runs.sql`
 - Create: `supabase/migrations/v_contatos_importados_source_exclui_ia_teste.sql`
 - Create: `lib/ghl/ai-seller/runs-store.ts`
@@ -2193,20 +2194,72 @@ revoke all on public.v_contatos_importados_source
   from public, anon, authenticated;
 ```
 
-- [ ] **Step 3: Aplicar as duas migrações**
+- [ ] **Step 3: Criar `scripts/run-sql.mjs`**
 
-Com `apply_migration` do Supabase MCP, projeto `ubqervuhvwnztxmsodlg`, nomes `ai_seller_runs` e `v_contatos_importados_source_exclui_ia_teste`, uma de cada vez. Se o conector continuar sem credencial, pedir ao Greco para colar os dois arquivos no SQL Editor.
+```js
+// Roda SQL no Postgres do Supabase pelo DATABASE_URL do .env.local.
+//   node --env-file=.env.local scripts/run-sql.mjs --file caminho.sql
+//   node --env-file=.env.local scripts/run-sql.mjs "select count(*) from public.ai_seller_runs"
+// Com --file, o arquivo inteiro roda numa transação (tudo ou nada).
+import { readFileSync } from "node:fs";
+import pg from "pg";
 
-Verificar com `execute_sql`:
+const args = process.argv.slice(2);
+const fileIndex = args.indexOf("--file");
+const sql = fileIndex >= 0 ? readFileSync(args[fileIndex + 1], "utf8") : args.join(" ");
+if (!sql.trim()) {
+  console.error("Informe o SQL ou --file <arquivo>.");
+  process.exit(1);
+}
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL não configurado (use --env-file=.env.local).");
+  process.exit(1);
+}
 
-```sql
-select count(*) as linhas from public.ai_seller_runs;
-select count(*) as importados from public.v_contatos_importados_source;
+const client = new pg.Client({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+await client.connect();
+try {
+  if (fileIndex >= 0) await client.query("begin");
+  const result = await client.query(sql);
+  if (fileIndex >= 0) await client.query("commit");
+  const last = Array.isArray(result) ? result.at(-1) : result;
+  if (last?.rows?.length) console.table(last.rows);
+  else console.log("ok");
+} catch (error) {
+  if (fileIndex >= 0) await client.query("rollback");
+  console.error("ERRO:", error.message);
+  process.exitCode = 1;
+} finally {
+  await client.end();
+}
 ```
 
-Expected: `linhas = 0`. `importados` igual ao valor de antes da migração (rodar a segunda consulta também antes de aplicar e anotar) — ainda não existe contato `ia-teste`.
+- [ ] **Step 4: Aplicar as duas migrações**
 
-- [ ] **Step 4: Criar `lib/ghl/ai-seller/runs-store.ts`**
+Anotar o valor de antes:
+
+Run: `node --env-file=.env.local scripts/run-sql.mjs "select count(*) as importados from public.v_contatos_importados_source"`
+
+Aplicar, uma de cada vez:
+
+Run: `node --env-file=.env.local scripts/run-sql.mjs --file supabase/migrations/ai_seller_runs.sql`
+Expected: `ok`
+
+Run: `node --env-file=.env.local scripts/run-sql.mjs --file supabase/migrations/v_contatos_importados_source_exclui_ia_teste.sql`
+Expected: `ok`
+
+Verificar:
+
+Run: `node --env-file=.env.local scripts/run-sql.mjs "select count(*) as linhas from public.ai_seller_runs"`
+Expected: `linhas = 0`.
+
+Run: `node --env-file=.env.local scripts/run-sql.mjs "select count(*) as importados from public.v_contatos_importados_source"`
+Expected: igual ao valor anotado antes — ainda não existe contato `ia-teste`.
+
+- [ ] **Step 5: Criar `lib/ghl/ai-seller/runs-store.ts`**
 
 ```ts
 import "server-only";
@@ -2274,13 +2327,13 @@ export async function insertRun(row: AiSellerRunInsert): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Verificar e commitar**
+- [ ] **Step 6: Verificar e commitar**
 
 Run: `npx tsc --noEmit`
 Expected: sem erros.
 
 ```bash
-git add supabase/migrations/ai_seller_runs.sql supabase/migrations/v_contatos_importados_source_exclui_ia_teste.sql lib/ghl/ai-seller/runs-store.ts
+git add scripts/run-sql.mjs supabase/migrations/ai_seller_runs.sql supabase/migrations/v_contatos_importados_source_exclui_ia_teste.sql lib/ghl/ai-seller/runs-store.ts
 git commit -m "feat: registro das rodadas da IA vendedora e testadores fora das métricas"
 ```
 
@@ -3095,11 +3148,8 @@ Depois, entre os testadores, cobrir o roteiro do spec: dúvida de preço e prazo
 
 Consulta de acompanhamento:
 
-```sql
-select triggered_at, contact_id, decision, escalation_reason, error
-from public.ai_seller_runs
-order by triggered_at desc
-limit 50;
+```bash
+node --env-file=.env.local scripts/run-sql.mjs "select triggered_at, contact_id, decision, escalation_reason, error from public.ai_seller_runs order by triggered_at desc limit 50"
 ```
 
 Depois do refresh das :07/:37, o contato do testador aparece em `v_contatos_importados` e some do funil e dos KPIs.
