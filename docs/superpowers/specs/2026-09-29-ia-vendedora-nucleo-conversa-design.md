@@ -38,7 +38,7 @@ O projeto inteiro é grande demais para um ciclo só. Este documento detalha a *
    - limite de 6 mensagens da IA para o contato na última hora atingido → `pulou:limite` e escala;
    - senão → roda o cérebro.
 
-   Uma rodada por contato por vez: a rodada real começa gravando uma linha `rodando` (índice único parcial por contato); uma segunda chamada simultânea vira `pulou:em_andamento`. Logo antes de enviar, a rodada relê o fim da conversa; se o cliente escreveu de novo, não envia (`pulou:mensagem_nova`) e a chamada da mensagem nova responde tudo.
+   Uma rodada por contato por vez: a rodada real começa gravando uma linha `rodando` (índice único parcial por contato); uma segunda chamada simultânea vira `pulou:em_andamento`. Logo antes de enviar, a rodada relê o fim da conversa; se o cliente escreveu de novo, não envia (`pulou:mensagem_nova`) e a chamada da mensagem nova responde tudo. Exceção: se a rodada foi longa e essa chamada chegou com a trava ocupada (virou `pulou:em_andamento`), ela não volta; a rodada que terminou sem responder a mensagem nova escala para humano (`falha_tecnica`). A sessão nova depois de um escalonamento começa na primeira rodada em que a IA de fato rodou (não contam `pulou:sem_tag`, `pulou:em_andamento` nem erro não escalado).
 4. **Cérebro** decide e chama ferramentas (abaixo), em loop de no máximo 5 passos.
 5. **Registro** da rodada em `ai_seller_runs`.
 

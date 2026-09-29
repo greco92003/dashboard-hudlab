@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideRun, hasUnseenInbound } from "../lib/ghl/ai-seller/decide.ts";
+import { decideRun, hasUnseenInbound, mustEscalateSwallowedCall } from "../lib/ghl/ai-seller/decide.ts";
 
 const NOW = Date.parse("2026-09-29T15:00:00.000Z");
 const at = (secondsAgo) => new Date(NOW - secondsAgo * 1000).toISOString();
@@ -179,4 +179,35 @@ test("rechecagem antes do envio: só mensagem do cliente fora do retrato conta",
     hasUnseenInbound([{ id: "c1", direction: "inbound" }, { id: "c2", direction: "inbound" }], seen),
     true,
   );
+});
+
+test("chamada engolida pela trava: rodada que não respondeu a mensagem nova escala", () => {
+  // Rodada longa (>90s): o webhook da mensagem nova chegou com a trava ocupada
+  // e virou pulou:em_andamento; ninguém mais vai responder essa mensagem.
+  assert.equal(
+    mustEscalateSwallowedCall({ decision: "pulou:mensagem_nova", swallowedCall: true, hasUnseenInbound: true }),
+    true,
+  );
+  assert.equal(
+    mustEscalateSwallowedCall({ decision: "nao_respondeu", swallowedCall: true, hasUnseenInbound: true }),
+    true,
+  );
+  // Sem chamada engolida, a chamada da mensagem nova ainda vem e responde.
+  assert.equal(
+    mustEscalateSwallowedCall({ decision: "pulou:mensagem_nova", swallowedCall: false, hasUnseenInbound: true }),
+    false,
+  );
+  // nao_respondeu sem mensagem nova do cliente: nada ficou para trás.
+  assert.equal(
+    mustEscalateSwallowedCall({ decision: "nao_respondeu", swallowedCall: true, hasUnseenInbound: false }),
+    false,
+  );
+  // Quem respondeu ou escalou já cuidou do cliente.
+  for (const decision of ["respondeu", "escalou", "erro"]) {
+    assert.equal(
+      mustEscalateSwallowedCall({ decision, swallowedCall: true, hasUnseenInbound: true }),
+      false,
+      decision,
+    );
+  }
 });

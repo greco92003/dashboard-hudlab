@@ -91,3 +91,18 @@ export function hasUnseenInbound(
 ): boolean {
   return recent.some((m) => m.direction === "inbound" && !seenMessageIds.has(m.id));
 }
+
+/**
+ * Rodada longa (>90s) engole o webhook da mensagem nova (pulou:em_andamento),
+ * que não volta. Se a rodada terminou sem responder o que o cliente escreveu
+ * depois do retrato, ninguém mais responde: escalar.
+ */
+export function mustEscalateSwallowedCall(input: {
+  decision: string;
+  swallowedCall: boolean;
+  hasUnseenInbound: boolean;
+}): boolean {
+  if (!input.swallowedCall) return false;
+  if (input.decision === "pulou:mensagem_nova") return true;
+  return input.decision === "nao_respondeu" && input.hasUnseenInbound;
+}

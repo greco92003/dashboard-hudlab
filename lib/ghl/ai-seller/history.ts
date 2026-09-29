@@ -13,7 +13,7 @@ export interface AiHistory {
   /** Para cada id enviado, o triggered_at da rodada que o enviou. */
   sentAtRunStart: Map<string, string>;
   sendsLastHour: number;
-  /** Primeira rodada depois da última que encerrou uma sessão; null se não houver. */
+  /** Primeira rodada da IA depois da última que encerrou uma sessão; null se não houver. */
   sessionStartedAt: string | null;
 }
 
@@ -25,6 +25,17 @@ function endsSession(row: RunHistoryRow): boolean {
     row.decision === "pulou:limite" ||
     (row.decision === "erro" && row.escalation_reason != null)
   );
+}
+
+/**
+ * Rodada que prova que a IA estava com o contato. Sem a tag, travada por outra
+ * rodada ou com erro não escalado (ex.: trava expirada) não prova: podem cair
+ * entre o fim de uma sessão e a volta à IA, e não podem abrir a sessão nova.
+ */
+function provesAiSession(row: RunHistoryRow): boolean {
+  if (row.decision === "pulou:sem_tag" || row.decision === "pulou:em_andamento") return false;
+  if (row.decision === "erro" && row.escalation_reason == null) return false;
+  return true;
 }
 
 /** `rows` em ordem cronológica (triggered_at crescente). */
@@ -51,6 +62,7 @@ export function summarizeRuns(rows: RunHistoryRow[], nowMs: number): AiHistory {
     sentMessageIds,
     sentAtRunStart,
     sendsLastHour,
-    sessionStartedAt: runs[lastEndIndex + 1]?.triggered_at ?? null,
+    sessionStartedAt:
+      runs.slice(lastEndIndex + 1).find(provesAiSession)?.triggered_at ?? null,
   };
 }

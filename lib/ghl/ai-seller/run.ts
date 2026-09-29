@@ -32,7 +32,7 @@ import {
   MODEL_CALL_TIMEOUT_MS,
   personaName,
 } from "./config";
-import { decideRun, hasUnseenInbound } from "./decide";
+import { decideRun, hasUnseenInbound, mustEscalateSwallowedCall } from "./decide";
 import {
   addContactTags,
   assignContact,
@@ -50,6 +50,7 @@ import {
   acquireRunLock,
   finishRun,
   hasRecentEscalation,
+  hasSwallowedCallSince,
   insertRun,
   loadAiHistory,
   type AiSellerRunInsert,
@@ -460,6 +461,30 @@ async function respondToContactUnsafe(
       console.error("IA vendedora: falha também ao escalar", err);
     }
     decision = "erro";
+  }
+
+  // Webhook da mensagem nova engolido pela trava durante esta rodada não volta:
+  // se o cliente escreveu algo que esta rodada não respondeu, escala.
+  if (!dryRun && (decision === "pulou:mensagem_nova" || decision === "nao_respondeu")) {
+    try {
+      const swallowedCall = await hasSwallowedCallSince(contactId, startedAt);
+      const unseenInbound =
+        swallowedCall && decision === "nao_respondeu" ? await actions.hasNewClientMessage() : true;
+      if (mustEscalateSwallowedCall({ decision, swallowedCall, hasUnseenInbound: unseenInbound })) {
+        sentMessageIds.push(
+          ...(await actions.escalate({
+            motivo: "falha_tecnica",
+            resumo:
+              "O cliente escreveu enquanto a IA ainda processava a rodada anterior e a mensagem nova ficou sem resposta.",
+            mensagemCliente: handoffMessage(),
+          })),
+        );
+        decision = "escalou";
+        escalationReason = "falha_tecnica";
+      }
+    } catch (err) {
+      console.error("IA vendedora: falha ao cobrir chamada engolida pela trava", { contactId, err });
+    }
   }
 
   await record({

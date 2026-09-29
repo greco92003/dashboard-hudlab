@@ -61,6 +61,29 @@ test("sessão encerrada e nenhuma rodada depois: sessão nova ainda não começo
   assert.equal(h.sessionStartedAt, null);
 });
 
+test("rodadas que não provam o contato com a IA não abrem a sessão nova", () => {
+  // Rajada durante o escalonamento e chamadas sem a tag ficam entre o fim da
+  // sessão e a volta à IA; a sessão nova só começa quando a IA de fato roda.
+  const h = summarizeRuns(
+    [
+      row(3000, "respondeu", { sent_message_ids: ["a1"] }),
+      row(2900, "escalou", { escalation_reason: "outro", sent_message_ids: ["a2"] }),
+      row(2899, "pulou:em_andamento"),
+      row(2000, "pulou:sem_tag"),
+      row(1000, "erro", { error: "trava expirada" }),
+      row(100, "respondeu", { sent_message_ids: ["a3"] }),
+    ],
+    NOW,
+  );
+  assert.equal(h.sessionStartedAt, at(100));
+
+  const pending = summarizeRuns(
+    [row(2900, "humano_assumiu"), row(2000, "pulou:sem_tag"), row(1999, "pulou:em_andamento")],
+    NOW,
+  );
+  assert.equal(pending.sessionStartedAt, null);
+});
+
 test("linha da trava em andamento não conta como rodada da sessão", () => {
   const h = summarizeRuns([row(900, "escalou", { escalation_reason: "outro" }), row(0, "rodando")], NOW);
   assert.equal(h.sessionStartedAt, null);

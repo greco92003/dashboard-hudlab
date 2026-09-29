@@ -100,6 +100,23 @@ export async function finishRun(
   if (!data || data.length === 0) throw new Error(`ai_seller_runs update: linha ${runId} não encontrada`);
 }
 
+/** Alguma chamada do contato pulou pela trava depois de `sinceMs`? */
+export async function hasSwallowedCallSince(
+  contactId: string,
+  sinceMs: number,
+): Promise<boolean> {
+  const supabase = await createSupabaseServerForSync();
+  const { data, error } = await supabase
+    .from("ai_seller_runs")
+    .select("id")
+    .eq("contact_id", contactId)
+    .eq("decision", "pulou:em_andamento" satisfies RunDecision)
+    .gt("triggered_at", new Date(sinceMs).toISOString())
+    .limit(1);
+  if (error) throw new Error(`ai_seller_runs chamada engolida: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
 /** Houve escalonamento registrado para o contato desde `sinceMs`? */
 export async function hasRecentEscalation(
   contactId: string,
