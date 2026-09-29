@@ -102,11 +102,15 @@ Regra: **o cliente nunca fica sem resposta em silêncio.**
 
 O teste usa o mesmo caminho da produção, só com o sorteio forçado. Não existe versão paralela da IA para teste.
 
-- **Entrada por palavra-chave.** Qualquer pessoa convidada manda a palavra-chave (`LIA TESTE`) no WhatsApp da Hud Lab. Um workflow aplica a tag `ia-teste` e dispara o bot de intake normal: mockup básico, orçamento rápido, Amostra Digital Oficial.
+- **Entrada com uma mensagem só.** A pessoa convidada manda no WhatsApp da Hud Lab uma mensagem com a palavra-chave e a palavra "chinelos", por exemplo "LIA TESTE, tenho interesse em chinelos". Dois workflows reagem à mesma mensagem:
+  - um workflow novo, com gatilho "mensagem contém `LIA TESTE`", aplica a tag `ia-teste` na hora;
+  - o "Atendimento Inicial" (o robô de atendimento, hoje com gatilho "mensagem contém chinelo/chinelos") começa normalmente: mockup básico, orçamento rápido, Amostra Digital Oficial.
+
+  Não há corrida entre os dois: a tag só é lida no split, no fim do robô, minutos e várias respostas depois; ela é aplicada em segundos. "LIA TESTE" sozinho não inicia o robô.
 - **Braço forçado.** No split, `ia-teste` vai sempre para a IA. Enquanto os testes rodam, o split real fica em **0%**: nenhum cliente de verdade é atendido pela IA até a decisão de abrir.
-- **Design de verdade, marcado como teste.** A Amostra Digital Oficial e os pedidos de ajuste chegam à Fábrica de Mockups identificados como TESTE, para o time de design saber que não é venda real. Cada testador custa tempo de designer e espera de até 24h úteis, então o número de testadores simultâneos é pequeno e combinado com o design.
-- **Fechamento com a Schay.** Como no fluxo real desta fatia, "pronto para pagar" escala para a Schay. Com `ia-teste`, ela encerra sem gerar cobrança.
-- **Fora das métricas de negócio, dentro das de qualidade.** Contatos `ia-teste` são excluídos do funil, do BI e dos rankings (senão inflam lead e conversão), mas continuam sendo avaliados pelo Copiloto e pelo Auditor, porque é assim que se mede a qualidade da IA.
+- **Design de verdade, marcado como teste.** A demanda de design é a própria oportunidade do lead, que passa pelo pipeline Fábrica de Mockups enquanto a arte é feita e depois volta. Ela recebe o prefixo `(TESTE IA)` no nome, no mesmo padrão do `(AMOSTRA)` que o time já usa, aplicado por um workflow do GHL quando a oportunidade é criada para um contato com `ia-teste`. O prefixo aparece no card da Fábrica, no briefing (que cita o nome do negócio) e nos painéis do app. Cada testador custa tempo de designer e espera de até 24h úteis, então o número de testadores simultâneos é pequeno e combinado com o design.
+- **Fechamento com a Schay.** Como no fluxo real desta fatia, "pronto para pagar" escala para a Schay. Com `ia-teste`, ela encerra a oportunidade como **perdida**, motivo "teste", sem gerar cobrança. Nunca como ganha: dashboard, programação e rankings de venda só contam negócio ganho, então essa regra os mantém limpos sem filtro no código.
+- **Fora das métricas de negócio, dentro das de qualidade.** Os contatos `ia-teste` entram na lista de exclusão que já tira os contatos migrados do BI (`v_contatos_importados_source`): uma migração cobre funil, KPIs, Meta × GHL e atribuição. **Não** são filtrados no `sync-ghl`, porque o Copiloto e o Auditor leem `ghl_opportunities` e é por eles que se mede a qualidade da IA.
 
 ## Testes e rollout
 
@@ -130,6 +134,5 @@ Pontos de API que o plano precisa verificar ao vivo antes de codar, como foi fei
 - como o pipeline "Fábrica de Mockups" liga a demanda de design ao contato (para a IA achar a oportunidade certa a mover);
 - conversão de quantidade de pares em volumes para o motor de frete;
 - se o passo de split do workflow e o filtro por tag cobrem o gatilho como descrito;
-- como o workflow da palavra-chave inicia o bot de intake (hoje ele começa pela mensagem padrão "tenho interesse", com código `HL-`);
-- como a demanda de teste aparece para o time de design na Fábrica de Mockups (tag visível no card, prefixo no nome ou nota no briefing);
-- em quais leituras entra o filtro da tag `ia-teste`: `sync-ghl` / `ghl_opportunities`, funil, BI Meta × GHL, rankings de vendedores.
+- se a ação "Criar/Atualizar oportunidade" do workflow do GHL permite reescrever o nome para aplicar o prefixo `(TESTE IA)`; se não permitir, o app aplica o prefixo pela API (`PUT /opportunities/{id}`) na primeira vez que vê a oportunidade de um contato `ia-teste`;
+- se `ghl_contact_tags` recebe a tag `ia-teste` a tempo de a exclusão do BI pegar o contato no mesmo dia (depende da frequência do sync de contatos).
