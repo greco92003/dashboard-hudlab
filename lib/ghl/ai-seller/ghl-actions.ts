@@ -148,7 +148,8 @@ export async function moveOpportunityForward(
     (s) => s.name.trim().toLowerCase() === etapa.toLowerCase(),
   );
   if (targetIndex < 0) throw new Error(`Etapa "${etapa}" não existe no pipeline Atendimento`);
-  if (currentIndex >= targetIndex) return "sem_mudanca";
+  // Etapa atual desconhecida (renomeada ou removida): sem saber a direção, não move.
+  if (currentIndex < 0 || currentIndex >= targetIndex) return "sem_mudanca";
 
   await updateGhlOpportunity(opportunityId, { pipelineStageId: stages[targetIndex].id });
   return "movido";
