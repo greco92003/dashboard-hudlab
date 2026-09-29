@@ -3,7 +3,8 @@ import type { AiMovableStage, ModelEscalationReason } from "./config";
 export type EscalationReason =
   | ModelEscalationReason
   | "falha_tecnica"
-  | "limite_mensagens";
+  | "limite_mensagens"
+  | "sem_oportunidade";
 
 export type RunDecision =
   | "respondeu"

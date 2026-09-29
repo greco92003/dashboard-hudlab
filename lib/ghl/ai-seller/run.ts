@@ -160,6 +160,13 @@ function makeCallModel(instructions: string): CallModel {
   };
 }
 
+/**
+ * Ponto de entrada público. "O cliente nunca fica sem resposta em silêncio":
+ * qualquer falha lançada por respondToContactUnsafe fora do loop do agente
+ * (busca inicial, pipelines, montagem do contexto, ramo humano_assumiu etc.)
+ * cai aqui e, em produção, tenta escalar para humano e registrar a rodada
+ * como erro em vez de deixar a rota estourar um 500 silencioso.
+ */
 export async function respondToContact(
   contactId: string,
   options: { dryRun?: boolean } = {},
@@ -167,6 +174,52 @@ export async function respondToContact(
   const dryRun = options.dryRun === true;
   const startedAt = Date.now();
 
+  try {
+    return await respondToContactUnsafe(contactId, dryRun, startedAt);
+  } catch (err) {
+    if (dryRun) throw err;
+
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("IA vendedora: falha fora do loop do agente", { contactId, error });
+
+    let sentMessageIds: string[] = [];
+    try {
+      sentMessageIds = await realActions(contactId, "").escalate({
+        motivo: "falha_tecnica",
+        resumo: error,
+        mensagemCliente: handoffMessage(),
+      });
+    } catch (escalateErr) {
+      console.error("IA vendedora: falha também ao escalar fora do loop", escalateErr);
+    }
+
+    try {
+      await insertRun({
+        contact_id: contactId,
+        opportunity_id: null,
+        triggered_at: new Date(startedAt).toISOString(),
+        decision: "erro",
+        escalation_reason: "falha_tecnica",
+        tool_calls: [],
+        sent_message_ids: sentMessageIds,
+        model: null,
+        usage: null,
+        latency_ms: Date.now() - startedAt,
+        error,
+      });
+    } catch (insertErr) {
+      console.error("IA vendedora: falha ao gravar a rodada de erro fora do loop", insertErr);
+    }
+
+    return { decision: "erro", dryRun: false, sentMessageIds, error };
+  }
+}
+
+async function respondToContactUnsafe(
+  contactId: string,
+  dryRun: boolean,
+  startedAt: number,
+): Promise<RespondResult> {
   const [contact, transcript, history, opportunity] = await Promise.all([
     fetchGhlContactById(contactId),
     getNegotiationTranscript(contactId),
@@ -188,7 +241,11 @@ export async function respondToContact(
   };
   const record = async (row: Partial<AiSellerRunInsert> & { decision: RunDecision }) => {
     if (dryRun) return;
-    await insertRun({ ...base, ...row, latency_ms: Date.now() - startedAt });
+    try {
+      await insertRun({ ...base, ...row, latency_ms: Date.now() - startedAt });
+    } catch (error) {
+      console.error("IA vendedora: falha ao gravar a rodada", { contactId, decision: row.decision, error });
+    }
   };
 
   if (!dryRun) {
@@ -218,7 +275,7 @@ export async function respondToContact(
     }
 
     if (decision.kind === "limit" || !opportunity) {
-      const motivo: EscalationReason = decision.kind === "limit" ? "limite_mensagens" : "falha_tecnica";
+      const motivo: EscalationReason = decision.kind === "limit" ? "limite_mensagens" : "sem_oportunidade";
       const resumo =
         decision.kind === "limit"
           ? "A IA atingiu o limite de mensagens por hora com este contato (proteção contra loop)."
