@@ -29,20 +29,22 @@ O projeto inteiro é grande demais para um ciclo só. Este documento detalha a *
 ## Fluxo
 
 1. **Quem é da IA.** No fim do bot de intake, um passo de split do workflow sorteia a fatia. Na fatia da IA: tag `ia-atendimento` no contato e campo Vendedor = persona. Fora dela, nada muda. Contato com a tag `ia-teste` (ver "Ambiente de teste") cai sempre na fatia da IA, sem sorteio.
-2. **Gatilho.** Workflow "Cliente respondeu" (WhatsApp) com filtro na tag `ia-atendimento` → espera 90s → webhook `POST /api/ai-seller/respond` com `contactId`, protegido pelo cabeçalho `x-ai-seller-secret` (`AI_SELLER_WEBHOOK_SECRET`).
+2. **Gatilho.** Workflow "Cliente respondeu" (WhatsApp) com filtro na tag `ia-atendimento` → espera 90s → webhook `POST /api/ai-seller/respond` com `contactId`, protegido pelo cabeçalho `Authorization: Bearer <AI_SELLER_WEBHOOK_SECRET>`.
 3. **Decisão de rodar** (função pura, testável), lendo a conversa pelo `getNegotiationTranscript` existente:
    - mensagem do cliente mais nova tem menos de 80s → `pulou:agrupando` (a chamada disparada por ela vai responder por todas);
-   - já existe mensagem da IA depois da última do cliente → `pulou:ja_respondido`;
+   - já existe mensagem da IA enviada por uma rodada que começou depois da última mensagem do cliente → `pulou:ja_respondido` (resposta de rodada que já rodava quando o cliente escreveu não conta: ela não viu a mensagem);
    - contato sem a tag `ia-atendimento` → `pulou:sem_tag` (defesa contra workflow mal configurado);
-   - há mensagem de humano (saída que não é automação nem enviada pela IA) depois da primeira rodada da IA para esse contato → `humano_assumiu` (remove a tag `ia-atendimento`, deixa nota, não responde). Na primeira rodada não há essa checagem: o histórico antigo de um cliente recorrente não cala a IA;
+   - há mensagem de humano (saída com `userId`, que não é automação nem enviada pela IA) depois da primeira rodada da sessão atual da IA com esse contato → `humano_assumiu` (remove a tag `ia-atendimento`, deixa nota, não responde). Na primeira rodada não há essa checagem: o histórico antigo de um cliente recorrente não cala a IA;
    - limite de 6 mensagens da IA para o contato na última hora atingido → `pulou:limite` e escala;
    - senão → roda o cérebro.
+
+   Uma rodada por contato por vez: a rodada real começa gravando uma linha `rodando` (índice único parcial por contato); uma segunda chamada simultânea vira `pulou:em_andamento`. Logo antes de enviar, a rodada relê o fim da conversa; se o cliente escreveu de novo, não envia (`pulou:mensagem_nova`) e a chamada da mensagem nova responde tudo.
 4. **Cérebro** decide e chama ferramentas (abaixo), em loop de no máximo 5 passos.
 5. **Registro** da rodada em `ai_seller_runs`.
 
 **Botão de pânico**: desativar o workflow no GHL. Para imediatamente todos os gatilhos, sem deploy, e qualquer pessoa da equipe consegue fazer.
 
-**Como se sabe que uma fala é da IA**: o id de toda mensagem enviada pela IA fica gravado em `ai_seller_runs.sent_message_ids`. "Humano" = mensagem de saída com `source` diferente de `"workflow"` e cujo id não está nesse registro. Não depende de como o GHL rotula mensagens enviadas por API.
+**Como se sabe que uma fala é da IA**: o id de toda mensagem enviada pela IA fica gravado em `ai_seller_runs.sent_message_ids`. "Humano" = mensagem de saída com `userId` preenchido, `source` diferente de `"workflow"` e cujo id não está nesse registro. Verificado ao vivo em 29/09: mensagem enviada pela API volta com `source: "app"` e `userId` vazio; a do vendedor, com `userId`. Saída sem `userId` que não é da IA é de origem desconhecida e não cala a IA.
 
 ## Cérebro
 
@@ -80,7 +82,7 @@ Uma chamada ao modelo com:
 | `contact_id` | text | |
 | `opportunity_id` | text, nulo | |
 | `triggered_at` | timestamptz | |
-| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:sem_tag`, `pulou:agrupando`, `pulou:ja_respondido`, `pulou:limite`, `erro` |
+| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:sem_tag`, `pulou:agrupando`, `pulou:ja_respondido`, `pulou:limite`, `pulou:em_andamento`, `pulou:mensagem_nova`, `erro`; `rodando` enquanto a rodada está em andamento (trava) |
 | `escalation_reason` | text, nulo | |
 | `tool_calls` | jsonb | ferramentas chamadas, entradas e saídas |
 | `sent_message_ids` | text[] | ids devolvidos pelo GHL |
