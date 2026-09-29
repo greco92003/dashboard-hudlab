@@ -14,7 +14,7 @@
     "test:erp": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/erp-production-order.test.mjs",
     "test:programacao": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/programacao-relatorio.test.mjs",
     "test:ghl": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/ghl-closing-date.test.mjs tests/ghl-cursor-pagination.test.mjs tests/ghl-funnel-dates.test.mjs tests/ghl-funnel-sales.test.mjs tests/ghl-pipelines.test.mjs tests/webhook-rejections.test.mjs",
-    "test:ai-seller": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/ai-seller-pricing.test.mjs tests/ai-seller-packing.test.mjs tests/ai-seller-decide.test.mjs tests/ai-seller-tools.test.mjs tests/ai-seller-loop.test.mjs",
+    "test:ai-seller": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/ai-seller-pricing.test.mjs tests/ai-seller-packing.test.mjs tests/ai-seller-decide.test.mjs tests/ai-seller-tools.test.mjs tests/ai-seller-loop.test.mjs tests/ai-seller-prompt.test.mjs",
     "verify:supabase-keys": "node scripts/verify-supabase-key-migration.mjs",
     "verify:ghl-dashboard": "node --experimental-strip-types scripts/verify-ghl-dashboard-consistency.mjs",
     "webhooks:setup": "node scripts/setup-webhooks.js",

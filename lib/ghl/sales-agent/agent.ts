@@ -36,7 +36,7 @@ ${modeInstructions}`;
 }
 
 /** Today's date in Brazil (UTC-3 year-round) as dd/mm/yyyy, so the agent can reason about whether a date the client mentioned (an event, a deadline) has already passed instead of only seeing relative "hours since" figures. */
-function todayBRDateString(): string {
+export function todayBRDateString(): string {
   const brNow = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const dd = String(brNow.getUTCDate()).padStart(2, "0");
   const mm = String(brNow.getUTCMonth() + 1).padStart(2, "0");
@@ -84,7 +84,7 @@ function isSupportedAttachmentMimeType(mimeType: string): boolean {
 
 type ImageContentPart = { type: "input_image"; image_url: string; detail: "auto" };
 type TextContentPart = { type: "input_text"; text: string };
-type ContentPart = TextContentPart | ImageContentPart;
+export type ContentPart = TextContentPart | ImageContentPart;
 
 type AttachmentContent =
   | { kind: "image"; part: ImageContentPart }
@@ -193,8 +193,9 @@ async function selectIncludedAttachments(
  * is derived from what actually got included (not just which URLs were in
  * range), so the model is never told media follows when it doesn't.
  */
-async function buildTranscriptParts(
+export async function buildTranscriptParts(
   messages: NegotiationMessage[],
+  options: { ownMessageIds?: ReadonlySet<string>; ownLabel?: string } = {},
 ): Promise<ContentPart[]> {
   const includedByMessage = await selectIncludedAttachments(messages);
 
@@ -206,7 +207,9 @@ async function buildTranscriptParts(
         ? "CLIENTE"
         : m.isAutomated
           ? "AUTOMAÇÃO (mensagem automática do sistema, não é o vendedor)"
-          : "VENDEDOR";
+          : options.ownMessageIds?.has(m.id)
+            ? (options.ownLabel ?? "VOCÊ")
+            : "VENDEDOR";
     const included = includedByMessage.get(i) ?? [];
     const imageParts = included
       .filter((c): c is Extract<AttachmentContent, { kind: "image" }> => c.kind === "image")
