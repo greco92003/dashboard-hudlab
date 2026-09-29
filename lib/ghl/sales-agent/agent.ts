@@ -91,6 +91,7 @@ type AttachmentContent =
   | { kind: "audio"; transcript: string };
 
 const TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
+const ATTACHMENT_FETCH_TIMEOUT_MS = 10_000;
 const KNOWN_AUDIO_EXTENSIONS = new Set([
   "flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm",
 ]);
@@ -113,7 +114,9 @@ function audioFileNameForMimeType(mimeType: string): string {
  */
 async function fetchAttachmentContent(url: string): Promise<AttachmentContent | null> {
   try {
-    const response = await fetch(url);
+    // Download travado não pode segurar a rodada da IA vendedora (webhook com
+    // prazo); estourar cai no catch e o anexo fica só como nota de texto.
+    const response = await fetch(url, { signal: AbortSignal.timeout(ATTACHMENT_FETCH_TIMEOUT_MS) });
     if (!response.ok) return null;
     const mimeType = (response.headers.get("content-type") || "").split(";")[0].trim();
     if (!isSupportedAttachmentMimeType(mimeType)) return null;
