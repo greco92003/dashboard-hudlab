@@ -99,6 +99,8 @@ export interface GhlContactDetail extends GhlContactSummary {
   postalCode?: string | null;
   country?: string | null;
   customFields?: Array<{ id: string; value: unknown }>;
+  tags?: string[];
+  assignedTo?: string | null;
 }
 
 export interface GhlOpportunity {
