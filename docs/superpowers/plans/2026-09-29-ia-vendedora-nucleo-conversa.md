@@ -3142,7 +3142,7 @@ Um membro da equipe manda "LIA TESTE, tenho interesse em chinelos" e segue o rob
 1. Contato recebe `ia-teste` em segundos e `ia-atendimento` no fim do robô.
 2. Oportunidade com `(TESTE IA)` no nome (Fábrica de Mockups e Atendimento).
 3. Primeira mensagem livre depois do robô: resposta da Lia em ~2 minutos; linha `respondeu` em `ai_seller_runs`; oportunidade movida para "Atendimento".
-4. Três mensagens seguidas do testador geram uma resposta só (as outras linhas ficam `pulou:agrupando`).
+4. Três mensagens seguidas do testador (dentro de 90s) geram uma resposta só: só a primeira dispara o webhook (o GHL ignora as outras enquanto o contato está na espera) e há uma única linha `respondeu`.
 
 Depois, entre os testadores, cobrir o roteiro do spec: dúvida de preço e prazo; mudança de quantidade (valor no card atualiza); pedido de ajuste de arte (card vai para "Alteração" e o briefing aparece); áudio; desconto acima do manual (escala); 600 pares (escala); "quero falar com uma pessoa" (escala); pronto para pagar (escala para a Schay, que encerra como **perdido**, motivo "teste"); vendedor humano entrando no meio (`humano_assumiu`, IA para).
 

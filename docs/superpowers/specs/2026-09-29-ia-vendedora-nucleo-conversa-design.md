@@ -29,9 +29,8 @@ O projeto inteiro é grande demais para um ciclo só. Este documento detalha a *
 ## Fluxo
 
 1. **Quem é da IA.** No fim do bot de intake, um passo de split do workflow sorteia a fatia. Na fatia da IA: tag `ia-atendimento` no contato e campo Vendedor = persona. Fora dela, nada muda. Contato com a tag `ia-teste` (ver "Ambiente de teste") cai sempre na fatia da IA, sem sorteio.
-2. **Gatilho.** Workflow "Cliente respondeu" (WhatsApp) com filtro na tag `ia-atendimento` → espera 90s → webhook `POST /api/ai-seller/respond` com `contactId`, protegido pelo cabeçalho `Authorization: Bearer <AI_SELLER_WEBHOOK_SECRET>`.
+2. **Gatilho.** Workflow "Cliente respondeu" (WhatsApp) com filtro na tag `ia-atendimento` → espera 90s → webhook `POST /api/ai-seller/respond` com `contactId`, protegido pelo cabeçalho `Authorization: Bearer <AI_SELLER_WEBHOOK_SECRET>`. O agrupamento é essa espera: o GHL ignora nova entrada de um contato ainda inscrito no workflow, então as mensagens que chegam durante os 90s não disparam chamada própria e são respondidas pela chamada da primeira. Por isso o endpoint devolve 202 na hora e roda em segundo plano (`after`): se segurasse o webhook enquanto a IA pensa, o contato seguiria inscrito e a mensagem seguinte também seria ignorada.
 3. **Decisão de rodar** (função pura, testável), lendo a conversa pelo `getNegotiationTranscript` existente:
-   - mensagem do cliente mais nova tem menos de 80s → `pulou:agrupando` (a chamada disparada por ela vai responder por todas);
    - já existe mensagem da IA enviada por uma rodada que começou depois da última mensagem do cliente → `pulou:ja_respondido` (resposta de rodada que já rodava quando o cliente escreveu não conta: ela não viu a mensagem);
    - contato sem a tag `ia-atendimento` → `pulou:sem_tag` (defesa contra workflow mal configurado);
    - há mensagem de humano (saída com `userId`, que não é automação nem enviada pela IA) depois da primeira rodada da sessão atual da IA com esse contato → `humano_assumiu` (remove a tag `ia-atendimento`, deixa nota, não responde). Na primeira rodada não há essa checagem: o histórico antigo de um cliente recorrente não cala a IA;
@@ -82,7 +81,7 @@ Uma chamada ao modelo com:
 | `contact_id` | text | |
 | `opportunity_id` | text, nulo | |
 | `triggered_at` | timestamptz | |
-| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:sem_tag`, `pulou:agrupando`, `pulou:ja_respondido`, `pulou:limite`, `pulou:em_andamento`, `pulou:mensagem_nova`, `erro`; `rodando` enquanto a rodada está em andamento (trava) |
+| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:sem_tag`, `pulou:ja_respondido`, `pulou:limite`, `pulou:em_andamento`, `pulou:mensagem_nova`, `erro`; `rodando` enquanto a rodada está em andamento (trava) |
 | `escalation_reason` | text, nulo | |
 | `tool_calls` | jsonb | ferramentas chamadas, entradas e saídas |
 | `sent_message_ids` | text[] | ids devolvidos pelo GHL |

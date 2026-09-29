@@ -12,7 +12,6 @@ export type RunDecision =
   | "escalou"
   | "humano_assumiu"
   | "pulou:sem_tag"
-  | "pulou:agrupando"
   | "pulou:ja_respondido"
   | "pulou:limite"
   /** Outra rodada do mesmo contato está em andamento (trava no banco). */

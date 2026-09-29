@@ -32,11 +32,13 @@ test("sem a tag da IA, pula", () => {
   );
 });
 
-test("mensagem do cliente com menos de 80s espera o agrupamento", () => {
-  assert.deepEqual(decideRun(input({ messages: [msg("c1", "inbound", 30)] })), {
-    kind: "skip",
-    decision: "pulou:agrupando",
-  });
+test("mensagem recente do cliente roda: o agrupamento é a espera do GHL", () => {
+  // O GHL ignora quem tenta reentrar no workflow durante a espera de 90s, então
+  // a mensagem que chegou no meio dela não tem chamada própria: esta responde.
+  assert.deepEqual(
+    decideRun(input({ messages: [msg("c1", "inbound", 90), msg("c2", "inbound", 5)] })),
+    { kind: "run" },
+  );
 });
 
 test("cliente escreveu há 2 minutos e ninguém respondeu: roda", () => {
