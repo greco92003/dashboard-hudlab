@@ -123,8 +123,8 @@ test("duas falhas seguidas do modelo viram erro", async () => {
   assert.match(result.error, /modelo/);
 });
 
-test("modelo sem chamar ferramenta vira erro", async () => {
-  const model = scriptedModel([[]]);
+test("modelo sem chamar ferramenta duas vezes seguidas vira erro", async () => {
+  const model = scriptedModel([[], []]);
   const result = await runAgentLoop({
     initialInput: [],
     callModel: model.fn,
@@ -173,4 +173,86 @@ test("falha em ferramenta sem efeito duplicável é tentada mais uma vez", async
   });
   assert.equal(attempts, 2);
   assert.equal(result.decision, "respondeu");
+});
+
+test("turno sem chamada de ferramenta é tentado mais uma vez", async () => {
+  const model = scriptedModel([[], [call("enviar_mensagens")]]);
+  const exec = executor({ enviar_mensagens: terminalSend });
+  const result = await runAgentLoop({
+    initialInput: [],
+    callModel: model.fn,
+    executeTool: exec.fn,
+    maxSteps: 5,
+  });
+  assert.equal(result.decision, "respondeu");
+  assert.equal(model.inputs.length, 2);
+  assert.deepEqual(result.usage, { input_tokens: 20, output_tokens: 10 });
+});
+
+test("prazo estourado antes de um passo termina em erro sem chamar o modelo de novo", async () => {
+  let clock = 0;
+  const model = scriptedModel([
+    [call("atualizar_orcamento", { pares: 40, cep: null })],
+    [call("enviar_mensagens")],
+  ]);
+  const exec = executor({
+    atualizar_orcamento: async () => {
+      clock = 90_000;
+      return { output: "{}", terminal: false, sentMessageIds: [] };
+    },
+    enviar_mensagens: terminalSend,
+  });
+  const result = await runAgentLoop({
+    initialInput: [],
+    callModel: model.fn,
+    executeTool: exec.fn,
+    maxSteps: 5,
+    deadlineMs: 85_000,
+    now: () => clock,
+  });
+  assert.equal(result.decision, "erro");
+  assert.match(result.error, /tempo esgotado/);
+  assert.equal(model.inputs.length, 1);
+  assert.deepEqual(exec.executed, ["atualizar_orcamento"]);
+});
+
+test("com o prazo estourado, falha do modelo não é repetida", async () => {
+  let clock = 0;
+  const model = scriptedModel([new Error("timeout"), [call("enviar_mensagens")]]);
+  const failing = async (input) => {
+    clock = 90_000;
+    return model.fn(input);
+  };
+  const result = await runAgentLoop({
+    initialInput: [],
+    callModel: failing,
+    executeTool: executor({ enviar_mensagens: terminalSend }).fn,
+    maxSteps: 5,
+    deadlineMs: 85_000,
+    now: () => clock,
+  });
+  assert.equal(result.decision, "erro");
+  assert.match(result.error, /tempo esgotado/);
+  assert.equal(model.inputs.length, 1);
+});
+
+test("decisão terminal pulou:mensagem_nova passa adiante sem erro", async () => {
+  const model = scriptedModel([[call("enviar_mensagens")]]);
+  const exec = executor({
+    enviar_mensagens: async () => ({
+      output: '{"ok":false}',
+      terminal: true,
+      sentMessageIds: [],
+      decision: "pulou:mensagem_nova",
+    }),
+  });
+  const result = await runAgentLoop({
+    initialInput: [],
+    callModel: model.fn,
+    executeTool: exec.fn,
+    maxSteps: 5,
+  });
+  assert.equal(result.decision, "pulou:mensagem_nova");
+  assert.equal(result.error, null);
+  assert.deepEqual(result.sentMessageIds, []);
 });

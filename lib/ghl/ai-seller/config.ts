@@ -11,6 +11,10 @@ export const AI_ESCALATED_TAG = "ia-escalado";
 export const DEBOUNCE_MS = 80_000;
 export const MAX_AI_SENDS_PER_HOUR = 6;
 export const MAX_AGENT_STEPS = 5;
+/** Nenhum passo do loop começa depois disso (desde o início da rodada): sobra tempo para escalar. */
+export const AGENT_DEADLINE_MS = 85_000;
+/** Timeout de cada chamada ao modelo; o loop já repete uma vez. */
+export const MODEL_CALL_TIMEOUT_MS = 30_000;
 export const LARGE_ORDER_PARES = 500;
 export const FREE_SHIPPING_MIN_PARES = 36;
 

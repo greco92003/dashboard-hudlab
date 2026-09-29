@@ -11,7 +11,7 @@ export type CallModel = (input: unknown[]) => Promise<ModelTurn>;
 export type ExecuteTool = (call: FunctionCall) => Promise<ToolExecution>;
 
 export interface LoopResult {
-  decision: "respondeu" | "nao_respondeu" | "escalou" | "erro";
+  decision: NonNullable<ToolExecution["decision"]> | "erro";
   escalationReason: EscalationReason | null;
   sentMessageIds: string[];
   toolCalls: Array<{ name: string; arguments: string; output: string }>;
@@ -28,10 +28,11 @@ const RETRYABLE_TOOLS = new Set([
   "nao_responder",
 ]);
 
-async function retryOnce<T>(fn: () => Promise<T>): Promise<T> {
+async function retryOnce<T>(fn: () => Promise<T>, canRetry: () => boolean = () => true): Promise<T> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    if (!canRetry()) throw err;
     return await fn();
   }
 }
@@ -40,16 +41,23 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+class DeadlineExceeded extends Error {}
+
 export async function runAgentLoop(opts: {
   initialInput: unknown[];
   callModel: CallModel;
   executeTool: ExecuteTool;
   maxSteps: number;
+  /** Instante (em ms, no relógio de `now`) a partir do qual nenhum passo novo começa. */
+  deadlineMs?: number;
+  now?: () => number;
 }): Promise<LoopResult> {
   const input = [...opts.initialInput];
   const toolCalls: LoopResult["toolCalls"] = [];
   const sentMessageIds: string[] = [];
   const usage = { input_tokens: 0, output_tokens: 0 };
+  const now = opts.now ?? Date.now;
+  const withinDeadline = () => opts.deadlineMs == null || now() < opts.deadlineMs;
   const fail = (error: string): LoopResult => ({
     decision: "erro",
     escalationReason: null,
@@ -59,16 +67,28 @@ export async function runAgentLoop(opts: {
     error,
   });
 
-  for (let step = 0; step < opts.maxSteps; step++) {
-    let turn: ModelTurn;
-    try {
-      turn = await retryOnce(() => opts.callModel(input));
-    } catch (err) {
-      return fail(`modelo: ${describe(err)}`);
-    }
+  // Toda chamada ao modelo, inclusive a repetição, só começa dentro do prazo:
+  // o que sobra dele é o tempo de escalar para humano.
+  const callModel = async (): Promise<ModelTurn> => {
+    if (!withinDeadline()) throw new DeadlineExceeded();
+    const turn = await retryOnce(() => opts.callModel(input), withinDeadline);
     if (turn.usage) {
       usage.input_tokens += turn.usage.input_tokens;
       usage.output_tokens += turn.usage.output_tokens;
+    }
+    return turn;
+  };
+
+  for (let step = 0; step < opts.maxSteps; step++) {
+    let turn: ModelTurn;
+    try {
+      turn = await callModel();
+      // Turno só com texto (sem ferramenta) é raro com tool_choice "required";
+      // mais uma tentativa costuma resolver.
+      if (turn.functionCalls.length === 0) turn = await callModel();
+    } catch (err) {
+      if (err instanceof DeadlineExceeded || !withinDeadline()) return fail("tempo esgotado");
+      return fail(`modelo: ${describe(err)}`);
     }
     if (turn.functionCalls.length === 0) {
       return fail("modelo respondeu sem chamar ferramenta");
