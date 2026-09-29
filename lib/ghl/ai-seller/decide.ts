@@ -1,5 +1,5 @@
 import type { NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
-import { DEBOUNCE_MS, MAX_AI_SENDS_PER_HOUR } from "./config";
+import { MAX_AI_SENDS_PER_HOUR } from "./config";
 
 export interface DecideInput {
   now: number;
@@ -18,7 +18,7 @@ export type DecideResult =
   | { kind: "run" }
   | {
       kind: "skip";
-      decision: "pulou:sem_tag" | "pulou:agrupando" | "pulou:ja_respondido";
+      decision: "pulou:sem_tag" | "pulou:ja_respondido";
     }
   | { kind: "human_took_over" }
   | { kind: "limit" };
@@ -62,10 +62,10 @@ export function decideRun(input: DecideInput): DecideResult {
     .find((m) => m.direction === "inbound");
   if (!lastInbound) return { kind: "skip", decision: "pulou:ja_respondido" };
 
+  // Sem espera aqui: o agrupamento é a espera de 90s do workflow do GHL, que
+  // ignora nova entrada do contato enquanto ele está inscrito. A mensagem que
+  // chegou durante a espera não tem chamada própria; esta chamada a responde.
   const lastInboundMs = Date.parse(lastInbound.dateAdded);
-  if (input.now - lastInboundMs < DEBOUNCE_MS) {
-    return { kind: "skip", decision: "pulou:agrupando" };
-  }
 
   // Só conta como resposta a fala de uma rodada que começou depois da última
   // mensagem do cliente: a rodada que já estava rodando quando ela chegou não

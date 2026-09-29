@@ -7,8 +7,6 @@ export const AI_TAG = "ia-atendimento";
 export const AI_TEST_TAG = "ia-teste";
 export const AI_ESCALATED_TAG = "ia-escalado";
 
-/** Mensagem do cliente mais nova que isso: outra chamada, disparada por ela, vai responder. */
-export const DEBOUNCE_MS = 80_000;
 export const MAX_AI_SENDS_PER_HOUR = 6;
 export const MAX_AGENT_STEPS = 5;
 /** Nenhum passo do loop começa depois disso (desde o início da rodada): sobra tempo para escalar. */
