@@ -24,17 +24,21 @@ const CONTACTS_VERSION = "2021-07-28";
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
+/**
+ * `retry` é decisão de quem chama: só chamadas idempotentes repetem em 429/5xx.
+ * O envio de WhatsApp nunca repete (mensagem duplicada para o cliente).
+ */
 async function ghlCall<T>(
   path: string,
   method: Method,
   version: string,
-  body?: unknown,
+  options: { body?: unknown; retry: boolean },
 ): Promise<T> {
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
   if (!token) throw new Error("GHL_PRIVATE_INTEGRATION_TOKEN não configurado");
   const url = new URL(path, GHL_BASE_URL);
-  // POST não se repete: um envio de WhatsApp repetido vira mensagem duplicada.
-  const attempts = method === "POST" ? 1 : 3;
+  const { body } = options;
+  const attempts = options.retry ? 3 : 1;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const response = await fetch(url, {
@@ -69,22 +73,46 @@ export async function sendWhatsAppMessage(
     "/conversations/messages",
     "POST",
     CONVERSATIONS_VERSION,
-    { type: "WhatsApp", contactId, message },
+    { body: { type: "WhatsApp", contactId, message }, retry: false },
   );
   if (!data.messageId) throw new Error("GHL não devolveu messageId no envio");
   return data.messageId;
 }
 
+/** Mensagens de WhatsApp mais recentes da conversa (só id e direção). */
+export async function fetchRecentWhatsAppMessages(
+  conversationId: string,
+  limit = 20,
+): Promise<Array<{ id: string; direction: "inbound" | "outbound" }>> {
+  const data = await ghlCall<{
+    messages?: { messages?: Array<{ id: string; direction: "inbound" | "outbound"; messageType?: string }> };
+  }>(`/conversations/${conversationId}/messages?limit=${limit}`, "GET", CONVERSATIONS_VERSION, {
+    retry: true,
+  });
+  return (data.messages?.messages ?? [])
+    .filter((m) => m.messageType === "TYPE_WHATSAPP")
+    .map((m) => ({ id: m.id, direction: m.direction }));
+}
+
 export async function addContactTags(contactId: string, tags: string[]): Promise<void> {
-  await ghlCall(`/contacts/${contactId}/tags`, "POST", CONTACTS_VERSION, { tags });
+  await ghlCall(`/contacts/${contactId}/tags`, "POST", CONTACTS_VERSION, {
+    body: { tags },
+    retry: true,
+  });
 }
 
 export async function removeContactTags(contactId: string, tags: string[]): Promise<void> {
-  await ghlCall(`/contacts/${contactId}/tags`, "DELETE", CONTACTS_VERSION, { tags });
+  await ghlCall(`/contacts/${contactId}/tags`, "DELETE", CONTACTS_VERSION, {
+    body: { tags },
+    retry: true,
+  });
 }
 
 export async function assignContact(contactId: string, userId: string): Promise<void> {
-  await ghlCall(`/contacts/${contactId}`, "PUT", CONTACTS_VERSION, { assignedTo: userId });
+  await ghlCall(`/contacts/${contactId}`, "PUT", CONTACTS_VERSION, {
+    body: { assignedTo: userId },
+    retry: true,
+  });
 }
 
 /** Cadeia do orçamento: valores gravados, não fórmulas (memória ghl-escrita-via-api). */
@@ -114,20 +142,22 @@ export async function writeBudgetChain(input: {
     ],
   });
 
-  const contactFields: Array<{ id: string; value: number }> = [
+  // Frete desconhecido limpa frete e total ("" esvazia campo numérico): o
+  // valor de um orçamento anterior não pode ficar parecendo o atual.
+  const contactFields: Array<{ id: string; value: number | "" }> = [
     { id: BUDGET_FIELDS.contactPares, value: input.pares },
     { id: BUDGET_FIELDS.contactUnitario, value: input.unitario },
     { id: BUDGET_FIELDS.contactSubtotal, value: input.subtotal },
+    { id: BUDGET_FIELDS.contactFrete, value: input.frete ?? "" },
+    {
+      id: BUDGET_FIELDS.contactTotal,
+      value: input.frete == null ? "" : roundMoney(input.subtotal + input.frete),
+    },
   ];
-  if (input.frete != null) {
-    contactFields.push(
-      { id: BUDGET_FIELDS.contactFrete, value: input.frete },
-      { id: BUDGET_FIELDS.contactTotal, value: roundMoney(input.subtotal + input.frete) },
-    );
-  }
   // Contato usa snake_case (field_value); oportunidade usa camelCase.
   await ghlCall(`/contacts/${input.contactId}`, "PUT", CONTACTS_VERSION, {
-    customFields: contactFields.map((f) => ({ id: f.id, field_value: f.value })),
+    body: { customFields: contactFields.map((f) => ({ id: f.id, field_value: f.value })) },
+    retry: true,
   });
 }
 
