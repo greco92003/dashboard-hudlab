@@ -33,7 +33,8 @@ O projeto inteiro é grande demais para um ciclo só. Este documento detalha a *
 3. **Decisão de rodar** (função pura, testável), lendo a conversa pelo `getNegotiationTranscript` existente:
    - mensagem do cliente mais nova tem menos de 80s → `pulou:agrupando` (a chamada disparada por ela vai responder por todas);
    - já existe mensagem da IA depois da última do cliente → `pulou:ja_respondido`;
-   - há mensagem de humano com data posterior à criação da oportunidade atual → `humano_assumiu` (remove a tag `ia-atendimento`, não responde). A data de corte evita que o histórico antigo de um cliente recorrente cale a IA num lead novo;
+   - contato sem a tag `ia-atendimento` → `pulou:sem_tag` (defesa contra workflow mal configurado);
+   - há mensagem de humano (saída que não é automação nem enviada pela IA) depois da primeira rodada da IA para esse contato → `humano_assumiu` (remove a tag `ia-atendimento`, deixa nota, não responde). Na primeira rodada não há essa checagem: o histórico antigo de um cliente recorrente não cala a IA;
    - limite de 6 mensagens da IA para o contato na última hora atingido → `pulou:limite` e escala;
    - senão → roda o cérebro.
 4. **Cérebro** decide e chama ferramentas (abaixo), em loop de no máximo 5 passos.
@@ -55,11 +56,11 @@ Uma chamada ao modelo com:
 | Ferramenta | Entrada | O que faz |
 |---|---|---|
 | `enviar_mensagens` | 1 a 3 textos | Envia em sequência pela API de conversas do GHL. Encerra a rodada. |
-| `atualizar_orcamento` | quantidade de pares | Calcula o preço unitário **no código** pela tabela de faixas do manual (12–23: 67,90; 24–99: 59,90; 100–499: 54,90; 500–999: 52,90; 1.000+: 49,90) e grava a cadeia do orçamento no GHL (oportunidade e contato, ver memória `ghl-escrita-via-api`). Devolve os valores para a IA citar. O LLM nunca faz conta de preço. |
-| `cotar_frete` | CEP, quantidade de pares | Usa o motor de frete existente (`lib/freight`). Frete grátis a partir de 36 pares é regra do manual, aplicada no código. |
+| `atualizar_orcamento` | quantidade de pares, CEP (opcional) | Calcula o preço unitário no código pela tabela de faixas, o frete pelo motor existente quando há CEP e menos de 36 pares (0 a partir de 36), grava a cadeia do orçamento no GHL e devolve os valores. O LLM nunca faz conta de preço. |
 | `solicitar_ajuste_arte` | resumo do pedido de ajuste | Move a demanda do contato no pipeline "Fábrica de Mockups" para "Alteração". O agente de briefing que já existe (`lib/ghl/mockup-instructions`) escreve para os designers. A IA avisa o cliente do prazo. O workflow de "mockup pronto" envia a nova arte como hoje; a resposta do cliente a ela aciona a IA normalmente. |
 | `escalar_para_humano` | motivo, resumo | Remove `ia-atendimento`, adiciona `ia-escalado`, atribui o contato ao usuário `AI_SELLER_ESCALATION_USER_ID` (padrão: Schay), cria nota interna com motivo e resumo, e envia ao cliente uma mensagem curta de passagem. |
 | `nao_responder` | motivo | Registra que nenhuma resposta cabe (despedida já encerrada, mensagem que não era para a Hud Lab, spam). |
+| `mover_etapa` | etapa ("Atendimento", "Negociação" ou "Prioridade de Fechamento") | Move a oportunidade para frente dentro do pipeline Atendimento: Atendimento na primeira resposta, Negociação quando o cliente discute condições, Prioridade de Fechamento quando diz que quer fechar. Nunca volta etapa e nunca tira a oportunidade da Fábrica de Mockups. |
 
 **Escalonamento obrigatório**:
 
@@ -79,7 +80,7 @@ Uma chamada ao modelo com:
 | `contact_id` | text | |
 | `opportunity_id` | text, nulo | |
 | `triggered_at` | timestamptz | |
-| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:agrupando`, `pulou:ja_respondido`, `pulou:limite`, `erro` |
+| `decision` | text | `respondeu`, `nao_respondeu`, `escalou`, `humano_assumiu`, `pulou:sem_tag`, `pulou:agrupando`, `pulou:ja_respondido`, `pulou:limite`, `erro` |
 | `escalation_reason` | text, nulo | |
 | `tool_calls` | jsonb | ferramentas chamadas, entradas e saídas |
 | `sent_message_ids` | text[] | ids devolvidos pelo GHL |
