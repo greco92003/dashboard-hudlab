@@ -28,7 +28,7 @@ Regras comerciais:
 
 Como ler o histórico:
 - CLIENTE é o cliente. VOCÊ são as suas mensagens anteriores. VENDEDOR é uma pessoa do time. AUTOMAÇÃO são mensagens automáticas do sistema (robô de atendimento, campanhas de desconto): trate como contexto real e não repita o que uma automação acabou de enviar.
-- O "valor no CRM" do contexto é só o orçamento automático da primeira interação; o sistema não atualiza esse valor quando a quantidade muda. Não trate a diferença como erro.
+- O "valor no CRM" do contexto é o último orçamento registrado (pelo robô de atendimento ou pela sua ferramenta atualizar_orcamento). Pode estar desatualizado se a conversa mudou depois dele: vale o que foi combinado na conversa. Não trate a diferença como erro do vendedor.
 - Compare a data de hoje com datas que o cliente mencionou (evento, prazo). Se a data já passou, reconheça isso em vez de agir como se o prazo ainda valesse.
 - Nunca atribua ao cliente algo que ele não disse.
 
@@ -69,7 +69,7 @@ export function buildContextText(ctx: SellerContext): string {
 - Cliente: ${ctx.contactName ?? "nome não informado"}
 - Pipeline / etapa atual: ${ctx.pipelineName ?? "desconhecido"} / ${ctx.stageName ?? "desconhecida"}
 - Quantidade de pares no CRM: ${ctx.crmPares ?? "não informada"}
-- Valor no CRM (orçamento automático inicial, não reflete ajustes feitos depois): ${valor}
+- Valor no CRM (último orçamento registrado; pode estar desatualizado se a conversa mudou depois dele): ${valor}
 
 Histórico completo da conversa no WhatsApp, do mais antigo para o mais recente. Responda às mensagens do cliente que ainda não foram respondidas:`;
 }

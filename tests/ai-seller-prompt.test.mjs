@@ -15,9 +15,11 @@ test("instruções levam persona, escalonamento, regras de preço e o manual", (
   assert.match(text, /pronto_para_pagar/);
   assert.match(text, /Schay/);
   assert.match(text, /MANUAL COMERCIAL HUD LAB/);
+  assert.match(text, /último orçamento registrado/);
+  assert.doesNotMatch(text, /não atualiza esse valor/);
 });
 
-test("contexto traz a data e marca o valor do CRM como orçamento inicial", () => {
+test("contexto traz a data e marca o valor do CRM como último orçamento registrado", () => {
   const text = buildContextText({
     today: "29/09/2026",
     contactName: "Arthur",
@@ -27,7 +29,7 @@ test("contexto traz a data e marca o valor do CRM como orçamento inicial", () =
     crmValor: 2396,
   });
   assert.match(text, /Data de hoje: 29\/09\/2026/);
-  assert.match(text, /orçamento automático inicial/);
+  assert.match(text, /último orçamento registrado/);
   assert.match(text, /R\$ 2396\.00/);
 });
 
