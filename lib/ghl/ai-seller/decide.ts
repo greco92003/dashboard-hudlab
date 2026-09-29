@@ -7,9 +7,11 @@ export interface DecideInput {
   /** Conversa em ordem cronológica, como getNegotiationTranscript devolve. */
   messages: NegotiationMessage[];
   aiSentMessageIds: ReadonlySet<string>;
+  /** Para cada id enviado pela IA, o triggered_at da rodada que o enviou. */
+  aiSentAtRunStart: ReadonlyMap<string, string>;
   aiSendsLastHour: number;
-  /** Primeiro acionamento registrado para o contato; null na primeira vez. */
-  aiFirstRunAt: string | null;
+  /** Primeira rodada da sessão atual da IA com o contato; null se não houver. */
+  aiSessionStartedAt: string | null;
 }
 
 export type DecideResult =
@@ -21,6 +23,12 @@ export type DecideResult =
   | { kind: "human_took_over" }
   | { kind: "limit" };
 
+/**
+ * Humano = saída digitada por alguém do time. Verificado ao vivo em 29/09: o
+ * GHL devolve mensagem enviada pela API com source "app" e userId vazio, e a
+ * do vendedor com userId preenchido. Saída sem userId, que não é automação nem
+ * da IA, é de origem desconhecida e não cala a IA.
+ */
 export function isHumanSellerMessage(
   message: NegotiationMessage,
   aiSentMessageIds: ReadonlySet<string>,
@@ -28,6 +36,7 @@ export function isHumanSellerMessage(
 ): boolean {
   return (
     message.direction === "outbound" &&
+    message.userId != null &&
     !message.isAutomated &&
     !aiSentMessageIds.has(message.id) &&
     Date.parse(message.dateAdded) >= cutoffMs
@@ -37,9 +46,9 @@ export function isHumanSellerMessage(
 export function decideRun(input: DecideInput): DecideResult {
   if (!input.hasAiTag) return { kind: "skip", decision: "pulou:sem_tag" };
 
-  // Sem rodada anterior, o corte é "agora": nada do histórico conta como
-  // humano assumindo (ver "Ajustes em relação ao spec", item 3, no plano).
-  const cutoffMs = input.aiFirstRunAt ? Date.parse(input.aiFirstRunAt) : input.now;
+  // Sem rodada anterior na sessão, o corte é "agora": nada do histórico conta
+  // como humano assumindo (ver "Ajustes em relação ao spec", item 3, no plano).
+  const cutoffMs = input.aiSessionStartedAt ? Date.parse(input.aiSessionStartedAt) : input.now;
   if (
     input.messages.some((m) =>
       isHumanSellerMessage(m, input.aiSentMessageIds, cutoffMs),
@@ -58,13 +67,27 @@ export function decideRun(input: DecideInput): DecideResult {
     return { kind: "skip", decision: "pulou:agrupando" };
   }
 
-  const alreadyAnswered = input.messages.some(
-    (m) =>
-      input.aiSentMessageIds.has(m.id) && Date.parse(m.dateAdded) > lastInboundMs,
-  );
+  // Só conta como resposta a fala de uma rodada que começou depois da última
+  // mensagem do cliente: a rodada que já estava rodando quando ela chegou não
+  // a viu, mesmo que tenha enviado depois.
+  const alreadyAnswered = input.messages.some((m) => {
+    const runStart = input.aiSentAtRunStart.get(m.id);
+    return runStart != null && Date.parse(runStart) > lastInboundMs;
+  });
   if (alreadyAnswered) return { kind: "skip", decision: "pulou:ja_respondido" };
 
   if (input.aiSendsLastHour >= MAX_AI_SENDS_PER_HOUR) return { kind: "limit" };
 
   return { kind: "run" };
+}
+
+/**
+ * Rechecagem logo antes do envio: há mensagem do cliente nas mais recentes da
+ * conversa que não estava no retrato lido no início da rodada?
+ */
+export function hasUnseenInbound(
+  recent: ReadonlyArray<{ id: string; direction: "inbound" | "outbound" }>,
+  seenMessageIds: ReadonlySet<string>,
+): boolean {
+  return recent.some((m) => m.direction === "inbound" && !seenMessageIds.has(m.id));
 }

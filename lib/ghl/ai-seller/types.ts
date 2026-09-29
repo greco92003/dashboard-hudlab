@@ -15,6 +15,12 @@ export type RunDecision =
   | "pulou:agrupando"
   | "pulou:ja_respondido"
   | "pulou:limite"
+  /** Outra rodada do mesmo contato está em andamento (trava no banco). */
+  | "pulou:em_andamento"
+  /** O cliente escreveu de novo antes do envio; a chamada da mensagem nova responde tudo. */
+  | "pulou:mensagem_nova"
+  /** Linha da trava enquanto a rodada roda; a gravação final a substitui. */
+  | "rodando"
   | "erro";
 
 export interface FunctionCall {
@@ -29,7 +35,7 @@ export interface ToolExecution {
   /** true encerra a rodada (enviar_mensagens, nao_responder, escalar_para_humano). */
   terminal: boolean;
   sentMessageIds: string[];
-  decision?: "respondeu" | "nao_respondeu" | "escalou";
+  decision?: "respondeu" | "nao_respondeu" | "escalou" | "pulou:mensagem_nova";
   escalationReason?: EscalationReason;
 }
 
@@ -37,7 +43,7 @@ export interface BudgetWrite {
   pares: number;
   unitario: number;
   subtotal: number;
-  /** null = frete ainda desconhecido (falta CEP); os campos de frete não são tocados. */
+  /** null = frete ainda desconhecido (falta CEP ou sem cotação); frete e total do contato são limpos. */
   frete: number | null;
 }
 
@@ -59,4 +65,6 @@ export interface SellerActions {
   moveStage(
     etapa: AiMovableStage,
   ): Promise<"movido" | "sem_mudanca" | "fora_do_atendimento">;
+  /** true se o cliente mandou mensagem depois do retrato da conversa que a rodada leu. */
+  hasNewClientMessage(): Promise<boolean>;
 }

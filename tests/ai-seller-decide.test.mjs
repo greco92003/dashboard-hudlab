@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideRun } from "../lib/ghl/ai-seller/decide.ts";
+import { decideRun, hasUnseenInbound } from "../lib/ghl/ai-seller/decide.ts";
 
 const NOW = Date.parse("2026-09-29T15:00:00.000Z");
 const at = (secondsAgo) => new Date(NOW - secondsAgo * 1000).toISOString();
@@ -19,8 +19,9 @@ const input = (over = {}) => ({
   hasAiTag: true,
   messages: [],
   aiSentMessageIds: new Set(),
+  aiSentAtRunStart: new Map(),
   aiSendsLastHour: 0,
-  aiFirstRunAt: null,
+  aiSessionStartedAt: null,
   ...over,
 });
 
@@ -50,10 +51,51 @@ test("IA já respondeu depois da última mensagem do cliente", () => {
       input({
         messages: [msg("c1", "inbound", 300), msg("a1", "outbound", 200)],
         aiSentMessageIds: new Set(["a1"]),
-        aiFirstRunAt: at(210),
+        aiSentAtRunStart: new Map([["a1", at(210)]]),
+        aiSessionStartedAt: at(210),
       }),
     ),
     { kind: "skip", decision: "pulou:ja_respondido" },
+  );
+});
+
+test("resposta de rodada que começou antes da mensagem nova do cliente não a responde", () => {
+  // c2 chegou enquanto a rodada de c1 processava; a1 saiu depois de c2, mas
+  // a rodada que o enviou não tinha visto c2.
+  assert.deepEqual(
+    decideRun(
+      input({
+        messages: [
+          msg("c1", "inbound", 400),
+          msg("c2", "inbound", 250),
+          msg("a1", "outbound", 240),
+        ],
+        aiSentMessageIds: new Set(["a1"]),
+        aiSentAtRunStart: new Map([["a1", at(310)]]),
+        aiSessionStartedAt: at(310),
+      }),
+    ),
+    { kind: "run" },
+  );
+});
+
+test("saída sem userId que não é automação nem da IA não conta como humano", () => {
+  // Mensagem enviada pela API (source "app", userId vazio) de outra integração.
+  assert.deepEqual(
+    decideRun(
+      input({
+        messages: [
+          msg("c1", "inbound", 600),
+          msg("a1", "outbound", 500),
+          msg("x1", "outbound", 300, { userId: null }),
+          msg("c2", "inbound", 120),
+        ],
+        aiSentMessageIds: new Set(["a1"]),
+        aiSentAtRunStart: new Map([["a1", at(510)]]),
+        aiSessionStartedAt: at(510),
+      }),
+    ),
+    { kind: "run" },
   );
 });
 
@@ -78,10 +120,11 @@ test("vendedor humano depois da primeira rodada da IA: humano assumiu", () => {
         messages: [
           msg("c1", "inbound", 600),
           msg("a1", "outbound", 500),
-          msg("h1", "outbound", 100),
+          msg("h1", "outbound", 100, { userId: "XdbufXkZKhQ5YeleSeCw" }),
         ],
         aiSentMessageIds: new Set(["a1"]),
-        aiFirstRunAt: at(510),
+        aiSentAtRunStart: new Map([["a1", at(510)]]),
+        aiSessionStartedAt: at(510),
       }),
     ),
     { kind: "human_took_over" },
@@ -92,8 +135,8 @@ test("mensagem humana de antes da IA entrar não cala a IA", () => {
   assert.deepEqual(
     decideRun(
       input({
-        messages: [msg("h0", "outbound", 5000), msg("c1", "inbound", 120)],
-        aiFirstRunAt: at(4000),
+        messages: [msg("h0", "outbound", 5000, { userId: "u1" }), msg("c1", "inbound", 120)],
+        aiSessionStartedAt: at(4000),
       }),
     ),
     { kind: "run" },
@@ -104,8 +147,8 @@ test("primeira rodada não procura humano no histórico", () => {
   assert.deepEqual(
     decideRun(
       input({
-        messages: [msg("h0", "outbound", 3000), msg("c1", "inbound", 120)],
-        aiFirstRunAt: null,
+        messages: [msg("h0", "outbound", 3000, { userId: "u1" }), msg("c1", "inbound", 120)],
+        aiSessionStartedAt: null,
       }),
     ),
     { kind: "run" },
@@ -123,5 +166,17 @@ test("sem mensagem do cliente, nada a responder", () => {
   assert.deepEqual(
     decideRun(input({ messages: [msg("w1", "outbound", 100, { isAutomated: true })] })),
     { kind: "skip", decision: "pulou:ja_respondido" },
+  );
+});
+
+test("rechecagem antes do envio: só mensagem do cliente fora do retrato conta", () => {
+  const seen = new Set(["c1", "a0"]);
+  assert.equal(
+    hasUnseenInbound([{ id: "c1", direction: "inbound" }, { id: "w9", direction: "outbound" }], seen),
+    false,
+  );
+  assert.equal(
+    hasUnseenInbound([{ id: "c1", direction: "inbound" }, { id: "c2", direction: "inbound" }], seen),
+    true,
   );
 });

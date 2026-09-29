@@ -28,6 +28,10 @@ function fakeActions(overrides = {}) {
       calls.push(["moveStage", etapa]);
       return "movido";
     },
+    async hasNewClientMessage() {
+      calls.push(["hasNewClientMessage"]);
+      return false;
+    },
     ...overrides,
   };
   return { actions, calls };
@@ -56,7 +60,7 @@ test("enviar_mensagens envia no máximo 3, ignora vazias e encerra a rodada", as
     call("enviar_mensagens", { mensagens: ["Oi!", "  ", "Tudo bem?", "Três", "Quatro"] }),
     actions,
   );
-  assert.deepEqual(calls[0], ["sendMessages", ["Oi!", "Tudo bem?", "Três"]]);
+  assert.deepEqual(calls.at(-1), ["sendMessages", ["Oi!", "Tudo bem?", "Três"]]);
   assert.equal(result.terminal, true);
   assert.equal(result.decision, "respondeu");
   assert.deepEqual(result.sentMessageIds, ["msg-0", "msg-1", "msg-2"]);
@@ -179,4 +183,26 @@ test("ferramenta desconhecida ou argumento inválido volta como erro para o mode
   assert.ok(JSON.parse(r1.output).erro);
   const r2 = await executeTool({ call_id: "c1", name: "mover_etapa", arguments: "{quebrado" }, actions);
   assert.ok(JSON.parse(r2.output).erro);
+});
+
+test("enviar_mensagens confere mensagem nova do cliente antes de enviar", async () => {
+  const { actions, calls } = fakeActions();
+  await executeTool(call("enviar_mensagens", { mensagens: ["Oi!"] }), actions);
+  assert.deepEqual(
+    calls.map((c) => c[0]),
+    ["hasNewClientMessage", "sendMessages"],
+  );
+});
+
+test("cliente escreveu de novo durante a rodada: não envia e encerra sem erro", async () => {
+  const { actions, calls } = fakeActions({
+    async hasNewClientMessage() {
+      return true;
+    },
+  });
+  const result = await executeTool(call("enviar_mensagens", { mensagens: ["Oi!"] }), actions);
+  assert.equal(calls.some((c) => c[0] === "sendMessages"), false);
+  assert.equal(result.terminal, true);
+  assert.equal(result.decision, "pulou:mensagem_nova");
+  assert.deepEqual(result.sentMessageIds, []);
 });

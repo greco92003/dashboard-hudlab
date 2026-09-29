@@ -142,6 +142,16 @@ export async function executeTool(
         .filter(Boolean)
         .slice(0, 3);
       if (mensagens.length === 0) return erro("nenhuma mensagem com texto");
+      // A resposta foi escrita sem ver a mensagem nova; a chamada disparada
+      // por ela responde tudo junto.
+      if (await actions.hasNewClientMessage()) {
+        return {
+          output: JSON.stringify({ ok: false, motivo: "cliente escreveu de novo" }),
+          terminal: true,
+          sentMessageIds: [],
+          decision: "pulou:mensagem_nova",
+        };
+      }
       const ids = await actions.sendMessages(mensagens);
       return {
         output: JSON.stringify({ ok: true, enviadas: ids.length }),

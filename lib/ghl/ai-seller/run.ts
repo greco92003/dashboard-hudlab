@@ -16,23 +16,27 @@ import {
   getQtyParesForOpportunity,
 } from "@/lib/ghl/negotiation-conversations";
 import { createContactNote } from "@/lib/ghl/mockup-instructions/ghl-client";
+import { isGhlWonDeal } from "@/lib/ghl/pipelines";
 import {
   buildTranscriptParts,
   todayBRDateString,
 } from "@/lib/ghl/sales-agent/agent";
 import {
+  AGENT_DEADLINE_MS,
   AI_ESCALATED_TAG,
   AI_SELLER_MODEL,
   AI_TAG,
   escalationUserId,
   escalationUserName,
   MAX_AGENT_STEPS,
+  MODEL_CALL_TIMEOUT_MS,
   personaName,
 } from "./config";
-import { decideRun } from "./decide";
+import { decideRun, hasUnseenInbound } from "./decide";
 import {
   addContactTags,
   assignContact,
+  fetchRecentWhatsAppMessages,
   moveOpportunityForward,
   moveOpportunityToArtChange,
   quoteFreightForPares,
@@ -42,11 +46,27 @@ import {
 } from "./ghl-actions";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
 import { buildContextText, buildSellerInstructions } from "./prompt";
-import { insertRun, loadAiHistory, type AiSellerRunInsert } from "./runs-store";
+import {
+  acquireRunLock,
+  finishRun,
+  hasRecentEscalation,
+  insertRun,
+  loadAiHistory,
+  type AiSellerRunInsert,
+} from "./runs-store";
 import { executeTool, TOOL_DEFINITIONS } from "./tools";
 import type { EscalationReason, RunDecision, SellerActions } from "./types";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+// Cliente próprio: timeout curto e sem retentativa do SDK (o loop repete uma
+// vez), para a rodada caber no tempo do webhook e ainda sobrar para escalar.
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+  timeout: MODEL_CALL_TIMEOUT_MS,
+  maxRetries: 0,
+});
+
+/** Escalonamento registrado há menos que isso: o fallback não escala de novo. */
+const RECENT_ESCALATION_MS = 10 * 60 * 1000;
 
 export interface RespondResult {
   decision: RunDecision;
@@ -60,14 +80,75 @@ function handoffMessage(): string {
   return `Vou pedir pra ${escalationUserName()} continuar seu atendimento por aqui, tá bom? 😊`;
 }
 
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function findCurrentOpportunity(contactId: string): Promise<GhlOpportunity | null> {
   const opportunities = await searchGhlOpportunitiesByContact(contactId);
-  const open = opportunities.filter((o) => (o.status ?? "open") === "open");
+  const open = opportunities.filter(
+    (o) =>
+      (o.status ?? "open") === "open" &&
+      // Venda fechada (ex.: na Serigrafia) não é negociação da IA.
+      !isGhlWonDeal(o.pipelineId, o.pipelineStageId, o.status, o.monetaryValue),
+  );
   open.sort((a, b) => Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? ""));
   return open[0] ?? null;
 }
 
-function realActions(contactId: string, opportunityId: string): SellerActions {
+interface RunContext {
+  contactId: string;
+  startedAt: number;
+  /** Linha da trava; null se a trava não foi obtida (a gravação vira insert). */
+  runId: string | null;
+}
+
+/**
+ * Gravação final da rodada, com uma segunda tentativa: sem os ids enviados, a
+ * próxima rodada não sabe que a IA já respondeu. Nunca lança.
+ */
+async function saveRun(
+  ctx: RunContext,
+  row: Partial<AiSellerRunInsert> & { decision: RunDecision },
+): Promise<void> {
+  const full: AiSellerRunInsert = {
+    contact_id: ctx.contactId,
+    opportunity_id: null,
+    triggered_at: new Date(ctx.startedAt).toISOString(),
+    escalation_reason: null,
+    tool_calls: [],
+    sent_message_ids: [],
+    model: null,
+    usage: null,
+    error: null,
+    ...row,
+    latency_ms: Date.now() - ctx.startedAt,
+  };
+  const write = () => {
+    if (!ctx.runId) return insertRun(full);
+    const { contact_id: _contact, triggered_at: _triggered, ...update } = full;
+    return finishRun(ctx.runId, update);
+  };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await write();
+      return;
+    } catch (error) {
+      console.error("IA vendedora: falha ao gravar a rodada", {
+        contactId: ctx.contactId,
+        decision: row.decision,
+        attempt,
+        error,
+      });
+    }
+  }
+}
+
+function realActions(
+  contactId: string,
+  opportunityId: string,
+  snapshot?: { conversationId: string | null; seenMessageIds: ReadonlySet<string> },
+): SellerActions {
   const persona = personaName();
   return {
     async sendMessages(messages) {
@@ -108,6 +189,18 @@ function realActions(contactId: string, opportunityId: string): SellerActions {
       return status;
     },
     moveStage: (etapa) => moveOpportunityForward(opportunityId, etapa),
+    async hasNewClientMessage() {
+      if (!snapshot?.conversationId) return false;
+      try {
+        const recent = await fetchRecentWhatsAppMessages(snapshot.conversationId);
+        return hasUnseenInbound(recent, snapshot.seenMessageIds);
+      } catch (err) {
+        // Sem conseguir reler, envia: resposta possivelmente defasada é melhor
+        // que cliente sem resposta, e a rodada da mensagem nova ainda responde.
+        console.error("IA vendedora: falha ao reler a conversa antes do envio", err);
+        return false;
+      }
+    },
   };
 }
 
@@ -129,6 +222,9 @@ function dryRunActions(): SellerActions {
     },
     async moveStage() {
       return "movido";
+    },
+    async hasNewClientMessage() {
+      return false;
     },
   };
 }
@@ -161,65 +257,79 @@ function makeCallModel(instructions: string): CallModel {
 }
 
 /**
- * Ponto de entrada público. "O cliente nunca fica sem resposta em silêncio":
- * qualquer falha lançada por respondToContactUnsafe fora do loop do agente
- * (busca inicial, pipelines, montagem do contexto, ramo humano_assumiu etc.)
- * cai aqui e, em produção, tenta escalar para humano e registrar a rodada
- * como erro em vez de deixar a rota estourar um 500 silencioso.
+ * Ponto de entrada público. Numa rodada real, a primeira coisa é a trava por
+ * contato (uma rodada por vez; a segunda chamada de uma rajada pula) e toda
+ * saída grava o fim na linha da trava.
+ *
+ * "O cliente nunca fica sem resposta em silêncio": falha lançada fora do loop
+ * do agente cai no catch e, se der para confirmar que o contato ainda é da IA
+ * e não foi escalado há pouco, escala para humano; senão só registra o erro.
  */
 export async function respondToContact(
   contactId: string,
   options: { dryRun?: boolean } = {},
 ): Promise<RespondResult> {
   const dryRun = options.dryRun === true;
-  const startedAt = Date.now();
+  const ctx: RunContext = { contactId, startedAt: Date.now(), runId: null };
 
   try {
-    return await respondToContactUnsafe(contactId, dryRun, startedAt);
+    if (!dryRun) {
+      ctx.runId = await acquireRunLock(contactId, ctx.startedAt);
+      if (!ctx.runId) {
+        await saveRun(ctx, { decision: "pulou:em_andamento" });
+        return { decision: "pulou:em_andamento", dryRun, sentMessageIds: [] };
+      }
+    }
+    return await respondToContactUnsafe(ctx, dryRun);
   } catch (err) {
     if (dryRun) throw err;
 
-    const error = err instanceof Error ? err.message : String(err);
+    const error = describe(err);
     console.error("IA vendedora: falha fora do loop do agente", { contactId, error });
 
-    let sentMessageIds: string[] = [];
+    let isStillAi = false;
     try {
-      sentMessageIds = await realActions(contactId, "").escalate({
-        motivo: "falha_tecnica",
-        resumo: error,
-        mensagemCliente: handoffMessage(),
-      });
-    } catch (escalateErr) {
-      console.error("IA vendedora: falha também ao escalar fora do loop", escalateErr);
+      const [contact, recentlyEscalated] = await Promise.all([
+        fetchGhlContactById(contactId),
+        hasRecentEscalation(contactId, Date.now() - RECENT_ESCALATION_MS),
+      ]);
+      isStillAi = (contact.tags ?? []).includes(AI_TAG) && !recentlyEscalated;
+      if (!isStillAi) {
+        console.warn("IA vendedora: fallback não escala (contato fora da IA ou escalado há pouco)", { contactId });
+      }
+    } catch (checkErr) {
+      console.error("IA vendedora: fallback não confirmou que o contato é da IA; não escala", checkErr);
     }
 
-    try {
-      await insertRun({
-        contact_id: contactId,
-        opportunity_id: null,
-        triggered_at: new Date(startedAt).toISOString(),
-        decision: "erro",
-        escalation_reason: "falha_tecnica",
-        tool_calls: [],
-        sent_message_ids: sentMessageIds,
-        model: null,
-        usage: null,
-        latency_ms: Date.now() - startedAt,
-        error,
-      });
-    } catch (insertErr) {
-      console.error("IA vendedora: falha ao gravar a rodada de erro fora do loop", insertErr);
+    let sentMessageIds: string[] = [];
+    if (isStillAi) {
+      try {
+        sentMessageIds = await realActions(contactId, "").escalate({
+          motivo: "falha_tecnica",
+          resumo: error,
+          mensagemCliente: handoffMessage(),
+        });
+      } catch (escalateErr) {
+        console.error("IA vendedora: falha também ao escalar fora do loop", escalateErr);
+      }
     }
+
+    await saveRun(ctx, {
+      decision: "erro",
+      escalation_reason: isStillAi ? "falha_tecnica" : null,
+      sent_message_ids: sentMessageIds,
+      error,
+    });
 
     return { decision: "erro", dryRun: false, sentMessageIds, error };
   }
 }
 
 async function respondToContactUnsafe(
-  contactId: string,
+  ctx: RunContext,
   dryRun: boolean,
-  startedAt: number,
 ): Promise<RespondResult> {
+  const { contactId, startedAt } = ctx;
   const [contact, transcript, history, opportunity] = await Promise.all([
     fetchGhlContactById(contactId),
     getNegotiationTranscript(contactId),
@@ -227,25 +337,9 @@ async function respondToContactUnsafe(
     findCurrentOpportunity(contactId),
   ]);
 
-  const base: Omit<AiSellerRunInsert, "decision"> = {
-    contact_id: contactId,
-    opportunity_id: opportunity?.id ?? null,
-    triggered_at: new Date(startedAt).toISOString(),
-    escalation_reason: null,
-    tool_calls: [],
-    sent_message_ids: [],
-    model: null,
-    usage: null,
-    latency_ms: 0,
-    error: null,
-  };
   const record = async (row: Partial<AiSellerRunInsert> & { decision: RunDecision }) => {
     if (dryRun) return;
-    try {
-      await insertRun({ ...base, ...row, latency_ms: Date.now() - startedAt });
-    } catch (error) {
-      console.error("IA vendedora: falha ao gravar a rodada", { contactId, decision: row.decision, error });
-    }
+    await saveRun(ctx, { opportunity_id: opportunity?.id ?? null, ...row });
   };
 
   if (!dryRun) {
@@ -254,8 +348,9 @@ async function respondToContactUnsafe(
       hasAiTag: (contact.tags ?? []).includes(AI_TAG),
       messages: transcript.messages,
       aiSentMessageIds: history.sentMessageIds,
+      aiSentAtRunStart: history.sentAtRunStart,
       aiSendsLastHour: history.sendsLastHour,
-      aiFirstRunAt: history.firstRunAt,
+      aiSessionStartedAt: history.sessionStartedAt,
     });
 
     if (decision.kind === "skip") {
@@ -263,6 +358,8 @@ async function respondToContactUnsafe(
       return { decision: decision.decision, dryRun, sentMessageIds: [] };
     }
 
+    // Humano = saída com userId (ver isHumanSellerMessage); saída sem userId não
+    // chega aqui, então não há caso de "humano" duvidoso a escalar.
     if (decision.kind === "human_took_over") {
       await removeContactTags(contactId, [AI_TAG]);
       await createContactNote({
@@ -280,15 +377,28 @@ async function respondToContactUnsafe(
         decision.kind === "limit"
           ? "A IA atingiu o limite de mensagens por hora com este contato (proteção contra loop)."
           : "Nenhuma oportunidade aberta encontrada para o contato.";
-      const actions = realActions(contactId, opportunity?.id ?? "");
-      const sent = await actions.escalate({ motivo, resumo, mensagemCliente: handoffMessage() });
+      const finalDecision: RunDecision = decision.kind === "limit" ? "pulou:limite" : "erro";
+      // try próprio: se cair no catch externo, o fallback escalaria de novo.
+      let sent: string[] = [];
+      let escalateError: string | null = null;
+      try {
+        sent = await realActions(contactId, opportunity?.id ?? "").escalate({
+          motivo,
+          resumo,
+          mensagemCliente: handoffMessage(),
+        });
+      } catch (err) {
+        escalateError = `falha ao escalar: ${describe(err)}`;
+        console.error("IA vendedora: falha ao escalar", { contactId, motivo, err });
+      }
+      const errors = [decision.kind === "limit" ? null : resumo, escalateError].filter(Boolean);
       await record({
-        decision: decision.kind === "limit" ? "pulou:limite" : "erro",
+        decision: finalDecision,
         escalation_reason: motivo,
         sent_message_ids: sent,
-        error: decision.kind === "limit" ? null : resumo,
+        error: errors.length ? errors.join(" | ") : null,
       });
-      return { decision: decision.kind === "limit" ? "pulou:limite" : "erro", dryRun, sentMessageIds: sent };
+      return { decision: finalDecision, dryRun, sentMessageIds: sent };
     }
   }
 
@@ -314,7 +424,12 @@ async function respondToContactUnsafe(
     crmValor: opportunity.monetaryValue,
   });
 
-  const actions = dryRun ? dryRunActions() : realActions(contactId, opportunity.id);
+  const actions = dryRun
+    ? dryRunActions()
+    : realActions(contactId, opportunity.id, {
+        conversationId: transcript.conversationId,
+        seenMessageIds: new Set(transcript.messages.map((m) => m.id)),
+      });
   const result = await runAgentLoop({
     initialInput: [
       { role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] },
@@ -324,6 +439,7 @@ async function respondToContactUnsafe(
     ),
     executeTool: (call) => executeTool(call, actions),
     maxSteps: MAX_AGENT_STEPS,
+    deadlineMs: startedAt + AGENT_DEADLINE_MS,
   });
 
   let decision: RunDecision = result.decision;
