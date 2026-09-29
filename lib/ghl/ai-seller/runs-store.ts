@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 import type { EscalationReason, RunDecision } from "./types";
 
 export interface AiHistory {
@@ -14,18 +15,19 @@ export async function loadAiHistory(
   nowMs: number,
 ): Promise<AiHistory> {
   const supabase = await createSupabaseServerForSync();
-  const { data, error } = await supabase
-    .from("ai_seller_runs")
-    .select("triggered_at, sent_message_ids")
-    .eq("contact_id", contactId)
-    .order("triggered_at", { ascending: true })
-    .limit(1000);
-  if (error) throw new Error(`ai_seller_runs: ${error.message}`);
 
-  const rows = (data ?? []) as Array<{
+  const rows = await fetchAllSupabaseRows<{
     triggered_at: string;
     sent_message_ids: string[] | null;
-  }>;
+  }>((from, to) => {
+    return supabase
+      .from("ai_seller_runs")
+      .select("triggered_at, sent_message_ids")
+      .eq("contact_id", contactId)
+      .order("triggered_at", { ascending: true })
+      .range(from, to);
+  }, "ai_seller_runs");
+
   const hourAgo = nowMs - 60 * 60 * 1000;
   const sentMessageIds = new Set<string>();
   let sendsLastHour = 0;
