@@ -28,7 +28,7 @@ O projeto inteiro é grande demais para um ciclo só. Este documento detalha a *
 
 ## Fluxo
 
-1. **Quem é da IA.** No fim do bot de intake, um passo de split do workflow sorteia a fatia. Na fatia da IA: tag `ia-atendimento` no contato e campo Vendedor = persona. Fora dela, nada muda.
+1. **Quem é da IA.** No fim do bot de intake, um passo de split do workflow sorteia a fatia. Na fatia da IA: tag `ia-atendimento` no contato e campo Vendedor = persona. Fora dela, nada muda. Contato com a tag `ia-teste` (ver "Ambiente de teste") cai sempre na fatia da IA, sem sorteio.
 2. **Gatilho.** Workflow "Cliente respondeu" (WhatsApp) com filtro na tag `ia-atendimento` → espera 90s → webhook `POST /api/ai-seller/respond` com `contactId`, protegido pelo cabeçalho `x-ai-seller-secret` (`AI_SELLER_WEBHOOK_SECRET`).
 3. **Decisão de rodar** (função pura, testável), lendo a conversa pelo `getNegotiationTranscript` existente:
    - mensagem do cliente mais nova tem menos de 80s → `pulou:agrupando` (a chamada disparada por ela vai responder por todas);
@@ -98,10 +98,20 @@ Regra: **o cliente nunca fica sem resposta em silêncio.**
 - Falha ao enviar pelo GHL depois de a resposta estar pronta: mesma coisa.
 - Se até o escalonamento falhar, a linha fica com `decision = erro` e o log do Vercel registra — o resumo diário (abaixo) mostra.
 
+## Ambiente de teste
+
+O teste usa o mesmo caminho da produção, só com o sorteio forçado. Não existe versão paralela da IA para teste.
+
+- **Entrada por palavra-chave.** Qualquer pessoa convidada manda a palavra-chave (`LIA TESTE`) no WhatsApp da Hud Lab. Um workflow aplica a tag `ia-teste` e dispara o bot de intake normal: mockup básico, orçamento rápido, Amostra Digital Oficial.
+- **Braço forçado.** No split, `ia-teste` vai sempre para a IA. Enquanto os testes rodam, o split real fica em **0%**: nenhum cliente de verdade é atendido pela IA até a decisão de abrir.
+- **Design de verdade, marcado como teste.** A Amostra Digital Oficial e os pedidos de ajuste chegam à Fábrica de Mockups identificados como TESTE, para o time de design saber que não é venda real. Cada testador custa tempo de designer e espera de até 24h úteis, então o número de testadores simultâneos é pequeno e combinado com o design.
+- **Fechamento com a Schay.** Como no fluxo real desta fatia, "pronto para pagar" escala para a Schay. Com `ia-teste`, ela encerra sem gerar cobrança.
+- **Fora das métricas de negócio, dentro das de qualidade.** Contatos `ia-teste` são excluídos do funil, do BI e dos rankings (senão inflam lead e conversão), mas continuam sendo avaliados pelo Copiloto e pelo Auditor, porque é assim que se mede a qualidade da IA.
+
 ## Testes e rollout
 
 1. **Testes automatizados** das partes puras: decisão de rodar (agrupar, já respondido, humano assumiu, limite), preço por faixa, frete grátis a partir de 36 pares.
-2. **Piloto interno**: tag `ia-atendimento` só em contatos da equipe, conversando pelo WhatsApp de verdade. Roteiro mínimo: dúvida de preço e prazo, mudança de quantidade, pedido de ajuste de arte, áudio, pedido de desconto acima do manual, pedido de 600 pares, "quero falar com uma pessoa", cliente pronto para pagar, vendedor humano entrando no meio.
+2. **Piloto por palavra-chave**, com split real em 0%. Roteiro mínimo que os testadores cobrem entre si: dúvida de preço e prazo, mudança de quantidade, pedido de ajuste de arte, áudio, pedido de desconto acima do manual, pedido de 600 pares, "quero falar com uma pessoa", cliente pronto para pagar, vendedor humano entrando no meio.
 3. **Split em 10%** dos leads novos. Acompanhamento diário pelo Copiloto (já roda a cada 15 min nas negociações abertas) e pelo Auditor (nas resolvidas), mais contagem de `decision` em `ai_seller_runs`. A fatia sobe conforme os números.
 
 ## Fora do escopo desta fatia
@@ -119,4 +129,7 @@ Pontos de API que o plano precisa verificar ao vivo antes de codar, como foi fei
 - corpo exato do envio de mensagem WhatsApp pela API de conversas do GHL e o `source` com que essas mensagens voltam na leitura;
 - como o pipeline "Fábrica de Mockups" liga a demanda de design ao contato (para a IA achar a oportunidade certa a mover);
 - conversão de quantidade de pares em volumes para o motor de frete;
-- se o passo de split do workflow e o filtro por tag cobrem o gatilho como descrito.
+- se o passo de split do workflow e o filtro por tag cobrem o gatilho como descrito;
+- como o workflow da palavra-chave inicia o bot de intake (hoje ele começa pela mensagem padrão "tenho interesse", com código `HL-`);
+- como a demanda de teste aparece para o time de design na Fábrica de Mockups (tag visível no card, prefixo no nome ou nota no briefing);
+- em quais leituras entra o filtro da tag `ia-teste`: `sync-ghl` / `ghl_opportunities`, funil, BI Meta × GHL, rankings de vendedores.
