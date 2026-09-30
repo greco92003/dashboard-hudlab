@@ -87,3 +87,64 @@ export function periodoAnterior(inicio: string, fim: string): { inicio: string; 
   inicioAnterior.setDate(inicioAnterior.getDate() - dias);
   return { inicio: fmt(inicioAnterior), fim: fmt(fimAnterior) };
 }
+
+// Primeiro dia com gasto do Meta e com lead não importado no banco. Antes
+// dele o módulo só tem venda antiga, sem gasto nem lead -- ROAS e variação
+// não fazem sentido, então os períodos começam aqui. Espelha
+// public.meta_inicio_coleta() no banco: se um dia houver backfill anterior,
+// mudar nos dois lugares.
+export const INICIO_COLETA_META = "2026-07-01";
+
+export interface JanelaComparacao {
+  /** Início efetivo do período (recortado no início da coleta). */
+  inicio: string;
+  fim: string;
+  recortadoNaColeta: boolean;
+  /** Parte do período usada na variação: só dias fechados (sem hoje). */
+  atualFechado: { inicio: string; fim: string } | null;
+  /** Período anterior de mesma duração que atualFechado. */
+  anterior: { inicio: string; fim: string } | null;
+  semComparacao: "sem_dia_fechado" | "anterior_antes_da_coleta" | null;
+}
+
+// O TOTAL do período inclui hoje (para bater com o /dashboard), mas a
+// VARIAÇÃO % compara só dias fechados com o período anterior de mesma
+// duração -- senão o dia de hoje, ainda pela metade, puxa toda variação para
+// baixo. Mesma regra de get_resumo_periodo no banco.
+export function janelaComparacao(inicio: string, fim: string): JanelaComparacao {
+  const ini = inicio < INICIO_COLETA_META ? INICIO_COLETA_META : inicio;
+  const ontem = diaAnterior(hojeSaoPaulo());
+  const fimFechado = fim < ontem ? fim : ontem;
+  const base = { inicio: ini, fim, recortadoNaColeta: ini !== inicio };
+
+  if (fimFechado < ini) {
+    return { ...base, atualFechado: null, anterior: null, semComparacao: "sem_dia_fechado" };
+  }
+  const anterior = periodoAnterior(ini, fimFechado);
+  if (anterior.inicio < INICIO_COLETA_META) {
+    return { ...base, atualFechado: null, anterior: null, semComparacao: "anterior_antes_da_coleta" };
+  }
+  return {
+    ...base,
+    atualFechado: { inicio: ini, fim: fimFechado },
+    anterior,
+    semComparacao: null,
+  };
+}
+
+// Frase curta explicando contra o que a variação % está comparando.
+export function textoComparacao(j: JanelaComparacao): string {
+  const coleta = `${fmtDataCurta(INICIO_COLETA_META)}/${INICIO_COLETA_META.slice(0, 4)}`;
+  const recorte = j.recortadoNaColeta
+    ? `Dados desde ${coleta}, início da coleta do Meta. `
+    : "";
+  if (j.semComparacao === "anterior_antes_da_coleta") {
+    return `${recorte}Sem variação: o período anterior começaria antes de ${coleta}, quando ainda não havia dados do Meta.`;
+  }
+  if (j.semComparacao === "sem_dia_fechado") {
+    return `${recorte}Sem variação: o período ainda não tem nenhum dia fechado.`;
+  }
+  const a = j.atualFechado!;
+  const b = j.anterior!;
+  return `${recorte}Variação compara dias fechados: ${fmtDataCurta(a.inicio)}–${fmtDataCurta(a.fim)} vs. ${fmtDataCurta(b.inicio)}–${fmtDataCurta(b.fim)}.`;
+}

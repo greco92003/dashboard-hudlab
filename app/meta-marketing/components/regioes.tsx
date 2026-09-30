@@ -132,6 +132,9 @@ export function Regioes({ refreshKey }: { refreshKey?: number }) {
               Mockup&quot; da Visão Geral (oportunidade que chegou em Amostra
               Digital Enviada) — o UF só é confiável a partir do orçamento,
               então contar por lead bruto por estado ficaria poluído.
+              Faturamento = pedidos pelo mês da venda, só de clientes com
+              estado informado — venda sem estado não aparece aqui, então a
+              soma dos estados fica abaixo do faturamento total.
               Intensidade da célula ={" "}
               {metrica === "roas"
                 ? "ROAS (verde forte = melhor)"

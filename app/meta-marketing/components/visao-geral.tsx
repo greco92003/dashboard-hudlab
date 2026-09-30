@@ -33,10 +33,10 @@ import {
   fmtBrl,
   fmtNum,
   fmtDataCurta,
-  addDias,
   diaAnterior,
   hojeSaoPaulo,
-  periodoAnterior,
+  janelaComparacao,
+  textoComparacao,
   type Periodo,
   type RangeCustom,
   periodoParaDatas,
@@ -49,7 +49,13 @@ interface Kpis {
   leads: number;
   vendas: number;
   faturamento: number;
+  // ROAS geral = faturamento de todas as fontes ÷ gasto do Meta.
   roas: number | null;
+  // Só o atribuído a anúncio/campanha do Meta (inclui bio com campanha de
+  // origem) -- é a soma do faturamento da aba Anúncios.
+  faturamento_meta: number;
+  vendas_meta: number;
+  roas_meta: number | null;
   cpa_pedido: number | null;
   cpl: number | null;
   ctr: number | null;
@@ -104,7 +110,13 @@ interface VendaSemParesRow {
   first_name: string | null;
   last_name: string | null;
   monetary_value: number;
-  venda_em: string;
+  dia_venda: string;
+}
+
+interface SerieDiaRow {
+  dia: string;
+  investimento: number;
+  faturamento: number;
 }
 
 interface SeriePonto {
@@ -163,30 +175,21 @@ export function VisaoGeral({
   const [fontes, setFontes] = useState<FonteRow[]>([]);
   const [topCampanhas, setTopCampanhas] = useState<CampanhaRow[]>([]);
   const [saudePct, setSaudePct] = useState<number | null>(null);
-  const [metaDiario, setMetaDiario] = useState<{ date: string; spend: number }[]>([]);
-  const [vendasDiario, setVendasDiario] = useState<{ venda_em: string; monetary_value: number }[]>([]);
-  const [metaAnteriorDiario, setMetaAnteriorDiario] = useState<{ date: string; spend: number }[]>([]);
-  const [vendasAnteriorDiario, setVendasAnteriorDiario] = useState<
-    { venda_em: string; monetary_value: number }[]
-  >([]);
+  const [serieAtual, setSerieAtual] = useState<SerieDiaRow[]>([]);
+  const [serieAnterior, setSerieAnterior] = useState<SerieDiaRow[]>([]);
   const [pipelineNomes, setPipelineNomes] = useState<Map<string, string>>(new Map());
   const [vendasSemPares, setVendasSemPares] = useState<VendaSemParesRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Gráfico Investimento vs Faturamento: sempre diário, respeita o
-  // período selecionado, exclui hoje (sempre parcial) e compara com o
-  // período imediatamente anterior de mesma duração (mesmo nº de dias).
-  const { inicio, fim } = periodoParaDatas(periodo, customRange);
-  // Só exclui o último dia quando ele é "hoje" (sempre parcial) -- um
-  // período personalizado terminando num dia passado já é dado completo.
+  const selecionado = periodoParaDatas(periodo, customRange);
+  // Início recortado na coleta do Meta; a variação compara só dias fechados
+  // com o período anterior de mesma duração (ver janelaComparacao).
+  const janela = janelaComparacao(selecionado.inicio, selecionado.fim);
+  const { inicio, fim } = janela;
+  // Gráfico diário: sempre exclui hoje (parcial). Um período personalizado
+  // que termina num dia passado já é dado completo.
   const realFim = fim === hojeSaoPaulo() ? diaAnterior(fim) : fim;
-  const anterior = periodoAnterior(inicio, realFim);
-  // Comparativo do funil de etapas usa o mesmo critério de "período
-  // anterior" do resto do módulo (get_resumo_periodo/get_funnel_por_anuncio):
-  // fim original, sem excluir hoje -- diferente do `anterior` acima, que é
-  // só pro alinhamento do gráfico diário.
-  const anteriorFunil = periodoAnterior(inicio, fim);
 
   useEffect(() => {
     const supabase = createClient();
@@ -194,36 +197,30 @@ export function VisaoGeral({
     setLoading(true);
     setErro(null);
 
+    const vazio = Promise.resolve({ data: [] as unknown[], error: null });
+    const { atualFechado, anterior } = janela;
+    // A variação do funil usa a parte fechada do período; quando o período
+    // já terminou, é o próprio período e não precisa de outra consulta.
+    const precisaFunilFechado = atualFechado != null && atualFechado.fim !== fim;
+
     (async () => {
-      const [rpc, meta, vendas, metaAnt, vendasAnt, funilQ, funilAntQ, fonteQ, funnelAds, saude, pipes, semPares] =
+      const [rpc, serieQ, serieAntQ, funilQ, funilFechadoQ, funilAntQ, fonteQ, funnelAds, saude, pipes, semPares] =
         await Promise.all([
           supabase.rpc("get_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
-          supabase
-            .from("meta_insights_daily")
-            .select("date, spend")
-            .gte("date", inicio)
-            .lte("date", realFim),
-          supabase
-            .from("v_vendas")
-            .select("venda_em, monetary_value")
-            .gte("venda_em", `${inicio}T00:00:00`)
-            .lte("venda_em", `${realFim}T23:59:59`),
-          supabase
-            .from("meta_insights_daily")
-            .select("date, spend")
-            .gte("date", anterior.inicio)
-            .lte("date", anterior.fim),
-          supabase
-            .from("v_vendas")
-            .select("venda_em, monetary_value")
-            .gte("venda_em", `${anterior.inicio}T00:00:00`)
-            .lte("venda_em", `${anterior.fim}T23:59:59`),
+          // Somado por dia no banco: ler meta_insights_daily cru esbarrava no
+          // limite de 1.000 linhas do PostgREST (chegavam 11 de 30 dias).
+          supabase.rpc("get_serie_diaria", { p_inicio: inicio, p_fim: realFim }),
+          anterior
+            ? supabase.rpc("get_serie_diaria", { p_inicio: anterior.inicio, p_fim: anterior.fim })
+            : vazio,
           supabase.rpc("get_funil_etapas", { p_inicio: inicio, p_fim: fim }),
-          supabase.rpc("get_funil_etapas", {
-            p_inicio: anteriorFunil.inicio,
-            p_fim: anteriorFunil.fim,
-          }),
-          supabase.from("v_desempenho_fonte").select("*"),
+          precisaFunilFechado
+            ? supabase.rpc("get_funil_etapas", { p_inicio: atualFechado!.inicio, p_fim: atualFechado!.fim })
+            : vazio,
+          anterior
+            ? supabase.rpc("get_funil_etapas", { p_inicio: anterior.inicio, p_fim: anterior.fim })
+            : vazio,
+          supabase.rpc("get_desempenho_fonte", { p_inicio: inicio, p_fim: fim }),
           supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
           supabase
             .from("v_atribuicao_saude")
@@ -235,11 +232,12 @@ export function VisaoGeral({
             .select("pipeline_id, pipeline_name")
             .not("pipeline_name", "is", null)
             .limit(500),
+          // Mesma base e mesmo período do contador "vendas sem pares" do card.
           supabase
             .from("v_vendas_sem_pares")
             .select("*")
-            .gte("venda_em", `${inicio}T00:00:00`)
-            .lte("venda_em", `${realFim}T23:59:59`),
+            .gte("dia_venda", inicio)
+            .lte("dia_venda", fim),
         ]);
       if (cancel) return;
 
@@ -249,14 +247,8 @@ export function VisaoGeral({
         return;
       }
       setResumo(rpc.data as Resumo);
-      setMetaDiario(meta.data ?? []);
-      setVendasDiario(
-        (vendas.data ?? []).filter((v) => v.venda_em) as { venda_em: string; monetary_value: number }[]
-      );
-      setMetaAnteriorDiario(metaAnt.data ?? []);
-      setVendasAnteriorDiario(
-        (vendasAnt.data ?? []).filter((v) => v.venda_em) as { venda_em: string; monetary_value: number }[]
-      );
+      setSerieAtual((serieQ.data as SerieDiaRow[]) ?? []);
+      setSerieAnterior((serieAntQ.data as SerieDiaRow[]) ?? []);
       setPipelineNomes(
         new Map(
           (pipes.data ?? []).map((p) => [p.pipeline_id as string, p.pipeline_name as string])
@@ -264,17 +256,23 @@ export function VisaoGeral({
       );
       setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);
 
+      const chave = (r: FunilRow) => `${r.pipeline_id}:${r.stage_name}`;
+      const funilFechado = (precisaFunilFechado ? funilFechadoQ.data : funilQ.data) as FunilRow[] | null;
+      const porEtapaFechada = new Map((funilFechado ?? []).map((r) => [chave(r), r]));
       const porEtapaAnterior = new Map(
-        ((funilAntQ.data as FunilRow[]) ?? []).map((r) => [`${r.pipeline_id}:${r.stage_name}`, r])
+        ((funilAntQ.data as FunilRow[]) ?? []).map((r) => [chave(r), r])
       );
+      // Quantidade exibida = período inteiro (inclui hoje); variação = dias
+      // fechados vs. período anterior de mesma duração.
       const funilMerged = ((funilQ.data as FunilRow[]) ?? []).map((r) => {
-        const ant = porEtapaAnterior.get(`${r.pipeline_id}:${r.stage_name}`);
+        const fechada = porEtapaFechada.get(chave(r));
+        const ant = porEtapaAnterior.get(chave(r));
         const variacao: FunilRow["variacao"] = {};
-        if (ant) {
-          const vq = calcVariacao(Number(r.qtd) || 0, Number(ant.qtd) || 0);
+        if (fechada && ant) {
+          const vq = calcVariacao(Number(fechada.qtd) || 0, Number(ant.qtd) || 0);
           if (vq !== undefined) variacao.qtd = vq;
-          if (r.custo_por_oportunidade != null && ant.custo_por_oportunidade != null) {
-            const vc = calcVariacao(r.custo_por_oportunidade, ant.custo_por_oportunidade);
+          if (fechada.custo_por_oportunidade != null && ant.custo_por_oportunidade != null) {
+            const vc = calcVariacao(fechada.custo_por_oportunidade, ant.custo_por_oportunidade);
             if (vc !== undefined) variacao.custo_por_oportunidade = vc;
           }
         }
@@ -379,18 +377,26 @@ export function VisaoGeral({
       ],
     },
     {
+      // Faturamento de todas as fontes (bate com o /dashboard). "Do Meta" e
+      // "ROAS Meta" isolam o que veio de anúncio ou campanha do Meta; o ROAS
+      // geral divide TUDO pelo gasto do Meta.
       key: "faturamento",
       label: "Faturamento",
       valor: fmtBrl(a.faturamento),
       extras: [
-        { key: "roas", label: "ROAS", valor: nd(a.roas, (n) => `${n.toLocaleString("pt-BR")}x`) },
+        { key: "faturamento_meta", label: "Do Meta", valor: fmtBrl(a.faturamento_meta) },
+        { key: "roas_meta", label: "ROAS Meta", valor: nd(a.roas_meta, (n) => `${n.toLocaleString("pt-BR")}x`) },
+        { key: "roas", label: "ROAS geral", valor: nd(a.roas, (n) => `${n.toLocaleString("pt-BR")}x`) },
       ],
     },
     {
       key: "vendas",
       label: "Vendas (pedidos)",
       valor: fmtNum(a.vendas),
-      extras: [{ key: "cpa_pedido", label: "CAC/pedido", valor: nd(a.cpa_pedido, fmtBrl) }],
+      extras: [
+        { key: "vendas_meta", label: "Do Meta", valor: fmtNum(a.vendas_meta) },
+        { key: "cpa_pedido", label: "CAC/pedido", valor: nd(a.cpa_pedido, fmtBrl) },
+      ],
     },
     {
       key: "pares_vendidos",
@@ -410,47 +416,18 @@ export function VisaoGeral({
   // quantidade de pares" abaixo).
   const temVendasSemPares = (a.vendas_sem_pares ?? 0) > 0;
 
-  // Série diária investimento vs faturamento, alinhada por posição
-  // (dia 0, 1, 2...) entre o período selecionado (excluindo hoje,
-  // sempre parcial) e o período anterior de mesma duração — permite
-  // sobrepor as duas linhas mesmo com datas de calendário diferentes.
-  const investimentoPorDia = new Map<string, number>();
-  const faturamentoPorDia = new Map<string, number>();
-  const investimentoAnteriorPorDia = new Map<string, number>();
-  const faturamentoAnteriorPorDia = new Map<string, number>();
-  for (const r of metaDiario) {
-    investimentoPorDia.set(r.date, (investimentoPorDia.get(r.date) ?? 0) + (Number(r.spend) || 0));
-  }
-  for (const vd of vendasDiario) {
-    const d = vd.venda_em.slice(0, 10);
-    faturamentoPorDia.set(d, (faturamentoPorDia.get(d) ?? 0) + (Number(vd.monetary_value) || 0));
-  }
-  for (const r of metaAnteriorDiario) {
-    investimentoAnteriorPorDia.set(
-      r.date,
-      (investimentoAnteriorPorDia.get(r.date) ?? 0) + (Number(r.spend) || 0)
-    );
-  }
-  for (const vd of vendasAnteriorDiario) {
-    const d = vd.venda_em.slice(0, 10);
-    faturamentoAnteriorPorDia.set(d, (faturamentoAnteriorPorDia.get(d) ?? 0) + (Number(vd.monetary_value) || 0));
-  }
-  const diasTotal =
-    Math.round(
-      (new Date(`${realFim}T12:00:00`).getTime() - new Date(`${inicio}T12:00:00`).getTime()) /
-        86400000
-    ) + 1;
-  const serie: SeriePonto[] = Array.from({ length: Math.max(diasTotal, 0) }, (_, offset) => {
-    const dataAtual = addDias(inicio, offset);
-    const dataAnterior = addDias(anterior.inicio, offset);
-    return {
-      bucket: dataAtual,
-      investimento: investimentoPorDia.get(dataAtual) ?? 0,
-      faturamento: faturamentoPorDia.get(dataAtual) ?? 0,
-      investimentoAnterior: investimentoAnteriorPorDia.get(dataAnterior) ?? 0,
-      faturamentoAnterior: faturamentoAnteriorPorDia.get(dataAnterior) ?? 0,
-    };
-  });
+  // Série diária investimento vs faturamento (já somada por dia no banco),
+  // alinhada por posição (dia 0, 1, 2...) com o período anterior de mesma
+  // duração -- permite sobrepor as linhas mesmo com datas diferentes. Sem
+  // período comparável, as linhas tracejadas não aparecem.
+  const temAnterior = serieAnterior.length > 0;
+  const serie: SeriePonto[] = serieAtual.map((d, i) => ({
+    bucket: d.dia,
+    investimento: Number(d.investimento) || 0,
+    faturamento: Number(d.faturamento) || 0,
+    investimentoAnterior: Number(serieAnterior[i]?.investimento) || 0,
+    faturamentoAnterior: Number(serieAnterior[i]?.faturamento) || 0,
+  }));
 
   const maxFunil = Math.max(1, ...funil.map((f) => f.qtd));
   const maxCusto = Math.max(1, ...funil.map((c) => c.custo_por_oportunidade ?? 0));
@@ -482,6 +459,9 @@ export function VisaoGeral({
           semana com UTM — detalhes na aba Saúde da Atribuição
         </div>
       )}
+
+      {/* Contra o que a variação % compara (e recorte no início da coleta) */}
+      <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
 
       {/* KPIs com variação vs período anterior */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
@@ -577,7 +557,8 @@ export function VisaoGeral({
             <CardDescription>
               Diário, sempre excluindo hoje (dado parcial) · linhas
               tracejadas = período anterior de mesma duração, alinhado por
-              dia · Faturamento = oportunidades marcadas como ganhas (won)
+              dia (só quando já havia dados do Meta nele) · Faturamento =
+              pedidos ganhos pelo dia da venda, todas as fontes
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -617,26 +598,30 @@ export function VisaoGeral({
                       strokeWidth={2}
                       dot={false}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="investimentoAnterior"
-                      name="Investimento (período anterior)"
-                      stroke="#f59e0b"
-                      strokeOpacity={0.45}
-                      strokeDasharray="4 4"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="faturamentoAnterior"
-                      name="Faturamento (período anterior)"
-                      stroke="#10b981"
-                      strokeOpacity={0.45}
-                      strokeDasharray="4 4"
-                      strokeWidth={2}
-                      dot={false}
-                    />
+                    {temAnterior && (
+                      <Line
+                        type="monotone"
+                        dataKey="investimentoAnterior"
+                        name="Investimento (período anterior)"
+                        stroke="#f59e0b"
+                        strokeOpacity={0.45}
+                        strokeDasharray="4 4"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
+                    {temAnterior && (
+                      <Line
+                        type="monotone"
+                        dataKey="faturamentoAnterior"
+                        name="Faturamento (período anterior)"
+                        stroke="#10b981"
+                        strokeOpacity={0.45}
+                        strokeDasharray="4 4"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -649,8 +634,10 @@ export function VisaoGeral({
           <CardHeader>
             <CardTitle>Performance por fonte</CardTitle>
             <CardDescription>
-              Investimento hoje só é conhecido para Meta Ads — demais fontes
-              exibem N/D
+              No período selecionado; as somas fecham com os cards acima.
+              Investimento só é conhecido para Meta Ads. Meta Ads inclui
+              quem chegou pela bio com a campanha de origem; Base antiga são
+              clientes do CRM anterior comprando de novo.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -708,8 +695,9 @@ export function VisaoGeral({
           <CardHeader>
             <CardTitle>Top 5 campanhas por ROAS</CardTitle>
             <CardDescription>
-              Agregado de todos os anúncios da campanha — detalhes na aba
-              Anúncios
+              Agregado de todos os anúncios da campanha, mais as vendas via
+              bio atribuídas a ela. Faturamento = pedidos fechados no período,
+              mesmo de lead anterior — detalhes na aba Anúncios
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -784,7 +772,7 @@ export function VisaoGeral({
                         </TableCell>
                         <TableCell className="text-right">{fmtBrl(r.monetary_value)}</TableCell>
                         <TableCell className="text-right whitespace-nowrap">
-                          {new Date(r.venda_em).toLocaleDateString("pt-BR")}
+                          {new Date(`${r.dia_venda}T12:00:00`).toLocaleDateString("pt-BR")}
                         </TableCell>
                       </TableRow>
                     ))}
