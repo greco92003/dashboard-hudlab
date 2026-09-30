@@ -8,10 +8,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import Calendar23 from "@/components/calendar-23";
-import { DateRange } from "react-day-picker";
 import { Label } from "@/components/ui/label";
-import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  getLiveDashboardPeriod,
+  limitesDosFechamentos,
+  mesesRecentes,
+  rotuloDoFechamento,
+  type MesAno,
+} from "@/lib/live-dashboard-period";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
@@ -52,23 +63,14 @@ export default function SellersPage() {
   const [totalValue, setTotalValue] = useState(0);
   const [topSellers, setTopSellers] = useState<SellerStats[]>([]);
 
-  // Use global date range hook
-  const {
-    dateRange,
-    period,
-    useCustomPeriod,
-    isHydrated,
-    handleDateRangeChange,
-    handlePeriodChange,
-  } = useGlobalDateRange();
-
-  // Helper function to format date as local YYYY-MM-DD without timezone conversion
-  const formatDateToLocal = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
+  // A comissão dos vendedores sai desta página: o período é sempre um mês de
+  // fechamento (dia 02 ao dia 01 do mês seguinte), o mesmo ciclo do Live
+  // Dashboard. Abre no fechamento em curso -- no dia 01 ainda é o anterior.
+  const [mes, setMes] = useState<MesAno>(() => {
+    const ciclo = getLiveDashboardPeriod();
+    return { month: ciclo.monthIndex + 1, year: ciclo.year };
+  });
+  const opcoesDeMes = mesesRecentes(12);
 
   // Função para converter string ISO para Date
   const parseISODate = (isoString: string): Date => {
@@ -252,32 +254,18 @@ export default function SellersPage() {
     },
   ];
 
-  // Fetch deals data based on the selected period or custom date range using cached data
+  // Fetch the won deals of one monthly closing (day 02 to day 01)
   const fetchDeals = useCallback(
-    async (selectedPeriod?: number, customDateRange?: DateRange) => {
+    async (mesFechamento: MesAno) => {
       setLoading(true);
       try {
         // Sellers uses the same unified GHL cache/shape as /deals, but only
         // requests completed sales. The API also recognizes completed sales
         // currently in the operational Mockup Factory pipeline as `won`.
         const params = new URLSearchParams({ status: "won" });
-
-        if (customDateRange?.from && customDateRange?.to) {
-          // Use custom date range - format as local date to avoid timezone issues
-          const startDate = formatDateToLocal(customDateRange.from);
-          const endDate = formatDateToLocal(customDateRange.to);
-          console.log("Sellers: Custom date range selected:", {
-            originalFrom: customDateRange.from,
-            originalTo: customDateRange.to,
-            formattedStart: startDate,
-            formattedEnd: endDate,
-          });
-          params.set("startDate", startDate);
-          params.set("endDate", endDate);
-        } else if (selectedPeriod) {
-          // Use period-based filtering
-          params.set("period", String(selectedPeriod));
-        }
+        const { inicio, fim } = limitesDosFechamentos(mesFechamento, mesFechamento);
+        params.set("startDate", inicio);
+        params.set("endDate", fim);
 
         // Force fresh data - bypass all caches (Service Worker, HTTP cache, etc.)
         params.set("_t", String(Date.now()));
@@ -360,49 +348,14 @@ export default function SellersPage() {
     [],
   );
 
-  // Handle period change (local function to maintain state)
-  const handlePeriodChangeLocal = (newPeriod: number) => {
-    handlePeriodChange(newPeriod);
-  };
-
-  // Handle date range change (local function to maintain state)
-  const handleDateRangeChangeLocal = (range: DateRange | undefined) => {
-    handleDateRangeChange(range);
-  };
-
   useEffect(() => {
-    const initializeData = async () => {
-      // Only fetch data after hydration is complete
-      if (!isHydrated) {
-        console.log("⏳ Sellers: Waiting for hydration...");
-        return;
-      }
-
-      console.log("✅ Sellers: Hydrated, fetching data...", {
-        useCustomPeriod,
-        period,
-        dateRange,
-      });
-
-      if (!useCustomPeriod) {
-        await fetchDeals(period);
-      } else {
-        await fetchDeals(period, dateRange);
-      }
-    };
-
-    initializeData();
-  }, [period, useCustomPeriod, dateRange, fetchDeals, isHydrated]);
+    fetchDeals(mes);
+  }, [mes, fetchDeals]);
 
   // Function to refresh sellers data
   const refreshSellersData = useCallback(() => {
-    console.log("🔄 Sellers: Refreshing data after sync...");
-    if (useCustomPeriod && dateRange?.from && dateRange?.to) {
-      fetchDeals(undefined, dateRange);
-    } else {
-      fetchDeals(period);
-    }
-  }, [useCustomPeriod, dateRange, period, fetchDeals]);
+    fetchDeals(mes);
+  }, [mes, fetchDeals]);
 
   // Register this page for automatic refresh after sync
   useDataRefresh("sellers", refreshSellersData);
@@ -415,43 +368,29 @@ export default function SellersPage() {
       <BusinessDaysCalculator />
 
       <div className="flex flex-col gap-4 mb-4 mt-2">
-        {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-          <Button
-            variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(30)}
-            className="w-full sm:w-auto"
-          >
-            Último mês
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(60)}
-            className="w-full sm:w-auto"
-          >
-            Últimos 2 meses
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(90)}
-            className="w-full sm:w-auto"
-          >
-            Últimos 3 meses
-          </Button>
-        </div>
-
-        {/* Calendar Section - Stack on mobile */}
+        {/* Mês de fechamento (dia 02 ao dia 01) -- base da comissão */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <Label className="text-sm sm:text-base whitespace-nowrap">
-            Selecione o período desejado:
+            Mês de fechamento:
           </Label>
-          <div className="w-full sm:min-w-[250px] sm:w-auto">
-            <Calendar23
-              value={dateRange}
-              onChange={handleDateRangeChangeLocal}
-              hideLabel
-            />
-          </div>
+          <Select
+            value={`${mes.year}-${mes.month}`}
+            onValueChange={(v) => {
+              const [year, month] = v.split("-").map(Number);
+              setMes({ month, year });
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {opcoesDeMes.map((m) => (
+                <SelectItem key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+                  {rotuloDoFechamento(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
