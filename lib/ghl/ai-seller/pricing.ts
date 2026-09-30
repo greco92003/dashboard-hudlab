@@ -6,8 +6,8 @@ const PRICE_TIERS = [
   { min: 1000, unit: 49.9 },
   { min: 500, unit: 52.9 },
   { min: 100, unit: 54.9 },
-  { min: 24, unit: 59.9 },
-  { min: 12, unit: 67.9 },
+  { min: 24, unit: 57.9 },
+  { min: 12, unit: 59.9 },
 ] as const;
 
 export const MIN_PARES = 12;

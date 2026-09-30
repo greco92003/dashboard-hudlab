@@ -79,10 +79,10 @@ test("atualizar_orcamento com 40 pares: frete grátis, sem cotar", async () => {
   assert.equal(calls.some(([name]) => name === "quoteFreight"), false);
   assert.deepEqual(calls[0], [
     "writeBudget",
-    { pares: 40, unitario: 59.9, subtotal: 2396, frete: 0 },
+    { pares: 40, unitario: 57.9, subtotal: 2316, frete: 0 },
   ]);
   const output = JSON.parse(result.output);
-  assert.equal(output.total, 2396);
+  assert.equal(output.total, 2316);
   assert.equal(output.frete_gratis, true);
   assert.equal(result.terminal, false);
 });
@@ -93,12 +93,12 @@ test("atualizar_orcamento com 12 pares e CEP cota o frete sobre o subtotal", asy
     call("atualizar_orcamento", { pares: 12, cep: "03911-040" }),
     actions,
   );
-  assert.deepEqual(calls[0], ["quoteFreight", { cep: "03911-040", pares: 12, valorNf: 814.8 }]);
+  assert.deepEqual(calls[0], ["quoteFreight", { cep: "03911-040", pares: 12, valorNf: 718.8 }]);
   assert.deepEqual(calls[1], [
     "writeBudget",
-    { pares: 12, unitario: 67.9, subtotal: 814.8, frete: 153 },
+    { pares: 12, unitario: 59.9, subtotal: 718.8, frete: 153 },
   ]);
-  assert.equal(JSON.parse(result.output).total, 967.8);
+  assert.equal(JSON.parse(result.output).total, 871.8);
 });
 
 test("atualizar_orcamento sem CEP abaixo de 36 pares deixa o frete em aberto", async () => {
@@ -106,7 +106,7 @@ test("atualizar_orcamento sem CEP abaixo de 36 pares deixa o frete em aberto", a
   const result = await executeTool(call("atualizar_orcamento", { pares: 20, cep: null }), actions);
   assert.deepEqual(calls[0], [
     "writeBudget",
-    { pares: 20, unitario: 67.9, subtotal: 1358, frete: null },
+    { pares: 20, unitario: 59.9, subtotal: 1198, frete: null },
   ]);
   assert.equal(JSON.parse(result.output).total, null);
 });
