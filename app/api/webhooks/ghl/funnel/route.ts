@@ -1,7 +1,9 @@
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
-import { timingSafeEqual } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getGhlDeal } from "@/lib/ghl/api";
+import { upsertGhlDeals } from "@/lib/ghl/deals-cache";
 import {
   GHL_FUNNEL_STAGES,
   normalizeGhlFunnelStage,
@@ -112,27 +114,38 @@ function parseDate(value: unknown): string | null {
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
-// Faturamento/Vendas (Visão Geral) vêm 100% do dado VIVO da oportunidade
-// via sync-ghl, nunca do payload congelado do webhook (ver lição de
-// 2026-07-23: valor pode ser corrigido depois do webhook original) --
-// então o webhook sozinho não pode atualizar o número. Mas sync-ghl só
-// roda 1x/dia via cron + quando alguém clica "Atualizar", então um
-// negócio marcado como ganho no meio do dia só aparecia no dashboard
-// no dia seguinte (ou se alguém lembrasse de clicar). Fix pedido pelo
-// usuário em 2026-08-12: usar o próprio webhook de "negócio fechado"
-// como GATILHO de um sync imediato -- dispara sem esperar a resposta
-// (não pode atrasar o 201 que devolvemos pro GHL) e não falha o
-// webhook se o sync falhar (é só uma tentativa de atualização mais
-// rápida, o cron diário continua sendo a rede de segurança).
-function dispararSyncGhl() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) return;
-  fetch(`${supabaseUrl}/functions/v1/sync-ghl`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  }).catch((err) => {
-    console.error("[GHL Funnel] Falha ao disparar sync-ghl após negociofechado", err);
+// Consulta o estado atual da oportunidade para não congelar no cache o valor
+// enviado pelo workflow. after mantém a função viva após a resposta ao GHL.
+function dispararSyncGhl(opportunityId: string | null) {
+  after(async () => {
+    try {
+      if (opportunityId) {
+        const deal = await getGhlDeal(opportunityId);
+        await upsertGhlDeals([deal], "webhook", randomUUID());
+        return;
+      }
+
+      // Workflows antigos de tag não têm contexto de oportunidade.
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl) throw new Error("Supabase URL is not configured");
+      const syncSecret = process.env.SYNC_SECRET;
+      const response = await fetch(`${supabaseUrl}/functions/v1/sync-ghl`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(syncSecret ? { "x-sync-secret": syncSecret } : {}),
+        },
+        body: "{}",
+      });
+      if (!response.ok) {
+        throw new Error(`sync-ghl returned ${response.status}`);
+      }
+    } catch (error) {
+      console.error("[GHL Funnel] Falha ao sincronizar negócio fechado", {
+        opportunityId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 }
 
@@ -314,7 +327,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (stage === "negociofechado") {
-    dispararSyncGhl();
+    dispararSyncGhl(firstString(customData.opportunity_id, customData.opportunityId));
   }
 
   return NextResponse.json(
@@ -338,3 +351,4 @@ export async function GET() {
 }
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
