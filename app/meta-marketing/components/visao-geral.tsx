@@ -35,6 +35,7 @@ import {
   fmtDataCurta,
   diaAnterior,
   hojeSaoPaulo,
+  inicioSemana,
   janelaComparacao,
   textoComparacao,
   type Periodo,
@@ -222,16 +223,14 @@ export function VisaoGeral({
             : vazio,
           supabase.rpc("get_desempenho_fonte", { p_inicio: inicio, p_fim: fim }),
           supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
+          // Só a semana atual: a view calcula todas as semanas se não filtrar.
           supabase
             .from("v_atribuicao_saude")
             .select("semana, pct_com_utm")
+            .gte("semana", inicioSemana(hojeSaoPaulo()))
             .order("semana", { ascending: false })
             .limit(1),
-          supabase
-            .from("ghl_opportunities")
-            .select("pipeline_id, pipeline_name")
-            .not("pipeline_name", "is", null)
-            .limit(500),
+          supabase.rpc("get_nomes_pipelines"),
           // Mesma base e mesmo período do contador "vendas sem pares" do card.
           supabase
             .from("v_vendas_sem_pares")
@@ -251,7 +250,9 @@ export function VisaoGeral({
       setSerieAnterior((serieAntQ.data as SerieDiaRow[]) ?? []);
       setPipelineNomes(
         new Map(
-          (pipes.data ?? []).map((p) => [p.pipeline_id as string, p.pipeline_name as string])
+          ((pipes.data as { pipeline_id: string; pipeline_name: string }[] | null) ?? []).map(
+            (p) => [p.pipeline_id, p.pipeline_name] as [string, string]
+          )
         )
       );
       setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);

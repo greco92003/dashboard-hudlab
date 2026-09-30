@@ -21,6 +21,7 @@ import { OTEMonthlyTarget } from "@/types/ote";
 import { DateRange } from "react-day-picker";
 import { formatCurrency } from "@/lib/utils";
 import { ultimosDias } from "@/lib/periodo";
+import { limitesDosFechamentos, mesDeFechamento } from "@/lib/live-dashboard-period";
 
 interface Deal {
   value: number;
@@ -152,24 +153,22 @@ export function ChartBarFaturamento({
       from = new Date(`${inicio}T00:00:00`);
       to = new Date(`${fim}T23:59:59.999`);
     }
-    // Expand to full months
-    const start = new Date(from.getFullYear(), from.getMonth(), 1);
-    const end = new Date(to.getFullYear(), to.getMonth() + 1, 0); // last day of last month
-    const prevStart = new Date(start);
-    prevStart.setFullYear(prevStart.getFullYear() - 1);
-    const prevEnd = new Date(end);
-    prevEnd.setFullYear(prevEnd.getFullYear() - 1);
-    const fmt = (d: Date) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    };
+    // Meses do período no fechamento mensal (dia 02 ao dia 01 do mês
+    // seguinte, lib/live-dashboard-period.ts) -- mesma regra do Live Dashboard.
+    const primeiro = { month: from.getMonth() + 1, year: from.getFullYear() };
+    const ultimo = { month: to.getMonth() + 1, year: to.getFullYear() };
+    const atual = limitesDosFechamentos(primeiro, ultimo);
+    const anterior = limitesDosFechamentos(
+      { ...primeiro, year: primeiro.year - 1 },
+      { ...ultimo, year: ultimo.year - 1 },
+    );
     return {
-      startDate: fmt(start),
-      endDate: fmt(end),
-      prevStartDate: fmt(prevStart),
-      prevEndDate: fmt(prevEnd),
+      startDate: atual.inicio,
+      endDate: atual.fim,
+      prevStartDate: anterior.inicio,
+      prevEndDate: anterior.fim,
+      primeiro,
+      ultimo,
     };
   }, [useCustomPeriod, dateRange, period]);
 
@@ -211,10 +210,15 @@ export function ChartBarFaturamento({
     const fetchAnnualData = async () => {
       setAnnualLoading(true);
       try {
-        const startDate = `${annualYear}-01-01`;
-        const endDate = `${annualYear}-12-31`;
-        const prevStartDate = `${annualYear - 1}-01-01`;
-        const prevEndDate = `${annualYear - 1}-12-31`;
+        // Fechamentos de janeiro a dezembro: 02/01 a 01/01 do ano seguinte.
+        const { inicio: startDate, fim: endDate } = limitesDosFechamentos(
+          { month: 1, year: annualYear },
+          { month: 12, year: annualYear },
+        );
+        const { inicio: prevStartDate, fim: prevEndDate } = limitesDosFechamentos(
+          { month: 1, year: annualYear - 1 },
+          { month: 12, year: annualYear - 1 },
+        );
 
         const [currentRes, prevRes] = await Promise.all([
           fetch(
@@ -246,12 +250,12 @@ export function ChartBarFaturamento({
   const getDealMonthYear = (
     deal: Deal,
   ): { month: number; year: number } | null => {
-    const dateStr =
-      deal.custom_field_value?.split("T")[0] ||
-      deal.closing_date?.split("T")[0];
+    // Data real da venda (closing_date, a mesma do /dashboard e do Live
+    // Dashboard) -- o campo manual "Data de Fechamento" pode estar
+    // desatualizado. O mês é o do fechamento 02→01.
+    const dateStr = deal.closing_date?.split("T")[0];
     if (!dateStr) return null;
-    const [year, month] = dateStr.split("-").map(Number);
-    return { month, year };
+    return mesDeFechamento(dateStr);
   };
 
   // Build chart data for a given set of deals/prevDeals and a month list
@@ -307,12 +311,10 @@ export function ChartBarFaturamento({
   };
 
   const mensalChartData = useMemo(() => {
-    // Parse as local date components to avoid UTC timezone shift
-    const [sy, sm] = mensalBounds.startDate.split("-").map(Number);
-    const [ey, em] = mensalBounds.endDate.split("-").map(Number);
+    const { primeiro, ultimo } = mensalBounds;
     const months: { month: number; year: number }[] = [];
-    const current = new Date(sy, sm - 1, 1);
-    const endMonth = new Date(ey, em - 1, 1);
+    const current = new Date(primeiro.year, primeiro.month - 1, 1);
+    const endMonth = new Date(ultimo.year, ultimo.month - 1, 1);
     while (current <= endMonth) {
       months.push({
         month: current.getMonth() + 1,
@@ -344,8 +346,8 @@ export function ChartBarFaturamento({
             <CardTitle>Comparativo Mensal</CardTitle>
             <CardDescription>
               {viewMode === "anual"
-                ? `Jan–Dez ${annualYear} · Ano anterior · Meta · Realizado`
-                : "Ano anterior · Meta · Realizado"}
+                ? `Jan–Dez ${annualYear} · Ano anterior · Meta · Realizado · mês = dia 02 ao dia 01`
+                : "Ano anterior · Meta · Realizado · mês = dia 02 ao dia 01"}
             </CardDescription>
           </div>
           <Tabs
