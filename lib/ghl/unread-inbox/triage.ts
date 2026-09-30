@@ -53,6 +53,24 @@ export function isWindowOpen(lastInboundAtMs: number, nowMs: number): boolean {
   return nowMs - lastInboundAtMs < WHATSAPP_WINDOW_MS;
 }
 
+/** Quanto falta para a janela de 24h fechar (0 se já fechou). */
+export function windowRemainingMs(lastInboundAtMs: number, nowMs: number): number {
+  return Math.max(0, lastInboundAtMs + WHATSAPP_WINDOW_MS - nowMs);
+}
+
+/**
+ * O que o cliente escreveu por último. O resumo da conversa no GHL traz a
+ * última mensagem de qualquer tipo — resposta automática de chamada perdida,
+ * envio nosso —, que não diz nada sobre o que o cliente quer.
+ */
+export function lastClientMessageText(messages: NegotiationMessage[]): string | null {
+  const last = [...messages].reverse().find((m) => m.direction === "inbound");
+  if (!last) return null;
+  const text = last.body.replace(/\s+/g, " ").trim();
+  if (text) return text;
+  return last.attachments.length ? "Enviou um anexo (imagem, áudio ou arquivo)" : null;
+}
+
 /**
  * Pós-venda sem precisar de IA: venda ganha, pedido de representante ou card
  * do Atendimento já na etapa de pagamento confirmado ou depois.

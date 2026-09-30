@@ -55,13 +55,16 @@ const FILTERS: Array<{ value: "todas" | TriageCategory; label: string }> = [
 
 const ALL_SELLERS = "__todos__";
 
-function formatWaiting(iso: string): string {
-  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+function formatDuration(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60000));
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "1 dia" : `${days} dias`;
+  const rest = minutes % 60;
+  return rest && hours < 3 ? `${hours}h${String(rest).padStart(2, "0")}` : `${hours}h`;
+}
+
+function formatWaiting(iso: string): string {
+  return formatDuration(Date.now() - Date.parse(iso));
 }
 
 function formatMoney(value: number | null): string | null {
@@ -171,9 +174,9 @@ export function UnreadInbox() {
             </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
               {lastRefresh
-                ? `Atualizado em ${new Date(lastRefresh).toLocaleString("pt-BR")}`
+                ? `Atualizado às ${new Date(lastRefresh).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
                 : "Ainda não atualizado"}
-              {" · "}ordem: mais perto de fechar primeiro; dentro de cada grupo, quem espera há mais tempo
+              {" · "}quem escreveu nas últimas 24h
             </p>
           </div>
           <Button onClick={refresh} disabled={refreshing} size="sm">
@@ -256,15 +259,16 @@ export function UnreadInbox() {
                       ) : (
                         <Badge variant="outline">Sem classificação</Badge>
                       )}
-                      {item.windowOpen ? (
-                        <Badge variant="outline" className="text-emerald-700 dark:text-emerald-300 border-emerald-500/40">
-                          Janela aberta
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          Janela fechada: use template
-                        </Badge>
-                      )}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          item.windowRemainingMs < 3 * 60 * 60 * 1000
+                            ? "text-red-700 dark:text-red-300 border-red-500/40"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        Janela fecha em {formatDuration(item.windowRemainingMs)}
+                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Esperando há {formatWaiting(item.lastInboundAt)}
@@ -281,7 +285,7 @@ export function UnreadInbox() {
                     )}
                     {item.lastMessageBody && (
                       <p className="text-xs text-muted-foreground line-clamp-2">
-                        Última mensagem: “{item.lastMessageBody}”
+                        Cliente: “{item.lastMessageBody}”
                       </p>
                     )}
                   </div>
@@ -332,11 +336,6 @@ export function UnreadInbox() {
                         </Button>
                       </div>
                       <p className="whitespace-pre-wrap">{insight.mensagemSugerida}</p>
-                      {!item.windowOpen && (
-                        <p className="text-xs text-muted-foreground">
-                          A janela de 24h está fechada: no WhatsApp, só dá para mandar um template aprovado.
-                        </p>
-                      )}
                     </div>
                     {insight.evitar && (
                       <p className="text-muted-foreground">
