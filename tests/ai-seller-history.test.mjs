@@ -101,4 +101,20 @@ test("ids enviados guardam o início da rodada que os enviou e contam na última
   assert.equal(h.sentAtRunStart.get("a1"), at(90));
   assert.equal(h.sentAtRunStart.get("a3"), at(30));
   assert.equal(h.sendsLastHour, 2);
+  assert.equal(h.repliesLastHour, 1);
+});
+
+test("respostas na última hora contam rodadas que enviaram algo", () => {
+  const h = summarizeRuns(
+    [
+      row(50, "respondeu", { sent_message_ids: ["a1", "a2", "a3"] }),
+      row(40, "pulou:ja_respondido"),
+      row(30, "nao_respondeu"),
+      row(20, "respondeu", { sent_message_ids: ["a4", "a5"] }),
+      row(10, "escalou", { escalation_reason: "outro", sent_message_ids: ["a6"] }),
+    ],
+    NOW,
+  );
+  assert.equal(h.repliesLastHour, 3);
+  assert.equal(h.sendsLastHour, 6);
 });

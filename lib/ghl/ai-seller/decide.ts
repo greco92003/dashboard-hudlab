@@ -1,5 +1,5 @@
 import type { NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
-import { MAX_AI_SENDS_PER_HOUR } from "./config";
+import { MAX_AI_REPLIES_PER_HOUR, MAX_AI_SENDS_PER_HOUR } from "./config";
 
 export interface DecideInput {
   now: number;
@@ -10,6 +10,8 @@ export interface DecideInput {
   /** Para cada id enviado pela IA, o triggered_at da rodada que o enviou. */
   aiSentAtRunStart: ReadonlyMap<string, string>;
   aiSendsLastHour: number;
+  /** Rodadas da última hora que enviaram ao menos uma mensagem. */
+  aiRepliesLastHour: number;
   /** Primeira rodada da sessão atual da IA com o contato; null se não houver. */
   aiSessionStartedAt: string | null;
 }
@@ -76,7 +78,13 @@ export function decideRun(input: DecideInput): DecideResult {
   });
   if (alreadyAnswered) return { kind: "skip", decision: "pulou:ja_respondido" };
 
-  if (input.aiSendsLastHour >= MAX_AI_SENDS_PER_HOUR) return { kind: "limit" };
+  // Conta respostas, não balões: cada resposta sai em 2-3 balões.
+  if (
+    input.aiRepliesLastHour >= MAX_AI_REPLIES_PER_HOUR ||
+    input.aiSendsLastHour >= MAX_AI_SENDS_PER_HOUR
+  ) {
+    return { kind: "limit" };
+  }
 
   return { kind: "run" };
 }

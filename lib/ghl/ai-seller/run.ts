@@ -351,6 +351,7 @@ async function respondToContactUnsafe(
       aiSentMessageIds: history.sentMessageIds,
       aiSentAtRunStart: history.sentAtRunStart,
       aiSendsLastHour: history.sendsLastHour,
+      aiRepliesLastHour: history.repliesLastHour,
       aiSessionStartedAt: history.sessionStartedAt,
     });
 
