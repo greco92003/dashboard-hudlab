@@ -14,7 +14,7 @@ test("Vendedores: no dia 01 o fechamento em curso ainda é o do mês anterior", 
     { month: 8, year: 2026 },
   ]);
   assert.deepEqual(mesesRecentes(1, new Date("2026-10-02T13:00:00Z")), [{ month: 10, year: 2026 }]);
-  assert.equal(rotuloDoFechamento({ month: 9, year: 2026 }), "Setembro/2026 (02/09 a 01/10)");
+  assert.equal(rotuloDoFechamento({ month: 9, year: 2026 }), "Setembro/2026");
 });
 
 // Fechamento mensal: dia 02 até o dia 01 do mês seguinte (vende-se até
