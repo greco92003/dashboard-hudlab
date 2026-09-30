@@ -70,7 +70,25 @@ async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) =>
 interface ExistingRow {
   conversation_id: string;
   category: TriageCategory | null;
+  reason: string | null;
+  subject: string | null;
   classified_message_id: string | null;
+  classified_at: string | null;
+}
+
+/**
+ * A fila é gravada num upsert em lote, e o PostgREST preenche com null a
+ * coluna que falta numa linha: toda linha leva a classificação inteira,
+ * mesmo quando só repete a que já estava guardada.
+ */
+function keptClassification(existing: ExistingRow | undefined): Record<string, unknown> {
+  return {
+    category: existing?.category ?? null,
+    reason: existing?.reason ?? null,
+    subject: existing?.subject ?? null,
+    classified_message_id: existing?.classified_message_id ?? null,
+    classified_at: existing?.classified_at ?? null,
+  };
 }
 
 async function triageConversation(
@@ -112,7 +130,9 @@ async function triageConversation(
   };
 
   // Classificação já feita sobre esta mesma última mensagem: não gasta de novo.
-  if (existing?.category && existing.classified_message_id === lastMessageId) return row;
+  if (existing?.category && existing.classified_message_id === lastMessageId) {
+    return { ...row, ...keptClassification(existing), classify_error: null };
+  }
 
   const won = picked?.won ?? false;
   if (isPostSale({ won, pipelineName, stageName, atendimentoStages: index.atendimentoStages })) {
@@ -147,7 +167,12 @@ async function triageConversation(
     };
   } catch (err) {
     console.error("Triagem de não lida falhou", { conversationId: conversation.conversationId, err });
-    return { ...row, classify_error: err instanceof Error ? err.message : String(err) };
+    // Falhou: mantém a classificação anterior em vez de apagar.
+    return {
+      ...row,
+      ...keptClassification(existing),
+      classify_error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -166,7 +191,7 @@ export async function refreshUnreadInbox(): Promise<{ total: number; errors: num
   const { data: existingRows, error: existingError } = ids.length
     ? await supabase
         .from(TABLE)
-        .select("conversation_id, category, classified_message_id")
+        .select("conversation_id, category, reason, subject, classified_message_id, classified_at")
         .in("conversation_id", ids)
     : { data: [], error: null };
   if (existingError) throw new Error(`${TABLE}: ${existingError.message}`);
