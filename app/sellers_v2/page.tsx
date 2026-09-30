@@ -43,6 +43,7 @@ import {
   TrainingChat,
   type TrainingChatMessage,
 } from "@/components/sellers-v2/training-chat";
+import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
 
 // Types
 interface SellerRanking {
@@ -106,61 +107,6 @@ interface AuditorReport {
   falhas: string[];
   errosCriticos: string[];
   exemploRespostaMelhor: string;
-}
-
-interface CopilotoReport {
-  situacaoAtual: string;
-  objetivoProvavelCliente: string;
-  sinaisCompra: string[];
-  objecoesAbertas: string[];
-  informacoesNecessarias: string[];
-  proximaAcao: string;
-  mensagemSugerida: string;
-  evitar: string;
-}
-
-interface ActiveNegotiation {
-  opportunityId: string;
-  contactId: string;
-  contactName: string | null;
-  stageName: string | null;
-  monetaryValue: number | null;
-  negotiationStartedAt: string | null;
-  latestInsight: {
-    report: CopilotoReport;
-    createdAt: string;
-    lastMessageAt: string | null;
-  } | null;
-}
-
-const SITUACAO_LABELS: Record<string, string> = {
-  em_risco: "Em risco",
-  estagnada: "Estagnada",
-  aguardando_acao_interna: "Aguardando nós",
-  aguardando_cliente: "Aguardando cliente",
-  avancando: "Avançando",
-};
-
-const SITUACAO_COLORS: Record<string, string> = {
-  em_risco: "#f87171",
-  estagnada: "#fb923c",
-  aguardando_acao_interna: "#facc15",
-  aguardando_cliente: "#60a5fa",
-  avancando: "#4ade80",
-};
-
-function formatMoneyBRL(value: number | null): string | null {
-  if (value == null) return null;
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatDaysSince(dateString: string | null): string | null {
-  if (!dateString) return null;
-  const ms = Date.now() - new Date(dateString).getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  if (days <= 0) return "hoje";
-  if (days === 1) return "há 1 dia";
-  return `há ${days} dias`;
 }
 
 interface ClosedNegotiation {
@@ -364,27 +310,10 @@ export default function SellersV2Page() {
   } | null>(null);
 
   // Atendimentos Reais state
-  const [activeNegotiations, setActiveNegotiations] = useState<ActiveNegotiation[]>([]);
   const [closedNegotiations, setClosedNegotiations] = useState<ClosedNegotiation[]>([]);
   const [negotiationRanking, setNegotiationRanking] = useState<VendedorRanking[]>([]);
   const [loadingNegotiations, setLoadingNegotiations] = useState(true);
-  const [generatingInsightFor, setGeneratingInsightFor] = useState<string | null>(null);
-  const [negotiationError, setNegotiationError] = useState<string | null>(null);
   const [expandedClosedId, setExpandedClosedId] = useState<string | null>(null);
-  // Purely visual per-card toggle — hides the insight block without deleting
-  // anything (history stays in the DB either way). Resets on page reload,
-  // same as expandedClosedId above.
-  const [hiddenInsightIds, setHiddenInsightIds] = useState<Set<string>>(new Set());
-
-  const toggleInsightVisibility = (opportunityId: string) => {
-    setHiddenInsightIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(opportunityId)) next.delete(opportunityId);
-      else next.add(opportunityId);
-      return next;
-    });
-  };
-
   const fetchNegotiations = useCallback(async () => {
     try {
       const res = await fetch(`/api/sellers-v2/negotiations?_t=${Date.now()}`, {
@@ -392,7 +321,6 @@ export default function SellersV2Page() {
       });
       if (!res.ok) throw new Error("Failed to fetch negotiations");
       const data = await res.json();
-      setActiveNegotiations(data.active || []);
       setClosedNegotiations(
         (data.closed || []).map((row: any) => ({
           opportunityId: row.opportunity_id,
@@ -441,29 +369,6 @@ export default function SellersV2Page() {
       supabase.removeChannel(channel);
     };
   }, [fetchNegotiations]);
-
-  const generateInsight = async (opportunityId: string) => {
-    setGeneratingInsightFor(opportunityId);
-    setNegotiationError(null);
-    try {
-      const res = await fetch("/api/sellers-v2/negotiation-insight", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ opportunityId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setNegotiationError(data.error || "Não foi possível gerar o insight.");
-        return;
-      }
-      await fetchNegotiations();
-    } catch (error) {
-      console.error("Error generating insight:", error);
-      setNegotiationError("Erro de conexão ao gerar insight.");
-    } finally {
-      setGeneratingInsightFor(null);
-    }
-  };
 
   const endingSessionRef = useRef(false);
 
@@ -1480,122 +1385,7 @@ export default function SellersV2Page() {
 
         {/* ======== ATENDIMENTOS REAIS TAB ======== */}
         <TabsContent value="real" className="space-y-6 mt-4">
-          {negotiationError && (
-            <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
-              <p className="text-sm font-medium text-destructive flex-1">{negotiationError}</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setNegotiationError(null)}
-                className="text-destructive hover:text-destructive"
-              >
-                ✕
-              </Button>
-            </div>
-          )}
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <Brain className="h-5 w-5 text-purple-500" />
-                Em Negociação
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingNegotiations ? (
-                <div className="space-y-3">
-                  {[1, 2].map((i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : activeNegotiations.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  Nenhuma negociação em andamento
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {activeNegotiations.map((neg) => (
-                    <div key={neg.opportunityId} className="rounded-lg border p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium">{neg.contactName || "Contato sem nome"}</p>
-                            {neg.latestInsight?.report.situacaoAtual && (
-                              <span
-                                className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
-                                style={{
-                                  backgroundColor:
-                                    SITUACAO_COLORS[neg.latestInsight.report.situacaoAtual] ?? "#94a3b8",
-                                }}
-                              >
-                                {SITUACAO_LABELS[neg.latestInsight.report.situacaoAtual] ??
-                                  neg.latestInsight.report.situacaoAtual}
-                              </span>
-                            )}
-                            {formatMoneyBRL(neg.monetaryValue) && (
-                              <span className="text-xs font-medium text-muted-foreground">
-                                {formatMoneyBRL(neg.monetaryValue)}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {neg.stageName || "Etapa desconhecida"}
-                            {neg.negotiationStartedAt &&
-                              ` · em negociação desde ${new Date(neg.negotiationStartedAt).toLocaleDateString("pt-BR")}`}
-                            {formatDaysSince(neg.latestInsight?.lastMessageAt ?? null) &&
-                              ` · última mensagem ${formatDaysSince(neg.latestInsight?.lastMessageAt ?? null)}`}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {neg.latestInsight && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => toggleInsightVisibility(neg.opportunityId)}
-                            >
-                              {hiddenInsightIds.has(neg.opportunityId) ? "Mostrar insight" : "Ocultar insight"}
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            onClick={() => generateInsight(neg.opportunityId)}
-                            disabled={generatingInsightFor === neg.opportunityId}
-                          >
-                            {generatingInsightFor === neg.opportunityId ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              "Gerar Insight"
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      {neg.latestInsight && !hiddenInsightIds.has(neg.opportunityId) && (
-                        <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
-                          <p>
-                            <span className="font-medium">Situação:</span>{" "}
-                            {neg.latestInsight.report.situacaoAtual}
-                          </p>
-                          <p>
-                            <span className="font-medium">Próxima ação:</span>{" "}
-                            {neg.latestInsight.report.proximaAcao}
-                          </p>
-                          <p>
-                            <span className="font-medium">Mensagem sugerida:</span>{" "}
-                            {neg.latestInsight.report.mensagemSugerida}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Gerado em{" "}
-                            {new Date(neg.latestInsight.createdAt).toLocaleString("pt-BR")}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <UnreadInbox />
 
           <Card>
             <CardHeader className="pb-3">

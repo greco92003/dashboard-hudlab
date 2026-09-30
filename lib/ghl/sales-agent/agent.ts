@@ -562,7 +562,14 @@ export async function runCopiloto(
   messages: NegotiationMessage[],
   responseGapStats: ResponseGapStats,
   context: CopilotoContext,
+  options: { recorte?: "amostra_digital" | "recentes" } = {},
 ): Promise<CopilotoReport> {
+  const historyLabel =
+    options.recorte === "amostra_digital"
+      ? "Segue o histórico de WhatsApp com esse cliente a partir da entrega da Amostra Digital (o que veio antes — robô de atendimento e orçamento automático — está resumido no contexto acima):"
+      : options.recorte === "recentes"
+        ? "Seguem as mensagens mais recentes do WhatsApp com esse cliente (o começo da conversa foi omitido):"
+        : "Segue o histórico completo de WhatsApp com esse cliente, desde o início do relacionamento:";
   const introText = `Contexto da negociação:
 ${contextBlock({
   "Data de hoje": todayBRDateString(),
@@ -575,7 +582,7 @@ ${contextBlock({
 
 ${formatResponseGapStats(responseGapStats)}
 
-Analise esta negociação em andamento e diga o próximo passo. Segue o histórico completo de WhatsApp com esse cliente, desde o início do relacionamento:`;
+Analise esta negociação em andamento e diga o próximo passo. ${historyLabel}`;
 
   const content: ContentPart[] = [
     { type: "input_text", text: introText },
@@ -602,4 +609,74 @@ Analise esta negociação em andamento e diga o próximo passo. Segue o históri
   });
 
   return JSON.parse(response.output_text || "{}") as CopilotoReport;
+}
+
+// ---------------------------------------------------------------------------
+// Triagem das não lidas (arena de vendedores)
+// ---------------------------------------------------------------------------
+
+const TRIAGE_INSTRUCTIONS = `Você faz a triagem de conversas de WhatsApp da Hud Lab (chinelos slide personalizados com a marca do cliente) que estão esperando resposta do time comercial. Classifique a conversa pela chance de fechamento agora:
+
+- quente: cliente engajado e perto de fechar — pede forma de pagamento ou dados para pagar, confirma quantidade, modelo ou grade, aprova a amostra digital, diz que vai fechar.
+- morno: interessado e respondendo, mas com dúvida ou objeção aberta (preço, prazo, frete, ajuste de arte) ou ainda decidindo.
+- frio: pouco engajamento, resposta vaga, só curiosidade, ou pedido que não leva a uma venda agora (gabarito, material de divulgação, fornecedor, vaga).
+- pos_venda: o cliente já comprou e fala de um pedido em andamento — pagamento feito, produção, entrega, troca ou reclamação de pedido.
+
+Mensagens marcadas AUTOMAÇÃO são envios automáticos do sistema, não do vendedor. Use só o que está escrito na conversa; não invente fatos.
+"motivo": uma frase curta com a evidência da conversa. "assunto": em até 8 palavras, o que o cliente quer agora.`;
+
+const TRIAGE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    categoria: { type: "string", enum: ["quente", "morno", "frio", "pos_venda"] },
+    motivo: { type: "string" },
+    assunto: { type: "string" },
+  },
+  required: ["categoria", "motivo", "assunto"],
+  additionalProperties: false,
+} as const;
+
+export interface TriageResult {
+  categoria: "quente" | "morno" | "frio" | "pos_venda";
+  motivo: string;
+  assunto: string;
+}
+
+/** Triagem barata: só texto (anexos viram nota), sem o manual, esforço baixo. */
+export async function runTriage(
+  messages: NegotiationMessage[],
+  context: { etapaCrm: string | null; qtyPares: number | null },
+): Promise<TriageResult> {
+  const lines = messages.map((m) => {
+    const who =
+      m.direction === "inbound" ? "CLIENTE" : m.isAutomated ? "AUTOMAÇÃO" : "VENDEDOR";
+    const note = m.attachments.length ? ` [${m.attachments.length} anexo(s)]` : "";
+    return `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto)"}${note}`;
+  });
+  const input = `${contextBlock({
+    "Data de hoje": todayBRDateString(),
+    "Etapa atual do CRM": context.etapaCrm ?? "sem oportunidade encontrada",
+    "Quantidade de pares": context.qtyPares != null ? String(context.qtyPares) : "não definida",
+  })}
+
+Conversa (mais recente por último):
+${lines.join("\n")}`;
+
+  const response = await openai.responses.create({
+    model: AGENT_MODEL,
+    instructions: TRIAGE_INSTRUCTIONS,
+    input: [{ role: "user", content: [{ type: "input_text", text: input }] }],
+    reasoning: { effort: "low" },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "triagem_nao_lida",
+        schema: TRIAGE_RESPONSE_SCHEMA,
+        strict: true,
+      },
+    },
+    max_output_tokens: 2000,
+  });
+
+  return JSON.parse(response.output_text || "{}") as TriageResult;
 }
