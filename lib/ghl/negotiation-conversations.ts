@@ -180,24 +180,103 @@ export async function getNegotiationTranscript(
   if (!conversationId) return { conversationId: null, messages: [] };
 
   const rawMessages = await fetchAllMessages(conversationId);
+  return { conversationId, messages: toWhatsappTranscript(rawMessages) };
+}
 
-  const messages = rawMessages
-    .filter((m) => m.messageType === "TYPE_WHATSAPP")
-    .map(
-      (m): NegotiationMessage => ({
-        id: m.id,
-        direction: m.direction,
-        body: m.body ?? "",
-        dateAdded: m.dateAdded,
-        userId: m.userId ? m.userId : null,
-        attachments: m.attachments ?? [],
-        isAutomated: m.source === "workflow",
-      }),
-    )
-    // API returns newest-first; the agent needs a chronological transcript.
-    .sort((a, b) => Date.parse(a.dateAdded) - Date.parse(b.dateAdded));
+function toWhatsappTranscript(rawMessages: GhlRawMessage[]): NegotiationMessage[] {
+  return (
+    rawMessages
+      .filter((m) => m.messageType === "TYPE_WHATSAPP")
+      .map(
+        (m): NegotiationMessage => ({
+          id: m.id,
+          direction: m.direction,
+          body: m.body ?? "",
+          dateAdded: m.dateAdded,
+          userId: m.userId ? m.userId : null,
+          attachments: m.attachments ?? [],
+          isAutomated: m.source === "workflow",
+        }),
+      )
+      // API returns newest-first; the agent needs a chronological transcript.
+      .sort((a, b) => Date.parse(a.dateAdded) - Date.parse(b.dateAdded))
+  );
+}
 
-  return { conversationId, messages };
+/** Só as mensagens mais recentes (uma página), em ordem cronológica: a triagem corta a conversa de qualquer jeito. */
+export async function getRecentWhatsappMessages(
+  conversationId: string,
+  limit = 100,
+): Promise<NegotiationMessage[]> {
+  const raw = await ghlConversationsFetch<GhlMessagesResponse>(
+    `/conversations/${conversationId}/messages`,
+    { limit: String(limit) },
+  );
+  return toWhatsappTranscript(raw.messages.messages);
+}
+
+export interface UnreadWhatsappConversation {
+  conversationId: string;
+  contactId: string;
+  contactName: string | null;
+  phone: string | null;
+  unreadCount: number;
+  /** Última mensagem de WhatsApp do cliente (ISO). */
+  lastInboundAt: string;
+  lastMessageBody: string | null;
+  lastMessageDirection: "inbound" | "outbound" | null;
+}
+
+interface GhlConversationListItem {
+  id: string;
+  contactId: string;
+  fullName?: string;
+  contactName?: string;
+  phone?: string;
+  unreadCount?: number;
+  lastInboundWhatsappMessageDate?: number;
+  lastMessageBody?: string;
+  lastMessageDirection?: "inbound" | "outbound";
+  sort?: number[];
+}
+
+const MAX_UNREAD_PAGES = 10; // 1.000 conversas não lidas; hoje são ~230, quase todas do Instagram
+
+/**
+ * Conversas não lidas em que o cliente escreveu por WhatsApp. As não lidas
+ * do GHL misturam Instagram, Facebook e SMS, que o time não responde pelo
+ * chat do GHL; o recorte é quem tem mensagem de WhatsApp recebida.
+ */
+export async function searchUnreadWhatsappConversations(): Promise<UnreadWhatsappConversation[]> {
+  const { locationId } = requireGhlEnv();
+  const all: GhlConversationListItem[] = [];
+  let startAfter: string | undefined;
+  for (let page = 0; page < MAX_UNREAD_PAGES; page++) {
+    const params: Record<string, string> = { locationId, status: "unread", limit: "100" };
+    if (startAfter) params.startAfterDate = startAfter;
+    const result = await ghlConversationsFetch<{ conversations?: GhlConversationListItem[] }>(
+      "/conversations/search",
+      params,
+    );
+    const conversations = result.conversations ?? [];
+    all.push(...conversations);
+    const cursor = conversations.at(-1)?.sort?.[0];
+    if (conversations.length < 100 || cursor == null) break;
+    startAfter = String(cursor);
+  }
+
+  return all
+    .filter((c) => c.lastInboundWhatsappMessageDate != null)
+    .map((c) => ({
+      conversationId: c.id,
+      contactId: c.contactId,
+      contactName: c.fullName || c.contactName || null,
+      phone: c.phone ?? null,
+      unreadCount: c.unreadCount ?? 0,
+      lastInboundAt: new Date(c.lastInboundWhatsappMessageDate as number).toISOString(),
+      lastMessageBody: c.lastMessageBody ?? null,
+      lastMessageDirection: c.lastMessageDirection ?? null,
+    }));
 }
 
 export interface ResponseGapStats {

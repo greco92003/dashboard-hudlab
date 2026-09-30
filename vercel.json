@@ -21,10 +21,6 @@
       "schedule": "*/30 * * * *"
     },
     {
-      "path": "/api/cron/refresh-negotiation-priorities",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/sync-fluxo-caixa",
       "schedule": "*/15 * * * *"
     }
@@ -44,6 +40,12 @@
     },
     "app/api/sellers-v2/training/route.ts": {
       "maxDuration": 180
+    },
+    "app/api/sellers-v2/unread/refresh/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/sellers-v2/unread/insight/route.ts": {
+      "maxDuration": 120
     },
     "app/api/test/robust-deals-sync/route.ts": {
       "maxDuration": 300
