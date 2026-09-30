@@ -31,8 +31,9 @@ import { ArrowDownRight, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import {
   fmtBrl,
   fmtNum,
-  periodoAnterior,
+  janelaComparacao,
   periodoParaDatas,
+  textoComparacao,
   type Periodo,
   type RangeCustom,
 } from "../lib";
@@ -191,6 +192,9 @@ function agruparPorNivel(rows: FunnelRow[], nivel: Nivel): FunnelRow[] {
         ? `${new Set(itens.map((r) => r.adset_id)).size} conjunto(s) · ${itens.length} anúncio(s)`
         : primeiro.campaign_name;
     const roas = spend > 0 ? round2(faturamento / spend) : null;
+    // Sem gasto no período (venda via bio, anúncio pausado antes) não existe
+    // custo por etapa -- mostrar R$ 0,00 sugeriria lead de graça.
+    const custo = (qtd: number) => (spend > 0 && qtd > 0 ? round2(spend / qtd) : null);
 
     return {
       ad_id: chave,
@@ -213,11 +217,11 @@ function agruparPorNivel(rows: FunnelRow[], nivel: Nivel): FunnelRow[] {
       vendas,
       faturamento,
       pares_vendidos: soma("pares_vendidos"),
-      custo_por_lead: leads > 0 ? round2(spend / leads) : null,
-      custo_por_orcamento: orcamentos > 0 ? round2(spend / orcamentos) : null,
-      custo_por_mockup: mockups > 0 ? round2(spend / mockups) : null,
-      custo_por_negociacao: negociacoes > 0 ? round2(spend / negociacoes) : null,
-      cpa_venda: vendas > 0 ? round2(spend / vendas) : null,
+      custo_por_lead: custo(leads),
+      custo_por_orcamento: custo(orcamentos),
+      custo_por_mockup: custo(mockups),
+      custo_por_negociacao: custo(negociacoes),
+      cpa_venda: custo(vendas),
       taxa_conversao_lead_venda: leads > 0 ? round2((100 * vendas) / leads) : null,
       roas,
       diagnostico: roas != null && roas >= 2 ? "GERA VENDA" : "REVISAR",
@@ -298,6 +302,7 @@ export function Anuncios({
   refreshKey?: number;
 }) {
   const [rawAtual, setRawAtual] = useState<FunnelRow[]>([]);
+  const [rawFechado, setRawFechado] = useState<FunnelRow[]>([]);
   const [rawAnterior, setRawAnterior] = useState<FunnelRow[]>([]);
   const [frios, setFrios] = useState<LeadFrioRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -306,24 +311,35 @@ export function Anuncios({
   const [sortKey, setSortKey] = useState<SortKey>("spend_total");
   const [sortDesc, setSortDesc] = useState(true);
 
+  const selecionado = periodoParaDatas(periodo, customRange);
+  const janela = janelaComparacao(selecionado.inicio, selecionado.fim);
+
   useEffect(() => {
     const supabase = createClient();
-    const { inicio, fim } = periodoParaDatas(periodo, customRange);
-    const anterior = periodoAnterior(inicio, fim);
+    const { inicio, fim, atualFechado, anterior } = janela;
+    // Tabela = período inteiro (inclui hoje). Variação = dias fechados vs.
+    // período anterior de mesma duração -- quando o período já terminou, a
+    // parte fechada é o próprio período.
+    const precisaFechado = atualFechado != null && atualFechado.fim !== fim;
+    const vazio = Promise.resolve({ data: [] as FunnelRow[], error: null });
     let cancel = false;
     setLoading(true);
     (async () => {
-      const [atual, anteriorQ, leadsFrios] = await Promise.all([
+      const [atual, fechadoQ, anteriorQ, leadsFrios] = await Promise.all([
         supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
-        supabase.rpc("get_funnel_por_anuncio", {
-          p_inicio: anterior.inicio,
-          p_fim: anterior.fim,
-        }),
+        precisaFechado
+          ? supabase.rpc("get_funnel_por_anuncio", { p_inicio: atualFechado!.inicio, p_fim: atualFechado!.fim })
+          : vazio,
+        anterior
+          ? supabase.rpc("get_funnel_por_anuncio", { p_inicio: anterior.inicio, p_fim: anterior.fim })
+          : vazio,
         supabase.from("v_leads_sem_venda").select("*"),
       ]);
       if (cancel) return;
 
-      setRawAtual((atual.data as FunnelRow[]) ?? []);
+      const linhasAtuais = (atual.data as FunnelRow[]) ?? [];
+      setRawAtual(linhasAtuais);
+      setRawFechado(precisaFechado ? ((fechadoQ.data as FunnelRow[]) ?? []) : linhasAtuais);
       setRawAnterior((anteriorQ.data as FunnelRow[]) ?? []);
       setFrios((leadsFrios.data as LeadFrioRow[]) ?? []);
       setLoading(false);
@@ -331,28 +347,30 @@ export function Anuncios({
     return () => {
       cancel = true;
     };
+    // janela deriva só de periodo/customRange (e do dia de hoje).
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
   // Agrupamento é 100% client-side a partir do nível de anúncio já
   // buscado -- trocar o seletor de nível não refaz a busca no banco, só
-  // reagrupa os mesmos dados (atual e período anterior, pra variação
-  // refletir o total agregado, não a média dos anúncios individuais).
+  // reagrupa os mesmos dados (pra variação refletir o total agregado, não a
+  // média dos anúncios individuais).
   const rows = useMemo(() => {
     const atualAgrupado = agruparPorNivel(rawAtual, nivel);
-    const anteriorAgrupado = agruparPorNivel(rawAnterior, nivel);
-    const porChaveAnterior = new Map(anteriorAgrupado.map((r) => [r.ad_id, r]));
+    const porChaveFechado = new Map(agruparPorNivel(rawFechado, nivel).map((r) => [r.ad_id, r]));
+    const porChaveAnterior = new Map(agruparPorNivel(rawAnterior, nivel).map((r) => [r.ad_id, r]));
     return atualAgrupado.map((r) => {
+      const fechado = porChaveFechado.get(r.ad_id);
       const ant = porChaveAnterior.get(r.ad_id);
       const variacao: Partial<Record<VarKey, number>> = {};
-      if (ant) {
+      if (fechado && ant) {
         for (const k of VAR_KEYS) {
-          const v = calcVariacao(Number(r[k]) || 0, Number(ant[k]) || 0);
+          const v = calcVariacao(Number(fechado[k]) || 0, Number(ant[k]) || 0);
           if (v !== undefined) variacao[k] = v;
         }
       }
       return { ...r, variacao };
     });
-  }, [rawAtual, rawAnterior, nivel]);
+  }, [rawAtual, rawFechado, rawAnterior, nivel]);
 
   // A linha "Sem investimento conhecido" (agrupamento de ad_ids nunca
   // vistos em meta_insights_daily) sempre fica no fim da tabela, fora do
@@ -422,12 +440,15 @@ export function Anuncios({
         <CardHeader>
           <CardTitle>Funil por anúncio</CardTitle>
           <CardDescription>
-            Leads = coorte criada no período selecionado; marcos = alcançados
-            até agora. Variação % comparada ao período anterior de mesma
-            duração. Valor e pares contam a partir de Orçamento Gerado (não é
-            o valor final — mede o anúncio no caminho); venda = status ganho
-            (won). Lead time ~35 dias.
+            Leads = criados no período; orçamento, mockup e negociação =
+            eventos no período. Vendas e faturamento = pedidos fechados no
+            período (pela data da venda), mesmo que o lead seja de antes — a
+            soma bate com o &quot;Do Meta&quot; da Visão Geral. Valor e pares de
+            orçamento contam a partir de Orçamento Gerado (mede o anúncio no
+            caminho). &quot;Via bio do Instagram&quot; = quem chegou pela bio
+            trazendo a campanha de origem. Lead time ~35 dias.
           </CardDescription>
+          <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <Input
               placeholder="Buscar por anúncio, campanha ou ad_id..."
@@ -565,7 +586,7 @@ export function Anuncios({
                         </Valor>
                       </TableCell>
                       <TableCell>
-                        {r.ad_id === "_sem_investimento" ? (
+                        {r.ad_id === "_sem_investimento" || !(Number(r.spend_total) > 0) ? (
                           <span className="text-xs text-muted-foreground">—</span>
                         ) : (
                           <DiagnosticoBadge valor={r.diagnostico} />
@@ -584,9 +605,10 @@ export function Anuncios({
         <CardHeader>
           <CardTitle>Leads frios</CardTitle>
           <CardDescription>
-            Contatos com mais de 35 dias (lead time do produto) sem nenhuma
-            venda, por anúncio —
-            detecta anúncios que queimam verba com lead ruim
+            Leads com mais de 35 dias (lead time do produto) sem nenhuma
+            venda, por anúncio — detecta anúncios que queimam verba com lead
+            ruim. Histórico completo (não segue o período selecionado), sem a
+            base importada do CRM anterior.
           </CardDescription>
         </CardHeader>
         <CardContent>

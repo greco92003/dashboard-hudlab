@@ -190,9 +190,10 @@ export function Saude({ refreshKey }: { refreshKey?: number }) {
         <CardHeader>
           <CardTitle>UTMs sem match com o Meta</CardTitle>
           <CardDescription>
-            Valores de utm_content que não correspondem a nenhum ad_id
-            conhecido — investigar campanhas com UTM quebrada (ex: parâmetro
-            estático em vez de {"{{ad.id}}"})
+            Valores de utm_content que não correspondem a nenhum anúncio da
+            conta — investigar campanhas com UTM quebrada (ex: parâmetro
+            estático em vez de {"{{ad.id}}"}). Anúncio antigo que ainda existe
+            na conta não entra aqui: é cliente voltando, não UTM quebrada.
           </CardDescription>
         </CardHeader>
         <CardContent>
