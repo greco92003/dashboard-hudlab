@@ -21,7 +21,6 @@ function LiveDot() {
   );
 }
 import { Skeleton } from "@/components/ui/skeleton";
-import { createClient } from "@/utils/supabase/client";
 
 interface ChartDataPoint {
   date: string;
@@ -105,40 +104,41 @@ function useUTC3Clock() {
 export default function LiveDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const fetchInProgress = useRef(false);
   const { time, dateStr } = useUTC3Clock();
 
   const fetchData = useCallback(async () => {
+    if (fetchInProgress.current) return;
+    fetchInProgress.current = true;
     try {
-      const res = await fetch("/api/live-dashboard");
+      const res = await fetch("/api/live-dashboard", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Live dashboard request failed: ${res.status}`);
       const json = await res.json();
       if (json.success) setData(json);
     } catch (err) {
       console.error("Error fetching live dashboard:", err);
     } finally {
+      fetchInProgress.current = false;
       setLoading(false);
     }
   }, []);
 
-  // Initial fetch + Supabase Realtime subscription
+  // Keep the dashboard current even when the CRM webhook or Realtime is delayed.
   useEffect(() => {
     fetchData();
-
-    // Subscribe to realtime changes on deals_cache (same source as /dashboard)
-    const supabase = createClient();
-    const channel = supabase
-      .channel("deals_cache_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "deals_cache" },
-        () => {
-          // Re-fetch aggregated data when any deal changes
-          fetchData();
-        },
-      )
-      .subscribe();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") fetchData();
+    }, 30_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") fetchData();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
     };
   }, [fetchData]);
 
