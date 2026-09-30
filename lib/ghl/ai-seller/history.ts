@@ -13,6 +13,8 @@ export interface AiHistory {
   /** Para cada id enviado, o triggered_at da rodada que o enviou. */
   sentAtRunStart: Map<string, string>;
   sendsLastHour: number;
+  /** Rodadas da última hora que enviaram ao menos uma mensagem. */
+  repliesLastHour: number;
   /** Primeira rodada da IA depois da última que encerrou uma sessão; null se não houver. */
   sessionStartedAt: string | null;
 }
@@ -47,6 +49,7 @@ export function summarizeRuns(rows: RunHistoryRow[], nowMs: number): AiHistory {
   const sentMessageIds = new Set<string>();
   const sentAtRunStart = new Map<string, string>();
   let sendsLastHour = 0;
+  let repliesLastHour = 0;
   let lastEndIndex = -1;
   runs.forEach((run, index) => {
     const ids = run.sent_message_ids ?? [];
@@ -54,7 +57,10 @@ export function summarizeRuns(rows: RunHistoryRow[], nowMs: number): AiHistory {
       sentMessageIds.add(id);
       sentAtRunStart.set(id, run.triggered_at);
     }
-    if (Date.parse(run.triggered_at) >= hourAgo) sendsLastHour += ids.length;
+    if (Date.parse(run.triggered_at) >= hourAgo) {
+      sendsLastHour += ids.length;
+      if (ids.length > 0) repliesLastHour += 1;
+    }
     if (endsSession(run)) lastEndIndex = index;
   });
 
@@ -62,6 +68,7 @@ export function summarizeRuns(rows: RunHistoryRow[], nowMs: number): AiHistory {
     sentMessageIds,
     sentAtRunStart,
     sendsLastHour,
+    repliesLastHour,
     sessionStartedAt:
       runs.slice(lastEndIndex + 1).find(provesAiSession)?.triggered_at ?? null,
   };

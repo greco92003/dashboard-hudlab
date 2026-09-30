@@ -21,6 +21,7 @@ const input = (over = {}) => ({
   aiSentMessageIds: new Set(),
   aiSentAtRunStart: new Map(),
   aiSendsLastHour: 0,
+  aiRepliesLastHour: 0,
   aiSessionStartedAt: null,
   ...over,
 });
@@ -157,9 +158,28 @@ test("primeira rodada não procura humano no histórico", () => {
   );
 });
 
-test("limite de mensagens da IA na última hora", () => {
+test("limite conta respostas, não balões: 3 respostas de 2-3 balões seguem rodando", () => {
+  // Piloto de 29/09: 7 balões em 3 respostas bateram o antigo limite de 6.
   assert.deepEqual(
-    decideRun(input({ messages: [msg("c1", "inbound", 120)], aiSendsLastHour: 6 })),
+    decideRun(
+      input({ messages: [msg("c1", "inbound", 120)], aiRepliesLastHour: 3, aiSendsLastHour: 7 }),
+    ),
+    { kind: "run" },
+  );
+});
+
+test("limite de respostas da IA na última hora", () => {
+  assert.deepEqual(
+    decideRun(input({ messages: [msg("c1", "inbound", 120)], aiRepliesLastHour: 15 })),
+    { kind: "limit" },
+  );
+});
+
+test("teto de balões da IA na última hora", () => {
+  assert.deepEqual(
+    decideRun(
+      input({ messages: [msg("c1", "inbound", 120)], aiRepliesLastHour: 10, aiSendsLastHour: 40 }),
+    ),
     { kind: "limit" },
   );
 });

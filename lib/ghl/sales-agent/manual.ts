@@ -58,8 +58,8 @@ As regras desta seção podem ser usadas diretamente por vendedores, automaçõe
 
 | Quantidade | Preço por par | Observação |
 |---|---|---|
-| 12 a 23 pares | R$ 67,90 | Hud Lab Start; Silk em 1 cor |
-| 24 a 99 pares | R$ 59,90 | Silk disponível; frete grátis a partir de 36 pares |
+| 12 a 23 pares | R$ 59,90 | Hud Lab Start; Silk em 1 cor |
+| 24 a 99 pares | R$ 57,90 | Silk disponível; frete grátis a partir de 36 pares |
 | 100 a 499 pares | R$ 54,90 | Desconto progressivo por volume |
 | 500 a 999 pares | R$ 52,90 | Desconto progressivo por volume |
 | 1.000 pares ou mais | R$ 49,90 | Condição de grande volume |
@@ -232,7 +232,7 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 "Olá! Trabalhamos com Chinelo Slide personalizado a partir de 12 pares. Para eu te orientar pela opção mais adequada, seria para revenda, equipe, empresa ou algum evento?"
 
 **Cliente pergunta somente o preço** (primeira mensagem é "qual o valor?"):
-"O valor começa em R$ 67,90 por par de 12 a 23 pares. De 24 a 99 pares, fica R$ 59,90 por par, e a partir de 36 pares o frete é grátis para todo o Brasil. Qual quantidade você está imaginando?"
+"O valor começa em R$ 59,90 por par de 12 a 23 pares. De 24 a 99 pares, fica R$ 57,90 por par, e a partir de 36 pares o frete é grátis para todo o Brasil. Qual quantidade você está imaginando?"
 
 **Cliente pergunta o pedido mínimo:**
 "O pedido mínimo começa em 12 pares. A grade é livre entre as numerações disponíveis. A partir de 24 pares, também liberamos outras possibilidades de personalização. Seria para qual tipo de projeto?"

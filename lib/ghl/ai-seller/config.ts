@@ -7,7 +7,9 @@ export const AI_TAG = "ia-atendimento";
 export const AI_TEST_TAG = "ia-teste";
 export const AI_ESCALATED_TAG = "ia-escalado";
 
-export const MAX_AI_SENDS_PER_HOUR = 6;
+/** Proteção contra loop, por contato: respostas (rodadas que enviaram algo) e balões na última hora. */
+export const MAX_AI_REPLIES_PER_HOUR = 15;
+export const MAX_AI_SENDS_PER_HOUR = 40;
 export const MAX_AGENT_STEPS = 5;
 /** Nenhum passo do loop começa depois disso (desde o início da rodada): sobra tempo para escalar. */
 export const AGENT_DEADLINE_MS = 85_000;
