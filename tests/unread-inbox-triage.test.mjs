@@ -4,6 +4,8 @@ import {
   cutTranscript,
   isPostSale,
   isWindowOpen,
+  lastClientMessageText,
+  windowRemainingMs,
   sortTriage,
   FALLBACK_RECENT_MESSAGES,
   MAX_CUT_MESSAGES,
@@ -101,4 +103,21 @@ test("fila: quente, morno, frio, pós; dentro da categoria quem espera há mais 
     sortTriage(items).map((i) => i.id),
     ["quente-antigo", "quente-novo", "morno", "frio", "pos", "sem"],
   );
+});
+
+test("última mensagem do cliente ignora as nossas e as automáticas", () => {
+  const messages = [
+    msg("c1", "inbound", "quero 20 pares"),
+    msg("c2", "inbound", "", ["https://x/audio.ogg"]),
+    msg("r1", "outbound", "Hi this is Hud Lab Private Label, I saw that we just missed your call"),
+  ];
+  assert.equal(lastClientMessageText(messages), "Enviou um anexo (imagem, áudio ou arquivo)");
+  assert.equal(lastClientMessageText(messages.slice(0, 1)), "quero 20 pares");
+  assert.equal(lastClientMessageText([msg("r1", "outbound", "oi")]), null);
+});
+
+test("tempo que falta para a janela fechar", () => {
+  const now = Date.parse("2026-09-30T12:00:00Z");
+  assert.equal(windowRemainingMs(now - 20 * 3600e3, now), 4 * 3600e3);
+  assert.equal(windowRemainingMs(now - 30 * 3600e3, now), 0);
 });

@@ -1,6 +1,6 @@
 // Leitura da fila de não lidas (aba Atendimentos Reais), usada pelas rotas de listar e atualizar.
 import type { createClient } from "@/lib/supabase/server";
-import { isWindowOpen, sortTriage, type TriageCategory } from "./triage";
+import { sortTriage, windowRemainingMs, type TriageCategory } from "./triage";
 
 export interface UnreadInboxItem {
   conversationId: string;
@@ -15,7 +15,8 @@ export interface UnreadInboxItem {
   unreadCount: number;
   lastInboundAt: string;
   lastMessageBody: string | null;
-  windowOpen: boolean;
+  /** Quanto falta para a janela de 24h fechar; a fila só tem quem ainda está nela. */
+  windowRemainingMs: number;
   category: TriageCategory | null;
   reason: string | null;
   subject: string | null;
@@ -50,7 +51,7 @@ export async function loadUnreadInbox(
     unreadCount: r.unread_count,
     lastInboundAt: r.last_inbound_at,
     lastMessageBody: r.last_message_body,
-    windowOpen: isWindowOpen(Date.parse(r.last_inbound_at), now),
+    windowRemainingMs: windowRemainingMs(Date.parse(r.last_inbound_at), now),
     category: r.category,
     reason: r.reason,
     subject: r.subject,
@@ -60,5 +61,6 @@ export async function loadUnreadInbox(
     insightOutdated: !!r.insight && r.insight_message_id !== r.last_message_id,
     refreshedAt: r.refreshed_at,
   }));
-  return sortTriage(items);
+  // Saiu da janela entre uma atualização e outra: some da fila na hora.
+  return sortTriage(items.filter((i) => i.windowRemainingMs > 0));
 }

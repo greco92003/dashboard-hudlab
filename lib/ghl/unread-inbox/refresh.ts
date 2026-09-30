@@ -16,7 +16,13 @@ import {
 import { isGhlWonDeal } from "@/lib/ghl/pipelines";
 import { runCopiloto, runTriage, type CopilotoReport } from "@/lib/ghl/sales-agent/agent";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
-import { cutTranscript, isPostSale, type TriageCategory } from "./triage";
+import {
+  cutTranscript,
+  isPostSale,
+  isWindowOpen,
+  lastClientMessageText,
+  type TriageCategory,
+} from "./triage";
 
 const TABLE = "ghl_unread_triage";
 /** Conversas processadas ao mesmo tempo: cabe no limite do GHL (100 req/10s) e da rota. */
@@ -124,7 +130,7 @@ async function triageConversation(
     unread_count: conversation.unreadCount,
     last_inbound_at: conversation.lastInboundAt,
     last_message_id: lastMessageId,
-    last_message_body: conversation.lastMessageBody,
+    last_message_body: lastClientMessageText(messages),
     is_unread: true,
     refreshed_at: refreshedAt,
   };
@@ -136,17 +142,13 @@ async function triageConversation(
 
   const won = picked?.won ?? false;
   if (isPostSale({ won, pipelineName, stageName, atendimentoStages: index.atendimentoStages })) {
-    // Assunto = o que o cliente escreveu por último, não a última mensagem da conversa (que pode ser nossa).
-    const lastClientMessage = [...messages].reverse().find((m) => m.direction === "inbound");
     return {
       ...row,
       category: "pos_venda",
       reason: won
         ? `Venda ganha${stageName ? ` (card em ${stageName})` : ""}.`
         : `Pedido já pago: card em ${stageName}.`,
-      subject:
-        lastClientMessage?.body.replace(/\s+/g, " ").trim().slice(0, 80) ||
-        (lastClientMessage?.attachments.length ? "Enviou um anexo (imagem, áudio ou arquivo)" : null),
+      subject: lastClientMessageText(messages)?.slice(0, 80) ?? null,
       classified_message_id: lastMessageId,
       classified_at: new Date().toISOString(),
       classify_error: null,
@@ -178,14 +180,18 @@ async function triageConversation(
 
 /**
  * Relê as não lidas de WhatsApp do GHL, classifica o que mudou e reescreve a
- * fila. Conversa que deixou de estar não lida sai da fila (is_unread = false).
+ * fila. Conversa lida, respondida ou fora da janela de 24h sai da fila
+ * (is_unread = false).
  */
 export async function refreshUnreadInbox(): Promise<{ total: number; errors: number }> {
   const supabase = await createSupabaseServerForSync();
-  const [conversations, index] = await Promise.all([
+  const [unread, index] = await Promise.all([
     searchUnreadWhatsappConversations(),
     loadPipelineIndex(),
   ]);
+  // Só quem ainda pode receber texto livre: fora da janela de 24h a fila não mostra (e não gasta IA).
+  const now = Date.now();
+  const conversations = unread.filter((c) => isWindowOpen(Date.parse(c.lastInboundAt), now));
 
   const ids = conversations.map((c) => c.conversationId);
   const { data: existingRows, error: existingError } = ids.length
