@@ -117,11 +117,9 @@ export function mesesRecentes(quantos: number, now = new Date()): MesAno[] {
   return meses;
 }
 
-/** "Setembro/2026 (02/09 a 01/10)" */
+/** "Setembro/2026" */
 export function rotuloDoFechamento(m: MesAno): string {
-  const { inicio, fim } = limitesDosFechamentos(m, m);
-  const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
-  return `${NOMES_DOS_MESES[m.month - 1]}/${m.year} (${ddmm(inicio)} a ${ddmm(fim)})`;
+  return `${NOMES_DOS_MESES[m.month - 1]}/${m.year}`;
 }
 
 /** Datas (YYYY-MM-DD) que cobrem os fechamentos do mês `de` até o mês `ate`. */
