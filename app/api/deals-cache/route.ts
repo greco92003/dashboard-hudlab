@@ -153,6 +153,16 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    const { data: completedSync } = await supabase
+      .from("sync_log")
+      .select("finished_at")
+      .in("source", ["ghl_deals_cache_full", "ghl_deals_cache_won"])
+      .eq("status", "success")
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastSyncAt = completedSync?.finished_at || lastSync?.last_synced_at || null;
+
     return NextResponse.json(
       {
         deals: transformedDeals,
@@ -163,8 +173,8 @@ export async function GET(request: NextRequest) {
             ? { startDate: startDateParam, endDate: endDateParam }
             : null,
         status: statusParam,
-        lastSync: lastSync?.last_synced_at || null,
-        syncStatus: lastSync ? "synced" : "unknown",
+        lastSync: lastSyncAt,
+        syncStatus: lastSyncAt ? "synced" : "unknown",
         totalDealsInLastSync: totalCachedDeals || 0,
         cacheInfo: {
           source: "ghl_deals_cache",

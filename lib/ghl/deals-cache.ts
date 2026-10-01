@@ -8,6 +8,7 @@ import {
 } from "@/lib/ghl/api";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { toIsoDate } from "@/lib/programacao/board-dates";
+import { shouldUpdateWonDeal, type CachedWonDeal } from "@/lib/ghl/won-deal-diff";
 
 const UPSERT_BATCH_SIZE = 500;
 
@@ -87,6 +88,41 @@ export async function upsertGhlDeals(
   return upserted;
 }
 
+async function onlyChangedWonDeals(deals: GhlMappedDeal[]) {
+  const supabase = createServiceClient();
+  const changed: GhlMappedDeal[] = [];
+
+  for (let index = 0; index < deals.length; index += UPSERT_BATCH_SIZE) {
+    const batch = deals.slice(index, index + UPSERT_BATCH_SIZE);
+    const { data, error } = await supabase
+      .from("deals_cache")
+      .select("deal_id, provider_payload, status, value, stage_id, pipeline_id, closing_date")
+      .eq("source_system", "ghl")
+      .in("deal_id", batch.map((deal) => deal.deal_id));
+    if (error) throw new Error(`GHL won cache comparison failed: ${error.message}`);
+
+    const cached = new Map(
+      ((data ?? []) as CachedWonDeal[]).map((row) => [row.deal_id, row]),
+    );
+    changed.push(
+      ...batch.filter((deal) => shouldUpdateWonDeal(deal, cached.get(deal.deal_id))),
+    );
+  }
+
+  return changed;
+}
+
+async function logCacheSync(source: string, startedAt: number, rows: number) {
+  const { error } = await createServiceClient().from("sync_log").insert({
+    source,
+    started_at: new Date(startedAt).toISOString(),
+    finished_at: new Date().toISOString(),
+    rows_upserted: rows,
+    status: "success",
+  });
+  if (error) console.error("GHL cache sync log failed", error);
+}
+
 async function removeStaleGhlDeals(liveDeals: GhlMappedDeal[]) {
   const supabase = createServiceClient();
   const cachedIds: string[] = [];
@@ -144,6 +180,7 @@ export async function syncAllGhlDeals(options?: {
   }
   const upserted = await upsertGhlDeals(result.deals, source, requestId);
   const removed = await removeStaleGhlDeals(result.deals);
+  await logCacheSync("ghl_deals_cache_full", startedAt, upserted);
 
   const wonDeals = result.deals.filter(
     (deal) => deal.status?.toLowerCase() === "won",
@@ -182,7 +219,12 @@ export async function syncWonGhlDeals(options?: {
   if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
     throw new Error("Refusing to upsert an incomplete GHL won snapshot");
   }
-  const upserted = await upsertGhlDeals(result.deals, source, requestId);
+  // This runs every 15 minutes. Rewriting all won deals at each pass causes
+  // index and WAL traffic even when the GHL payload is byte-for-byte equal.
+  // The complete daily sync still reconciles every field.
+  const changed = await onlyChangedWonDeals(result.deals);
+  const upserted = await upsertGhlDeals(changed, source, requestId);
+  await logCacheSync("ghl_deals_cache_won", startedAt, upserted);
   const wonValue =
     result.deals.reduce((sum, deal) => sum + Number(deal.value || 0), 0) / 100;
   return {

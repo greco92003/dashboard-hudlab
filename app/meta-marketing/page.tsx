@@ -49,6 +49,10 @@ function MetaMarketingContent() {
         toast.error("Falha ao sincronizar. Tente de novo em instantes.");
         return;
       }
+      if (data.alreadyRunning) {
+        toast.info("Uma sincronização recente já está em andamento. Aguarde os dados atualizarem.");
+        return;
+      }
       toast.success("Sincronização iniciada — os dados atualizam em alguns segundos.");
       await new Promise((resolve) => setTimeout(resolve, 8000));
       setRefreshKey((key) => key + 1);
