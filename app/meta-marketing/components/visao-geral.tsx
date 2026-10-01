@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Card,
@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { fetchMarketingReport } from "../report-client";
 import { ArrowDownRight, ArrowUpRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   LineChart,
@@ -181,7 +182,19 @@ export function VisaoGeral({
   const [pipelineNomes, setPipelineNomes] = useState<Map<string, string>>(new Map());
   const [vendasSemPares, setVendasSemPares] = useState<VendaSemParesRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingFunil, setLoadingFunil] = useState(true);
+  const [loadingSerie, setLoadingSerie] = useState(true);
+  const [loadingFontes, setLoadingFontes] = useState(true);
+  const [loadingCampanhas, setLoadingCampanhas] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroFunil, setErroFunil] = useState<string | null>(null);
+  const [erroSerie, setErroSerie] = useState<string | null>(null);
+  const [erroFontes, setErroFontes] = useState<string | null>(null);
+  const [erroCampanhas, setErroCampanhas] = useState<string | null>(null);
+  const [revalidateTick, setRevalidateTick] = useState(0);
+  const revalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selecionado = periodoParaDatas(periodo, customRange);
   // Início recortado na coleta do Meta; a variação compara só dias fechados
@@ -193,152 +206,159 @@ export function VisaoGeral({
   const realFim = fim === hojeSaoPaulo() ? diaAnterior(fim) : fim;
 
   useEffect(() => {
-    const supabase = createClient();
-    let cancel = false;
-    setLoading(true);
-    setErro(null);
-
-    const vazio = Promise.resolve({ data: [] as unknown[], error: null });
-    const { atualFechado, anterior } = janela;
-    // A variação do funil usa a parte fechada do período; quando o período
-    // já terminou, é o próprio período e não precisa de outra consulta.
-    const precisaFunilFechado = atualFechado != null && atualFechado.fim !== fim;
-
-    (async () => {
-      const [rpc, serieQ, serieAntQ, funilQ, funilFechadoQ, funilAntQ, fonteQ, funnelAds, saude, pipes, semPares] =
-        await Promise.all([
-          supabase.rpc("get_resumo_periodo", { p_inicio: inicio, p_fim: fim }),
-          // Somado por dia no banco: ler meta_insights_daily cru esbarrava no
-          // limite de 1.000 linhas do PostgREST (chegavam 11 de 30 dias).
-          supabase.rpc("get_serie_diaria", { p_inicio: inicio, p_fim: realFim }),
-          anterior
-            ? supabase.rpc("get_serie_diaria", { p_inicio: anterior.inicio, p_fim: anterior.fim })
-            : vazio,
-          supabase.rpc("get_funil_etapas", { p_inicio: inicio, p_fim: fim }),
-          precisaFunilFechado
-            ? supabase.rpc("get_funil_etapas", { p_inicio: atualFechado!.inicio, p_fim: atualFechado!.fim })
-            : vazio,
-          anterior
-            ? supabase.rpc("get_funil_etapas", { p_inicio: anterior.inicio, p_fim: anterior.fim })
-            : vazio,
-          supabase.rpc("get_desempenho_fonte", { p_inicio: inicio, p_fim: fim }),
-          supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
-          // Só a semana atual: a view calcula todas as semanas se não filtrar.
-          supabase
-            .from("v_atribuicao_saude")
-            .select("semana, pct_com_utm")
-            .gte("semana", inicioSemana(hojeSaoPaulo()))
-            .order("semana", { ascending: false })
-            .limit(1),
-          supabase.rpc("get_nomes_pipelines"),
-          // Mesma base e mesmo período do contador "vendas sem pares" do card.
-          supabase
-            .from("v_vendas_sem_pares")
-            .select("*")
-            .gte("dia_venda", inicio)
-            .lte("dia_venda", fim),
-        ]);
-      if (cancel) return;
-
-      if (rpc.error) {
-        setErro(rpc.error.message);
-        setLoading(false);
-        return;
-      }
-      setResumo(rpc.data as Resumo);
-      setSerieAtual((serieQ.data as SerieDiaRow[]) ?? []);
-      setSerieAnterior((serieAntQ.data as SerieDiaRow[]) ?? []);
-      setPipelineNomes(
-        new Map(
-          ((pipes.data as { pipeline_id: string; pipeline_name: string }[] | null) ?? []).map(
-            (p) => [p.pipeline_id, p.pipeline_name] as [string, string]
-          )
-        )
-      );
-      setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);
-
-      const chave = (r: FunilRow) => `${r.pipeline_id}:${r.stage_name}`;
-      const funilFechado = (precisaFunilFechado ? funilFechadoQ.data : funilQ.data) as FunilRow[] | null;
-      const porEtapaFechada = new Map((funilFechado ?? []).map((r) => [chave(r), r]));
-      const porEtapaAnterior = new Map(
-        ((funilAntQ.data as FunilRow[]) ?? []).map((r) => [chave(r), r])
-      );
-      // Quantidade exibida = período inteiro (inclui hoje); variação = dias
-      // fechados vs. período anterior de mesma duração.
-      const funilMerged = ((funilQ.data as FunilRow[]) ?? []).map((r) => {
-        const fechada = porEtapaFechada.get(chave(r));
-        const ant = porEtapaAnterior.get(chave(r));
-        const variacao: FunilRow["variacao"] = {};
-        if (fechada && ant) {
-          const vq = calcVariacao(Number(fechada.qtd) || 0, Number(ant.qtd) || 0);
-          if (vq !== undefined) variacao.qtd = vq;
-          if (fechada.custo_por_oportunidade != null && ant.custo_por_oportunidade != null) {
-            const vc = calcVariacao(fechada.custo_por_oportunidade, ant.custo_por_oportunidade);
-            if (vc !== undefined) variacao.custo_por_oportunidade = vc;
-          }
-        }
-        return { ...r, variacao };
-      });
-      setFunil(funilMerged);
-      setFontes((fonteQ.data as FonteRow[]) ?? []);
-      setSaudePct(saude.data?.[0]?.pct_com_utm ?? null);
-
-      // Top 5 campanhas por ROAS (agregado por campanha)
-      const porCampanha = new Map<string, CampanhaRow>();
-      for (const r of funnelAds.data ?? []) {
-        const nome = r.campaign_name ?? "(sem campanha)";
-        let c = porCampanha.get(nome);
-        if (!c) {
-          c = { campaign_name: nome, spend: 0, faturamento: 0, vendas: 0, roas: null };
-          porCampanha.set(nome, c);
-        }
-        c.spend += Number(r.spend_total) || 0;
-        c.faturamento += Number(r.faturamento) || 0;
-        c.vendas += Number(r.vendas) || 0;
-      }
-      const campanhas = [...porCampanha.values()].map((c) => ({
-        ...c,
-        roas: c.spend > 0 ? c.faturamento / c.spend : null,
-      }));
-      campanhas.sort((a, b) => (b.roas ?? -1) - (a.roas ?? -1));
-      setTopCampanhas(campanhas.slice(0, 5));
-
-      setLoading(false);
-    })();
-
+    setRevalidateTick(0);
     return () => {
-      cancel = true;
+      if (revalidateTimer.current) clearTimeout(revalidateTimer.current);
+      revalidateTimer.current = null;
     };
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
-        </div>
-        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
-        </div>
-      </div>
-    );
-  }
+  const scheduleRevalidate = () => {
+    if (revalidateTick >= 2 || revalidateTimer.current) return;
+    revalidateTimer.current = setTimeout(() => {
+      revalidateTimer.current = null;
+      setRevalidateTick((tick) => tick + 1);
+    }, 12_000);
+  };
 
-  if (erro) {
-    return (
-      <Card>
-        <CardContent className="pt-6 text-sm text-destructive">
-          Erro ao carregar resumo: {erro}
-        </CardContent>
-      </Card>
-    );
-  }
+  useEffect(() => {
+    const controller = new AbortController();
+    if (revalidateTick === 0) setLoading(true);
+    setErro(null);
+    if (revalidateTick === 0) {
+      setResumo(null);
+      setUpdatedAt(null);
+      setStale(false);
+    }
+    fetchMarketingReport<Resumo>("summary", inicio, fim, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setResumo(result.data);
+        setUpdatedAt(result.updatedAt);
+        setStale(result.stale);
+        if (result.stale) scheduleRevalidate();
+      })
+      .catch((error) => { if (!controller.signal.aborted) setErro(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
 
-  const a = resumo!.atual;
-  const v = resumo!.variacao_pct;
+  useEffect(() => {
+    const controller = new AbortController();
+    if (revalidateTick === 0) setLoadingSerie(true);
+    setErroSerie(null);
+    if (revalidateTick === 0) {
+      setSerieAtual([]);
+      setSerieAnterior([]);
+    }
+    const anterior = janela.anterior;
+    Promise.all([
+      realFim >= inicio
+        ? fetchMarketingReport<SerieDiaRow[]>("series", inicio, realFim, controller.signal)
+        : Promise.resolve({ data: [] as SerieDiaRow[], stale: false }),
+      anterior ? fetchMarketingReport<SerieDiaRow[]>("series", anterior.inicio, anterior.fim, controller.signal) : Promise.resolve(null),
+    ]).then(([atual, previo]) => {
+      if (controller.signal.aborted) return;
+      setSerieAtual(atual.data ?? []);
+      setSerieAnterior(previo?.data ?? []);
+      if (atual.stale || previo?.stale) scheduleRevalidate();
+    }).catch((error) => { if (!controller.signal.aborted) setErroSerie(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingSerie(false); });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const supabase = createClient();
+    const { atualFechado, anterior } = janela;
+    const precisaFechado = atualFechado != null && atualFechado.fim !== fim;
+    if (revalidateTick === 0) setLoadingFunil(true);
+    setErroFunil(null);
+    if (revalidateTick === 0) setFunil([]);
+    Promise.all([
+      fetchMarketingReport<FunilRow[]>("funnel", inicio, fim, controller.signal),
+      precisaFechado ? fetchMarketingReport<FunilRow[]>("funnel", atualFechado!.inicio, atualFechado!.fim, controller.signal) : Promise.resolve(null),
+      anterior ? fetchMarketingReport<FunilRow[]>("funnel", anterior.inicio, anterior.fim, controller.signal) : Promise.resolve(null),
+      supabase.rpc("get_nomes_pipelines"),
+    ]).then(([atual, fechado, previo, pipes]) => {
+      if (controller.signal.aborted) return;
+      const chave = (r: FunilRow) => `${r.pipeline_id}:${r.stage_name}`;
+      const fechadas = fechado?.data ?? atual.data;
+      const porFechada = new Map((fechadas ?? []).map((r) => [chave(r), r]));
+      const porAnterior = new Map((previo?.data ?? []).map((r) => [chave(r), r]));
+      setFunil((atual.data ?? []).map((row) => {
+        const fechada = porFechada.get(chave(row));
+        const ant = porAnterior.get(chave(row));
+        const variacao: FunilRow["variacao"] = {};
+        if (fechada && ant) {
+          const qtd = calcVariacao(Number(fechada.qtd) || 0, Number(ant.qtd) || 0);
+          if (qtd !== undefined) variacao.qtd = qtd;
+          if (fechada.custo_por_oportunidade != null && ant.custo_por_oportunidade != null) {
+            const custo = calcVariacao(fechada.custo_por_oportunidade, ant.custo_por_oportunidade);
+            if (custo !== undefined) variacao.custo_por_oportunidade = custo;
+          }
+        }
+        return { ...row, variacao };
+      }));
+      setPipelineNomes(new Map(
+        ((pipes.data as { pipeline_id: string; pipeline_name: string }[] | null) ?? [])
+          .map((p) => [p.pipeline_id, p.pipeline_name] as [string, string])
+      ));
+      if (atual.stale || fechado?.stale || previo?.stale) scheduleRevalidate();
+    }).catch((error) => { if (!controller.signal.aborted) setErroFunil(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingFunil(false); });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (revalidateTick === 0) setLoadingFontes(true);
+    setErroFontes(null);
+    if (revalidateTick === 0) setFontes([]);
+    fetchMarketingReport<FonteRow[]>("sources", inicio, fim, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setFontes(result.data ?? []);
+        if (result.stale) scheduleRevalidate();
+      })
+      .catch((error) => { if (!controller.signal.aborted) setErroFontes(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingFontes(false); });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (revalidateTick === 0) setLoadingCampanhas(true);
+    setErroCampanhas(null);
+    if (revalidateTick === 0) setTopCampanhas([]);
+    fetchMarketingReport<CampanhaRow[]>("top-campaigns", inicio, fim, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setTopCampanhas(result.data ?? []);
+        if (result.stale) scheduleRevalidate();
+      })
+      .catch((error) => { if (!controller.signal.aborted) setErroCampanhas(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoadingCampanhas(false); });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    Promise.all([
+      supabase.from("v_atribuicao_saude").select("semana, pct_com_utm")
+        .gte("semana", inicioSemana(hojeSaoPaulo())).order("semana", { ascending: false }).limit(1),
+      supabase.from("v_vendas_sem_pares").select("*").gte("dia_venda", inicio).lte("dia_venda", fim),
+    ]).then(([saude, semPares]) => {
+      if (cancelled) return;
+      setSaudePct(saude.data?.[0]?.pct_com_utm ?? null);
+      setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
+
+  const a = resumo?.atual ?? {} as Kpis;
+  const v = resumo?.variacao_pct ?? {};
   const nd = (x: number | null | undefined, fmt: (n: number) => string) =>
     x == null ? "N/D" : fmt(x);
 
@@ -463,10 +483,20 @@ export function VisaoGeral({
 
       {/* Contra o que a variação % compara (e recorte no início da coleta) */}
       <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
+      {updatedAt && (
+        <p className="text-xs text-muted-foreground">
+          Atualizado às {new Date(updatedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+          {stale ? " · atualizando em segundo plano" : ""}
+        </p>
+      )}
 
       {/* KPIs com variação vs período anterior */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {kpis.map((k) => (
+        {loading && !resumo ? Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-28" />
+        )) : erro && !resumo ? (
+          <p className="text-sm text-destructive col-span-full">Erro ao carregar resumo: {erro}</p>
+        ) : kpis.map((k) => (
           <Card key={k.key}>
             <CardHeader className="pb-2 px-4 pt-4">
               <CardDescription className="text-xs">{k.label}</CardDescription>
@@ -511,7 +541,9 @@ export function VisaoGeral({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {funil.length === 0 ? (
+            {loadingFunil ? <Skeleton className="h-64" /> : erroFunil ? (
+              <p className="text-sm text-destructive">Erro ao carregar funil: {erroFunil}</p>
+            ) : funil.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem snapshots ainda. O funil começa a existir quando o sync-ghl
                 roda pela primeira vez.
@@ -563,7 +595,9 @@ export function VisaoGeral({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {serie.length === 0 ? (
+            {loadingSerie ? <Skeleton className="h-64" /> : erroSerie ? (
+              <p className="text-sm text-destructive">Erro ao carregar gráfico: {erroSerie}</p>
+            ) : serie.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem dados no período. Rode os syncs para começar a coletar.
               </p>
@@ -642,7 +676,9 @@ export function VisaoGeral({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {fontes.length === 0 ? (
+            {loadingFontes ? <Skeleton className="h-64" /> : erroFontes ? (
+              <p className="text-sm text-destructive">Erro ao carregar fontes: {erroFontes}</p>
+            ) : fontes.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem leads sincronizados ainda.
               </p>
@@ -702,7 +738,9 @@ export function VisaoGeral({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {topCampanhas.length === 0 ? (
+            {loadingCampanhas ? <Skeleton className="h-64" /> : erroCampanhas ? (
+              <p className="text-sm text-destructive">Erro ao carregar campanhas: {erroCampanhas}</p>
+            ) : topCampanhas.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem campanhas sincronizadas ainda.
               </p>
@@ -795,7 +833,9 @@ export function VisaoGeral({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {funil.length === 0 ? (
+            {loadingFunil ? <Skeleton className="h-48" /> : erroFunil ? (
+              <p className="text-sm text-destructive">Erro ao carregar custos do funil: {erroFunil}</p>
+            ) : funil.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">
                 Sem snapshots ainda — o custo por etapa nasce junto com o funil.
               </p>

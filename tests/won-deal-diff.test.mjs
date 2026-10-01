@@ -20,7 +20,7 @@ const cached = {
   value: "12500.00",
   stage_id: "stage-1",
   pipeline_id: "pipeline-1",
-  closing_date: "2026-10-01",
+  closing_date: "2026-10-01T00:00:00+00:00",
 };
 
 test("não regrava venda ganha idêntica só por ordem de chaves ou formato numérico", () => {

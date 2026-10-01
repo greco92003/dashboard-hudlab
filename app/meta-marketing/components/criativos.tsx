@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchMarketingReport } from "../report-client";
 import {
   Card,
   CardContent,
@@ -134,6 +135,7 @@ export function Criativos() {
 
   useEffect(() => {
     const supabase = createClient();
+    const controller = new AbortController();
     let cancel = false;
     setLoading(true);
     setErro(null);
@@ -153,12 +155,13 @@ export function Criativos() {
           .from("meta_ad_creative_analysis")
           .select("ad_id, media_type, call_to_action_type, analysis")
           .not("analysis", "is", null),
-        supabase.rpc("get_funnel_por_anuncio", { p_inicio: fmt(inicio), p_fim: fmt(hoje) }),
+        fetchMarketingReport<FunnelRow[]>("ads", fmt(inicio), fmt(hoje), controller.signal)
+          .then((result) => ({ data: result.data, error: null })),
       ]);
       if (cancel) return;
 
       const erroEncontrado =
-        padroesRes.error?.message ?? analiseRes.error?.message ?? funilRes.error?.message ?? null;
+        padroesRes.error?.message ?? analiseRes.error?.message ?? null;
       if (erroEncontrado) {
         setErro(erroEncontrado);
         setLoading(false);
@@ -197,9 +200,15 @@ export function Criativos() {
         .sort((a, b) => b.spend_total - a.spend_total);
       setCriativos(combinados);
       setLoading(false);
-    })();
+    })().catch((error) => {
+      if (!cancel) {
+        setErro(error.message);
+        setLoading(false);
+      }
+    });
     return () => {
       cancel = true;
+      controller.abort();
     };
   }, []);
 

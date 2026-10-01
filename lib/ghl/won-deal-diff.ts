@@ -22,6 +22,8 @@ export function shouldUpdateWonDeal(
     Number(cached.value) !== incoming.value ||
     cached.stage_id !== incoming.stage_id ||
     cached.pipeline_id !== incoming.pipeline_id ||
-    cached.closing_date !== incoming.closing_date
+    // PostgREST serializes the timestamptz column at UTC midnight while the
+    // GHL payload carries the same closing day as YYYY-MM-DD.
+    (cached.closing_date?.slice(0, 10) ?? null) !== incoming.closing_date
   );
 }

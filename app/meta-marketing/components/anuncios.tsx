@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchMarketingReport } from "../report-client";
 import {
   Card,
   CardContent,
@@ -306,6 +307,8 @@ export function Anuncios({
   const [rawAnterior, setRawAnterior] = useState<FunnelRow[]>([]);
   const [frios, setFrios] = useState<LeadFrioRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const [busca, setBusca] = useState("");
   const [nivel, setNivel] = useState<Nivel>("anuncio");
   const [sortKey, setSortKey] = useState<SortKey>("spend_total");
@@ -316,6 +319,7 @@ export function Anuncios({
 
   useEffect(() => {
     const supabase = createClient();
+    const controller = new AbortController();
     const { inicio, fim, atualFechado, anterior } = janela;
     // Tabela = período inteiro (inclui hoje). Variação = dias fechados vs.
     // período anterior de mesma duração -- quando o período já terminou, a
@@ -326,26 +330,34 @@ export function Anuncios({
     setLoading(true);
     (async () => {
       const [atual, fechadoQ, anteriorQ, leadsFrios] = await Promise.all([
-        supabase.rpc("get_funnel_por_anuncio", { p_inicio: inicio, p_fim: fim }),
+        fetchMarketingReport<FunnelRow[]>("ads", inicio, fim, controller.signal),
         precisaFechado
-          ? supabase.rpc("get_funnel_por_anuncio", { p_inicio: atualFechado!.inicio, p_fim: atualFechado!.fim })
+          ? fetchMarketingReport<FunnelRow[]>("ads", atualFechado!.inicio, atualFechado!.fim, controller.signal)
           : vazio,
         anterior
-          ? supabase.rpc("get_funnel_por_anuncio", { p_inicio: anterior.inicio, p_fim: anterior.fim })
+          ? fetchMarketingReport<FunnelRow[]>("ads", anterior.inicio, anterior.fim, controller.signal)
           : vazio,
         supabase.from("v_leads_sem_venda").select("*"),
       ]);
       if (cancel) return;
 
       const linhasAtuais = (atual.data as FunnelRow[]) ?? [];
+      setUpdatedAt(atual.updatedAt);
+      setStale(atual.stale);
       setRawAtual(linhasAtuais);
       setRawFechado(precisaFechado ? ((fechadoQ.data as FunnelRow[]) ?? []) : linhasAtuais);
       setRawAnterior((anteriorQ.data as FunnelRow[]) ?? []);
       setFrios((leadsFrios.data as LeadFrioRow[]) ?? []);
       setLoading(false);
-    })();
+    })().catch((error) => {
+      if (!cancel) {
+        console.error("Relatório de anúncios", error);
+        setLoading(false);
+      }
+    });
     return () => {
       cancel = true;
+      controller.abort();
     };
     // janela deriva só de periodo/customRange (e do dia de hoje).
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
@@ -449,6 +461,12 @@ export function Anuncios({
             trazendo a campanha de origem. Lead time ~35 dias.
           </CardDescription>
           <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
+          {updatedAt && (
+            <p className="text-xs text-muted-foreground">
+              Atualizado às {new Date(updatedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+              {stale ? " · atualizando em segundo plano" : ""}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <Input
               placeholder="Buscar por anúncio, campanha ou ad_id..."
