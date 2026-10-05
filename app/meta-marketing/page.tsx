@@ -94,7 +94,7 @@ function MetaMarketingContent() {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Atualizando..." : "Atualizar"}
           </Button>
-          {(aba === "visao-geral" || aba === "anuncios") && <SeletorPeriodo />}
+          {(aba === "visao-geral" || aba === "anuncios" || aba === "regioes") && <SeletorPeriodo />}
         </div>
       </div>
 
