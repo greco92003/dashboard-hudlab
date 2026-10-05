@@ -8,6 +8,8 @@ export const REPORTS = {
   ads: { rpc: "get_funnel_por_anuncio", period: true },
   "top-campaigns": { rpc: "get_funnel_por_anuncio", period: true },
   "sales-without-pairs": { rpc: "get_vendas_sem_pares", period: true },
+  regions: { rpc: "get_desempenho_uf", period: true },
+  "regions-history": { rpc: "get_desempenho_uf", period: false },
   pipelines: { rpc: "get_nomes_pipelines", period: false },
   health: { rpc: "get_atribuicao_saude", period: false },
   "utm-unmatched": { rpc: "get_utm_sem_match", period: false },

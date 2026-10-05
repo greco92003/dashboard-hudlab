@@ -34,7 +34,16 @@ test("relatório fora da lista e nomes herdados de Object são recusados", () =>
 
 test("catálogo cobre os relatórios que as telas usam", () => {
   assert.deepEqual(Object.keys(REPORTS).sort(), [
-    "ads", "funnel", "health", "leads-without-sale", "pipelines", "sales-without-pairs",
-    "series", "sources", "summary", "top-campaigns", "utm-unmatched",
+    "ads", "funnel", "health", "leads-without-sale", "pipelines", "regions", "regions-history",
+    "sales-without-pairs", "series", "sources", "summary", "top-campaigns", "utm-unmatched",
   ]);
+});
+
+test("regions usa período e regions-history não", () => {
+  assert.deepEqual(parseReportRequest(q({ report: "regions", inicio: "2026-09-01", fim: "2026-09-30" })), {
+    ok: true, report: "regions", rpc: "get_desempenho_uf", inicio: "2026-09-01", fim: "2026-09-30",
+  });
+  assert.deepEqual(parseReportRequest(q({ report: "regions-history" })), {
+    ok: true, report: "regions-history", rpc: "get_desempenho_uf", inicio: null, fim: null,
+  });
 });
