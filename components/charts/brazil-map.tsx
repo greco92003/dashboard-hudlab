@@ -39,8 +39,11 @@ export interface BrazilMapProps {
 const DIM_OPACITY = 0.35;
 const DF_RADIUS = 7;
 
+// Mistura em oklab, não oklch: o fundo é um cinza e, em oklch, a matiz dele
+// (0, vermelho) entra na interpolação e o verde passa por marrom e laranja.
+// Em oklab não há ângulo de matiz, então a cor só escurece rumo ao fundo.
 function mixColor(color: string, intensity: number): string {
-  return `color-mix(in oklch, ${color} ${Math.round(intensity * 100)}%, ${chartCssVars.background})`;
+  return `color-mix(in oklab, ${color} ${Math.round(intensity * 100)}%, ${chartCssVars.background})`;
 }
 
 interface HoverState {
