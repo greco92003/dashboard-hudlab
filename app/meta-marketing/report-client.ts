@@ -1,5 +1,6 @@
-export type MarketingReport =
-  | "summary" | "series" | "funnel" | "sources" | "ads" | "top-campaigns";
+import type { MarketingReport } from "./report-catalog";
+
+export type { MarketingReport };
 
 export interface MarketingReportResult<T> {
   data: T;
@@ -7,13 +8,28 @@ export interface MarketingReportResult<T> {
   stale: boolean;
 }
 
-export async function fetchMarketingReport<T>(
+export function fetchMarketingReport<T>(
   report: MarketingReport,
   inicio: string,
   fim: string,
   signal?: AbortSignal,
 ): Promise<MarketingReportResult<T>> {
-  const params = new URLSearchParams({ report, inicio, fim });
+  return fetchReport<T>(report, new URLSearchParams({ report, inicio, fim }), signal);
+}
+
+/** Relatórios sem período (retrato do momento, cache de 30 min). */
+export function fetchMarketingSnapshot<T>(
+  report: MarketingReport,
+  signal?: AbortSignal,
+): Promise<MarketingReportResult<T>> {
+  return fetchReport<T>(report, new URLSearchParams({ report }), signal);
+}
+
+async function fetchReport<T>(
+  report: MarketingReport,
+  params: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<MarketingReportResult<T>> {
   const url = `/api/meta-marketing/report?${params.toString()}`;
   for (let attempt = 0; attempt < 16; attempt += 1) {
     const response = await fetch(url, { cache: "no-store", signal });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { fetchMarketingSnapshot } from "../report-client";
 import {
   Card,
   CardContent,
@@ -60,26 +60,21 @@ export function Saude({ refreshKey }: { refreshKey?: number }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = createClient();
-    let cancel = false;
+    const controller = new AbortController();
     setLoading(true);
-    (async () => {
-      const [saude, utms] = await Promise.all([
-        supabase.from("v_atribuicao_saude").select("*"),
-        supabase.from("v_utm_sem_match").select("*").limit(100),
-      ]);
-      if (cancel) return;
-      setRows(
-        ((saude.data as SaudeRow[]) ?? []).sort((a, b) =>
-          a.semana.localeCompare(b.semana)
-        )
-      );
-      setSemMatch((utms.data as UtmSemMatchRow[]) ?? []);
-      setLoading(false);
-    })();
-    return () => {
-      cancel = true;
-    };
+    Promise.all([
+      fetchMarketingSnapshot<SaudeRow[]>("health", controller.signal),
+      fetchMarketingSnapshot<UtmSemMatchRow[]>("utm-unmatched", controller.signal),
+    ]).then(([saude, utms]) => {
+      if (controller.signal.aborted) return;
+      setRows([...(saude.data ?? [])].sort((a, b) => a.semana.localeCompare(b.semana)));
+      setSemMatch(utms.data ?? []);
+    }).catch((error) => {
+      if (!controller.signal.aborted) console.error("Saúde da atribuição", error);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
   }, [refreshKey]);
 
   if (loading) return <Skeleton className="h-96" />;

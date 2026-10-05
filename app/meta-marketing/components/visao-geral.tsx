@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   Card,
   CardContent,
@@ -18,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchMarketingReport } from "../report-client";
+import { fetchMarketingReport, fetchMarketingSnapshot } from "../report-client";
 import { ArrowDownRight, ArrowUpRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   LineChart,
@@ -269,7 +268,6 @@ export function VisaoGeral({
 
   useEffect(() => {
     const controller = new AbortController();
-    const supabase = createClient();
     const { atualFechado, anterior } = janela;
     const precisaFechado = atualFechado != null && atualFechado.fim !== fim;
     if (revalidateTick === 0) setLoadingFunil(true);
@@ -279,7 +277,7 @@ export function VisaoGeral({
       fetchMarketingReport<FunilRow[]>("funnel", inicio, fim, controller.signal),
       precisaFechado ? fetchMarketingReport<FunilRow[]>("funnel", atualFechado!.inicio, atualFechado!.fim, controller.signal) : Promise.resolve(null),
       anterior ? fetchMarketingReport<FunilRow[]>("funnel", anterior.inicio, anterior.fim, controller.signal) : Promise.resolve(null),
-      supabase.rpc("get_nomes_pipelines"),
+      fetchMarketingSnapshot<{ pipeline_id: string; pipeline_name: string }[]>("pipelines", controller.signal),
     ]).then(([atual, fechado, previo, pipes]) => {
       if (controller.signal.aborted) return;
       const chave = (r: FunilRow) => `${r.pipeline_id}:${r.stage_name}`;
@@ -343,18 +341,21 @@ export function VisaoGeral({
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey, revalidateTick]);
 
   useEffect(() => {
-    const supabase = createClient();
-    let cancelled = false;
+    const controller = new AbortController();
+    const semana = inicioSemana(hojeSaoPaulo());
     Promise.all([
-      supabase.from("v_atribuicao_saude").select("semana, pct_com_utm")
-        .gte("semana", inicioSemana(hojeSaoPaulo())).order("semana", { ascending: false }).limit(1),
-      supabase.from("v_vendas_sem_pares").select("*").gte("dia_venda", inicio).lte("dia_venda", fim),
+      fetchMarketingSnapshot<{ semana: string; pct_com_utm: number | null }[]>("health", controller.signal),
+      fetchMarketingReport<VendaSemParesRow[]>("sales-without-pairs", inicio, fim, controller.signal),
     ]).then(([saude, semPares]) => {
-      if (cancelled) return;
-      setSaudePct(saude.data?.[0]?.pct_com_utm ?? null);
-      setVendasSemPares((semPares.data as VendaSemParesRow[]) ?? []);
+      if (controller.signal.aborted) return;
+      const atual = (saude.data ?? []).filter((r) => r.semana >= semana)
+        .sort((a, b) => b.semana.localeCompare(a.semana))[0];
+      setSaudePct(atual?.pct_com_utm ?? null);
+      setVendasSemPares(semPares.data ?? []);
+    }).catch((error) => {
+      if (!controller.signal.aborted) console.error("Saúde e vendas sem pares", error);
     });
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
   const a = resumo?.atual ?? {} as Kpis;
