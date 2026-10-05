@@ -116,7 +116,7 @@ function MetaMarketingContent() {
           <Anuncios periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="regioes" className="mt-4">
-          <Regioes refreshKey={refreshKey} />
+          <Regioes periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="saude" className="mt-4">
           <Saude refreshKey={refreshKey} />
