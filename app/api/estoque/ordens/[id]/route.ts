@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { cancelarOrdemCompra } from "@/lib/estoque/ordem-compra-source";
-import { invalidarCacheSolados } from "@/lib/estoque/solados-source";
+import { atualizarTinySolados } from "@/lib/estoque/solados-source";
 import { COMPRAS_ROLES, requireRole } from "@/lib/security/route-guards";
+
+// A releitura do Tiny roda depois da resposta (`after`) e cabe aqui.
+export const maxDuration = 300;
 
 
 const acaoSchema = z.object({ cancelar: z.literal(true) });
@@ -33,7 +36,13 @@ export async function PATCH(
 
   try {
     await cancelarOrdemCompra(numero);
-    invalidarCacheSolados();
+    // A OC mudou: relê saldo e "a caminho" do Tiny para a tela de estoque, em
+    // segundo plano. A falha fica no log; a próxima abertura da tela relê.
+    after(() =>
+      atualizarTinySolados({ evento: true }).catch((error) =>
+        console.error("Estoque de solados: releitura do Tiny falhou", error),
+      ),
+    );
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Falha ao cancelar ordem de compra no Tiny", error);

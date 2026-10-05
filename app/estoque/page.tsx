@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,11 @@ import { PainelPolitica } from "@/components/estoque/painel-politica";
 import { TabelaSolados } from "@/components/estoque/tabela-solados";
 import type { SoladoResumo } from "@/lib/estoque/solados";
 
-type Resposta = SoladoResumo & { lidoEm: string };
+type Resposta = SoladoResumo & { lidoEm: string; atualizando: boolean };
+
+/** Enquanto o Tiny é relido em segundo plano, a tela busca de novo. */
+const INTERVALO_ATUALIZANDO_MS = 10_000;
+const MAX_BUSCAS_ATUALIZANDO = 30;
 
 const formatarHora = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
@@ -26,15 +30,27 @@ export default function EstoquePage() {
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // Teto de buscas seguidas: se o Tiny falhar de vez (token expirado), cada
+  // busca pediria outra releitura. Zera a cada carga manual.
+  const buscasAtualizando = useRef(0);
 
   const carregar = useCallback(async (forcar = false) => {
+    buscasAtualizando.current = 0;
     setCarregando(true);
     setErro(null);
     try {
       const resposta = await fetch(
         `/api/estoque/solados${forcar ? "?refresh=1" : ""}`,
       );
-      const corpo = await resposta.json();
+      // Estouro de tempo na Vercel volta como página HTML, não JSON: sem isso a
+      // tela mostraria "Unexpected token '<'" em vez do status.
+      const texto = await resposta.text();
+      let corpo: Record<string, unknown>;
+      try {
+        corpo = JSON.parse(texto);
+      } catch {
+        throw new Error(`Falha na leitura (HTTP ${resposta.status}).`);
+      }
       if (!resposta.ok) {
         // A causa entra na mensagem: sem ela a falha some num texto genérico e
         // só resta caçar log, que nem sempre chega.
@@ -44,7 +60,7 @@ export default function EstoquePage() {
             .join(" — "),
         );
       }
-      setDados(corpo as Resposta);
+      setDados(corpo as unknown as Resposta);
       if (forcar) toast.success("Estoque atualizado.");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha na leitura.");
@@ -56,6 +72,23 @@ export default function EstoquePage() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  const atualizando = dados?.atualizando ?? false;
+  useEffect(() => {
+    if (!atualizando || buscasAtualizando.current >= MAX_BUSCAS_ATUALIZANDO) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      buscasAtualizando.current += 1;
+      try {
+        const resposta = await fetch("/api/estoque/solados");
+        if (resposta.ok) setDados((await resposta.json()) as Resposta);
+      } catch {
+        // Silencioso: a tela segue com a leitura anterior e a hora dela.
+      }
+    }, INTERVALO_ATUALIZANDO_MS);
+    return () => clearTimeout(timer);
+  }, [atualizando, dados]);
 
   const porCor = useMemo(() => {
     if (!dados) return [];
@@ -75,6 +108,7 @@ export default function EstoquePage() {
           {dados && (
             <span className="mr-2 text-xs tabular-nums text-muted-foreground">
               {formatarHora(dados.lidoEm)}
+              {dados.atualizando && " · atualizando…"}
             </span>
           )}
           {dados && <PainelPolitica dados={dados} />}

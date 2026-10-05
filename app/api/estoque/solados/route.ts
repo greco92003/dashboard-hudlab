@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
-import { getResumoSolados } from "@/lib/estoque/solados-source";
+import { after, NextResponse } from "next/server";
+import {
+  atualizarTinySolados,
+  getResumoSolados,
+} from "@/lib/estoque/solados-source";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 
-// A leitura completa cruza ~20 buscas no GHL, ~45 leituras de oportunidade e
-// ~40 chamadas no Tiny. Cabe folga.
+// A tela lê do banco. O tempo é para o botão Atualizar e a primeira abertura,
+// que refazem a leitura completa: ~20 buscas no GHL, ~45 leituras de
+// oportunidade e ~40 chamadas no Tiny.
 export const maxDuration = 300;
 
 export async function GET(request: Request) {
@@ -13,8 +17,18 @@ export async function GET(request: Request) {
   const forcar = new URL(request.url).searchParams.get("refresh") === "1";
 
   try {
-    const { resumo, lidoEm } = await getResumoSolados({ forcar });
-    return NextResponse.json({ ...resumo, lidoEm });
+    const { resumo, lidoEm, atualizando, revalidar } = await getResumoSolados({
+      forcar,
+    });
+    if (revalidar) {
+      // Serve a leitura gravada agora e relê o Tiny depois da resposta.
+      after(() =>
+        atualizarTinySolados().catch((error) =>
+          console.error("Estoque de solados: releitura do Tiny falhou", error),
+        ),
+      );
+    }
+    return NextResponse.json({ ...resumo, lidoEm, atualizando });
   } catch (error) {
     console.error("Estoque de solados falhou", error);
     const mensagem = error instanceof Error ? error.message : "";

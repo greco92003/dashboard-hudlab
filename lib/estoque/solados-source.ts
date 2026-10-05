@@ -1,10 +1,17 @@
 /**
- * Leitura ao vivo do GHL e do Tiny para o estoque de solados.
+ * Estoque de solados: GHL e Tiny gravados quando mudam, servidos do banco.
  *
- * Nada disso vive em tabela: a grade e a cor do solado mudam no CRM várias
- * vezes por dia enquanto o time completa os pedidos, e compras precisa decidir
- * sobre o estado de agora. O custo é ~100 chamadas por atualização, então o
- * resultado fica em cache por alguns minutos e a tela mostra a hora da leitura.
+ * Ler tudo ao vivo custava ~100 chamadas a cada tela aberta. Agora:
+ *   - GHL: o webhook de oportunidade regrava só aquele negócio
+ *     (`sincronizarNegocioSolados`), com a mesma regra da varredura completa
+ *     (`etapasAlvo` + `montarNegocio`);
+ *   - Tiny: saldo e compras são relidos juntos (`atualizarTinySolados`) quando
+ *     uma OC muda pelo dashboard, no botão Atualizar, ou quando alguém abre a
+ *     tela e a última leitura passou de cinco minutos — em segundo plano,
+ *     servindo a leitura anterior com a hora dela enquanto isso.
+ * O botão Atualizar também refaz a varredura do GHL, corrigindo o que um
+ * webhook perdido tenha deixado para trás. O cálculo não mudou: `montarResumo`
+ * recebe as mesmas entradas, só que guardadas.
  */
 
 import {
@@ -13,8 +20,10 @@ import {
   fetchOpportunityById,
   searchGhlOpportunitiesByStage,
   type GhlCustomFieldDef,
+  type GhlDealContext,
   type GhlOpportunity,
 } from "@/lib/ghl/api";
+import { createClient } from "@supabase/supabase-js";
 import { normalizeStageTitle } from "@/lib/ghl/programacao-stages";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { paresACaminho } from "./ordem-compra";
@@ -33,7 +42,8 @@ import {
   type SoladoSkuTiny,
 } from "./solados";
 
-const CACHE_MS = 5 * 60 * 1_000;
+/** Mesma validade do antigo cache em memória. */
+const VALIDADE_TINY_MS = 5 * 60 * 1_000;
 const LOTE_GHL = 5;
 
 /**
@@ -50,20 +60,15 @@ const LOTE_GHL = 5;
  * ficaram invisíveis nas duas pontas e a tela mandou comprar 1.557 em vez de
  * 767 — o dobro, do material que tinha acabado de chegar.
  *
- * OC nova criada pelo dashboard invalida o cache; criada direto no Tiny,
- * aparece na próxima leitura ou no botão Atualizar. É uma espera visível e
+ * Por isso os dois são lidos na mesma leitura e gravados no mesmo `update`.
+ * OC nova criada pelo dashboard dispara uma releitura; criada direto no Tiny,
+ * aparece na próxima releitura ou no botão Atualizar. É uma espera visível e
  * corrigível, diferente de um número errado que ninguém tem como desconfiar.
  */
-type BaseSolados = {
-  negocios: SoladoNegocio[];
+type LeituraTiny = {
   skus: SoladoSkuTiny[];
-  consumoMensalMedio: number;
   aCaminho: SoladoItemDemanda[];
 };
-
-let cache: { base: BaseSolados; lidoEm: string; expiraEm: number } | null =
-  null;
-let emVoo: Promise<{ base: BaseSolados; lidoEm: string }> | null = null;
 
 async function emLotes<T, R>(
   itens: T[],
@@ -192,11 +197,10 @@ type EtapaAlvo = {
 };
 
 type DefinicoesGhl = Map<string, GhlCustomFieldDef>;
+type PipelinesGhl = Awaited<ReturnType<typeof fetchGhlPipelines>>;
 
-async function lerNegociosGhl(
-  definicoes: DefinicoesGhl,
-  pipelines: Awaited<ReturnType<typeof fetchGhlPipelines>>,
-): Promise<SoladoNegocio[]> {
+/** As etapas cujos negócios GANHOS são demanda de solado. */
+function etapasAlvo(pipelines: PipelinesGhl): EtapaAlvo[] {
   const etapas: EtapaAlvo[] = [];
   for (const pipeline of pipelines) {
     const estagios = pipeline.stages ?? [];
@@ -230,6 +234,38 @@ async function lerNegociosGhl(
       });
     }
   }
+  return etapas;
+}
+
+function montarNegocio(
+  oportunidade: GhlOpportunity,
+  etapa: EtapaAlvo,
+  definicoes: DefinicoesGhl,
+): SoladoNegocio {
+  const { itens, paresSemSolado } = extrairItens(oportunidade, definicoes);
+  return {
+    dealId: oportunidade.id,
+    nome: oportunidade.name.trim(),
+    pipeline: etapa.pipeline,
+    etapa: etapa.etapa,
+    dataEmbarque: campoTexto(oportunidade, definicoes, "data_de_embarque"),
+    itens,
+    paresSemSolado,
+  };
+}
+
+/**
+ * Varredura completa: busca cada etapa-alvo e lê cada negócio por id. É a
+ * referência — o webhook aplica a mesma regra (`etapasAlvo` + `montarNegocio`)
+ * a um negócio de cada vez, e o botão Atualizar volta a varrer tudo.
+ */
+async function lerNegociosGhl(): Promise<SoladoNegocio[]> {
+  const [definicoesLista, pipelines] = await Promise.all([
+    fetchCustomFieldDefs("opportunity"),
+    fetchGhlPipelines(),
+  ]);
+  const definicoes = new Map(definicoesLista.map((d) => [d.id, d]));
+  const etapas = etapasAlvo(pipelines);
 
   const resumos = await emLotes(etapas, LOTE_GHL, async (etapa) => {
     const oportunidades = await searchGhlOpportunitiesByStage(
@@ -251,19 +287,30 @@ async function lerNegociosGhl(
     fetchOpportunityById,
   );
 
-  return detalhes.map((oportunidade) => {
-    const etapa = unicos.get(oportunidade.id)!;
-    const { itens, paresSemSolado } = extrairItens(oportunidade, definicoes);
-    return {
-      dealId: oportunidade.id,
-      nome: oportunidade.name.trim(),
-      pipeline: etapa.pipeline,
-      etapa: etapa.etapa,
-      dataEmbarque: campoTexto(oportunidade, definicoes, "data_de_embarque"),
-      itens,
-      paresSemSolado,
-    };
-  });
+  return detalhes.map((oportunidade) =>
+    montarNegocio(oportunidade, unicos.get(oportunidade.id)!, definicoes),
+  );
+}
+
+/**
+ * O negócio como a varredura o veria, a partir de uma oportunidade já lida
+ * por id. `null` quando ele não é demanda: não ganho, ou fora das etapas-alvo.
+ * Mesmo critério da busca da varredura — status `won` na etapa.
+ */
+export function negocioDoContexto(contexto: GhlDealContext): SoladoNegocio | null {
+  const { opportunity, definitions, pipelines } = contexto;
+  if (opportunity.status !== "won") return null;
+  const etapa = etapasAlvo(pipelines).find(
+    (alvo) =>
+      alvo.pipelineId === opportunity.pipelineId &&
+      alvo.stageId === opportunity.pipelineStageId,
+  );
+  if (!etapa) return null;
+  return montarNegocio(
+    opportunity,
+    etapa,
+    new Map(definitions.map((d) => [d.id, d])),
+  );
 }
 
 // ── Tiny ────────────────────────────────────────────────────────────────────
@@ -281,7 +328,7 @@ async function lerSkusTiny(): Promise<SoladoSkuTiny[]> {
   });
 
   // Leitura sequencial: em paralelo o Tiny devolve 429 para a maior parte das
-  // chamadas. São ~7 segundos, absorvidos pelo cache.
+  // chamadas. São ~7 segundos, fora do caminho da tela.
   const skus: SoladoSkuTiny[] = [];
   for (const candidato of candidatos) {
     const estoque = await tinyV3Request<{ saldo?: number | null }>(
@@ -349,71 +396,302 @@ async function lerConsumoMensalMedio(meses = 6): Promise<number> {
   return meses > 0 ? Math.round(total / meses) : 0;
 }
 
-// ── Orquestração ────────────────────────────────────────────────────────────
+// ── Armazenamento ───────────────────────────────────────────────────────────
 
-/**
- * Descarta o cache. Chamado depois de mexer numa ordem de compra pela nossa
- * rota, para a OC nova aparecer na hora. Ordem ou nota lançada direto no Tiny
- * não passa por aqui: aparece na próxima leitura ou no botão Atualizar — ver
- * `BaseSolados` para por que isso é melhor que ler as ordens fora do cache.
- */
-export function invalidarCacheSolados(): void {
-  cache = null;
+const TABELA_NEGOCIOS = "estoque_solados_negocios";
+const TABELA_ESTADO = "estoque_solados_estado";
+/** Mesmo prazo da reserva no banco: leitura parada há mais que isso morreu. */
+const LEITURA_TRAVADA_MS = 5 * 60 * 1_000;
+const ESPERA_LEITURA_MS = 2_000;
+
+type EstadoSolados = {
+  skus: SoladoSkuTiny[] | null;
+  a_caminho: SoladoItemDemanda[] | null;
+  tiny_lido_em: string | null;
+  ghl_varrido_em: string | null;
+  sujo: boolean;
+  leitura_iniciada_em: string | null;
+};
+
+type ClienteServico = ReturnType<typeof clienteServico>;
+
+function clienteServico() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL não configurada.");
+  return createClient(url, getSupabaseSecretKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+async function lerEstado(supabase: ClienteServico): Promise<EstadoSolados> {
+  const { data, error } = await supabase
+    .from(TABELA_ESTADO)
+    .select(
+      "skus,a_caminho,tiny_lido_em,ghl_varrido_em,sujo,leitura_iniciada_em",
+    )
+    .eq("id", 1)
+    .single();
+  if (error) throw new Error(`Estado do estoque de solados: ${error.message}`);
+  return data as EstadoSolados;
 }
 
 /**
- * A parte cara e lenta: ~65 chamadas no GHL, 18 no Tiny, e a média de consumo.
- * Muda devagar — os pedidos entram ao longo do dia — então vale cachear.
+ * Em ordem de `deal_id`, para o resultado não depender da ordem de gravação.
+ * A ordem só pesa na curva, que soma em ponto flutuante — a verificação de
+ * equivalência compara contra a ordem da varredura.
+ */
+async function lerNegociosGravados(
+  supabase: ClienteServico,
+): Promise<SoladoNegocio[]> {
+  const { data, error } = await supabase
+    .from(TABELA_NEGOCIOS)
+    .select("negocio")
+    .order("deal_id");
+  if (error) throw new Error(`Negócios do estoque de solados: ${error.message}`);
+  return (data ?? []).map((linha) => linha.negocio as SoladoNegocio);
+}
+
+// ── GHL por evento ──────────────────────────────────────────────────────────
+
+/**
+ * Aplica um webhook de oportunidade. Recebe a oportunidade já lida por id —
+ * a única leitura com a grade — para não repetir a chamada ao GHL.
+ */
+export async function sincronizarNegocioSolados(
+  contexto: GhlDealContext,
+): Promise<void> {
+  const negocio = negocioDoContexto(contexto);
+  if (!negocio) return removerNegocioSolados(contexto.opportunity.id);
+
+  const { error } = await clienteServico()
+    .from(TABELA_NEGOCIOS)
+    .upsert(
+      {
+        deal_id: negocio.dealId,
+        negocio,
+        atualizado_em: new Date().toISOString(),
+      },
+      { onConflict: "deal_id" },
+    );
+  if (error) throw new Error(`Gravar negócio ${negocio.dealId}: ${error.message}`);
+}
+
+export async function removerNegocioSolados(dealId: string): Promise<void> {
+  const { error } = await clienteServico()
+    .from(TABELA_NEGOCIOS)
+    .delete()
+    .eq("deal_id", dealId);
+  if (error) throw new Error(`Remover negócio ${dealId}: ${error.message}`);
+}
+
+/**
+ * Varredura completa gravada por cima. Só apaga o que estava gravado ANTES de
+ * ela começar: um negócio que entrou por webhook durante a varredura fica.
+ */
+async function varrerNegociosGhl(): Promise<void> {
+  const inicio = new Date().toISOString();
+  const negocios = await lerNegociosGhl();
+  const supabase = clienteServico();
+
+  if (negocios.length > 0) {
+    const agora = new Date().toISOString();
+    const { error } = await supabase.from(TABELA_NEGOCIOS).upsert(
+      negocios.map((negocio) => ({
+        deal_id: negocio.dealId,
+        negocio,
+        atualizado_em: agora,
+      })),
+      { onConflict: "deal_id" },
+    );
+    if (error) throw new Error(`Gravar varredura do GHL: ${error.message}`);
+  }
+
+  const { data: antigos, error: erroAntigos } = await supabase
+    .from(TABELA_NEGOCIOS)
+    .select("deal_id")
+    .lt("atualizado_em", inicio);
+  if (erroAntigos) throw new Error(`Ler negócios antigos: ${erroAntigos.message}`);
+  const atuais = new Set(negocios.map((negocio) => negocio.dealId));
+  const sairam = (antigos ?? [])
+    .map((linha) => linha.deal_id as string)
+    .filter((id) => !atuais.has(id));
+  if (sairam.length > 0) {
+    const { error } = await supabase
+      .from(TABELA_NEGOCIOS)
+      .delete()
+      .in("deal_id", sairam);
+    if (error) throw new Error(`Remover negócios que saíram: ${error.message}`);
+  }
+
+  const { error } = await supabase
+    .from(TABELA_ESTADO)
+    .update({ ghl_varrido_em: new Date().toISOString() })
+    .eq("id", 1);
+  if (error) throw new Error(`Marcar varredura do GHL: ${error.message}`);
+}
+
+// ── Tiny por snapshot ───────────────────────────────────────────────────────
+
+/** A leitura de sempre: saldos e compras juntos, ver `LeituraTiny`. */
+async function lerTiny(): Promise<LeituraTiny> {
+  const [skus, compras] = await Promise.all([lerSkusTiny(), lerCompras()]);
+  return { skus, aCaminho: paresACaminho(compras.consolidado) };
+}
+
+/**
+ * Relê o Tiny e grava saldo e "a caminho" no mesmo `update`.
  *
- * O consumo histórico é barato: já vem agregado por mês pelo cron, uma leitura
- * só. Fica no cache junto porque muda uma vez por dia.
+ * Uma leitura por vez entre todas as instâncias, pela reserva no banco: duas
+ * ao mesmo tempo disputariam o limite de chamadas do Tiny.
+ * - `evento`: algo mudou no Tiny. Se outra leitura já corre, marca `sujo` e
+ *   ela relê ao terminar — pode ter lido o saldo antes da mudança.
+ * - `esperar`: quem precisa do dado agora espera a leitura em curso terminar.
+ *   "nova" (botão Atualizar) lê de novo depois dela — a que corria pode ter
+ *   começado antes da mudança que motivou o clique. "qualquer" (primeira
+ *   abertura) se contenta com ela, sem uma segunda leitura do Tiny.
  */
-async function lerBaseCacheada(): Promise<{
-  base: BaseSolados;
-  lidoEm: string;
-}> {
-  const [definicoesLista, pipelines] = await Promise.all([
-    fetchCustomFieldDefs("opportunity"),
-    fetchGhlPipelines(),
-  ]);
-  const definicoes = new Map(definicoesLista.map((d) => [d.id, d]));
+export async function atualizarTinySolados(
+  opcoes: { evento?: boolean; esperar?: "nova" | "qualquer" } = {},
+): Promise<void> {
+  const supabase = clienteServico();
+  const prazo = Date.now() + LEITURA_TRAVADA_MS;
 
-  const [negocios, skus, consumoMensalMedio, compras] = await Promise.all([
-    lerNegociosGhl(definicoes, pipelines),
-    lerSkusTiny(),
-    lerConsumoMensalMedio(),
-    lerCompras(),
-  ]);
-  const lidoEm = new Date().toISOString();
-  const base = {
-    negocios,
-    skus,
-    consumoMensalMedio,
-    aCaminho: paresACaminho(compras.consolidado),
-  };
-  cache = { base, lidoEm, expiraEm: Date.now() + CACHE_MS };
-  return { base, lidoEm };
+  // Teto de releituras: eventos sem fim não prendem uma instância. O `sujo`
+  // que sobrar faz a próxima abertura da tela reler.
+  for (let leituras = 0; leituras < 3; ) {
+    const { data: reservou, error } = await supabase.rpc(
+      "try_claim_estoque_solados_tiny",
+    );
+    if (error) throw new Error(`Reservar leitura do Tiny: ${error.message}`);
+
+    if (!reservou) {
+      if (!opcoes.esperar) {
+        if (opcoes.evento) {
+          await supabase.from(TABELA_ESTADO).update({ sujo: true }).eq("id", 1);
+        }
+        return;
+      }
+      if (Date.now() > prazo) {
+        throw new Error("Outra leitura do Tiny está em andamento há tempo demais.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, ESPERA_LEITURA_MS));
+      if (opcoes.esperar === "qualquer") {
+        const estado = await lerEstado(supabase);
+        if (estado.tiny_lido_em && !estado.leitura_iniciada_em) return;
+      }
+      continue;
+    }
+    leituras += 1;
+
+    let leitura: LeituraTiny;
+    try {
+      leitura = await lerTiny();
+    } catch (erro) {
+      await supabase
+        .from(TABELA_ESTADO)
+        .update({ leitura_iniciada_em: null })
+        .eq("id", 1);
+      throw erro;
+    }
+
+    const { data, error: erroGravar } = await supabase
+      .from(TABELA_ESTADO)
+      .update({
+        skus: leitura.skus,
+        a_caminho: leitura.aCaminho,
+        tiny_lido_em: new Date().toISOString(),
+        leitura_iniciada_em: null,
+      })
+      .eq("id", 1)
+      .select("sujo")
+      .single();
+    if (erroGravar) throw new Error(`Gravar leitura do Tiny: ${erroGravar.message}`);
+    if (!data.sujo) return;
+  }
 }
 
+// ── Leitura da tela ─────────────────────────────────────────────────────────
+
+/**
+ * O resumo a partir do que está gravado.
+ *
+ * `revalidar` diz à rota para reler o Tiny em segundo plano (`after`): a
+ * última leitura passou da validade ou ficou um evento pendente. A tela recebe
+ * `atualizando` e busca de novo até a leitura terminar.
+ */
 export async function getResumoSolados(
   opcoes: { forcar?: boolean } = {},
-): Promise<{ resumo: SoladoResumo; lidoEm: string }> {
-  const valido = !opcoes.forcar && cache && cache.expiraEm > Date.now();
+): Promise<{
+  resumo: SoladoResumo;
+  lidoEm: string;
+  atualizando: boolean;
+  revalidar: boolean;
+}> {
+  const supabase = clienteServico();
 
-  const { base, lidoEm } = valido
-    ? { base: cache!.base, lidoEm: cache!.lidoEm }
-    : await (emVoo ??= lerBaseCacheada().finally(() => {
-        emVoo = null;
-      }));
+  if (opcoes.forcar) {
+    await Promise.all([
+      varrerNegociosGhl(),
+      atualizarTinySolados({ evento: true, esperar: "nova" }),
+    ]);
+  }
+
+  let [estado, negocios] = await Promise.all([
+    lerEstado(supabase),
+    lerNegociosGravados(supabase),
+  ]);
+
+  // Primeira abertura depois da implantação: ainda não há o que servir.
+  if (!estado.ghl_varrido_em || !estado.tiny_lido_em) {
+    await Promise.all([
+      estado.ghl_varrido_em ? null : varrerNegociosGhl(),
+      estado.tiny_lido_em
+        ? null
+        : atualizarTinySolados({ evento: true, esperar: "qualquer" }),
+    ]);
+    [estado, negocios] = await Promise.all([
+      lerEstado(supabase),
+      lerNegociosGravados(supabase),
+    ]);
+  }
+
+  if (!estado.skus || !estado.a_caminho || !estado.tiny_lido_em) {
+    throw new Error("A leitura do Tiny não foi gravada.");
+  }
+
+  const consumoMensalMedio = await lerConsumoMensalMedio();
+
+  const lendo =
+    estado.leitura_iniciada_em !== null &&
+    Date.now() - Date.parse(estado.leitura_iniciada_em) < LEITURA_TRAVADA_MS;
+  const revalidar =
+    !lendo &&
+    (estado.sujo ||
+      Date.now() - Date.parse(estado.tiny_lido_em) > VALIDADE_TINY_MS);
 
   const resumo = montarResumo({
-    negocios: base.negocios,
-    skus: base.skus,
-    aCaminho: base.aCaminho,
+    negocios,
+    skus: estado.skus,
+    aCaminho: estado.a_caminho,
     parametros: {
       ...SOLADO_PARAMETROS_PADRAO,
-      consumoMensalMedio: base.consumoMensalMedio,
+      consumoMensalMedio,
     },
   });
-  return { resumo, lidoEm };
+  return {
+    resumo,
+    lidoEm: estado.tiny_lido_em,
+    atualizando: lendo || revalidar,
+    revalidar,
+  };
 }
+
+/**
+ * Só para a verificação de equivalência (scripts/verificar-estoque-solados):
+ * as leituras ao vivo, sem gravar nada.
+ */
+export const leiturasAoVivo = {
+  lerNegociosGhl,
+  lerTiny,
+  lerConsumoMensalMedio,
+};

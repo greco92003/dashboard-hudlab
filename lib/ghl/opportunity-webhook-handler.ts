@@ -2,7 +2,7 @@ import "server-only";
 
 import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getGhlDeal } from "@/lib/ghl/api";
+import { fetchGhlDealContext, mapGhlDealContext } from "@/lib/ghl/api";
 import { upsertGhlDeals } from "@/lib/ghl/deals-cache";
 import { verifyGhlWebhook } from "@/lib/ghl/webhook";
 import {
@@ -11,6 +11,10 @@ import {
 } from "@/lib/ghl/webhook-routing";
 import { processMockupInstructionWebhook } from "@/lib/ghl/mockup-instructions/processor";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
+import {
+  removerNegocioSolados,
+  sincronizarNegocioSolados,
+} from "@/lib/estoque/solados-source";
 import {
   buildWebhookIdempotencyKey,
   claimWebhookEvent,
@@ -117,14 +121,29 @@ async function syncOpportunity(input: {
       .eq("source_system", "ghl")
       .eq("deal_id", input.opportunityId);
     if (error) throw error;
+    await sincronizarEstoque(() => removerNegocioSolados(input.opportunityId));
     const claim = await claimWebhookEvent(claimInput);
     return { deleted: true, duplicate: !claim.claimed };
   }
 
-  const deal = await getGhlDeal(input.opportunityId);
-  await upsertGhlDeals([deal], "webhook", input.requestId);
+  const context = await fetchGhlDealContext(input.opportunityId);
+  await upsertGhlDeals([mapGhlDealContext(context)], "webhook", input.requestId);
+  await sincronizarEstoque(() => sincronizarNegocioSolados(context));
   const claim = await claimWebhookEvent(claimInput);
   return { deleted: false, duplicate: !claim.claimed };
+}
+
+/**
+ * O estoque de solados é mais um consumidor da mesma leitura por id. Falha
+ * nele não derruba o sync de negócios: o botão Atualizar da tela refaz a
+ * varredura inteira e corrige o que um evento perdido deixou para trás.
+ */
+async function sincronizarEstoque(fn: () => Promise<void>) {
+  try {
+    await fn();
+  } catch (error) {
+    console.error("Estoque de solados: falha ao aplicar o webhook", error);
+  }
 }
 
 async function processOpportunityConsumers(input: {

@@ -871,18 +871,44 @@ async function fetchAndMapWonDeals(): Promise<GhlDealsResult> {
   };
 }
 
-export async function getGhlDeal(dealId: string): Promise<GhlMappedDeal> {
-  const [result, definitions, stageTitles] = await Promise.all([
+export type GhlDealContext = {
+  opportunity: GhlOpportunity;
+  definitions: GhlCustomFieldDef[];
+  pipelines: GhlPipeline[];
+};
+
+/**
+ * One opportunity read by id (the only read that returns TEXTBOX_LIST fields)
+ * plus what is needed to interpret it. The webhook hands the same context to
+ * every consumer instead of each one repeating these calls.
+ */
+export async function fetchGhlDealContext(
+  dealId: string,
+): Promise<GhlDealContext> {
+  const [result, definitions, pipelines] = await Promise.all([
     ghlFetch<{ opportunity?: GhlOpportunity }>(`/opportunities/${dealId}`),
     fetchCustomFieldDefs("opportunity"),
-    fetchStageTitles(),
+    fetchGhlPipelines(),
   ]);
   if (!result.opportunity) throw new Error(`GHL opportunity ${dealId} not found`);
+  return { opportunity: result.opportunity, definitions, pipelines };
+}
+
+export function mapGhlDealContext(context: GhlDealContext): GhlMappedDeal {
+  const stageTitles = new Map(
+    context.pipelines.flatMap((pipeline) =>
+      (pipeline.stages || []).map((stage) => [stage.id, stage.name] as const),
+    ),
+  );
   return mapOpportunity(
-    result.opportunity,
-    new Map(definitions.map((definition) => [definition.id, definition])),
+    context.opportunity,
+    new Map(context.definitions.map((definition) => [definition.id, definition])),
     stageTitles,
   );
+}
+
+export async function getGhlDeal(dealId: string): Promise<GhlMappedDeal> {
+  return mapGhlDealContext(await fetchGhlDealContext(dealId));
 }
 
 /**
