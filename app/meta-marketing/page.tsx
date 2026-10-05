@@ -94,7 +94,7 @@ function MetaMarketingContent() {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Atualizando..." : "Atualizar"}
           </Button>
-          {(aba === "visao-geral" || aba === "anuncios") && <SeletorPeriodo />}
+          {(aba === "visao-geral" || aba === "anuncios" || aba === "regioes") && <SeletorPeriodo />}
         </div>
       </div>
 
@@ -116,7 +116,7 @@ function MetaMarketingContent() {
           <Anuncios periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="regioes" className="mt-4">
-          <Regioes refreshKey={refreshKey} />
+          <Regioes periodo={periodo} customRange={customRange} refreshKey={refreshKey} />
         </TabsContent>
         <TabsContent value="saude" className="mt-4">
           <Saude refreshKey={refreshKey} />
