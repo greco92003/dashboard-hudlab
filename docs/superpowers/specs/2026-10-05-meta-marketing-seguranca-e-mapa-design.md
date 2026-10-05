@@ -55,6 +55,28 @@ Alternativas descartadas:
 3. `revoke insert, update, delete, truncate` de `authenticated` e `anon` em
    todas as views e MVs do módulo.
 4. `revoke execute on function sync_ghl_contact_tags() from public, authenticated`.
+5. Tabelas `meta_ad_attributes`, `meta_ad_creative_analysis`,
+   `meta_ad_creative_insights`, `meta_ghl_ad_insights` e `ghl_contact_tags`:
+   hoje têm "read authenticated" (`true`, em duas delas para `public`) e um
+   `approved_user_gate` **permissivo** de `ALL`, que somados liberam leitura
+   para qualquer logado e escrita pelo navegador para o aprovado. Passam a ter
+   só `approved_read` (SELECT, `authenticated`,
+   `(select private.is_approved_user())`), como `deals_cache`, e perdem
+   INSERT/UPDATE/DELETE/TRUNCATE de `anon` e `authenticated`. Quem grava são
+   as edge functions e rotas com `service_role`. As tabelas `ig_*` e
+   `webhook_rejections` têm o mesmo defeito, mas são de outros módulos e
+   ficam para uma tarefa separada.
+
+Ordem de aplicação (expandir e depois contrair, sem quebrar a produção):
+- **Migration A, antes do deploy:** funções de leitura novas, políticas das
+  tabelas, revokes de escrita, revoke das funções que o navegador não chama
+  (todas menos `get_nomes_pipelines`), revoke de SELECT nas views e MVs que o
+  navegador não lê (`v_vendas`, `mv_contato_atribuicao`,
+  `mv_contatos_importados`) e o item 4.
+- **Migration B, depois que o deploy das telas estiver no ar:** revoke de
+  SELECT nas views que as telas liam (`v_atribuicao_saude`,
+  `v_leads_sem_venda`, `v_utm_sem_match`, `v_vendas_sem_pares`) e de EXECUTE
+  em `get_nomes_pipelines`.
 
 ### Rota `/api/meta-marketing/report`
 Relatórios novos, com o mesmo cache. Os que não dependem de período usam a
