@@ -1,0 +1,88 @@
+-- A aba Regiões lê get_desempenho_uf pela rota de cache (PR #32) e a
+-- reconciliacao_meta_ghl também passou para ela. As duas views (11 s cada)
+-- ficaram sem uso. Sem CASCADE: se algo depender, o drop falha.
+drop view if exists public.v_sazonalidade_regiao;
+drop view if exists public.v_desempenho_uf_mes;
+
+-- Para voltar atrás, as definições que estavam em produção (recriar nesta
+-- ordem; só a de sazonalidade tinha security_invoker, e os grants eram
+-- SELECT para authenticated e service_role):
+--
+-- create view public.v_desempenho_uf_mes as
+-- with marcos as (
+--   select (select stage_order from dim_pipeline_stages
+--           where stage_name = 'Amostra Digital Enviada') as ord_mockup
+-- ), alcance as (
+--   select s.opportunity_id, max(coalesce(d_1.stage_order, 0)) as max_order
+--   from ghl_stage_snapshots s
+--   left join dim_pipeline_stages d_1 on d_1.stage_id = s.stage_id
+--   group by s.opportunity_id
+-- ), meta_uf as (
+--   select m_1.uf, date_trunc('month', m_1.date::timestamp)::date as mes,
+--     sum(m_1.spend) as spend, sum(m_1.leads) as leads_meta
+--   from meta_insights_daily m_1
+--   where m_1.uf is not null
+--   group by m_1.uf, date_trunc('month', m_1.date::timestamp)
+-- ), opp as (
+--   select o.id, o.contact_id, c.uf,
+--     date_trunc('month', o.created_at at time zone 'America/Sao_Paulo')::date as mes,
+--     greatest(coalesce(a.max_order, 0), coalesce(dcur.stage_order, 0)) as max_order,
+--     o.created_at
+--   from ghl_opportunities o
+--   join ghl_contacts c on c.id = o.contact_id
+--   left join alcance a on a.opportunity_id = o.id
+--   left join dim_pipeline_stages dcur on dcur.stage_id = o.stage_id
+--   where c.uf is not null
+--     and not (o.contact_id in (select contact_id from v_contatos_importados))
+-- ), leads_uf as (
+--   select uf, mes, count(*) as leads_ghl from opp group by uf, mes
+-- ), legado_uf as (
+--   select opp.uf, opp.mes,
+--     count(*) filter (where opp.max_order >= m_1.ord_mockup) as mockups_legado
+--   from opp, marcos m_1
+--   where (opp.created_at at time zone 'America/Sao_Paulo')::date < '2026-07-16'
+--   group by opp.uf, opp.mes
+-- ), webhook_uf as (
+--   select upper(nullif(e.raw_payload ->> 'Estado', ''))::character(2) as uf,
+--     date_trunc('month', e.received_at at time zone 'America/Sao_Paulo')::date as mes,
+--     count(*) as mockups_webhook
+--   from ghl_funnel_events e
+--   where e.stage_slug = 'solicitoumockupoficial'
+--     and (e.received_at at time zone 'America/Sao_Paulo')::date >= '2026-07-16'
+--     and length(upper(nullif(e.raw_payload ->> 'Estado', ''))) = 2
+--     and not (e.contact_id in (select contact_id from v_contatos_importados))
+--   group by 1, 2
+-- ), ghl_uf as (
+--   select coalesce(l.uf, lu.uf, wu.uf) as uf, coalesce(l.mes, lu.mes, wu.mes) as mes,
+--     coalesce(l.leads_ghl, 0) as leads_ghl,
+--     coalesce(lu.mockups_legado, 0) + coalesce(wu.mockups_webhook, 0) as mockups
+--   from leads_uf l
+--   full join legado_uf lu on lu.uf = l.uf and lu.mes = l.mes
+--   full join webhook_uf wu on wu.uf = coalesce(l.uf, lu.uf) and wu.mes = coalesce(l.mes, lu.mes)
+-- ), vendas_uf as (
+--   select p.uf, date_trunc('month', p.dia_venda::timestamp)::date as mes,
+--     count(*) filter (where p.monetary_value > 0) as vendas,
+--     coalesce(sum(p.monetary_value), 0) as faturamento
+--   from v_pedidos_ganhos p
+--   where p.uf is not null and p.dia_venda >= meta_inicio_coleta()
+--   group by p.uf, date_trunc('month', p.dia_venda::timestamp)::date
+-- )
+-- select coalesce(m.uf, g.uf, ve.uf) as uf, d.region_group,
+--   coalesce(m.mes, g.mes, ve.mes) as mes,
+--   estacao_do_mes(extract(month from coalesce(m.mes, g.mes, ve.mes))::integer) as estacao,
+--   coalesce(m.spend, 0) as spend, coalesce(m.leads_meta, 0) as leads_meta,
+--   coalesce(g.leads_ghl, 0) as leads_ghl, coalesce(g.mockups, 0) as mockups,
+--   coalesce(ve.vendas, 0) as vendas, coalesce(ve.faturamento, 0) as faturamento
+-- from meta_uf m
+-- full join ghl_uf g on g.uf = m.uf and g.mes = m.mes
+-- full join vendas_uf ve on ve.uf = coalesce(m.uf, g.uf) and ve.mes = coalesce(m.mes, g.mes)
+-- left join dim_region_group d on d.uf = coalesce(m.uf, g.uf, ve.uf);
+--
+-- create view public.v_sazonalidade_regiao with (security_invoker = true) as
+-- select region_group, estacao,
+--   sum(spend) as spend, sum(vendas) as vendas, sum(faturamento) as faturamento,
+--   case when sum(spend) > 0 then round(sum(faturamento) / sum(spend), 2) end as roas,
+--   case when sum(vendas) > 0 then round(sum(spend) / sum(vendas), 2) end as cpa
+-- from v_desempenho_uf_mes
+-- where region_group is not null
+-- group by region_group, estacao;
