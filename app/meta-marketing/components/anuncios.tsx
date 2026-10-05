@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { fetchMarketingReport } from "../report-client";
+import { fetchMarketingReport, fetchMarketingSnapshot } from "../report-client";
 import {
   Card,
   CardContent,
@@ -318,7 +317,6 @@ export function Anuncios({
   const janela = janelaComparacao(selecionado.inicio, selecionado.fim);
 
   useEffect(() => {
-    const supabase = createClient();
     const controller = new AbortController();
     const { inicio, fim, atualFechado, anterior } = janela;
     // Tabela = período inteiro (inclui hoje). Variação = dias fechados vs.
@@ -337,7 +335,7 @@ export function Anuncios({
         anterior
           ? fetchMarketingReport<FunnelRow[]>("ads", anterior.inicio, anterior.fim, controller.signal)
           : vazio,
-        supabase.from("v_leads_sem_venda").select("*"),
+        fetchMarketingSnapshot<LeadFrioRow[]>("leads-without-sale", controller.signal),
       ]);
       if (cancel) return;
 
