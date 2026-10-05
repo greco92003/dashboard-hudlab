@@ -61,6 +61,7 @@ export function BrazilMap({
   className,
 }: BrazilMapProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const patternId = `brazil-map-hatch-${useId().replace(/:/g, "")}`;
   const hatchFill = `url(#${patternId})`;
   const reducedMotion = useReducedMotion();
@@ -122,10 +123,15 @@ export function BrazilMap({
     return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
   };
 
-  const labelPos = (lx: number, ly: number) => ({
-    x: (lx / BRAZIL_VIEWBOX.width) * size.width,
-    y: (ly / BRAZIL_VIEWBOX.height) * size.height,
-  });
+  // Ponto de rótulo em px do container. Usa o tamanho do próprio SVG: o
+  // container também contém a legenda, então a altura dele não serve.
+  const labelPos = (lx: number, ly: number) => {
+    const r = svgRef.current?.getBoundingClientRect();
+    return {
+      x: (lx / BRAZIL_VIEWBOX.width) * (r?.width ?? 0),
+      y: (ly / BRAZIL_VIEWBOX.height) * (r?.height ?? 0),
+    };
+  };
 
   const onKey = (e: KeyboardEvent, uf: string) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -167,6 +173,7 @@ export function BrazilMap({
         aria-label="Mapa dos estados do Brasil"
         className="h-auto w-full"
         onClick={() => onSelectUf?.(null)}
+        ref={svgRef}
         role="group"
         viewBox={`0 0 ${BRAZIL_VIEWBOX.width} ${BRAZIL_VIEWBOX.height}`}
       >
