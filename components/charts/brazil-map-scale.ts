@@ -1,14 +1,20 @@
 export const BRAZIL_MAP_STEPS = 5;
 
-/** Limites superiores das faixas por quantil dos valores não nulos (até 4 cortes). */
+/**
+ * Limites superiores das faixas por quantil (até steps-1 cortes). O quantil é
+ * dos valores distintos: com muitos empates (ex.: 20 estados com ROAS 0), o
+ * quantil bruto cortava no próprio empate e jogava todo o resto numa cor só.
+ * Corte igual ao menor valor não separa nada e é descartado, então o menor
+ * valor sempre fica na faixa 0.
+ */
 export function quantileBreaks(values: number[], steps: number = BRAZIL_MAP_STEPS): number[] {
-  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  const n = sorted.length;
+  const distinct = [...new Set(values.filter((v) => Number.isFinite(v)))].sort((a, b) => a - b);
+  const n = distinct.length;
   if (n < 2) return [];
   const cuts: number[] = [];
   for (let i = 1; i < steps; i++) {
-    const c = sorted[Math.floor((i * n) / steps)];
-    if (!cuts.includes(c)) cuts.push(c);
+    const c = distinct[Math.floor((i * n) / steps)];
+    if (c > distinct[0] && !cuts.includes(c)) cuts.push(c);
   }
   return cuts;
 }

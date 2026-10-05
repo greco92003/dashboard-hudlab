@@ -12,11 +12,22 @@ test("cinco faixas por quantil", () => {
   assert.equal(stepFor(null, breaks), null);
 });
 
-test("valores repetidos não criam faixas vazias", () => {
+test("valores repetidos não criam faixas vazias: o menor fica na faixa 0", () => {
   const breaks = quantileBreaks([5, 5, 5, 5, 10], 5);
-  assert.deepEqual(breaks, [5, 10]);
-  assert.equal(stepFor(5, breaks), 2);
+  assert.deepEqual(breaks, [10]);
+  assert.equal(stepFor(5, breaks), 0);
   assert.equal(stepFor(10, breaks), 4);
+});
+
+test("muitos zeros (ROAS de estado sem venda) não empurram o resto para uma cor só", () => {
+  const values = [...Array(20).fill(0), 1.6, 4.3, 5.6, 8.5, 11.9, 12.8];
+  const breaks = quantileBreaks(values, 5);
+  assert.deepEqual(breaks, [1.6, 4.3, 8.5, 11.9]);
+  assert.equal(stepFor(0, breaks), 0);
+  assert.equal(stepFor(1.6, breaks), 1);
+  assert.equal(stepFor(5.6, breaks), 2);
+  assert.equal(stepFor(8.5, breaks), 3);
+  assert.equal(stepFor(12.8, breaks), 4);
 });
 
 test("um valor só fica na faixa 0", () => {
