@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/sync-fluxo-caixa",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/prewarm-meta-marketing",
+      "schedule": "45 12 * * *"
     }
   ],
   "functions": {
@@ -75,6 +79,9 @@
       "maxDuration": 300
     },
     "app/api/fluxo-caixa/sync/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/prewarm-meta-marketing/route.ts": {
       "maxDuration": 300
     }
   },
