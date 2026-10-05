@@ -1,0 +1,55 @@
+-- A tabela "Performance por fonte" do Meta Marketing passou a ler de
+-- get_desempenho_fonte(inicio, fim) no PR #27 (30/09/2026). A view somava tudo
+-- desde o início, sem período, e ficou sem uso: nenhuma view ou função depende
+-- dela, nenhum código do app a cita e não houve chamada pela API desde o deploy.
+-- Sem CASCADE de propósito: se algo passar a depender dela, o drop falha.
+drop view if exists public.v_desempenho_fonte;
+
+-- Para voltar atrás, a definição que estava em produção:
+--
+-- create view public.v_desempenho_fonte as
+-- with contatos as (
+--   select c.id,
+--     case
+--       when c.ad_id ~ '^[0-9]{10,}$' then 'Meta Ads'
+--       when c.ad_id = 'link_in_bio'
+--         or lower(coalesce(nullif(c.utm_source, ''), nullif(c.source, ''), ''))
+--            ~ '(facebook|instagram|meta|^fb$)' then 'Instagram/Facebook (perfil)'
+--       when lower(coalesce(nullif(c.utm_source, ''), nullif(c.source, ''), ''))
+--            ~ 'google' then 'Google Ads'
+--       when lower(coalesce(nullif(c.utm_source, ''), nullif(c.source, ''), ''))
+--            ~ '(indica|referral)' then 'Indicação'
+--       when nullif(lower(nullif(c.utm_source, '')), 'website') is null then 'Orgânico'
+--       else 'Outros'
+--     end as fonte
+--   from ghl_contacts c
+--   where c.id not in (select contact_id from v_contatos_importados)
+-- ), leads_agg as (
+--   select fonte, count(*) as leads from contatos group by fonte
+-- ), vendas_agg as (
+--   select coalesce(ct.fonte, 'Outros') as fonte,
+--     count(distinct v.contact_id) filter (where v.monetary_value > 0) as vendas,
+--     coalesce(sum(v.monetary_value), 0) as faturamento
+--   from v_vendas v
+--   left join contatos ct on ct.id = v.contact_id
+--   group by coalesce(ct.fonte, 'Outros')
+-- ), agg as (
+--   select coalesce(l.fonte, v.fonte) as fonte,
+--     coalesce(l.leads, 0) as leads,
+--     coalesce(v.vendas, 0) as vendas,
+--     coalesce(v.faturamento, 0) as faturamento
+--   from leads_agg l
+--   full join vendas_agg v on v.fonte = l.fonte
+-- ), spend_por_fonte as (
+--   select 'Meta Ads'::text as fonte, sum(spend) as investimento
+--   from meta_insights_daily
+-- )
+-- select a.fonte, s.investimento, a.leads,
+--   case when s.investimento is not null and a.leads > 0
+--        then round(s.investimento / a.leads, 2) end as cpl,
+--   a.vendas, a.faturamento,
+--   case when s.investimento > 0
+--        then round(a.faturamento / s.investimento, 2) end as roas
+-- from agg a
+-- left join spend_por_fonte s on s.fonte = a.fonte
+-- order by a.faturamento desc;
