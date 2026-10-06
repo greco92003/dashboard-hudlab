@@ -148,7 +148,8 @@ async function generateInTiny(orderId: number) {
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
     body: new URLSearchParams({ token: getTinyV2Token(), formato: "JSON", id: String(orderId), lancarEstoque: "N" }),
     cache: "no-store",
-    signal: AbortSignal.timeout(60_000),
+    // Pedido grande demora no Tiny; abortar no meio deixa a OP criada sem registro.
+    signal: AbortSignal.timeout(240_000),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`Tiny API v2 respondeu HTTP ${response.status}.`);

@@ -9,7 +9,7 @@ import {
 import { requireApprovedUser } from "@/lib/security/route-guards";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 type Context = { params: Promise<{ id: string }> };
 

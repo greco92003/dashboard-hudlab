@@ -30,7 +30,7 @@ const schema = z.object({
     unit: z.string().trim().min(1).max(3),
     quantity: z.number().positive(),
     unitPrice: z.number().min(0),
-  })).min(1).max(100),
+  })).min(1).max(500),
 }).superRefine((data, context) => {
   if (data.natureName === FREE_SAMPLE_NATURE) return;
   if (data.expectedPairs === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["expectedPairs"], message: "Quantidade obrigatória." });
@@ -69,7 +69,12 @@ export async function POST(request: Request) {
   if (!access.ok) return access.response;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Revise os campos obrigatórios do pedido." }, { status: 400 });
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join(".");
+    return NextResponse.json(
+      { error: `Revise os campos obrigatórios do pedido${field ? ` (${field}: ${issue.message})` : ""}.` },
+      { status: 400 },
+    );
   }
   try {
     const [opportunity, definitions] = await Promise.all([
