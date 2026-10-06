@@ -110,6 +110,7 @@ function clonerMatchesAudience(cloner: TinyCloner, audience: ProductAudience) {
 
 
 const PRODUCT_PREPARATION_TIMEOUT_MS = 295_000;
+const PRODUCT_CREATION_BATCH_SIZE = 5;
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
@@ -238,6 +239,7 @@ export default function CadastroErpPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [creatingProducts, setCreatingProducts] = useState(false);
   const [creationResults, setCreationResults] = useState<ProductCreationResult[]>([]);
+  const [creationProgress, setCreationProgress] = useState<{ done: number; total: number } | null>(null);
   const [tinyContactReady, setTinyContactReady] = useState(false);
   const [tinyContactId, setTinyContactId] = useState<number | null>(null);
   const [tinyContactDraft, setTinyContactDraft] = useState<ErpContactDraft | null>(null);
@@ -496,40 +498,50 @@ export default function CadastroErpPage() {
     if (!preview || validations.length > 0 || creatingProducts) return;
     setCreatingProducts(true);
     setConfirmOpen(false);
+    setCreationResults([]);
+    const products = preview.models.map((model) => {
+      const mapping = mappings[productModelKey(model)];
+      return mapping.mode === "existing"
+        ? { mode: "existing", modelNumber: model.modelNumber, audience: model.audience, existingProductId: Number(mapping.existingProductId) }
+        : { mode: "clone", modelNumber: model.modelNumber, audience: model.audience, clonerId: Number(mapping.clonerId), title: mapping.title.trim(), baseSku: mapping.baseSku.trim() };
+    });
+    const results: ProductCreationResult[] = [];
+    setCreationProgress({ done: 0, total: products.length });
     try {
-      const response = await apiJson<{ results: ProductCreationResult[] }>(
-        "/api/erp/tiny/products",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(PRODUCT_PREPARATION_TIMEOUT_MS),
-          body: JSON.stringify({
-            dealId: preview.deal.id,
-            products: preview.models.map((model) => {
-              const mapping = mappings[productModelKey(model)];
-              return mapping.mode === "existing"
-                ? { mode: "existing", modelNumber: model.modelNumber, audience: model.audience, existingProductId: Number(mapping.existingProductId) }
-                : { mode: "clone", modelNumber: model.modelNumber, audience: model.audience, clonerId: Number(mapping.clonerId), title: mapping.title.trim(), baseSku: mapping.baseSku.trim() };
+      // A rota aceita até 10 produtos e tem 300 s por chamada: lotes menores
+      // mantêm cada chamada dentro do limite mesmo em pedidos grandes.
+      for (let start = 0; start < products.length; start += PRODUCT_CREATION_BATCH_SIZE) {
+        const response = await apiJson<{ results: ProductCreationResult[] }>(
+          "/api/erp/tiny/products",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(PRODUCT_PREPARATION_TIMEOUT_MS),
+            body: JSON.stringify({
+              dealId: preview.deal.id,
+              products: products.slice(start, start + PRODUCT_CREATION_BATCH_SIZE),
             }),
-          }),
-        },
-      );
-      setMappings((current) => {
-        const next = { ...current };
-        for (const result of response.results) {
-          if (!result.variationSkus) continue;
-          const key = productModelKey(result);
-          next[key] = {
-            ...current[key],
-            variationSkus: result.variationSkus,
-          };
-        }
-        return next;
-      });
-      setCreationResults(response.results);
-      const created = response.results.filter((item) => item.status === "created").length;
-      const existing = response.results.filter((item) => item.status === "existing").length;
-      const failed = response.results.filter((item) => item.status === "failed").length;
+          },
+        );
+        results.push(...response.results);
+        setMappings((current) => {
+          const next = { ...current };
+          for (const result of response.results) {
+            if (!result.variationSkus) continue;
+            const key = productModelKey(result);
+            next[key] = {
+              ...current[key],
+              variationSkus: result.variationSkus,
+            };
+          }
+          return next;
+        });
+        setCreationResults([...results]);
+        setCreationProgress({ done: results.length, total: products.length });
+      }
+      const created = results.filter((item) => item.status === "created").length;
+      const existing = results.filter((item) => item.status === "existing").length;
+      const failed = results.filter((item) => item.status === "failed").length;
       if (failed > 0) {
         toast.error(`${failed} produto(s) falharam. ${created} cadastrado(s).`);
       } else {
@@ -547,6 +559,7 @@ export default function CadastroErpPage() {
       );
     } finally {
       setCreatingProducts(false);
+      setCreationProgress(null);
     }
   };
 
@@ -863,7 +876,9 @@ export default function CadastroErpPage() {
                     onClick={() => setConfirmOpen(true)}
                   >
                     {creatingProducts ? <Loader2 className="animate-spin" /> : <PackagePlus />}
-                    {creatingProducts ? "Validando…" : "Validar e preparar produtos"}
+                    {creatingProducts
+                      ? `Validando…${creationProgress && creationProgress.total > PRODUCT_CREATION_BATCH_SIZE ? ` ${creationProgress.done}/${creationProgress.total}` : ""}`
+                      : "Validar e preparar produtos"}
                   </Button>
                 </div>
 
