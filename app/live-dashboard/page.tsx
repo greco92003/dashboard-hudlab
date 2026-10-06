@@ -21,6 +21,7 @@ function LiveDot() {
   );
 }
 import { Skeleton } from "@/components/ui/skeleton";
+import { IntegrationHealthNotice } from "@/components/integration-health-notice";
 
 interface ChartDataPoint {
   date: string;
@@ -161,6 +162,7 @@ export default function LiveDashboardPage() {
           <SidebarTrigger />
           <LiveDot />
           <h1 className="text-xl sm:text-2xl font-bold">Live Dashboard</h1>
+          <IntegrationHealthNotice />
           {loading && (
             <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
           )}

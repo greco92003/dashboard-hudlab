@@ -23,7 +23,11 @@ import {
   sha256Hex,
   WEBHOOK_MAX_BODY_BYTES,
 } from "@/lib/security/webhook-verification";
-import { logWebhookRejection } from "@/lib/security/webhook-rejections";
+import {
+  impressaoDaAutorizacao,
+  logWebhookRejection,
+  type WebhookRejectionReason,
+} from "@/lib/security/webhook-rejections";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -169,34 +173,38 @@ async function processOpportunityConsumers(input: {
 }
 
 export async function handleGhlOpportunityWebhook(request: NextRequest) {
+  const rota = request.nextUrl.pathname;
+  // Até 06/10/2026 estas recusas só voltavam como HTTP: o webhook de
+  // negócios ficou de 04/09 a 06/10 sem gravar nada e não havia rastro no
+  // banco. O sync de ganhos lê este registro para avisar o admin.
+  const recusar = (
+    motivo: WebhookRejectionReason,
+    status: number,
+    error: string,
+    detalhe?: Record<string, unknown>,
+  ) => {
+    // after(): a função serverless pode encerrar logo depois da resposta.
+    after(() => logWebhookRejection({ provider: "ghl", rota, motivo, status, detalhe }));
+    return NextResponse.json({ accepted: false, error }, { status });
+  };
+
   const rawBody = await request.text();
-  if (!rawBody) {
-    return NextResponse.json(
-      { accepted: false, error: "Empty body" },
-      { status: 400 },
-    );
-  }
+  if (!rawBody) return recusar("corpo_vazio", 400, "Empty body");
   if (Buffer.byteLength(rawBody, "utf8") > WEBHOOK_MAX_BODY_BYTES) {
-    return NextResponse.json(
-      { accepted: false, error: "Payload too large" },
-      { status: 413 },
-    );
+    return recusar("corpo_grande_demais", 413, "Payload too large");
   }
   if (!verifyGhlWebhook(rawBody, request.headers)) {
-    return NextResponse.json(
-      { accepted: false, error: "Unauthorized" },
-      { status: 401 },
-    );
+    return recusar("autorizacao_invalida", 401, "Unauthorized", {
+      assinatura_ghl: Boolean(request.headers.get("x-ghl-signature")),
+      ...impressaoDaAutorizacao(request.headers.get("authorization")),
+    });
   }
 
   let parsed: ReturnType<typeof parsePayload>;
   try {
     parsed = parsePayload(rawBody);
   } catch {
-    return NextResponse.json(
-      { accepted: false, error: "Invalid JSON" },
-      { status: 400 },
-    );
+    return recusar("json_invalido", 400, "Invalid JSON");
   }
 
   if (
@@ -204,10 +212,7 @@ export async function handleGhlOpportunityWebhook(request: NextRequest) {
     process.env.GHL_LOCATION_ID &&
     parsed.locationId !== process.env.GHL_LOCATION_ID
   ) {
-    return NextResponse.json(
-      { accepted: false, error: "Wrong location" },
-      { status: 403 },
-    );
+    return recusar("location_errada", 403, "Wrong location");
   }
 
   // Outros tipos podem estar habilitados na mesma integração Marketplace.
@@ -251,6 +256,13 @@ export async function handleGhlOpportunityWebhook(request: NextRequest) {
       return NextResponse.json({ accepted: true, ...result }, { status: 200 });
     } catch (error) {
       console.error("GHL opportunity webhook processing failed", error);
+      await logWebhookRejection({
+        provider: "ghl",
+        rota,
+        motivo: "falha_ao_gravar",
+        status: 500,
+        detalhe: { opportunityId: parsed.opportunityId, erro: error instanceof Error ? error.message : "Unknown error" },
+      });
       return NextResponse.json(
         { accepted: false, error: "Processing failed" },
         { status: 500 },
@@ -268,10 +280,20 @@ export async function handleGhlOpportunityWebhook(request: NextRequest) {
         });
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
       console.error("GHL opportunity webhook background processing failed", {
         opportunityId: parsed.opportunityId,
         eventType: parsed.eventType,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: message,
+      });
+      // O GHL já recebeu 202 e não vai tentar de novo: sem este registro a
+      // falha só existiria no log da Vercel.
+      await logWebhookRejection({
+        provider: "ghl",
+        rota,
+        motivo: "falha_ao_gravar",
+        status: 202,
+        detalhe: { opportunityId: parsed.opportunityId, tipo_de_evento: parsed.eventType, erro: message },
       });
     }
   });

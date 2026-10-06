@@ -8,7 +8,18 @@ import {
 } from "@/lib/ghl/api";
 import { getSupabaseSecretKey } from "@/lib/supabase/keys-server";
 import { toIsoDate } from "@/lib/programacao/board-dates";
-import { shouldUpdateWonDeal, type CachedWonDeal } from "@/lib/ghl/won-deal-diff";
+import {
+  isStorableDealValue,
+  isWithinWebhookGrace,
+  shouldUpdateWonDeal,
+  webhookMissedWonDeal,
+  type CachedWonDeal,
+} from "@/lib/ghl/won-deal-diff";
+import {
+  recentOpportunityWebhookRejections,
+  reportIntegrationOk,
+  reportIntegrationProblem,
+} from "@/lib/ghl/integration-health";
 
 const UPSERT_BATCH_SIZE = 500;
 
@@ -72,9 +83,23 @@ export async function upsertGhlDeals(
 ) {
   const supabase = createServiceClient();
   let upserted = 0;
+  // Um valor que não cabe na coluna faz o Postgres recusar o lote inteiro
+  // (foi o que parou o sync completo em 05/10/2026). O negócio fica com o
+  // último valor gravado e volta como aviso para alguém corrigir no GHL.
+  const skipped = deals.filter((deal) => !isStorableDealValue(deal.value));
+  const storable = skipped.length
+    ? deals.filter((deal) => isStorableDealValue(deal.value))
+    : deals;
+  if (skipped.length) {
+    console.error("GHL cache: negócios com valor inválido ignorados", skipped.map((deal) => ({
+      deal_id: deal.deal_id,
+      title: deal.title,
+      value: deal.value,
+    })));
+  }
 
-  for (let index = 0; index < deals.length; index += UPSERT_BATCH_SIZE) {
-    const rows = deals
+  for (let index = 0; index < storable.length; index += UPSERT_BATCH_SIZE) {
+    const rows = storable
       .slice(index, index + UPSERT_BATCH_SIZE)
       .map((deal) => toDealsCacheRow(deal, source, requestId));
     const { error } = await supabase.from("deals_cache").upsert(rows, {
@@ -85,12 +110,36 @@ export async function upsertGhlDeals(
     upserted += rows.length;
   }
 
-  return upserted;
+  return { upserted, skipped };
 }
 
+function describeDeals(deals: GhlMappedDeal[]) {
+  const names = deals.slice(0, 5).map((deal) => `"${deal.title || deal.deal_id}"`).join(", ");
+  return deals.length > 5 ? `${names} e mais ${deals.length - 5}` : names;
+}
+
+function describeSkipped(skipped: GhlMappedDeal[]) {
+  return `${skipped.length} negócio(s) com valor inválido no GHL não foram atualizados: ${describeDeals(skipped)}. Corrija o valor no GHL.`;
+}
+
+function dealRefs(deals: GhlMappedDeal[]) {
+  return deals.map((deal) => ({ deal_id: deal.deal_id, title: deal.title }));
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * O webhook é o caminho normal. Mudança com menos de WEBHOOK_GRACE_MS fica
+ * para ele; a que passou da janela e ainda difere do banco é aplicada aqui
+ * e, se for mudança real, conta como falha do webhook.
+ */
 async function onlyChangedWonDeals(deals: GhlMappedDeal[]) {
   const supabase = createServiceClient();
   const changed: GhlMappedDeal[] = [];
+  const missed: GhlMappedDeal[] = [];
+  const now = Date.now();
 
   for (let index = 0; index < deals.length; index += UPSERT_BATCH_SIZE) {
     const batch = deals.slice(index, index + UPSERT_BATCH_SIZE);
@@ -104,12 +153,15 @@ async function onlyChangedWonDeals(deals: GhlMappedDeal[]) {
     const cached = new Map(
       ((data ?? []) as CachedWonDeal[]).map((row) => [row.deal_id, row]),
     );
-    changed.push(
-      ...batch.filter((deal) => shouldUpdateWonDeal(deal, cached.get(deal.deal_id))),
-    );
+    for (const deal of batch) {
+      const row = cached.get(deal.deal_id);
+      if (!shouldUpdateWonDeal(deal, row) || isWithinWebhookGrace(deal, now)) continue;
+      changed.push(deal);
+      if (webhookMissedWonDeal(deal, row)) missed.push(deal);
+    }
   }
 
-  return changed;
+  return { changed, missed };
 }
 
 async function logCacheSync(source: string, startedAt: number, rows: number) {
@@ -174,13 +226,32 @@ export async function syncAllGhlDeals(options?: {
   const startedAt = Date.now();
   const source = options?.source || "manual";
   const requestId = options?.requestId || crypto.randomUUID();
-  const result = await getGhlDeals(true);
-  if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
-    throw new Error("Refusing to reconcile an incomplete GHL snapshot");
+  let result: Awaited<ReturnType<typeof getGhlDeals>>;
+  let upserted: number;
+  let skipped: GhlMappedDeal[];
+  let removed: number;
+  try {
+    result = await getGhlDeals(true);
+    if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
+      throw new Error("Refusing to reconcile an incomplete GHL snapshot");
+    }
+    ({ upserted, skipped } = await upsertGhlDeals(result.deals, source, requestId));
+    removed = await removeStaleGhlDeals(result.deals);
+  } catch (error) {
+    await reportIntegrationProblem(
+      "ghl_sync_completo",
+      `O sync completo falhou: ${errorMessage(error)}`,
+    );
+    throw error;
   }
-  const upserted = await upsertGhlDeals(result.deals, source, requestId);
-  const removed = await removeStaleGhlDeals(result.deals);
   await logCacheSync("ghl_deals_cache_full", startedAt, upserted);
+  if (skipped.length) {
+    await reportIntegrationProblem("ghl_sync_completo", describeSkipped(skipped), {
+      negocios: dealRefs(skipped),
+    });
+  } else {
+    await reportIntegrationOk("ghl_sync_completo", { upserted, removed });
+  }
 
   const wonDeals = result.deals.filter(
     (deal) => deal.status?.toLowerCase() === "won",
@@ -197,6 +268,7 @@ export async function syncAllGhlDeals(options?: {
     duplicates: result.duplicates,
     snapshotComplete: result.snapshotComplete,
     upserted,
+    skipped: skipped.length,
     removed,
     wonDeals: wonDeals.length,
     wonValue: Math.round(wonValue * 100) / 100,
@@ -215,16 +287,37 @@ export async function syncWonGhlDeals(options?: {
   const startedAt = Date.now();
   const source = options?.source || "cron";
   const requestId = options?.requestId || crypto.randomUUID();
-  const result = await getGhlWonDeals();
-  if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
-    throw new Error("Refusing to upsert an incomplete GHL won snapshot");
+  let result: Awaited<ReturnType<typeof getGhlWonDeals>>;
+  let missed: GhlMappedDeal[];
+  let upserted: number;
+  let skipped: GhlMappedDeal[];
+  try {
+    result = await getGhlWonDeals();
+    if (!result.snapshotComplete || result.deals.length !== result.totalOpportunities) {
+      throw new Error("Refusing to upsert an incomplete GHL won snapshot");
+    }
+    // This runs every 15 minutes. Rewriting all won deals at each pass causes
+    // index and WAL traffic even when the GHL payload is byte-for-byte equal.
+    // The complete daily sync still reconciles every field.
+    const diff = await onlyChangedWonDeals(result.deals);
+    missed = diff.missed;
+    ({ upserted, skipped } = await upsertGhlDeals(diff.changed, source, requestId));
+  } catch (error) {
+    await reportIntegrationProblem(
+      "ghl_sync_ganhos",
+      `O sync de ganhos falhou: ${errorMessage(error)}`,
+    );
+    throw error;
   }
-  // This runs every 15 minutes. Rewriting all won deals at each pass causes
-  // index and WAL traffic even when the GHL payload is byte-for-byte equal.
-  // The complete daily sync still reconciles every field.
-  const changed = await onlyChangedWonDeals(result.deals);
-  const upserted = await upsertGhlDeals(changed, source, requestId);
   await logCacheSync("ghl_deals_cache_won", startedAt, upserted);
+  if (skipped.length) {
+    await reportIntegrationProblem("ghl_sync_ganhos", describeSkipped(skipped), {
+      negocios: dealRefs(skipped),
+    });
+  } else {
+    await reportIntegrationOk("ghl_sync_ganhos", { upserted });
+  }
+  await reportWebhookHealth(missed);
   const wonValue =
     result.deals.reduce((sum, deal) => sum + Number(deal.value || 0), 0) / 100;
   return {
@@ -234,10 +327,40 @@ export async function syncWonGhlDeals(options?: {
     wonDeals: result.totalOpportunities,
     wonValue: Math.round(wonValue * 100) / 100,
     upserted,
+    missedByWebhook: missed.length,
     removed: 0,
     pages: result.pages,
     duplicates: result.duplicates,
     snapshotComplete: result.snapshotComplete,
     durationMs: Date.now() - startedAt,
   };
+}
+
+async function reportWebhookHealth(missed: GhlMappedDeal[]) {
+  const problems: string[] = [];
+  const detalhe: Record<string, unknown> = {};
+  if (missed.length) {
+    problems.push(
+      `O webhook não entregou ${missed.length} alteração(ões) em negócios ganhos (${describeDeals(missed)}); o sync de 15 min aplicou.`,
+    );
+    detalhe.negocios = dealRefs(missed);
+  }
+  try {
+    const rejections = await recentOpportunityWebhookRejections();
+    if (rejections.total) {
+      const reasons = Object.entries(rejections.byReason)
+        .map(([reason, count]) => `${reason}: ${count}`)
+        .join(", ");
+      problems.push(`O webhook recusou ${rejections.total} requisição(ões) nas últimas 24 h (${reasons}). Se for autorizacao_invalida, a chave configurada no GHL não bate com GHL_WEBHOOK_SECRET.`);
+      detalhe.recusas = rejections.byReason;
+    }
+  } catch (error) {
+    console.error("GHL webhook health: leitura das recusas falhou", error);
+  }
+
+  if (problems.length) {
+    await reportIntegrationProblem("ghl_webhook", problems.join(" "), detalhe);
+  } else {
+    await reportIntegrationOk("ghl_webhook");
+  }
 }
