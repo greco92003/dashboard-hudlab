@@ -100,6 +100,67 @@ function productModelKey(model: Pick<ErpProductModel, "modelNumber" | "audience"
   return `${model.modelNumber}:${model.audience}`;
 }
 
+function emptyMapping(model: Pick<ErpProductModel, "soleColor">): ProductMapping {
+  return {
+    mode: "clone",
+    clonerId: "",
+    existingProductId: "",
+    color: "",
+    soleColor: model.soleColor ?? "",
+    title: "",
+    baseSku: "",
+    variationSkus: {},
+  };
+}
+
+// Escolhas feitas na tela, guardadas por negócio só neste navegador: um F5
+// não obriga a escolher de novo o cloner de cada modelo.
+type SavedDraft = { productBaseName: string; mappings: Record<string, ProductMapping> };
+
+function draftStorageKey(dealId: string) {
+  return `cadastro-erp:rascunho:${dealId}`;
+}
+
+function readDraft(dealId: string): Partial<SavedDraft> | null {
+  try {
+    const raw = window.localStorage.getItem(draftStorageKey(dealId));
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" ? parsed as Partial<SavedDraft> : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(dealId: string, draft: SavedDraft) {
+  try {
+    window.localStorage.setItem(draftStorageKey(dealId), JSON.stringify(draft));
+  } catch {
+    // Armazenamento bloqueado ou cheio: a tela segue funcionando sem rascunho.
+  }
+}
+
+function restoreMapping(model: ErpProductModel, saved: unknown): ProductMapping {
+  const base = emptyMapping(model);
+  if (!saved || typeof saved !== "object") return base;
+  const value = saved as Record<string, unknown>;
+  const text = (field: keyof ProductMapping) =>
+    typeof value[field] === "string" ? value[field] as string : base[field] as string;
+  const skus = value.variationSkus && typeof value.variationSkus === "object"
+    ? Object.fromEntries(Object.entries(value.variationSkus as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    : {};
+  return {
+    mode: value.mode === "existing" ? "existing" : "clone",
+    clonerId: text("clonerId"),
+    existingProductId: text("existingProductId"),
+    color: text("color"),
+    soleColor: text("soleColor"),
+    title: text("title"),
+    baseSku: text("baseSku"),
+    variationSkus: skus,
+  };
+}
+
 function productModelLabel(model: Pick<ErpProductModel, "modelNumber" | "audience">) {
   return `Modelo ${model.modelNumber} ${model.audience}`;
 }
@@ -289,18 +350,18 @@ export default function CadastroErpPage() {
     )
       .then((data) => {
         if (!active) return;
+        const draft = readDraft(data.deal.id);
         setPreview(data);
-        setProductBaseName(data.deal.name);
-        setMappings(Object.fromEntries(data.models.map((model) => [productModelKey(model), {
-          mode: "clone" as const,
-          clonerId: "",
-          existingProductId: "",
-          color: "",
-          soleColor: model.soleColor ?? "",
-          title: "",
-          baseSku: "",
-          variationSkus: {},
-        }])));
+        setProductBaseName(
+          typeof draft?.productBaseName === "string" && draft.productBaseName.trim()
+            ? draft.productBaseName
+            : data.deal.name,
+        );
+        // Modelos que saíram da ficha do GHL ficam de fora; os novos começam vazios.
+        setMappings(Object.fromEntries(data.models.map((model) => [
+          productModelKey(model),
+          restoreMapping(model, draft?.mappings?.[productModelKey(model)]),
+        ])));
         setCreationResults([]);
       })
       .catch((error) => active && toast.error(error.message))
@@ -323,6 +384,11 @@ export default function CadastroErpPage() {
     };
   }, [query.deal, cloners.length]);
 
+  useEffect(() => {
+    if (!preview || preview.deal.id !== query.deal) return;
+    writeDraft(preview.deal.id, { productBaseName, mappings });
+  }, [preview, query.deal, productBaseName, mappings]);
+
   const selectedContact = contacts.find((contact) => contact.id === query.contact);
   const selectedDeal = deals.find((deal) => deal.id === query.deal);
 
@@ -330,16 +396,7 @@ export default function CadastroErpPage() {
     const key = productModelKey(model);
     setCreationResults([]);
     setMappings((current) => {
-      const previous = current[key] ?? {
-        mode: "clone" as const,
-        clonerId: "",
-        existingProductId: "",
-        color: "",
-        soleColor: model.soleColor ?? "",
-        title: "",
-        baseSku: "",
-        variationSkus: {},
-      };
+      const previous = current[key] ?? emptyMapping(model);
       return {
         ...current,
         [key]: {
