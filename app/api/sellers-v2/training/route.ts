@@ -11,6 +11,7 @@ import {
   type AuditorResult,
 } from "@/lib/ghl/sales-agent/agent";
 import { TRAINING_CUSTOMER_KNOWLEDGE } from "@/lib/ghl/sales-agent/training-knowledge";
+import { isTrainingBlocked, TRAINING_BLOCKED_MESSAGE } from "@/lib/sellers-v2/arena-access";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 const TRAINING_MODEL = "gpt-5.6-terra";
@@ -543,6 +544,17 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.action === "start") {
+      // Todo treino pertence a uma pessoa: a conta Hud Lab (owner) e as de teste não treinam.
+      const { data: profile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role, email")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (isTrainingBlocked(profile)) {
+        return NextResponse.json({ error: TRAINING_BLOCKED_MESSAGE, code: "TRAINING_BLOCKED" }, { status: 403 });
+      }
+
       const { data: activeData, error: activeError } = await supabase
         .from("seller_training_sessions")
         .select("*")
