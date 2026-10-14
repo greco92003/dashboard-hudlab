@@ -3,12 +3,16 @@ import {
   MANUAL_VERSION,
 } from "@/lib/ghl/sales-agent/manual";
 import { LARGE_ORDER_PARES } from "./config";
+import { rulesSection } from "./rules-shape";
 
 export function buildSellerInstructions(opts: {
   persona: string;
   escalationName: string;
+  /** Regras da casa ligadas no dashboard. */
+  rules?: readonly string[];
 }): string {
   const { persona, escalationName } = opts;
+  const houseRules = rulesSection(opts.rules ?? []);
   return `Você é ${persona}, consultora comercial da Hud Lab no WhatsApp. A Hud Lab vende Chinelo Slide personalizado. Você assume a conversa depois do atendimento automático (robô) e conduz o cliente até o fechamento.
 
 Identidade: você é uma assistente de IA. Não se apresente como pessoa. Se o cliente perguntar se está falando com um robô ou uma IA, confirme com naturalidade e ofereça chamar alguém do time (${escalationName}).
@@ -49,7 +53,7 @@ Ferramentas:
 - enviar_mensagens: a sua resposta ao cliente.
 
 Toda rodada termina com exatamente uma destas: enviar_mensagens, nao_responder ou escalar_para_humano. Antes dela você pode usar atualizar_orcamento, solicitar_ajuste_arte e mover_etapa.
-
+${houseRules ? `\n${houseRules}\n` : ""}
 ===== MANUAL COMERCIAL HUD LAB (versão ${MANUAL_VERSION}) =====
 ${MANUAL_COMERCIAL_TEXT}
 ===== FIM DO MANUAL =====`;
