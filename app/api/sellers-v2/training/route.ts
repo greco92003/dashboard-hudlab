@@ -12,6 +12,16 @@ import {
 } from "@/lib/ghl/sales-agent/agent";
 import { TRAINING_CUSTOMER_KNOWLEDGE } from "@/lib/ghl/sales-agent/training-knowledge";
 import { isTrainingBlocked, TRAINING_BLOCKED_MESSAGE } from "@/lib/sellers-v2/arena-access";
+import { compareWithCami } from "@/lib/sellers-v2/cami-compare";
+import {
+  FREE_MISSION_ID,
+  missionById,
+  TRILHA_NOTA_MINIMA,
+  unlockedMissions,
+  weeklyChallenge,
+  type Mission,
+} from "@/lib/sellers-v2/missions";
+import { SEASON_ONE_START } from "@/lib/sellers-v2/progression";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
 const TRAINING_MODEL = "gpt-5.6-terra";
@@ -31,7 +41,7 @@ PRODUTO: A Hud Lab vende Chinelo Slide personalizado. Nunca mencione tênis, sap
 
 REGRAS COMERCIAIS REAIS (use exatamente estes números ao perguntar ou fazer objeção — nunca invente outros valores):
 - Pedido mínimo: 12 pares.
-- Preço por par: 12 a 23 pares R$ 67,90 | 24 a 99 pares R$ 59,90 | 100 a 499 pares R$ 54,90 | 500 a 999 pares R$ 52,90 | 1.000 pares ou mais R$ 49,90.
+- Preço por par: 12 a 23 pares R$ 59,90 | 24 a 99 pares R$ 57,90 | 100 a 499 pares R$ 54,90 | 500 a 999 pares R$ 52,90 | 1.000 pares ou mais R$ 49,90.
 - Frete grátis a partir de 36 pares para todo o Brasil; abaixo disso o frete é calculado por CEP.
 - Personalização: Hud Lab Start (12 pares, Silk 1 cor); Silk a partir de 24 pares (até 3 cores entre 24 e 35 pares; até 4 cores a partir de 36 pares); Silk Relevo (60 pares); 3D (132 pares); Sola colorida (adicional de R$ 5,00/par, mín. 100 pares). O preço não muda pela técnica escolhida, só pela quantidade total.
 - Pagamento: PIX à vista (5% de desconto), cartão até 3x sem juros ou até 6x com juros da operadora, ou 50% para liberar a produção + 50% antes do envio.
@@ -88,7 +98,16 @@ function getRoundFocus(messages: TrainingChatMessage[]): string {
   return TRAINING_FOCUS_CYCLE[clientReplies % TRAINING_FOCUS_CYCLE.length];
 }
 
-function buildTurnInstructions(messages: TrainingChatMessage[]): string {
+function buildTurnInstructions(messages: TrainingChatMessage[], mission: Mission | null = null): string {
+  if (mission) {
+    // Missão: o cenário dela vale acima do cenário genérico e do ciclo de focos.
+    return `${SYSTEM_PROMPT}
+
+CENÁRIO DESTA MISSÃO (vale acima do "CENÁRIO DO CLIENTE" genérico; mantenha estes fatos até o fim):
+${mission.cliente}
+
+Conduza a conversa em torno deste cenário. Não mencione que existe uma missão ou um treinamento.`;
+  }
   return `${SYSTEM_PROMPT}
 
 FOCO DESTA RODADA: ${getRoundFocus(messages)}.
@@ -129,6 +148,8 @@ interface TrainingSessionRow {
   model: string | null;
   token_usage: Record<string, number> | null;
   updated_at: string;
+  mission_id: string | null;
+  comparacao_cami: unknown;
 }
 
 type TrainingSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -185,6 +206,8 @@ function serializeSession(session: TrainingSessionRow) {
     evaluation: session.evaluation,
     score: session.score,
     completionReason: session.completion_reason,
+    missionId: session.mission_id ?? null,
+    comparacaoCami: session.comparacao_cami ?? null,
   };
 }
 
@@ -210,10 +233,11 @@ async function resolveSellerName(
 async function generateClientReply(
   messages: TrainingChatMessage[],
   userId: string,
+  mission: Mission | null = null,
 ) {
   const response = await openai.responses.create({
     model: TRAINING_MODEL,
-    instructions: buildTurnInstructions(messages),
+    instructions: buildTurnInstructions(messages, mission),
     input: messages.map((message) => ({
       role: message.role,
       content: message.content,
@@ -537,8 +561,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as {
-      action: "start" | "chat" | "evaluate";
+      action: "start" | "chat" | "evaluate" | "compare";
       sessionId?: string;
+      missionId?: string;
       message?: TrainingChatMessage;
       completionReason?: "manual" | "timer";
     };
@@ -577,6 +602,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Missão: existe e está liberada pela trilha (o desafio da semana e o treino livre sempre estão).
+      const missionId = body.missionId && body.missionId !== FREE_MISSION_ID ? body.missionId : null;
+      const mission = missionById(missionId);
+      if (missionId && !mission) {
+        return NextResponse.json({ error: "Missão não encontrada." }, { status: 400 });
+      }
+      if (mission) {
+        const { data: done, error: doneError } = await supabase
+          .from("seller_training_sessions")
+          .select("mission_id, score")
+          .eq("user_id", user.id)
+          .eq("status", "completed")
+          .not("mission_id", "is", null)
+          .gte("started_at", `${SEASON_ONE_START}T03:00:00Z`);
+        if (doneError) throw doneError;
+        const best: Record<string, number> = {};
+        for (const row of done ?? []) {
+          best[row.mission_id as string] = Math.max(best[row.mission_id as string] ?? 0, (row.score as number) ?? 0);
+        }
+        if (!unlockedMissions(best, weeklyChallenge(Date.now()).mission.id).has(mission.id)) {
+          return NextResponse.json(
+            { error: `Missão bloqueada: tire ${TRILHA_NOTA_MINIMA} ou mais na missão anterior da trilha.`, code: "MISSION_LOCKED" },
+            { status: 403 },
+          );
+        }
+      }
+
       const sellerName = await resolveSellerName(supabase, user);
       const startedAt = new Date();
       const deadlineAt = new Date(startedAt.getTime() + TRAINING_DURATION_MS);
@@ -592,6 +644,7 @@ export async function POST(request: NextRequest) {
           model: TRAINING_MODEL,
           token_usage: {},
           updated_at: startedAt.toISOString(),
+          mission_id: mission?.id ?? null,
         })
         .select("*")
         .single();
@@ -602,6 +655,7 @@ export async function POST(request: NextRequest) {
         id: randomUUID(),
         role: "assistant",
         content:
+          mission?.abertura ??
           CLIENT_OPENING_QUESTIONS[
             Math.floor(Math.random() * CLIENT_OPENING_QUESTIONS.length)
           ],
@@ -685,7 +739,7 @@ export async function POST(request: NextRequest) {
         if (persistError) throw persistError;
       }
 
-      const generated = await generateClientReply(messages, user.id);
+      const generated = await generateClientReply(messages, user.id, missionById(session.mission_id));
       messages.push({
         id: randomUUID(),
         role: "assistant",
@@ -726,6 +780,24 @@ export async function POST(request: NextRequest) {
         evaluation: session.evaluation,
         session: serializeSession(session),
       });
+    }
+
+    if (body.action === "compare") {
+      // "Você × Cami": calculado uma vez e guardado na sessão.
+      if (session.comparacao_cami) {
+        return NextResponse.json({ success: true, comparacao: session.comparacao_cami });
+      }
+      if (session.status !== "completed" || !session.evaluation) {
+        return NextResponse.json({ error: "O treino ainda não foi avaliado." }, { status: 409 });
+      }
+      const comparacao = await compareWithCami(session.transcript ?? [], session.evaluation, missionById(session.mission_id));
+      const { error: saveError } = await supabase
+        .from("seller_training_sessions")
+        .update({ comparacao_cami: comparacao })
+        .eq("id", session.id)
+        .eq("user_id", user.id);
+      if (saveError) console.error("Comparação com a Cami não salva:", saveError);
+      return NextResponse.json({ success: true, comparacao });
     }
 
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
