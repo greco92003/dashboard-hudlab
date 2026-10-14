@@ -31,6 +31,20 @@ test("contexto traz a data e marca o valor do CRM como último orçamento regist
   assert.match(text, /Data de hoje: 29\/09\/2026/);
   assert.match(text, /último orçamento registrado/);
   assert.match(text, /R\$ 2396\.00/);
+  assert.doesNotMatch(text, /omitidas/);
+});
+
+test("contexto avisa quando o robô de antes da amostra foi omitido", () => {
+  const text = buildContextText({
+    today: "14/10/2026",
+    contactName: null,
+    pipelineName: "Atendimento",
+    stageName: "Atendimento",
+    crmPares: 30,
+    crmValor: 1737,
+    omittedAutomated: 7,
+  });
+  assert.match(text, /As 7 mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas/);
 });
 
 test("mensagens da própria IA aparecem como VOCÊ na transcrição", async () => {

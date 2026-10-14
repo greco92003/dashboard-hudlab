@@ -35,7 +35,13 @@ function endsSession(row: RunHistoryRow): boolean {
  * entre o fim de uma sessão e a volta à IA, e não podem abrir a sessão nova.
  */
 function provesAiSession(row: RunHistoryRow): boolean {
-  if (row.decision === "pulou:sem_tag" || row.decision === "pulou:em_andamento") return false;
+  if (
+    row.decision === "pulou:sem_tag" ||
+    row.decision === "pulou:em_andamento" ||
+    row.decision === "pulou:aguardando_cliente"
+  ) {
+    return false;
+  }
   if (row.decision === "erro" && row.escalation_reason == null) return false;
   return true;
 }

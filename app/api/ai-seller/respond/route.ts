@@ -2,9 +2,10 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { requireBearerSecret } from "@/lib/security/route-guards";
 import { respondToContact } from "@/lib/ghl/ai-seller/run";
 
-// Chamado pelo workflow "IA Vendedora | Responder" do GHL, ~90s depois de cada
-// mensagem do cliente. ?dryRun=1 roda o cérebro sem enviar nem gravar nada e
-// devolve o resultado; a rodada real devolve 202 e roda em segundo plano.
+// Chamado pelo workflow "IA Vendedora | Responder" do GHL a cada mensagem do
+// cliente. A rodada real devolve 202 e roda em segundo plano, esperando o
+// cliente parar de escrever (CLIENT_PAUSE_MS). ?dryRun=1 roda o cérebro na
+// hora, sem enviar nem gravar nada, e devolve o resultado.
 export async function POST(request: NextRequest) {
   const authError = requireBearerSecret(
     request,
