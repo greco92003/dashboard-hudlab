@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -15,6 +15,14 @@ import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
+import {
+  EditableDealCell,
+  type DealFieldsUpdate,
+} from "@/components/deals/editable-deal-cell";
+import {
+  DEAL_EDITABLE_FIELDS,
+  type DealEditableColumn,
+} from "@/lib/ghl/deal-fields";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -36,12 +44,19 @@ interface Deal {
   designer: string | null; // Field ID 47
   "utm-source": string | null; // Field ID 49 (UTM Source)
   "utm-medium": string | null; // Deal custom field ID 50 (UTM Medium)
-  custom_field_54: string | null; // Field ID 54 (Data de Embarque)
+  data_embarque: string | null; // GHL "Data de Embarque", dd/mm/aaaa
   contact_id: string | null;
   organization_id: string | null;
   api_updated_at: string | null;
   segmento_de_negocio: string | null; // Contact field ID 7 (Segmento de Negócio)
   intencao_de_compra: string | null; // Contact field ID 50 (Intenção de Compra)
+}
+
+/** dd/mm/aaaa -> aaaa-mm-dd, para ordenar; vazio vai para o fim. */
+function embarqueIso(valor: string | null) {
+  const partes = valor?.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!partes) return "9999";
+  return `${partes[3]}-${partes[2].padStart(2, "0")}-${partes[1].padStart(2, "0")}`;
 }
 
 export default function DealsPage() {
@@ -76,34 +91,54 @@ export default function DealsPage() {
     return new Date(year, month - 1, day); // month is 0-indexed
   };
 
+  // Valores já usados em cada coluna editável, sugeridos ao preencher.
+  const sugestoes = useMemo(() => {
+    const porColuna = {} as Record<DealEditableColumn, string[]>;
+    for (const column of Object.keys(DEAL_EDITABLE_FIELDS) as DealEditableColumn[]) {
+      const valores = new Set<string>();
+      for (const deal of deals) {
+        const valor = deal[column];
+        if (typeof valor === "string" && valor.trim()) valores.add(valor.trim());
+      }
+      porColuna[column] = [...valores].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+    return porColuna;
+  }, [deals]);
+
+  const aplicarEdicao = useCallback((update: DealFieldsUpdate) => {
+    setDeals((atual) =>
+      atual.map((deal) =>
+        deal.deal_id === update.deal_id ? { ...deal, ...update } : deal,
+      ),
+    );
+  }, []);
+
+  // Campo vazio vira célula editável que grava no card do GHL.
+  const celulaEditavel = (
+    deal: Deal,
+    column: DealEditableColumn,
+    exibir: (valor: string) => ReactNode = (valor) => valor,
+  ) => {
+    const valor = deal[column];
+    if (valor === null || valor === undefined || String(valor).trim() === "") {
+      return (
+        <EditableDealCell
+          dealId={deal.deal_id}
+          column={column}
+          suggestions={sugestoes[column]}
+          onSaved={aplicarEdicao}
+        />
+      );
+    }
+    return exibir(String(valor));
+  };
+
   // Define columns for the data table
   const columns: ColumnDef<Deal>[] = [
     {
-      accessorKey: "deal_id",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="px-0"
-          >
-            ID do Negócio
-            {column.getIsSorted() === "asc" ? (
-              <ArrowUp className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <ArrowDown className="ml-2 h-4 w-4" />
-            ) : (
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            )}
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        return <div className="font-mono text-xs">{row.original.deal_id}</div>;
-      },
-    },
-    {
       accessorKey: "title",
+      // Fica preso à esquerda: rolando até as últimas colunas, ainda se vê de qual negócio é a linha.
+      meta: { sticky: true },
       header: ({ column }) => {
         return (
           <Button
@@ -122,6 +157,15 @@ export default function DealsPage() {
           </Button>
         );
       },
+      cell: ({ row }) => (
+        // Estreito em tela pequena: fixo à esquerda, não pode cobrir a última coluna.
+        <div
+          className="max-w-[120px] truncate sm:max-w-[180px] xl:max-w-[240px]"
+          title={row.original.title}
+        >
+          {row.original.title}
+        </div>
+      ),
     },
     {
       accessorKey: "status",
@@ -195,34 +239,6 @@ export default function DealsPage() {
       },
     },
     {
-      accessorKey: "contact_id",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="px-0"
-          >
-            ID do Contato
-            {column.getIsSorted() === "asc" ? (
-              <ArrowUp className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <ArrowDown className="ml-2 h-4 w-4" />
-            ) : (
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            )}
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        return (
-          <div className="font-mono text-xs">
-            {row.original.contact_id || "-"}
-          </div>
-        );
-      },
-    },
-    {
       accessorKey: "created_date",
       header: ({ column }) => {
         return (
@@ -231,7 +247,7 @@ export default function DealsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="px-0"
           >
-            Data de Criação
+            Criação
             {column.getIsSorted() === "asc" ? (
               <ArrowUp className="ml-2 h-4 w-4" />
             ) : column.getIsSorted() === "desc" ? (
@@ -263,7 +279,7 @@ export default function DealsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="px-0"
           >
-            Data de Fechamento
+            Fechamento
             {column.getIsSorted() === "asc" ? (
               <ArrowUp className="ml-2 h-4 w-4" />
             ) : column.getIsSorted() === "desc" ? (
@@ -287,7 +303,12 @@ export default function DealsPage() {
       },
     },
     {
-      accessorKey: "custom_field_54",
+      accessorKey: "data_embarque",
+      // O GHL guarda dd/mm/aaaa; ordenar o texto misturaria os meses.
+      sortingFn: (a, b) =>
+        embarqueIso(a.original.data_embarque).localeCompare(
+          embarqueIso(b.original.data_embarque),
+        ),
       header: ({ column }) => {
         return (
           <Button
@@ -295,7 +316,7 @@ export default function DealsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="px-0"
           >
-            Data de Embarque
+            Embarque
             {column.getIsSorted() === "asc" ? (
               <ArrowUp className="ml-2 h-4 w-4" />
             ) : column.getIsSorted() === "desc" ? (
@@ -306,18 +327,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        const dataEmbarque = row.original.custom_field_54;
-        if (!dataEmbarque) return "-";
-
-        // Format date from YYYY-MM-DD to DD/MM/YYYY if needed
-        if (dataEmbarque.includes("-")) {
-          const [year, month, day] = dataEmbarque.split("-");
-          return `${day}/${month}/${year}`;
-        }
-
-        return dataEmbarque;
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "data_embarque"),
     },
     {
       accessorKey: "estado",
@@ -328,7 +338,7 @@ export default function DealsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="px-0"
           >
-            Estado
+            UF
             {column.getIsSorted() === "asc" ? (
               <ArrowUp className="ml-2 h-4 w-4" />
             ) : column.getIsSorted() === "desc" ? (
@@ -339,9 +349,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original.estado || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "estado"),
     },
     {
       accessorKey: "quantidade-de-pares",
@@ -352,7 +360,7 @@ export default function DealsPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="px-0"
           >
-            Quantidade de Pares
+            Pares
             {column.getIsSorted() === "asc" ? (
               <ArrowUp className="ml-2 h-4 w-4" />
             ) : column.getIsSorted() === "desc" ? (
@@ -363,9 +371,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original["quantidade-de-pares"] || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "quantidade-de-pares"),
     },
     {
       accessorKey: "vendedor",
@@ -387,10 +393,8 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        const vendedor = row.original.vendedor;
-        return vendedor ? normalizeSellerName(vendedor) : "-";
-      },
+      cell: ({ row }) =>
+        celulaEditavel(row.original, "vendedor", normalizeSellerName),
     },
     {
       accessorKey: "designer",
@@ -412,9 +416,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original.designer || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "designer"),
     },
     {
       accessorKey: "utm-source",
@@ -436,9 +438,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original["utm-source"] || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "utm-source"),
     },
     {
       accessorKey: "utm-medium",
@@ -460,9 +460,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original["utm-medium"] || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "utm-medium"),
     },
     {
       accessorKey: "segmento_de_negocio",
@@ -484,9 +482,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original.segmento_de_negocio || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "segmento_de_negocio"),
     },
     {
       accessorKey: "intencao_de_compra",
@@ -508,9 +504,7 @@ export default function DealsPage() {
           </Button>
         );
       },
-      cell: ({ row }) => {
-        return row.original.intencao_de_compra || "-";
-      },
+      cell: ({ row }) => celulaEditavel(row.original, "intencao_de_compra"),
     },
   ];
 
@@ -655,16 +649,7 @@ export default function DealsPage() {
         ? parseISODate(deal.closing_date).toLocaleDateString("pt-BR")
         : "-";
 
-      // Format data de embarque
-      let dataEmbarque = "-";
-      if (deal.custom_field_54) {
-        if (deal.custom_field_54.includes("-")) {
-          const [year, month, day] = deal.custom_field_54.split("-");
-          dataEmbarque = `${day}/${month}/${year}`;
-        } else {
-          dataEmbarque = deal.custom_field_54;
-        }
-      }
+      const dataEmbarque = deal.data_embarque || "-";
 
       return [
         deal.deal_id,
