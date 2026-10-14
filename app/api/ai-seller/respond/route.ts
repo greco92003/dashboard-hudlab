@@ -7,6 +7,7 @@ import { respondToContact } from "@/lib/ghl/ai-seller/run";
 // cliente parar de escrever (CLIENT_PAUSE_MS). ?dryRun=1 roda o cérebro na
 // hora, sem enviar nem gravar nada, e devolve o resultado.
 export async function POST(request: NextRequest) {
+  const receivedAt = Date.now();
   const authError = requireBearerSecret(
     request,
     process.env.AI_SELLER_WEBHOOK_SECRET,
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   if (!dryRun) {
     after(async () => {
       try {
-        await respondToContact(contactId);
+        await respondToContact(contactId, { receivedAt });
       } catch (error) {
         console.error("ai-seller respond error:", { contactId, dryRun, error });
       }

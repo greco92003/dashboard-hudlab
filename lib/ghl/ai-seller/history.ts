@@ -25,6 +25,7 @@ function endsSession(row: RunHistoryRow): boolean {
     row.decision === "escalou" ||
     row.decision === "humano_assumiu" ||
     row.decision === "pulou:limite" ||
+    row.decision === "pulou:desligada" ||
     (row.decision === "erro" && row.escalation_reason != null)
   );
 }

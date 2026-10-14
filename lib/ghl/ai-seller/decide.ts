@@ -1,7 +1,5 @@
 import type { NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
 import {
-  ASSIGN_MAX_PARES,
-  ASSIGN_MIN_PARES,
   GHL_ATENDIMENTO_PIPELINE_ID,
   HUMAN_RECENT_MS,
   MAX_AI_REPLIES_PER_HOUR,
@@ -100,6 +98,7 @@ export type AssignDecision =
   | {
       assign: false;
       motivo:
+        | "cami_pausada"
         | "ja_com_a_ia"
         | "ja_passou_para_humano"
         | "sem_oportunidade"
@@ -116,6 +115,10 @@ export type AssignDecision =
  */
 export function decideAssignment(input: {
   now: number;
+  /** Só "ligada" pega cliente novo. */
+  estado: "ligada" | "nao_pega_novos" | "desligada";
+  minPares: number;
+  maxPares: number;
   tags: readonly string[];
   aiTag: string;
   escalatedTag: string;
@@ -123,11 +126,12 @@ export function decideAssignment(input: {
   pares: number | null;
   messages: NegotiationMessage[];
 }): AssignDecision {
+  if (input.estado !== "ligada") return { assign: false, motivo: "cami_pausada" };
   if (input.tags.includes(input.aiTag)) return { assign: false, motivo: "ja_com_a_ia" };
   if (input.tags.includes(input.escalatedTag)) return { assign: false, motivo: "ja_passou_para_humano" };
   if (input.pipelineId == null) return { assign: false, motivo: "sem_oportunidade" };
   if (input.pipelineId !== GHL_ATENDIMENTO_PIPELINE_ID) return { assign: false, motivo: "fora_do_atendimento" };
-  if (input.pares == null || input.pares < ASSIGN_MIN_PARES || input.pares > ASSIGN_MAX_PARES) {
+  if (input.pares == null || input.pares < input.minPares || input.pares > input.maxPares) {
     return { assign: false, motivo: "fora_da_faixa_de_pares" };
   }
   const humanTalking = input.messages.some((m) =>

@@ -14,6 +14,8 @@ import {
 import { decideAssignment, type AssignDecision } from "./decide";
 import { addContactTags } from "./ghl-actions";
 import { findCurrentOpportunity } from "./run";
+import { insertAssignment } from "./runs-store";
+import { loadSellerSettings } from "./settings";
 
 export interface AssignResult {
   decision: AssignDecision;
@@ -33,17 +35,21 @@ export async function assignToSeller(
   options: { opportunityId?: string | null; dryRun?: boolean } = {},
 ): Promise<AssignResult> {
   const dryRun = options.dryRun === true;
-  const [contact, opportunity, transcript] = await Promise.all([
+  const [contact, opportunity, transcript, settings] = await Promise.all([
     fetchGhlContactById(contactId),
     options.opportunityId
       ? fetchOpportunityById(options.opportunityId)
       : findCurrentOpportunity(contactId),
     getNegotiationTranscript(contactId),
+    loadSellerSettings(),
   ]);
   const pares = opportunity ? await getQtyParesForOpportunity(opportunity) : null;
 
   const decision = decideAssignment({
     now: Date.now(),
+    estado: settings.estado,
+    minPares: settings.minPares,
+    maxPares: settings.maxPares,
     tags: contact.tags ?? [],
     aiTag: AI_TAG,
     escalatedTag: AI_ESCALATED_TAG,
@@ -58,6 +64,20 @@ export async function assignToSeller(
     });
     // Tag por último: é ela que liga a Cami no workflow "Responder".
     await addContactTags(contactId, [AI_TAG]);
+  }
+
+  if (!dryRun) {
+    // Começo do funil da CAMI Intelligence. Falha aqui não desfaz a entrada.
+    try {
+      await insertAssignment({
+        contact_id: contactId,
+        opportunity_id: opportunity?.id ?? null,
+        pares,
+        decisao: decision.assign ? "assumiu" : decision.motivo,
+      });
+    } catch (err) {
+      console.error("IA vendedora: entrada não registrada", { contactId, err });
+    }
   }
 
   console.info("IA vendedora: entrada", {
