@@ -5,19 +5,13 @@ import type {
   ResponseFunctionToolCall,
   ResponseInput,
 } from "openai/resources/responses/responses";
-import {
-  fetchGhlContactById,
-  fetchGhlPipelines,
-  searchGhlOpportunitiesByContact,
-  type GhlOpportunity,
-} from "@/lib/ghl/api";
+import { fetchGhlContactById, fetchGhlPipelines } from "@/lib/ghl/api";
 import {
   findPhoneConversationId,
   getNegotiationTranscript,
   getQtyParesForOpportunity,
 } from "@/lib/ghl/negotiation-conversations";
 import { createContactNote } from "@/lib/ghl/mockup-instructions/ghl-client";
-import { isGhlWonDeal } from "@/lib/ghl/pipelines";
 import {
   buildTranscriptParts,
   todayBRDateString,
@@ -48,6 +42,8 @@ import {
   writeBudgetChain,
 } from "./ghl-actions";
 import { escalationAvailability } from "./hours";
+import { findCurrentOpportunity } from "./opportunity";
+import { loadActiveRules } from "./rules";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
 import { buildContextText, buildSellerInstructions } from "./prompt";
 import {
@@ -147,17 +143,7 @@ function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export async function findCurrentOpportunity(contactId: string): Promise<GhlOpportunity | null> {
-  const opportunities = await searchGhlOpportunitiesByContact(contactId);
-  const open = opportunities.filter(
-    (o) =>
-      (o.status ?? "open") === "open" &&
-      // Venda fechada (ex.: na Serigrafia) não é negociação da IA.
-      !isGhlWonDeal(o.pipelineId, o.pipelineStageId, o.status, o.monetaryValue),
-  );
-  open.sort((a, b) => Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? ""));
-  return open[0] ?? null;
-}
+export { findCurrentOpportunity };
 
 interface RunContext {
   contactId: string;
@@ -303,7 +289,7 @@ function realActions(
 }
 
 /** Sem efeito colateral: só a cotação de frete (leitura) é real. */
-function dryRunActions(): SellerActions {
+export function dryRunActions(): SellerActions {
   let counter = 0;
   const fakeId = () => `dry-${++counter}`;
   return {
@@ -327,7 +313,7 @@ function dryRunActions(): SellerActions {
   };
 }
 
-function makeCallModel(instructions: string): CallModel {
+export function makeCallModel(instructions: string): CallModel {
   return async (input) => {
     const response = await openai.responses.create({
       model: AI_SELLER_MODEL,
@@ -588,7 +574,7 @@ async function respondToContactUnsafe(
       { role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] },
     ],
     callModel: makeCallModel(
-      buildSellerInstructions({ persona, escalationName: settings.escalationName }),
+      buildSellerInstructions({ persona, escalationName: settings.escalationName, rules: await loadActiveRules() }),
     ),
     executeTool: (call) => executeTool(call, actions),
     maxSteps: MAX_AGENT_STEPS,

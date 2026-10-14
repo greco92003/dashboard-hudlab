@@ -43,6 +43,12 @@
     "app/api/cami/refresh/route.ts": {
       "maxDuration": 300
     },
+    "app/api/cami/rules/test/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cami/references/route.ts": {
+      "maxDuration": 60
+    },
     "app/api/cron/evaluate-negotiations/route.ts": {
       "maxDuration": 300
     },

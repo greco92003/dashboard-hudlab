@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseAsStringLiteral, useQueryStates } from "nuqs";
 import { toast } from "sonner";
-import { Bot, Gauge, Inbox, Loader2, MessagesSquare, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Bot, Gauge, Inbox, ListChecks, Loader2, MessagesSquare, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CamiControl } from "@/components/cami/control";
 import { CamiConversations } from "@/components/cami/conversations";
 import { CamiOverview } from "@/components/cami/overview";
+import { CamiRules, type RuleDraft } from "@/components/cami/rules";
 import { ESTADO_LABEL, fmtDateTime } from "@/components/cami/format";
 import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -17,7 +18,7 @@ import type { ConversationItem, OverviewPayload } from "@/lib/ghl/ai-seller/inte
 import type { Periodo } from "@/lib/ghl/ai-seller/intel";
 import { cn } from "@/lib/utils";
 
-const TABS = ["visao", "conversas", "nao-lidas", "controle"] as const;
+const TABS = ["visao", "conversas", "regras", "nao-lidas", "controle"] as const;
 const PERIODOS: Array<{ id: Periodo; label: string }> = [
   { id: "hoje", label: "Hoje" },
   { id: "7d", label: "7 dias" },
@@ -41,6 +42,8 @@ export default function CamiIntelligencePage() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
+  const clearDraft = useCallback(() => setRuleDraft(null), []);
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -153,7 +156,7 @@ export default function CamiIntelligencePage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => void setRoute({ tab: v as (typeof TABS)[number] })} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="visao" className="flex items-center gap-2">
             <Gauge className="h-4 w-4" />
             <span className="hidden sm:inline">Visão geral</span>
@@ -166,6 +169,11 @@ export default function CamiIntelligencePage() {
             {paraRevisar > 0 && (
               <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">{paraRevisar}</span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="regras" className="flex items-center gap-2">
+            <ListChecks className="h-4 w-4" />
+            <span className="hidden sm:inline">Regras da casa</span>
+            <span className="sm:hidden">Regras</span>
           </TabsTrigger>
           <TabsTrigger value="nao-lidas" className="flex items-center gap-2">
             <Inbox className="h-4 w-4" />
@@ -188,7 +196,14 @@ export default function CamiIntelligencePage() {
             isOwner={isOwner}
             escalationName={settings?.escalationName ?? "Schay"}
             onReviewed={() => void loadConversations()}
+            onCorrect={(item) => {
+              setRuleDraft({ texto: "", contactId: item.contactId, contactName: item.contactName });
+              void setRoute({ tab: "regras" });
+            }}
           />
+        </TabsContent>
+        <TabsContent value="regras" className="mt-4">
+          <CamiRules draft={ruleDraft} onDraftUsed={clearDraft} />
         </TabsContent>
         <TabsContent value="nao-lidas" className="mt-4">
           <UnreadInbox />

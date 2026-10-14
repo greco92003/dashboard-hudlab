@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { AlertTriangle, BookmarkPlus, CheckCircle2, ExternalLink, Loader2, PencilLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,18 +53,40 @@ export function CamiConversations({
   isOwner,
   escalationName,
   onReviewed,
+  onCorrect,
 }: {
   items: ConversationItem[];
   loading: boolean;
   isOwner: boolean;
   escalationName: string;
   onReviewed: () => void;
+  /** "Corrigir a Cami": abre uma regra nova ligada a esta conversa. */
+  onCorrect: (item: ConversationItem) => void;
 }) {
   const [filtro, setFiltro] = useState<Filtro>("revisar");
   const [open, setOpen] = useState<ConversationItem | null>(null);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [savingRef, setSavingRef] = useState(false);
+
+  const saveAsReference = async (item: ConversationItem) => {
+    setSavingRef(true);
+    try {
+      const res = await fetch("/api/cami/references", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contato: item.contactId, nome: item.contactName || "Conversa da Cami" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Não foi possível guardar");
+      toast.success("Guardada como referência (renomeie o cenário na aba Regras da casa se quiser)");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingRef(false);
+    }
+  };
 
   const counts = useMemo(
     () => Object.fromEntries(FILTROS.map((f) => [f.id, items.filter(f.test).length])) as Record<Filtro, number>,
@@ -208,6 +230,25 @@ export function CamiConversations({
                       {reviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                       Revisado
                     </Button>
+                  )}
+                  {isOwner && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          onCorrect(open);
+                          setOpen(null);
+                        }}
+                      >
+                        <PencilLine className="h-4 w-4" />
+                        Corrigir a Cami
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => saveAsReference(open)} disabled={savingRef}>
+                        {savingRef ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkPlus className="h-4 w-4" />}
+                        Usar como referência
+                      </Button>
+                    </>
                   )}
                 </div>
 
