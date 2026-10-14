@@ -57,31 +57,41 @@ export function ChartAreaGradient({
     });
   };
 
-  // Calculate trend percentage
+  // Com o ano anterior, a variação é contra ele -- o mesmo "Anterior" do card
+  // de faturamento. Comparar as metades do período, como antes, dava "queda"
+  // num mês que cresceu 75% sobre o ano anterior, só porque a venda grande
+  // caiu na 1ª metade. Sem ano anterior (dashboard de parceiros), segue a
+  // comparação das metades, dita com todas as letras.
   const calculateTrend = () => {
-    if (data.length < 2) return { value: 0, trending: "neutral" };
+    const neutral = { value: "0", trending: "neutral", comparacao: "" };
+    const total = (items: ChartData[]) =>
+      items.reduce((sum, item) => sum + item.revenue, 0);
 
-    // Split data into two halves to compare
-    const halfPoint = Math.floor(data.length / 2);
-    const firstHalf = data.slice(0, halfPoint);
-    const secondHalf = data.slice(halfPoint);
+    let base: number;
+    let atual: number;
+    let comparacao: string;
+    if (prevYearData && prevYearData.length > 0) {
+      base = total(prevYearData);
+      atual = total(data);
+      comparacao = "sobre o mesmo período do ano anterior";
+    } else {
+      if (data.length < 2) return neutral;
+      const halfPoint = Math.floor(data.length / 2);
+      base = total(data.slice(0, halfPoint));
+      atual = total(data.slice(halfPoint));
+      comparacao = "na 2ª metade do período";
+    }
 
-    const firstHalfTotal = firstHalf.reduce(
-      (sum, item) => sum + item.revenue,
-      0,
-    );
-    const secondHalfTotal = secondHalf.reduce(
-      (sum, item) => sum + item.revenue,
-      0,
-    );
+    if (base === 0) return neutral;
 
-    if (firstHalfTotal === 0) return { value: 0, trending: "neutral" };
-
-    const percentChange =
-      ((secondHalfTotal - firstHalfTotal) / firstHalfTotal) * 100;
+    const percentChange = ((atual - base) / base) * 100;
     return {
-      value: Math.abs(percentChange).toFixed(1),
+      value: Math.abs(percentChange).toLocaleString("pt-BR", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      }),
       trending: percentChange >= 0 ? "up" : "down",
+      comparacao,
     };
   };
 
@@ -227,12 +237,12 @@ export function ChartAreaGradient({
               <div className="flex items-center gap-2 leading-none font-medium">
                 {trend.trending === "up" ? (
                   <>
-                    Crescimento de {trend.value}% no período{" "}
+                    Crescimento de {trend.value}% {trend.comparacao}{" "}
                     <TrendingUp className="h-4 w-4 text-green-500" />
                   </>
                 ) : (
                   <>
-                    Queda de {trend.value}% no período{" "}
+                    Queda de {trend.value}% {trend.comparacao}{" "}
                     <TrendingDown className="h-4 w-4 text-red-500" />
                   </>
                 )}
