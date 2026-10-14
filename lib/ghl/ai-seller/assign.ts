@@ -13,7 +13,7 @@ import {
 } from "./config";
 import { decideAssignment, type AssignDecision } from "./decide";
 import { addContactTags } from "./ghl-actions";
-import { findCurrentOpportunity } from "./run";
+import { findCurrentOpportunity } from "./opportunity";
 import { insertAssignment } from "./runs-store";
 import { loadSellerSettings } from "./settings";
 

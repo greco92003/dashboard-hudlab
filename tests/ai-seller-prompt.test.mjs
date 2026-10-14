@@ -68,7 +68,9 @@ test("instruções cobrem frete estimado pelo robô e desconto da régua", () =>
   const text = buildSellerInstructions({ persona: "Cami", escalationName: "Schay" });
   assert.match(text, /estimativa pelo estado/);
   assert.match(text, /desconto por tempo limitado/);
-  assert.match(text, /diga quando ela volta/);
+  // Sem pronome: quem recebe as passagens muda no Controle.
+  assert.match(text, /diga quando Schay volta/);
+  assert.doesNotMatch(buildSellerInstructions({ persona: "Cami", escalationName: "Felipe" }), /quando ela volta/);
 });
 
 test("mensagens da própria IA aparecem como VOCÊ na transcrição", async () => {

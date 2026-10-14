@@ -124,7 +124,7 @@ export function CamiOverview({ data, loading }: { data: OverviewPayload | null; 
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Funil da Cami</CardTitle>

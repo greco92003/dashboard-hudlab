@@ -25,7 +25,7 @@ export interface CamiComparison {
 /**
  * Qual resposta do vendedor custou mais pontos? Pergunta curta à IA com a
  * conversa numerada e as falhas da avaliação. Sem resposta válida, fica a
- * primeira resposta do vendedor depois de uma objeção (a última do cliente).
+ * última resposta do vendedor.
  */
 async function pickWeakestSellerTurn(
   turns: TrainingTurn[],

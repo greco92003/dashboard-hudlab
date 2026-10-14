@@ -171,7 +171,7 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
         <CardHeader>
           <CardTitle className="text-base">Quem recebe as passagens</CardTitle>
           <p className="text-sm text-muted-foreground">
-            A Cami atribui o contato a esta pessoa no GHL e diz o nome dela ao cliente. Fora dos turnos, avisa quando ela volta.
+            A Cami atribui o contato a esta pessoa no GHL e diz esse nome ao cliente. Fora dos turnos, avisa quando a pessoa volta.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">

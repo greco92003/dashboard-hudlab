@@ -791,12 +791,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "O treino ainda não foi avaliado." }, { status: 409 });
       }
       const comparacao = await compareWithCami(session.transcript ?? [], session.evaluation, missionById(session.mission_id));
-      const { error: saveError } = await supabase
-        .from("seller_training_sessions")
-        .update({ comparacao_cami: comparacao })
-        .eq("id", session.id)
-        .eq("user_id", user.id);
-      if (saveError) console.error("Comparação com a Cami não salva:", saveError);
+      // Erro não fica guardado: a próxima abertura tenta de novo.
+      if (!("erro" in comparacao)) {
+        const { error: saveError } = await supabase
+          .from("seller_training_sessions")
+          .update({ comparacao_cami: comparacao })
+          .eq("id", session.id)
+          .eq("user_id", user.id);
+        if (saveError) console.error("Comparação com a Cami não salva:", saveError);
+      }
       return NextResponse.json({ success: true, comparacao });
     }
 

@@ -129,14 +129,18 @@ async function acquireRunLockWaiting(
   }
 }
 
-/** Aviso de passagem quando a IA não escreveu o seu (fallbacks): diz quando a pessoa volta, fora do horário. */
+/**
+ * Aviso de passagem quando a IA não escreveu o seu (fallbacks): diz quando a
+ * pessoa volta, fora do horário. Sem pronome: o Controle pode apontar as
+ * passagens para qualquer pessoa do time.
+ */
 function handoffMessage(settings: SellerSettings): string {
   const name = settings.escalationName;
   const { available, returnsAt } = escalationAvailability(Date.now(), settings.shifts);
   if (available || !returnsAt) {
     return `Vou pedir pra ${name} continuar seu atendimento por aqui, tá bom? 😊`;
   }
-  return `Vou pedir pra ${name} continuar seu atendimento por aqui. Ela te responde ${returnsAt}, tá bom? 😊`;
+  return `Vou pedir pra ${name} continuar seu atendimento por aqui, com retorno ${returnsAt}, tá bom? 😊`;
 }
 
 function describe(err: unknown): string {
