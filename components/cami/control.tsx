@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -260,6 +261,52 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Alertas</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Chegam no sininho do dashboard e no celular de quem ativou as notificações. Contam só minutos dos turnos acima.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="alerta-pessoa">Avisar quem recebe a passagem após (min)</Label>
+              <Input
+                id="alerta-pessoa"
+                type="number"
+                min={15}
+                className="w-36"
+                disabled={!canEdit}
+                value={form.alertas.passagemSemRespostaMin}
+                onChange={(e) => set("alertas", { ...form.alertas, passagemSemRespostaMin: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="alerta-owner">Avisar você após (min)</Label>
+              <Input
+                id="alerta-owner"
+                type="number"
+                min={15}
+                className="w-36"
+                disabled={!canEdit}
+                value={form.alertas.ownerAposMin}
+                onChange={(e) => set("alertas", { ...form.alertas, ownerAposMin: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-3 text-sm">
+            <Switch
+              checked={form.alertas.resumoDiario}
+              disabled={!canEdit}
+              onCheckedChange={(v) => set("alertas", { ...form.alertas, resumoDiario: v })}
+              aria-label="Resumo diário"
+            />
+            Resumo do dia às 18h30 (segunda a sexta), só quando a Cami atendeu alguém
+          </label>
         </CardContent>
       </Card>
 

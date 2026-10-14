@@ -10,6 +10,7 @@ import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 import { GHL_ATENDIMENTO_PIPELINE_ID } from "./config";
 import { summarizeConversation, type FunnelRanks, type IntelHandoff, type IntelRun } from "./intel";
+import { sendHandoffAlerts } from "./alerts-send";
 import { loadSellerSettings } from "./settings";
 
 /** Clientes assumidos há mais que isso saem do resumo (a página olha no máximo 30 dias). */
@@ -84,6 +85,12 @@ export async function refreshCamiIntel(): Promise<{
   const now = Date.now();
   const settings = await loadSellerSettings();
   const passagensRespondidas = await checkPendingHandoffs(supabase, now);
+  // Avisos depois da conferência: passagem que acabou de ser respondida não gera alerta.
+  try {
+    await sendHandoffAlerts(settings, now);
+  } catch (err) {
+    console.error("CAMI Intelligence: alertas de passagem não enviados", err);
+  }
 
   const { data: assignments, error: assignError } = await supabase
     .from("ai_seller_assignments")

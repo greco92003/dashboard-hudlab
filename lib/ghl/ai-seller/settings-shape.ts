@@ -1,5 +1,6 @@
 // Configuração da Cami vinda do banco (ai_seller_settings), com os valores do
 // código como reserva. Módulo puro.
+import { DEFAULT_ALERTS, type AlertSettings } from "./alerts";
 import { ASSIGN_MAX_PARES, ASSIGN_MIN_PARES, ESCALATION_SHIFTS } from "./config";
 
 export type SellerState = "ligada" | "nao_pega_novos" | "desligada";
@@ -15,6 +16,7 @@ export interface SellerSettings {
   shifts: ReadonlyArray<Shift>;
   /** Para estimar o custo: preço do modelo (US$ por milhão de tokens) e dólar. */
   custo: { entradaUsdPorMilhao: number; saidaUsdPorMilhao: number; dolar: number };
+  alertas: AlertSettings;
 }
 
 export const DEFAULT_SETTINGS: SellerSettings = {
@@ -25,7 +27,22 @@ export const DEFAULT_SETTINGS: SellerSettings = {
   escalationName: "Schay",
   shifts: ESCALATION_SHIFTS,
   custo: { entradaUsdPorMilhao: 2.5, saidaUsdPorMilhao: 15, dolar: 5.4 },
+  alertas: DEFAULT_ALERTS,
 };
+
+const validMinutes = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 15 && n <= 24 * 60;
+
+/** Alertas do banco; o resumo diário antigo vinha como horário ("18:30") e conta como ligado. */
+function validAlertas(value: unknown): AlertSettings | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (!validMinutes(v.passagemSemRespostaMin) || !validMinutes(v.ownerAposMin)) return null;
+  return {
+    passagemSemRespostaMin: v.passagemSemRespostaMin as number,
+    ownerAposMin: v.ownerAposMin as number,
+    resumoDiario: typeof v.resumoDiario === "boolean" ? v.resumoDiario : Boolean(v.resumoDiario),
+  };
+}
 
 function validCusto(value: unknown): SellerSettings["custo"] | null {
   if (!value || typeof value !== "object") return null;
@@ -76,6 +93,7 @@ export function normalizeSettings(row: Record<string, unknown> | null | undefine
     escalationName: name,
     shifts: validShifts(row.escalation_shifts) ?? DEFAULT_SETTINGS.shifts,
     custo: validCusto(row.custo) ?? DEFAULT_SETTINGS.custo,
+    alertas: validAlertas(row.alertas) ?? DEFAULT_SETTINGS.alertas,
   };
 }
 
@@ -104,6 +122,11 @@ export function validateSettingsInput(
   if (!shifts) return { ok: false, error: "Turnos inválidos: use HH:MM e início antes do fim" };
   const custo = validCusto(b.custo);
   if (!custo) return { ok: false, error: "Preço do modelo e dólar precisam ser números maiores que zero" };
+  const alertas = validAlertas(b.alertas);
+  if (!alertas) return { ok: false, error: "Prazos dos alertas: minutos inteiros entre 15 e 1440" };
+  if (alertas.ownerAposMin < alertas.passagemSemRespostaMin) {
+    return { ok: false, error: "O aviso para o dono não pode vir antes do aviso para quem recebe as passagens" };
+  }
   return {
     ok: true,
     row: {
@@ -114,6 +137,7 @@ export function validateSettingsInput(
       escalation_name: name,
       escalation_shifts: shifts,
       custo,
+      alertas,
     },
   };
 }
