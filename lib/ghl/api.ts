@@ -503,18 +503,22 @@ export async function fetchOpportunityById(
 export interface GhlLocationUser {
   id: string;
   name: string;
+  email: string | null;
 }
 
 /** Usuários da location (quem pode receber as passagens da IA). */
 export async function fetchGhlLocationUsers(): Promise<GhlLocationUser[]> {
   const { locationId } = requireEnv();
-  const data = await ghlFetch<{ users?: Array<{ id: string; name?: string; firstName?: string; lastName?: string; deleted?: boolean }> }>(
-    "/users/",
-    { locationId },
-  );
+  const data = await ghlFetch<{
+    users?: Array<{ id: string; name?: string; firstName?: string; lastName?: string; email?: string; deleted?: boolean }>;
+  }>("/users/", { locationId });
   return (data.users ?? [])
     .filter((u) => !u.deleted)
-    .map((u) => ({ id: u.id, name: u.name || [u.firstName, u.lastName].filter(Boolean).join(" ") || u.id }))
+    .map((u) => ({
+      id: u.id,
+      name: u.name || [u.firstName, u.lastName].filter(Boolean).join(" ") || u.id,
+      email: u.email?.trim().toLowerCase() || null,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 

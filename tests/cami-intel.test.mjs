@@ -183,6 +183,7 @@ test("Controle: salvar recusa valor inválido com o motivo", () => {
     escalationName: "Schay",
     shifts: [["08:30", "12:00"]],
     custo: { entradaUsdPorMilhao: 2.5, saidaUsdPorMilhao: 15, dolar: 5.4 },
+    alertas: { passagemSemRespostaMin: 60, ownerAposMin: 120, resumoDiario: true },
   };
   const v = validateSettingsInput(ok);
   assert.equal(v.ok, true);
