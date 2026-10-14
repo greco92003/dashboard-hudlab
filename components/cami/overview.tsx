@@ -71,11 +71,11 @@ export function CamiOverview({ data, loading }: { data: OverviewPayload | null; 
         <Kpi
           title="Clientes assumidos"
           value={fmtInt(o.assumidos)}
-          detail={
-            o.foraDaCami.length
-              ? `${fmtInt(o.foraDaCami.reduce((s, f) => s + f.n, 0))} ficaram com o time`
-              : "Nenhum ficou de fora"
-          }
+          detail={(() => {
+            const fora = o.foraDaCami.reduce((s, f) => s + f.n, 0);
+            if (fora === 0) return "Nenhum ficou de fora";
+            return fora === 1 ? "1 ficou com o time" : `${fmtInt(fora)} ficaram com o time`;
+          })()}
         />
         <Kpi
           title="Responderam à Cami"

@@ -188,7 +188,7 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
                 }}
               >
                 <SelectTrigger className="w-56">
-                  <SelectValue placeholder={users.length ? "Escolha" : "Padrão (variável de ambiente)"} />
+                  <SelectValue placeholder="Padrão do servidor" />
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((u) => (
