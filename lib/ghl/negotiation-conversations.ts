@@ -81,7 +81,7 @@ interface GhlConversationSearchResult {
 }
 
 /** Find the WhatsApp/SMS/Call conversation thread for a contact (GHL groups them under type TYPE_PHONE). */
-async function findPhoneConversationId(
+export async function findPhoneConversationId(
   contactId: string,
 ): Promise<string | null> {
   const { locationId } = requireGhlEnv();

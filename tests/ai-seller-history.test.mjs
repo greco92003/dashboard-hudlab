@@ -69,6 +69,7 @@ test("rodadas que não provam o contato com a IA não abrem a sessão nova", () 
       row(3000, "respondeu", { sent_message_ids: ["a1"] }),
       row(2900, "escalou", { escalation_reason: "outro", sent_message_ids: ["a2"] }),
       row(2899, "pulou:em_andamento"),
+      row(2500, "pulou:aguardando_cliente"),
       row(2000, "pulou:sem_tag"),
       row(1000, "erro", { error: "trava expirada" }),
       row(100, "respondeu", { sent_message_ids: ["a3"] }),

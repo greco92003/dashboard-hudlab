@@ -25,7 +25,7 @@ const SAMPLE_MENTION = /amostras?\s+digita(l|is)/i;
  * (texto de "ficou pronta" ou com o arquivo anexado). A mensagem do robô que
  * só anuncia que o designer vai criar a amostra não conta.
  */
-function isSampleDelivery(message: NegotiationMessage): boolean {
+export function isSampleDelivery(message: NegotiationMessage): boolean {
   if (message.direction !== "outbound" || !SAMPLE_MENTION.test(message.body)) return false;
   return /pront/i.test(message.body) || message.attachments.length > 0;
 }

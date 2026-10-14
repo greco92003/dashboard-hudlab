@@ -12,6 +12,7 @@ import {
   type GhlOpportunity,
 } from "@/lib/ghl/api";
 import {
+  findPhoneConversationId,
   getNegotiationTranscript,
   getQtyParesForOpportunity,
 } from "@/lib/ghl/negotiation-conversations";
@@ -26,8 +27,11 @@ import {
   AI_ESCALATED_TAG,
   AI_SELLER_MODEL,
   AI_TAG,
+  CLIENT_PAUSE_MS,
   escalationUserId,
   escalationUserName,
+  LOCK_RETRY_MS,
+  LOCK_WAIT_MS,
   MAX_AGENT_STEPS,
   MODEL_CALL_TIMEOUT_MS,
   personaName,
@@ -56,6 +60,7 @@ import {
   type AiSellerRunInsert,
 } from "./runs-store";
 import { executeTool, TOOL_DEFINITIONS } from "./tools";
+import { trimForSeller } from "./transcript";
 import type { EscalationReason, RunDecision, SellerActions } from "./types";
 
 // Cliente próprio: timeout curto e sem retentativa do SDK (o loop repete uma
@@ -74,7 +79,56 @@ export interface RespondResult {
   dryRun: boolean;
   sentMessageIds: string[];
   toolCalls?: LoopResult["toolCalls"];
+  usage?: LoopResult["usage"];
   error?: string | null;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Espera o cliente parar de escrever: retrato das mensagens recentes, pausa de
+ * CLIENT_PAUSE_MS, e de novo. Mensagem nova do cliente no meio = esta chamada
+ * desiste, porque a chamada da mensagem nova responde tudo. Sem conseguir ler
+ * a conversa, segue: resposta é melhor que silêncio.
+ */
+async function clientKeptWriting(contactId: string): Promise<boolean> {
+  let conversationId: string | null = null;
+  let seen: Set<string> | null = null;
+  try {
+    conversationId = await findPhoneConversationId(contactId);
+    if (conversationId) {
+      seen = new Set((await fetchRecentWhatsAppMessages(conversationId)).map((m) => m.id));
+    }
+  } catch (err) {
+    console.error("IA vendedora: falha ao ler a conversa antes da espera", { contactId, err });
+  }
+  await sleep(CLIENT_PAUSE_MS);
+  if (!conversationId || !seen) return false;
+  try {
+    return hasUnseenInbound(await fetchRecentWhatsAppMessages(conversationId), seen);
+  } catch (err) {
+    console.error("IA vendedora: falha ao reler a conversa depois da espera", { contactId, err });
+    return false;
+  }
+}
+
+/**
+ * Trava por contato, esperando a rodada anterior terminar: o cliente que
+ * escreve enquanto a Lia pensa ganha resposta da chamada seguinte, em vez de
+ * a chamada desistir e a conversa ir para humano. Devolve o id da trava e o
+ * início da rodada, ou null se a outra rodada passou de LOCK_WAIT_MS.
+ */
+async function acquireRunLockWaiting(
+  contactId: string,
+): Promise<{ runId: string; startedAt: number } | null> {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    const startedAt = Date.now();
+    const runId = await acquireRunLock(contactId, startedAt);
+    if (runId) return { runId, startedAt };
+    if (Date.now() + LOCK_RETRY_MS > deadline) return null;
+    await sleep(LOCK_RETRY_MS);
+  }
 }
 
 function handoffMessage(): string {
@@ -275,11 +329,20 @@ export async function respondToContact(
 
   try {
     if (!dryRun) {
-      ctx.runId = await acquireRunLock(contactId, ctx.startedAt);
-      if (!ctx.runId) {
+      if (await clientKeptWriting(contactId)) {
+        await saveRun(ctx, { decision: "pulou:aguardando_cliente" });
+        return { decision: "pulou:aguardando_cliente", dryRun, sentMessageIds: [] };
+      }
+      const lock = await acquireRunLockWaiting(contactId);
+      if (!lock) {
+        ctx.startedAt = Date.now();
         await saveRun(ctx, { decision: "pulou:em_andamento" });
         return { decision: "pulou:em_andamento", dryRun, sentMessageIds: [] };
       }
+      // A rodada começa quando lê a conversa (depois da espera): é o que
+      // decideRun compara com a última mensagem do cliente.
+      ctx.runId = lock.runId;
+      ctx.startedAt = lock.startedAt;
     }
     return await respondToContactUnsafe(ctx, dryRun);
   } catch (err) {
@@ -413,7 +476,8 @@ async function respondToContactUnsafe(
   const pipeline = pipelines.find((p) => p.id === opportunity.pipelineId) ?? null;
   const stage = pipeline?.stages?.find((s) => s.id === opportunity.pipelineStageId) ?? null;
 
-  const transcriptParts = await buildTranscriptParts(transcript.messages, {
+  const trimmed = trimForSeller(transcript.messages);
+  const transcriptParts = await buildTranscriptParts(trimmed.messages, {
     ownMessageIds: history.sentMessageIds,
     ownLabel: `VOCÊ (${persona})`,
   });
@@ -424,6 +488,7 @@ async function respondToContactUnsafe(
     stageName: stage?.name ?? null,
     crmPares: await getQtyParesForOpportunity(opportunity),
     crmValor: opportunity.monetaryValue,
+    omittedAutomated: trimmed.omittedAutomated,
   });
 
   const actions = dryRun
@@ -498,5 +563,12 @@ async function respondToContactUnsafe(
     error: result.error,
   });
 
-  return { decision, dryRun, sentMessageIds, toolCalls: result.toolCalls, error: result.error };
+  return {
+    decision,
+    dryRun,
+    sentMessageIds,
+    toolCalls: result.toolCalls,
+    usage: result.usage,
+    error: result.error,
+  };
 }

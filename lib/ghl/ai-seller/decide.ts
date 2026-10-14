@@ -64,9 +64,8 @@ export function decideRun(input: DecideInput): DecideResult {
     .find((m) => m.direction === "inbound");
   if (!lastInbound) return { kind: "skip", decision: "pulou:ja_respondido" };
 
-  // Sem espera aqui: o agrupamento é a espera de 90s do workflow do GHL, que
-  // ignora nova entrada do contato enquanto ele está inscrito. A mensagem que
-  // chegou durante a espera não tem chamada própria; esta chamada a responde.
+  // Sem espera aqui: a rodada já esperou o cliente parar de escrever
+  // (CLIENT_PAUSE_MS, em run.ts) antes de chegar à decisão.
   const lastInboundMs = Date.parse(lastInbound.dateAdded);
 
   // Só conta como resposta a fala de uma rodada que começou depois da última
@@ -101,8 +100,8 @@ export function hasUnseenInbound(
 }
 
 /**
- * Rodada longa (>90s) engole o webhook da mensagem nova (pulou:em_andamento),
- * que não volta. Se a rodada terminou sem responder o que o cliente escreveu
+ * Chamada que esperou a rodada anterior além de LOCK_WAIT_MS desiste
+ * (pulou:em_andamento) e não volta. Se a rodada terminou sem responder o que o cliente escreveu
  * depois do retrato, ninguém mais responde: escalar.
  */
 export function mustEscalateSwallowedCall(input: {

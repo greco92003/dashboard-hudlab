@@ -31,7 +31,7 @@
   ],
   "functions": {
     "app/api/ai-seller/respond/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 240
     },
     "app/api/cron/evaluate-negotiations/route.ts": {
       "maxDuration": 300

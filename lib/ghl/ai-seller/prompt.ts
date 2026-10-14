@@ -60,16 +60,21 @@ export interface SellerContext {
   stageName: string | null;
   crmPares: number | null;
   crmValor: number | null;
+  /** Mensagens automáticas anteriores à Amostra Digital tiradas da conversa (ver trimForSeller). */
+  omittedAutomated?: number;
 }
 
 export function buildContextText(ctx: SellerContext): string {
   const valor = ctx.crmValor != null ? `R$ ${ctx.crmValor.toFixed(2)}` : "não informado";
+  const omitted = ctx.omittedAutomated
+    ? `\n\nAs ${ctx.omittedAutomated} mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas; o orçamento delas é o valor do CRM acima.`
+    : "";
   return `Contexto:
 - Data de hoje: ${ctx.today}
 - Cliente: ${ctx.contactName ?? "nome não informado"}
 - Pipeline / etapa atual: ${ctx.pipelineName ?? "desconhecido"} / ${ctx.stageName ?? "desconhecida"}
 - Quantidade de pares no CRM: ${ctx.crmPares ?? "não informada"}
-- Valor no CRM (último orçamento registrado; pode estar desatualizado se a conversa mudou depois dele): ${valor}
+- Valor no CRM (último orçamento registrado; pode estar desatualizado se a conversa mudou depois dele): ${valor}${omitted}
 
-Histórico completo da conversa no WhatsApp, do mais antigo para o mais recente. Responda às mensagens do cliente que ainda não foram respondidas:`;
+Histórico da conversa no WhatsApp, do mais antigo para o mais recente. Responda às mensagens do cliente que ainda não foram respondidas:`;
 }

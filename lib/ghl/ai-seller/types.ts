@@ -18,6 +18,8 @@ export type RunDecision =
   | "pulou:em_andamento"
   /** O cliente escreveu de novo antes do envio; a chamada da mensagem nova responde tudo. */
   | "pulou:mensagem_nova"
+  /** O cliente escreveu de novo durante a espera; a chamada da mensagem nova responde tudo. */
+  | "pulou:aguardando_cliente"
   /** Linha da trava enquanto a rodada roda; a gravação final a substitui. */
   | "rodando"
   | "erro";
