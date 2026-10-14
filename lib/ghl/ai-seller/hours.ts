@@ -18,6 +18,33 @@ function label(hhmm: string): string {
 const isWorkday = (weekday: number) => weekday >= 1 && weekday <= 5;
 const WEEKDAY_NAMES = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
+/**
+ * Minutos de turno (segunda a sexta, horário de Brasília) entre dois
+ * instantes. Uma passagem às 17h50 de sexta respondida às 8h40 de segunda
+ * esperou 20 minutos úteis, não 63 horas.
+ */
+export function businessMinutesBetween(
+  fromMs: number,
+  toMs: number,
+  shifts: ReadonlyArray<readonly [start: string, end: string]> = ESCALATION_SHIFTS,
+): number {
+  if (toMs <= fromMs) return 0;
+  const start = fromMs - BRT_OFFSET_MS;
+  const end = toMs - BRT_OFFSET_MS;
+  let totalMs = 0;
+  // Teto de 90 dias: uma passagem esquecida não vira um laço longo.
+  const lastDay = Math.min(end, start + 90 * DAY_MS);
+  for (let day = Math.floor(start / DAY_MS) * DAY_MS; day < lastDay; day += DAY_MS) {
+    if (!isWorkday(new Date(day).getUTCDay())) continue;
+    for (const [shiftStart, shiftEnd] of shifts) {
+      const lo = Math.max(day + toMinutes(shiftStart) * 60_000, start);
+      const hi = Math.min(day + toMinutes(shiftEnd) * 60_000, end);
+      if (hi > lo) totalMs += hi - lo;
+    }
+  }
+  return totalMs / 60_000;
+}
+
 export interface Availability {
   /** Dentro de um turno agora. */
   available: boolean;

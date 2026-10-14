@@ -13,6 +13,8 @@ export interface SellerSettings {
   escalationUserId: string | null;
   escalationName: string;
   shifts: ReadonlyArray<Shift>;
+  /** Para estimar o custo: preço do modelo (US$ por milhão de tokens) e dólar. */
+  custo: { entradaUsdPorMilhao: number; saidaUsdPorMilhao: number; dolar: number };
 }
 
 export const DEFAULT_SETTINGS: SellerSettings = {
@@ -22,7 +24,20 @@ export const DEFAULT_SETTINGS: SellerSettings = {
   escalationUserId: null,
   escalationName: "Schay",
   shifts: ESCALATION_SHIFTS,
+  custo: { entradaUsdPorMilhao: 2.5, saidaUsdPorMilhao: 15, dolar: 5.4 },
 };
+
+function validCusto(value: unknown): SellerSettings["custo"] | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const nums = [v.entradaUsdPorMilhao, v.saidaUsdPorMilhao, v.dolar];
+  if (!nums.every((n) => typeof n === "number" && Number.isFinite(n) && n > 0)) return null;
+  return {
+    entradaUsdPorMilhao: v.entradaUsdPorMilhao as number,
+    saidaUsdPorMilhao: v.saidaUsdPorMilhao as number,
+    dolar: v.dolar as number,
+  };
+}
 
 const STATES: readonly SellerState[] = ["ligada", "nao_pega_novos", "desligada"];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -60,5 +75,45 @@ export function normalizeSettings(row: Record<string, unknown> | null | undefine
     escalationUserId: userId,
     escalationName: name,
     shifts: validShifts(row.escalation_shifts) ?? DEFAULT_SETTINGS.shifts,
+    custo: validCusto(row.custo) ?? DEFAULT_SETTINGS.custo,
+  };
+}
+
+/**
+ * O que o owner manda salvar no Controle → linha do banco. Diferente da
+ * leitura, aqui valor inválido é recusado com a explicação, nunca trocado
+ * pelo padrão em silêncio.
+ */
+export function validateSettingsInput(
+  body: unknown,
+): { ok: true; row: Record<string, unknown> } | { ok: false; error: string } {
+  if (!body || typeof body !== "object") return { ok: false, error: "Corpo inválido" };
+  const b = body as Record<string, unknown>;
+  if (!STATES.includes(b.estado as SellerState)) return { ok: false, error: "Estado inválido" };
+  const min = b.minPares;
+  const max = b.maxPares;
+  if (!Number.isInteger(min) || !Number.isInteger(max)) {
+    return { ok: false, error: "A faixa de pares precisa ser de números inteiros" };
+  }
+  if ((min as number) < 12) return { ok: false, error: "O mínimo é 12 pares (pedido mínimo)" };
+  if ((max as number) < (min as number)) return { ok: false, error: "O máximo não pode ser menor que o mínimo" };
+  const name = typeof b.escalationName === "string" ? b.escalationName.trim() : "";
+  if (!name) return { ok: false, error: "Diga o nome de quem recebe as passagens" };
+  const userId = typeof b.escalationUserId === "string" ? b.escalationUserId.trim() : "";
+  const shifts = validShifts(b.shifts);
+  if (!shifts) return { ok: false, error: "Turnos inválidos: use HH:MM e início antes do fim" };
+  const custo = validCusto(b.custo);
+  if (!custo) return { ok: false, error: "Preço do modelo e dólar precisam ser números maiores que zero" };
+  return {
+    ok: true,
+    row: {
+      estado: b.estado,
+      min_pares: min,
+      max_pares: max,
+      escalation_user_id: userId || null,
+      escalation_name: name,
+      escalation_shifts: shifts,
+      custo,
+    },
   };
 }

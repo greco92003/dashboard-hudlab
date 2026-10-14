@@ -500,6 +500,24 @@ export async function fetchOpportunityById(
   return data.opportunity;
 }
 
+export interface GhlLocationUser {
+  id: string;
+  name: string;
+}
+
+/** Usuários da location (quem pode receber as passagens da IA). */
+export async function fetchGhlLocationUsers(): Promise<GhlLocationUser[]> {
+  const { locationId } = requireEnv();
+  const data = await ghlFetch<{ users?: Array<{ id: string; name?: string; firstName?: string; lastName?: string; deleted?: boolean }> }>(
+    "/users/",
+    { locationId },
+  );
+  return (data.users ?? [])
+    .filter((u) => !u.deleted)
+    .map((u) => ({ id: u.id, name: u.name || [u.firstName, u.lastName].filter(Boolean).join(" ") || u.id }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+}
+
 export async function fetchGhlContactById(
   contactId: string,
 ): Promise<GhlContactDetail> {
