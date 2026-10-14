@@ -60,7 +60,7 @@ export function VsCami({ sessionId, initial }: { sessionId: string; initial: unk
               <p className="text-xs font-semibold text-muted-foreground">Cliente</p>
               <p className="text-sm">{data.cliente}</p>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-red-500/40 p-4 space-y-2">
                 <p className="text-xs font-extrabold uppercase tracking-widest text-red-600 dark:text-red-400">Você respondeu</p>
                 <p className="text-sm whitespace-pre-line">{data.vendedor}</p>

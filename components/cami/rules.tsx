@@ -81,7 +81,7 @@ function TestResults({ items }: { items: RuleTestItem[] }) {
             <p className="font-medium">{item.nome}</p>
             <p className="text-sm text-muted-foreground">Cliente: “{item.cliente}”</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Reply reply={item.atual} title="Hoje" />
             <Reply reply={item.comRegra} title="Com a regra" highlight />
           </div>
@@ -435,7 +435,7 @@ export function CamiRules({ draft, onDraftUsed }: { draft: RuleDraft | null; onD
                 <Plus className="h-4 w-4" />
                 Guardar uma conversa
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="ref-contato">Contato no GHL (link ou ID)</Label>
                   <Input

@@ -706,7 +706,7 @@ export function TrainingPanel({
                         </section>
                       )}
     
-                      <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <section className="rounded-2xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
                           <div className="mb-3 flex items-center gap-2">
                             <CheckCircle2 className="size-4 text-primary" />

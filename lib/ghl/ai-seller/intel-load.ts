@@ -93,12 +93,13 @@ export async function loadOverview(periodo: Periodo): Promise<OverviewPayload> {
   ]);
 
   // Clientes da Cami = quem passou pela entrada. Rodadas e passagens dos testadores ficam de fora.
-  const { data: camiContacts, error: contactsError } = await supabase
-    .from("ai_seller_assignments")
-    .select("contact_id")
-    .eq("decisao", "assumiu");
-  if (contactsError) throw new Error(`ai_seller_assignments: ${contactsError.message}`);
-  const real = new Set((camiContacts ?? []).map((c) => c.contact_id as string));
+  // Paginado: o PostgREST corta em 1.000 linhas e o resto sumiria da conta.
+  const camiContacts = await fetchAllSupabaseRows<{ contact_id: string }>(
+    (from, to) =>
+      supabase.from("ai_seller_assignments").select("contact_id").eq("decisao", "assumiu").order("created_at").range(from, to),
+    "ai_seller_assignments",
+  );
+  const real = new Set(camiContacts.map((c) => c.contact_id));
 
   const overview = computeOverview({
     fromMs,

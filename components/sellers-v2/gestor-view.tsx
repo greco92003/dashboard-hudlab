@@ -67,7 +67,7 @@ export function GestorView() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {kpis.map(([label, value]) => (
           <Card key={label} className="py-4">
             <CardContent className="px-4">
@@ -155,7 +155,7 @@ export function GestorView() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Pontos fortes e fracos do time</CardTitle>

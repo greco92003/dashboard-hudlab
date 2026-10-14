@@ -18,7 +18,9 @@ const MOTIVO: Record<string, string> = {
   pedido_grande: "pedido grande",
   falha_tecnica: "falha técnica",
   limite_mensagens: "limite de mensagens",
+  sem_oportunidade: "sem oportunidade aberta",
   cami_desligada: "Cami desligada",
+  outro: "outro motivo",
 };
 
 /**

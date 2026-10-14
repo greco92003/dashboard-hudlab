@@ -175,7 +175,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
           <XpBar pct={me.nivel.progressPct} />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border bg-background/60 p-4 space-y-1">
             <span className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
               <Flame className="h-4 w-4" /> Sequência
@@ -468,7 +468,7 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {visiveis.map((m) => {
             const feita = m.melhorNota != null && m.melhorNota >= 70;
             return (
