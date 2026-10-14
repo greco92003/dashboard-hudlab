@@ -36,13 +36,18 @@ export interface FollowUpDegrau {
 }
 
 /**
- * Campanhas de WhatsApp para a base de clientes (ver migration get_campanhas).
- * Mesmo princípio da régua: tudo vem de tag, e o resultado é medido pelo
- * CONTATO -- pedido novo abre oportunidade nova.
+ * Campanhas de WhatsApp (ver migration get_campanhas_regra_por_tipo). Mesmo
+ * princípio da régua: tudo vem de tag. O resultado depende do tipo --
+ * fechamento conta a negociação ganha até o dia 01, recompra conta negócio
+ * novo ganho em até 60 dias -- e cada venda vai só para a última campanha.
  */
+type CampanhaTipo = "fechamento" | "recompra";
+
 interface CampanhaRow {
   campanha: string;
+  tipo: CampanhaTipo;
   inicio: string;
+  fim: string;
   enviados: number;
   quero_ver: number;
   nao_quero: number;
@@ -55,7 +60,9 @@ interface CampanhaRow {
 
 export interface Campanha {
   campanha: string;
+  tipo: CampanhaTipo;
   inicio: string;
+  fim: string;
   enviados: number;
   queroVer: number;
   naoQuero: number;
@@ -86,7 +93,9 @@ function toNumber(value: string | number | null): number | null {
 function toCampanha(row: CampanhaRow): Campanha {
   return {
     campanha: row.campanha,
+    tipo: row.tipo,
     inicio: row.inicio,
+    fim: row.fim,
     enviados: row.enviados,
     queroVer: row.quero_ver,
     naoQuero: row.nao_quero,
