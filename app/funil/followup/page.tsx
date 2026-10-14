@@ -42,7 +42,9 @@ interface FollowUpDegrau {
 
 interface Campanha {
   campanha: string;
+  tipo: "fechamento" | "recompra";
   inicio: string;
+  fim: string;
   enviados: number;
   queroVer: number;
   naoQuero: number;
@@ -182,10 +184,17 @@ function fmtDia(iso: string) {
   return dia && mes ? `${dia}/${mes}/${ano}` : iso;
 }
 
+/** A regra de resultado depende do público (ver migration get_campanhas_regra_por_tipo). */
+function regraDaCampanha(c: Campanha) {
+  return c.tipo === "fechamento"
+    ? `Negociações em fase final: conta a venda ganha até o fechamento do mês (${fmtDia(c.fim)}), mesmo de negócio que já existia.`
+    : `Base de clientes: conta negócio aberto depois do disparo e ganho até ${fmtDia(c.fim)}.`;
+}
+
 /**
- * Campanhas para a base de clientes (a primeira é a "Política"). O funil é
- * lido de cima para baixo, e cada linha mostra a fatia de quem recebeu --
- * assim dá para ver onde as pessoas param.
+ * Campanhas de WhatsApp (a primeira foi a "Política"). O funil é lido de
+ * cima para baixo, e cada linha mostra a fatia de quem recebeu -- assim dá
+ * para ver onde as pessoas param.
  */
 function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
   return (
@@ -193,9 +202,8 @@ function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
       <CardHeader>
         <CardTitle>Campanhas</CardTitle>
         <CardDescription>
-          Disparos para a base de clientes. O resultado é medido pelo contato:
-          pedido novo abre uma oportunidade nova, e só conta o que foi criado
-          depois do envio.
+          Disparos de WhatsApp. Cada venda conta só na última campanha que o
+          contato recebeu.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -229,12 +237,15 @@ function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
                       desde {fmtDia(c.inicio)}
                     </span>
                   </div>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    {regraDaCampanha(c)}
+                  </p>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Etapa</TableHead>
-                          <TableHead className="text-right">Clientes</TableHead>
+                          <TableHead className="text-right">Contatos</TableHead>
                           <TableHead className="text-right">
                             % de quem recebeu
                           </TableHead>
