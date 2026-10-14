@@ -40,6 +40,37 @@ export interface AiSellerRunInsert {
   usage: unknown;
   latency_ms: number;
   error: string | null;
+  /** Chegada do webhook. */
+  received_at?: string | null;
+  /** Última mensagem do cliente que a rodada leu. */
+  client_message_at?: string | null;
+  /** Primeira mensagem enviada pela rodada. */
+  replied_at?: string | null;
+}
+
+/** Cada chamada da entrada, assumida ou não. Lança em falha. */
+export async function insertAssignment(row: {
+  contact_id: string;
+  opportunity_id: string | null;
+  pares: number | null;
+  decisao: string;
+}): Promise<void> {
+  const supabase = await createSupabaseServerForSync();
+  const { error } = await supabase.from("ai_seller_assignments").insert(row);
+  if (error) throw new Error(`ai_seller_assignments insert: ${error.message}`);
+}
+
+/** Cada passagem da IA para humano. Lança em falha. */
+export async function insertHandoff(row: {
+  contact_id: string;
+  opportunity_id: string | null;
+  motivo: EscalationReason;
+  resumo: string | null;
+  to_user_id: string | null;
+}): Promise<void> {
+  const supabase = await createSupabaseServerForSync();
+  const { error } = await supabase.from("ai_seller_handoffs").insert(row);
+  if (error) throw new Error(`ai_seller_handoffs insert: ${error.message}`);
 }
 
 /** Lança em falha; quem chama decide se loga ou repete. */

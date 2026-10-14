@@ -45,6 +45,7 @@ test("humano_assumiu, pulou:limite e erro escalado encerram a sessão; erro sem 
     row(500, "humano_assumiu"),
     row(500, "pulou:limite", { escalation_reason: "limite_mensagens" }),
     row(500, "erro", { escalation_reason: "falha_tecnica" }),
+    row(500, "pulou:desligada", { escalation_reason: "cami_desligada" }),
   ]) {
     const h = summarizeRuns([row(900, "respondeu"), ending, row(40, "respondeu")], NOW);
     assert.equal(h.sessionStartedAt, at(40), ending.decision);

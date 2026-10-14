@@ -4,7 +4,9 @@ export type EscalationReason =
   | ModelEscalationReason
   | "falha_tecnica"
   | "limite_mensagens"
-  | "sem_oportunidade";
+  | "sem_oportunidade"
+  /** Cami desligada pelo Controle: cliente passado para humano sem mensagem. */
+  | "cami_desligada";
 
 export type RunDecision =
   | "respondeu"
@@ -20,6 +22,8 @@ export type RunDecision =
   | "pulou:mensagem_nova"
   /** O cliente escreveu de novo durante a espera; a chamada da mensagem nova responde tudo. */
   | "pulou:aguardando_cliente"
+  /** Cami desligada: o cliente foi passado para humano sem mensagem. */
+  | "pulou:desligada"
   /** Linha da trava enquanto a rodada roda; a gravação final a substitui. */
   | "rodando"
   | "erro";

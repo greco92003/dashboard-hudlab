@@ -27,14 +27,17 @@ export interface Availability {
   nowLabel: string;
 }
 
-export function escalationAvailability(nowMs: number): Availability {
+export function escalationAvailability(
+  nowMs: number,
+  shifts: ReadonlyArray<readonly [start: string, end: string]> = ESCALATION_SHIFTS,
+): Availability {
   const local = new Date(nowMs - BRT_OFFSET_MS);
   const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
   const weekday = local.getUTCDay();
   const nowLabel = `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
 
   if (isWorkday(weekday)) {
-    for (const [start, end] of ESCALATION_SHIFTS) {
+    for (const [start, end] of shifts) {
       if (minutes >= toMinutes(start) && minutes < toMinutes(end)) {
         return { available: true, returnsAt: null, nowLabel };
       }
@@ -44,7 +47,7 @@ export function escalationAvailability(nowMs: number): Availability {
     }
   }
 
-  const firstStart = label(ESCALATION_SHIFTS[0][0]);
+  const firstStart = label(shifts[0][0]);
   for (let days = 1; days <= 7; days++) {
     const next = new Date(local.getTime() + days * DAY_MS).getUTCDay();
     if (!isWorkday(next)) continue;

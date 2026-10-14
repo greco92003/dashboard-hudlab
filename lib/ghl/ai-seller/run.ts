@@ -29,7 +29,6 @@ import {
   AI_TAG,
   CLIENT_PAUSE_MS,
   escalationUserId,
-  escalationUserName,
   LOCK_RETRY_MS,
   LOCK_WAIT_MS,
   MAX_AGENT_STEPS,
@@ -56,10 +55,12 @@ import {
   finishRun,
   hasRecentEscalation,
   hasSwallowedCallSince,
+  insertHandoff,
   insertRun,
   loadAiHistory,
   type AiSellerRunInsert,
 } from "./runs-store";
+import { loadSellerSettings, type SellerSettings } from "./settings";
 import { executeTool, TOOL_DEFINITIONS } from "./tools";
 import { trimForSeller } from "./transcript";
 import type { EscalationReason, RunDecision, SellerActions } from "./types";
@@ -133,9 +134,9 @@ async function acquireRunLockWaiting(
 }
 
 /** Aviso de passagem quando a IA não escreveu o seu (fallbacks): diz quando a pessoa volta, fora do horário. */
-function handoffMessage(): string {
-  const name = escalationUserName();
-  const { available, returnsAt } = escalationAvailability(Date.now());
+function handoffMessage(settings: SellerSettings): string {
+  const name = settings.escalationName;
+  const { available, returnsAt } = escalationAvailability(Date.now(), settings.shifts);
   if (available || !returnsAt) {
     return `Vou pedir pra ${name} continuar seu atendimento por aqui, tá bom? 😊`;
   }
@@ -163,6 +164,25 @@ interface RunContext {
   startedAt: number;
   /** Linha da trava; null se a trava não foi obtida (a gravação vira insert). */
   runId: string | null;
+  /** Chegada do webhook. */
+  receivedAt: number;
+  /** Primeira mensagem enviada ao cliente nesta rodada. */
+  repliedAt: number | null;
+  settings: SellerSettings;
+}
+
+/** Quem recebe as passagens: o do Controle, senão a variável de ambiente. */
+function escalationTarget(settings: SellerSettings): string {
+  return settings.escalationUserId ?? escalationUserId();
+}
+
+/** Registro da passagem para a CAMI Intelligence; falha não interrompe a passagem. */
+async function recordHandoff(row: Parameters<typeof insertHandoff>[0]): Promise<void> {
+  try {
+    await insertHandoff(row);
+  } catch (err) {
+    console.error("IA vendedora: passagem não registrada", { contactId: row.contact_id, err });
+  }
 }
 
 /**
@@ -183,6 +203,8 @@ async function saveRun(
     model: null,
     usage: null,
     error: null,
+    received_at: new Date(ctx.receivedAt).toISOString(),
+    replied_at: ctx.repliedAt == null ? null : new Date(ctx.repliedAt).toISOString(),
     ...row,
     latency_ms: Date.now() - ctx.startedAt,
   };
@@ -207,35 +229,49 @@ async function saveRun(
 }
 
 function realActions(
-  contactId: string,
+  ctx: RunContext,
   opportunityId: string,
   snapshot?: { conversationId: string | null; seenMessageIds: ReadonlySet<string> },
 ): SellerActions {
+  const { contactId, settings } = ctx;
   const persona = personaName();
+  const send = async (message: string) => {
+    const id = await sendWhatsAppMessage(contactId, message);
+    ctx.repliedAt ??= Date.now();
+    return id;
+  };
   return {
     async sendMessages(messages) {
       const ids: string[] = [];
       for (const [index, message] of messages.entries()) {
         if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1500));
-        ids.push(await sendWhatsAppMessage(contactId, message));
+        ids.push(await send(message));
       }
       return ids;
     },
     async escalate({ motivo, resumo, mensagemCliente }) {
       const ids: string[] = [];
-      const text = mensagemCliente.trim() || handoffMessage();
+      const text = mensagemCliente.trim() || handoffMessage(settings);
       try {
-        ids.push(await sendWhatsAppMessage(contactId, text));
+        ids.push(await send(text));
       } catch (err) {
         console.error("IA vendedora: falha ao avisar o cliente na passagem", err);
       }
+      const toUserId = escalationTarget(settings);
       await removeContactTags(contactId, [AI_TAG]);
       await addContactTags(contactId, [AI_ESCALATED_TAG]);
-      await assignContact(contactId, escalationUserId());
+      await assignContact(contactId, toUserId);
       await createContactNote({
         contactId,
         title: `IA ${persona} passou o atendimento — ${motivo}`,
         body: `Motivo: ${motivo}\n\n${resumo}`,
+      });
+      await recordHandoff({
+        contact_id: contactId,
+        opportunity_id: opportunityId || null,
+        motivo,
+        resumo,
+        to_user_id: toUserId,
       });
       return ids;
     },
@@ -329,10 +365,18 @@ function makeCallModel(instructions: string): CallModel {
  */
 export async function respondToContact(
   contactId: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; receivedAt?: number } = {},
 ): Promise<RespondResult> {
   const dryRun = options.dryRun === true;
-  const ctx: RunContext = { contactId, startedAt: Date.now(), runId: null };
+  const receivedAt = options.receivedAt ?? Date.now();
+  const ctx: RunContext = {
+    contactId,
+    startedAt: receivedAt,
+    runId: null,
+    receivedAt,
+    repliedAt: null,
+    settings: await loadSellerSettings(),
+  };
 
   try {
     if (!dryRun) {
@@ -375,10 +419,10 @@ export async function respondToContact(
     let sentMessageIds: string[] = [];
     if (isStillAi) {
       try {
-        sentMessageIds = await realActions(contactId, "").escalate({
+        sentMessageIds = await realActions(ctx, "").escalate({
           motivo: "falha_tecnica",
           resumo: error,
-          mensagemCliente: handoffMessage(),
+          mensagemCliente: handoffMessage(ctx.settings),
         });
       } catch (escalateErr) {
         console.error("IA vendedora: falha também ao escalar fora do loop", escalateErr);
@@ -408,10 +452,16 @@ async function respondToContactUnsafe(
     findCurrentOpportunity(contactId),
   ]);
 
+  const lastClientMessage = [...transcript.messages].reverse().find((m) => m.direction === "inbound");
   const record = async (row: Partial<AiSellerRunInsert> & { decision: RunDecision }) => {
     if (dryRun) return;
-    await saveRun(ctx, { opportunity_id: opportunity?.id ?? null, ...row });
+    await saveRun(ctx, {
+      opportunity_id: opportunity?.id ?? null,
+      client_message_at: lastClientMessage?.dateAdded ?? null,
+      ...row,
+    });
   };
+  const { settings } = ctx;
 
   if (!dryRun) {
     const decision = decideRun({
@@ -443,6 +493,28 @@ async function respondToContactUnsafe(
       return { decision: "humano_assumiu", dryRun, sentMessageIds: [] };
     }
 
+    // Desligada pelo Controle: o cliente vai para humano sem mensagem da IA.
+    if (settings.estado === "desligada") {
+      const toUserId = escalationTarget(settings);
+      await removeContactTags(contactId, [AI_TAG]);
+      await addContactTags(contactId, [AI_ESCALATED_TAG]);
+      await assignContact(contactId, toUserId);
+      await createContactNote({
+        contactId,
+        title: `IA ${personaName()} desligada`,
+        body: "A IA foi desligada no Controle da CAMI Intelligence; o cliente escreveu e ficou com o time, sem mensagem da IA.",
+      });
+      await recordHandoff({
+        contact_id: contactId,
+        opportunity_id: opportunity?.id ?? null,
+        motivo: "cami_desligada",
+        resumo: null,
+        to_user_id: toUserId,
+      });
+      await record({ decision: "pulou:desligada", escalation_reason: "cami_desligada" });
+      return { decision: "pulou:desligada", dryRun, sentMessageIds: [] };
+    }
+
     if (decision.kind === "limit" || !opportunity) {
       const motivo: EscalationReason = decision.kind === "limit" ? "limite_mensagens" : "sem_oportunidade";
       const resumo =
@@ -454,10 +526,10 @@ async function respondToContactUnsafe(
       let sent: string[] = [];
       let escalateError: string | null = null;
       try {
-        sent = await realActions(contactId, opportunity?.id ?? "").escalate({
+        sent = await realActions(ctx, opportunity?.id ?? "").escalate({
           motivo,
           resumo,
-          mensagemCliente: handoffMessage(),
+          mensagemCliente: handoffMessage(settings),
         });
       } catch (err) {
         escalateError = `falha ao escalar: ${describe(err)}`;
@@ -483,7 +555,7 @@ async function respondToContactUnsafe(
   const pipeline = pipelines.find((p) => p.id === opportunity.pipelineId) ?? null;
   const stage = pipeline?.stages?.find((s) => s.id === opportunity.pipelineStageId) ?? null;
 
-  const availability = escalationAvailability(Date.now());
+  const availability = escalationAvailability(Date.now(), settings.shifts);
   const trimmed = trimForSeller(transcript.messages);
   const transcriptParts = await buildTranscriptParts(trimmed.messages, {
     ownMessageIds: history.sentMessageIds,
@@ -499,7 +571,7 @@ async function respondToContactUnsafe(
     omittedAutomated: trimmed.omittedAutomated,
     nowLabel: availability.nowLabel,
     escalation: {
-      name: escalationUserName(),
+      name: settings.escalationName,
       available: availability.available,
       returnsAt: availability.returnsAt,
     },
@@ -507,7 +579,7 @@ async function respondToContactUnsafe(
 
   const actions = dryRun
     ? dryRunActions()
-    : realActions(contactId, opportunity.id, {
+    : realActions(ctx, opportunity.id, {
         conversationId: transcript.conversationId,
         seenMessageIds: new Set(transcript.messages.map((m) => m.id)),
       });
@@ -516,7 +588,7 @@ async function respondToContactUnsafe(
       { role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] },
     ],
     callModel: makeCallModel(
-      buildSellerInstructions({ persona, escalationName: escalationUserName() }),
+      buildSellerInstructions({ persona, escalationName: settings.escalationName }),
     ),
     executeTool: (call) => executeTool(call, actions),
     maxSteps: MAX_AGENT_STEPS,
@@ -534,7 +606,7 @@ async function respondToContactUnsafe(
         ...(await actions.escalate({
           motivo: "falha_tecnica",
           resumo: result.error ?? "falha técnica sem detalhe",
-          mensagemCliente: handoffMessage(),
+          mensagemCliente: handoffMessage(settings),
         })),
       );
     } catch (err) {
@@ -556,7 +628,7 @@ async function respondToContactUnsafe(
             motivo: "falha_tecnica",
             resumo:
               "O cliente escreveu enquanto a IA ainda processava a rodada anterior e a mensagem nova ficou sem resposta.",
-            mensagemCliente: handoffMessage(),
+            mensagemCliente: handoffMessage(settings),
           })),
         );
         decision = "escalou";
