@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeDesignerName } from "@/lib/utils/normalize-names";
 import { getAllDesigners } from "@/lib/constants/designers";
+import { readGoogleSheet } from "@/lib/google-sheets";
 import {
   requireAdminOrCron,
   requireApprovedUser,
@@ -247,80 +248,33 @@ export async function POST(request: NextRequest) {
     syncLogId = syncLogData.id;
     console.log("📝 Created sync log entry:", syncLogId);
 
-    // Fetch data from Google Sheets - Mockups Feitos
+    // Lê a planilha direto, sem passar por /api/google-sheets/read: chamar a
+    // própria API pela URL do deploy esbarra no login da Vercel (401) quando
+    // quem chama é o cron.
+    const spreadsheetId =
+      process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
+      "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM";
+
     console.log("📊 Fetching Mockups Feitos data from Google Sheets...");
-    const mockupsResponse = await fetch(
-      `${request.nextUrl.origin}/api/google-sheets/read`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(request.headers.get("authorization")
-            ? { Authorization: request.headers.get("authorization")! }
-            : {}),
-          ...(request.headers.get("cookie")
-            ? { Cookie: request.headers.get("cookie")! }
-            : {}),
-        },
-        body: JSON.stringify({
-          spreadsheetId:
-            process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
-            "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
-          range: "Mockups Feitos!A1:Z5000",
-          includeHeaders: true,
-        }),
-      }
+    const mockupsData = await readGoogleSheet(
+      spreadsheetId,
+      "Mockups Feitos!A1:Z5000",
     );
 
-    if (!mockupsResponse.ok) {
-      const errorText = await mockupsResponse.text();
-      throw new Error(`Google Sheets API error (Mockups): ${errorText}`);
-    }
-
-    const mockupsData = await mockupsResponse.json();
-    console.log("📊 Mockups Feitos response:", mockupsData);
-
-    // Fetch data from Google Sheets - Arquivo Serigrafia Feito
     console.log(
       "📊 Fetching Arquivo Serigrafia Feito data from Google Sheets..."
     );
-    const serigrafiaResponse = await fetch(
-      `${request.nextUrl.origin}/api/google-sheets/read`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(request.headers.get("authorization")
-            ? { Authorization: request.headers.get("authorization")! }
-            : {}),
-          ...(request.headers.get("cookie")
-            ? { Cookie: request.headers.get("cookie")! }
-            : {}),
-        },
-        body: JSON.stringify({
-          spreadsheetId:
-            process.env.NEXT_PUBLIC_GOOGLE_SHEETS_DESIGNER_FOLLOW_UP_ID ||
-            "1yjVv1CKWVBJ81Xxzgu5qQknQTMbt3EDk4UvxZRStuPM",
-          range: "Arquivo Serigrafia Feito!A1:Z5000",
-          includeHeaders: true,
-        }),
-      }
+    const serigrafiaData = await readGoogleSheet(
+      spreadsheetId,
+      "Arquivo Serigrafia Feito!A1:Z5000",
     );
 
-    if (!serigrafiaResponse.ok) {
-      const errorText = await serigrafiaResponse.text();
-      throw new Error(`Google Sheets API error (Serigrafia): ${errorText}`);
-    }
-
-    const serigrafiaData = await serigrafiaResponse.json();
-    console.log("📊 Arquivo Serigrafia Feito response:", serigrafiaData);
-
     // Combine data from both sheets with source tracking
-    const mockupsRawData = (mockupsData.data?.data || []).map((row: any) => ({
+    const mockupsRawData = (mockupsData.data || []).map((row: any) => ({
       ...row,
       _source: "mockups",
     }));
-    const serigrafiaRawData = (serigrafiaData.data?.data || []).map(
+    const serigrafiaRawData = (serigrafiaData.data || []).map(
       (row: any) => ({
         ...row,
         _source: "serigrafia",
