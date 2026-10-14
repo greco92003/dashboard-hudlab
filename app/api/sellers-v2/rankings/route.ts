@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient, createSupabaseServerForSync } from "@/lib/supabase/server";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
+import {
+  ACHIEVEMENTS,
+  bestScoresByMission,
+  challengeRanking,
+  unlockedAchievements,
+} from "@/lib/sellers-v2/achievements";
 import { isTrainingBlocked } from "@/lib/sellers-v2/arena-access";
+import { MISSIONS, unlockedMissions, weeklyChallenge } from "@/lib/sellers-v2/missions";
 import {
   brtDay,
   playerProgress,
@@ -15,6 +22,7 @@ import {
 
 interface SessionRow {
   id: string;
+  mission_id: string | null;
   user_id: string | null;
   seller_name: string;
   score: number | null;
@@ -83,7 +91,7 @@ export async function GET() {
         (from, to) =>
           admin
             .from("seller_training_sessions")
-            .select("id, user_id, seller_name, score, started_at, status, deadline_at")
+            .select("id, user_id, seller_name, score, started_at, status, deadline_at, mission_id")
             .gte("started_at", `${SEASON_ONE_START}T03:00:00Z`)
             .order("started_at", { ascending: true })
             .range(from, to),
@@ -106,7 +114,13 @@ export async function GET() {
 
     const lite: TrainingSessionLite[] = sessions
       .filter((s) => s.user_id)
-      .map((s) => ({ userId: s.user_id as string, startedAt: s.started_at, score: s.score, status: s.status }));
+      .map((s) => ({
+        userId: s.user_id as string,
+        startedAt: s.started_at,
+        score: s.score,
+        status: s.status,
+        missionId: s.mission_id,
+      }));
     const trainers = [...new Set(lite.map((s) => s.userId))].filter((id) => !isTrainingBlocked(profileOf.get(id)));
     const ranking = seasonRanking(trainers.map((id) => playerProgress(id, lite, now))).map((p, i) => ({
       posicao: i + 1,
@@ -136,6 +150,60 @@ export async function GET() {
     const active = mySessions.find((s) => s.status === "active" && Date.parse(s.deadline_at) > now);
     const weekdayToday = new Date(Date.parse(`${today}T12:00:00Z`)).getUTCDay();
 
+    // Missões, trilha e desafio da semana.
+    const eligible = new Set(trainers);
+    const myBest = bestScoresByMission(myScored);
+    const desafio = weeklyChallenge(now);
+    const liberadas = unlockedMissions(myBest, desafio.mission.id);
+    const missoes = MISSIONS.map((m) => ({
+      id: m.id,
+      ordem: m.ordem,
+      curto: m.curto,
+      titulo: m.titulo,
+      dificuldade: m.dificuldade,
+      resumo: m.resumo,
+      objetivo: m.objetivo,
+      melhorNota: myBest[m.id] ?? null,
+      liberada: liberadas.has(m.id),
+      desafio: m.id === desafio.mission.id,
+    }));
+    const desafioRanking = challengeRanking(lite, now, eligible).map((r, i) => ({
+      posicao: i + 1,
+      userId: r.userId,
+      nome: nameOf(r.userId),
+      avatarUrl: (profileOf.get(r.userId)?.avatar_url as string | null) ?? null,
+      melhorNota: r.melhorNota,
+      tentativas: r.tentativas,
+    }));
+
+    // Conquistas: as liberadas agora e ainda não gravadas são "novas" (a página comemora uma vez).
+    const blocked = isTrainingBlocked(myProfile);
+    const liberadasAgora = blocked ? new Set<string>() : unlockedAchievements(user.id, lite, now, eligible);
+    const { data: stored, error: storedError } = await admin
+      .from("seller_achievements")
+      .select("achievement_id, unlocked_at")
+      .eq("user_id", user.id);
+    if (storedError) throw storedError;
+    const storedAt = new Map((stored ?? []).map((a) => [a.achievement_id as string, a.unlocked_at as string]));
+    const novas = [...liberadasAgora].filter((id) => !storedAt.has(id));
+    if (novas.length) {
+      const nowIso = new Date(now).toISOString();
+      const { error: insertError } = await admin
+        .from("seller_achievements")
+        .upsert(
+          novas.map((achievement_id) => ({ user_id: user.id, achievement_id, unlocked_at: nowIso })),
+          { onConflict: "user_id,achievement_id", ignoreDuplicates: true },
+        );
+      if (insertError) console.error("Conquistas não gravadas:", insertError);
+      for (const id of novas) storedAt.set(id, nowIso);
+    }
+    const conquistas = ACHIEVEMENTS.map((a) => ({
+      ...a,
+      liberada: liberadasAgora.has(a.id) || storedAt.has(a.id),
+      nova: novas.includes(a.id),
+      em: storedAt.get(a.id) ?? null,
+    }));
+
     const label = seasonLabel(now);
     return NextResponse.json(
       {
@@ -143,7 +211,7 @@ export async function GET() {
         me: {
           nome: nameOf(user.id),
           avatarUrl: (myProfile?.avatar_url as string | null) ?? null,
-          bloqueado: isTrainingBlocked(myProfile),
+          bloqueado: blocked,
           totalXp: me.totalXp,
           seasonXp: me.seasonXp,
           nivel: me.level,
@@ -156,6 +224,16 @@ export async function GET() {
           xpPorTreino: Object.fromEntries(xpBySession),
         },
         ranking,
+        missoes,
+        desafio: {
+          missaoId: desafio.mission.id,
+          titulo: desafio.mission.titulo,
+          resumo: desafio.mission.resumo,
+          dificuldade: desafio.mission.dificuldade,
+          terminaEm: new Date(desafio.terminaEm).toISOString(),
+          ranking: desafioRanking,
+        },
+        conquistas,
         // Formato antigo, usado pelos medidores do simulador.
         currentUserTraining: {
           todayScore: todayScores.length ? Math.max(...todayScores) : null,

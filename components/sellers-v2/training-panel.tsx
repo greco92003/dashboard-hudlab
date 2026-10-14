@@ -39,7 +39,7 @@ export interface CurrentUserTraining {
   trainedWeekdays: number[];
 }
 
-interface TrainingSessionSnapshot {
+export interface TrainingSessionSnapshot {
   id: string;
   status: "active" | "evaluating" | "completed" | "expired" | "failed";
   startedAt: string;
@@ -54,6 +54,8 @@ interface TrainingSessionSnapshot {
   } | null;
   score: number | null;
   completionReason: string | null;
+  missionId?: string | null;
+  comparacaoCami?: unknown;
 }
 
 interface AuditorReport {
@@ -179,6 +181,8 @@ export function TrainingPanel({
   trainingSessionId,
   setTrainingSession,
   onSessionEnded,
+  missionId = null,
+  onSessionChange,
 }: {
   currentUserTraining: CurrentUserTraining;
   loadingRankings: boolean;
@@ -186,6 +190,10 @@ export function TrainingPanel({
   setTrainingSession: (id: string | null) => void;
   /** Treino avaliado: a página recarrega XP e ranking. */
   onSessionEnded: () => void | Promise<void>;
+  /** Missão escolhida na Arena: o próximo treino começa nela, e o último treino do dia não é reaberto sozinho. */
+  missionId?: string | null;
+  /** Sessão aberta no simulador (para a página mostrar a missão e o "Você × Cami"). */
+  onSessionChange?: (session: TrainingSessionSnapshot | null) => void;
 }) {
   // Chat state
   const [chatMessages, setChatMessages] = useState<TrainingChatMessage[]>([]);
@@ -223,13 +231,19 @@ export function TrainingPanel({
     setSessionActive(session.status === "active" && deadline > Date.now());
     setEvaluating(session.status === "evaluating");
     setEvaluation(session.evaluation);
-  }, []);
+    onSessionChange?.(session);
+  }, [onSessionChange]);
 
   useEffect(() => {
     const controller = new AbortController();
     const restore = async () => {
       setRestoringSession(true);
       try {
+        // Missão escolhida e nenhum treino aberto: tela de início da missão, sem reabrir o último treino do dia.
+        if (!trainingSessionId && missionId) {
+          onSessionChange?.(null);
+          return;
+        }
         const query = trainingSessionId
           ? `?sessionId=${encodeURIComponent(trainingSessionId)}`
           : "";
@@ -258,7 +272,7 @@ export function TrainingPanel({
     };
     void restore();
     return () => controller.abort();
-  }, [applyTrainingSession, setTrainingSession, trainingSessionId]);
+  }, [applyTrainingSession, missionId, onSessionChange, setTrainingSession, trainingSessionId]);
 
   const startSession = async () => {
     setChatLoading(true);
@@ -270,7 +284,7 @@ export function TrainingPanel({
       const response = await fetch("/api/sellers-v2/training", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start" }),
+        body: JSON.stringify({ action: "start", missionId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível iniciar.");
