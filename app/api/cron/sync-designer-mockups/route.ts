@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllDesigners } from "@/lib/constants/designers";
 import { requireCronSecret } from "@/lib/security/route-guards";
+import { POST as syncDesignerMockupsCache } from "@/app/api/designer-mockups-cache/route";
+
+/**
+ * Chama o sync na mesma função, sem fetch. O cron da Vercel chega pela URL do
+ * deploy, que fica atrás do login da Vercel: o fetch para
+ * request.nextUrl.origin voltava 401 "Protected deployment" e o cache dos
+ * mockups ficou parado de 11/08 a 14/10/2026.
+ */
+function callSync(request: NextRequest, body: Record<string, unknown>) {
+  return syncDesignerMockupsCache(
+    new NextRequest(new URL("/api/designer-mockups-cache", request.url), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.CRON_SECRET}`,
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,18 +29,9 @@ export async function GET(request: NextRequest) {
 
     console.log("🕐 CRON - Starting designer mockups sync...");
 
-    // Chamar a API de sincronização
-    const baseUrl = request.nextUrl.origin;
-    const syncResponse = await fetch(`${baseUrl}/api/designer-mockups-cache`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({
-        designers: getAllDesigners(), // Use centralized designer list
-        forceSync: true, // Sempre forçar sync no cron
-      }),
+    const syncResponse = await callSync(request, {
+      designers: getAllDesigners(), // Use centralized designer list
+      forceSync: true, // Sempre forçar sync no cron
     });
 
     let syncResult;
@@ -87,9 +98,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { designers = getAllDesigners(), startDate, endDate } = body;
 
-    // Chamar a API de sincronização
-    const baseUrl = request.nextUrl.origin;
-    const syncUrl = `${baseUrl}/api/designer-mockups-cache`;
     const requestBody = {
       designers,
       startDate,
@@ -97,23 +105,11 @@ export async function POST(request: NextRequest) {
       forceSync: true,
     };
 
-    console.log("🔗 MANUAL - Calling sync API:", syncUrl);
     console.log("📦 MANUAL - Request body:", requestBody);
 
-    const syncResponse = await fetch(syncUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    const syncResponse = await callSync(request, requestBody);
 
     console.log("📊 MANUAL - Sync response status:", syncResponse.status);
-    console.log(
-      "📊 MANUAL - Sync response headers:",
-      Object.fromEntries(syncResponse.headers.entries())
-    );
 
     let syncResult;
     try {

@@ -27,6 +27,13 @@ const GHL_BASE_URL =
 const GHL_API_VERSION = process.env.GHL_API_VERSION || "2021-07-28";
 const GHL_TOKEN = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
+// Sem limite, uma resposta presa no GHL segurava o sync até a Vercel matar a
+// função aos 300 s, sem registrar falha (14/10/2026). Uma leitura normal
+// leva ~1 s.
+const GHL_REQUEST_TIMEOUT_MS = 20_000;
+// Esperas de 1+2+4+8 s passam da janela de 10 s do limite de rajada do GHL
+// (100 req/10 s); com 3 esperas (7 s) o ERP ainda recebia 429.
+const GHL_READ_ATTEMPTS = 5;
 
 // Same flat shape returned by /api/deals-cache (deals_cache table) so the
 // dashboard charts work without changes. `value` is stored multiplied by 100
@@ -182,17 +189,31 @@ async function ghlFetch<T>(
 
   // Honor the provider's backoff signal and retry transient failures. All
   // mutations happen after the complete snapshot, so a final error is safe.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Version: GHL_API_VERSION,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+  for (let attempt = 0; attempt < GHL_READ_ATTEMPTS; attempt++) {
+    const lastAttempt = attempt === GHL_READ_ATTEMPTS - 1;
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: GHL_API_VERSION,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(GHL_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // Sem resposta (timeout ou rede) é transitório como um 5xx.
+      if (lastAttempt) {
+        throw new Error(
+          `GHL API sem resposta em ${url.pathname}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
+      continue;
+    }
 
-    if ((response.status === 429 || response.status >= 500) && attempt < 3) {
+    if ((response.status === 429 || response.status >= 500) && !lastAttempt) {
       const retryAfterSeconds = Number(response.headers.get("retry-after"));
       const delayMs = Number.isFinite(retryAfterSeconds)
         ? Math.max(1_000, retryAfterSeconds * 1_000)

@@ -19,6 +19,8 @@ const GHL_BASE_URL =
 // public OpenAPI spec (github.com/GoHighLevel/highlevel-api-docs). Do not
 // swap in GHL_API_VERSION (2021-07-28), it 404s/behaves differently here.
 const CONVERSATIONS_API_VERSION = "2021-04-15";
+/** Maior valor da coluna integer (Postgres) onde a quantidade de pares é gravada. */
+const MAX_QTY_PARES = 2_147_483_647;
 
 function requireGhlEnv(): { token: string; locationId: string } {
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
@@ -456,8 +458,10 @@ export async function getQtyParesForOpportunity(
     const byName = key.includes("pares") || key.includes("quantidade");
     if (!byId && !byName) continue;
     const value = extractOpportunityFieldValue(cf);
-    const n = Number(value);
-    if (Number.isFinite(n) && n > 0) return Math.round(n);
+    const n = Math.round(Number(value));
+    // Numeração digitada no campo ("33 34 … 40" vira 33343536…) não cabe no
+    // integer das tabelas e derrubava o upsert da fila de não lidas inteira.
+    if (n > 0 && n <= MAX_QTY_PARES) return n;
   }
   return null;
 }
