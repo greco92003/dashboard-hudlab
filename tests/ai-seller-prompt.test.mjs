@@ -47,6 +47,30 @@ test("contexto avisa quando o robô de antes da amostra foi omitido", () => {
   assert.match(text, /As 7 mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas/);
 });
 
+test("contexto diz a hora e quando quem recebe a passagem volta", () => {
+  const ctx = {
+    today: "14/10/2026",
+    contactName: null,
+    pipelineName: "Atendimento",
+    stageName: "Atendimento",
+    crmPares: 12,
+    crmValor: 718.8,
+    nowLabel: "19:10",
+  };
+  const fora = buildContextText({ ...ctx, escalation: { name: "Schay", available: false, returnsAt: "amanhã às 8h30" } });
+  assert.match(fora, /14\/10\/2026, 19:10 \(horário de Brasília\)/);
+  assert.match(fora, /Schay: fora do horário de atendimento; volta amanhã às 8h30/);
+  const dentro = buildContextText({ ...ctx, escalation: { name: "Schay", available: true, returnsAt: null } });
+  assert.match(dentro, /Schay: em horário de atendimento agora/);
+});
+
+test("instruções cobrem frete estimado pelo robô e desconto da régua", () => {
+  const text = buildSellerInstructions({ persona: "Cami", escalationName: "Schay" });
+  assert.match(text, /estimativa pelo estado/);
+  assert.match(text, /desconto por tempo limitado/);
+  assert.match(text, /diga quando ela volta/);
+});
+
 test("mensagens da própria IA aparecem como VOCÊ na transcrição", async () => {
   const base = { body: "", userId: null, attachments: [], isAutomated: false };
   const parts = await buildTranscriptParts(

@@ -1,5 +1,12 @@
 import type { NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
-import { MAX_AI_REPLIES_PER_HOUR, MAX_AI_SENDS_PER_HOUR } from "./config";
+import {
+  ASSIGN_MAX_PARES,
+  ASSIGN_MIN_PARES,
+  GHL_ATENDIMENTO_PIPELINE_ID,
+  HUMAN_RECENT_MS,
+  MAX_AI_REPLIES_PER_HOUR,
+  MAX_AI_SENDS_PER_HOUR,
+} from "./config";
 
 export interface DecideInput {
   now: number;
@@ -86,6 +93,48 @@ export function decideRun(input: DecideInput): DecideResult {
   }
 
   return { kind: "run" };
+}
+
+export type AssignDecision =
+  | { assign: true }
+  | {
+      assign: false;
+      motivo:
+        | "ja_com_a_ia"
+        | "ja_passou_para_humano"
+        | "sem_oportunidade"
+        | "fora_do_atendimento"
+        | "fora_da_faixa_de_pares"
+        | "time_ja_conversando";
+    };
+
+/**
+ * A Cami assume o cliente quando a amostra é entregue? Só pedido na faixa de
+ * pares, no pipeline Atendimento, que ninguém do time esteja conduzindo e que
+ * nunca tenha sido passado da IA para humano (cliente que voltou fica com quem
+ * já o conhece).
+ */
+export function decideAssignment(input: {
+  now: number;
+  tags: readonly string[];
+  aiTag: string;
+  escalatedTag: string;
+  pipelineId: string | null;
+  pares: number | null;
+  messages: NegotiationMessage[];
+}): AssignDecision {
+  if (input.tags.includes(input.aiTag)) return { assign: false, motivo: "ja_com_a_ia" };
+  if (input.tags.includes(input.escalatedTag)) return { assign: false, motivo: "ja_passou_para_humano" };
+  if (input.pipelineId == null) return { assign: false, motivo: "sem_oportunidade" };
+  if (input.pipelineId !== GHL_ATENDIMENTO_PIPELINE_ID) return { assign: false, motivo: "fora_do_atendimento" };
+  if (input.pares == null || input.pares < ASSIGN_MIN_PARES || input.pares > ASSIGN_MAX_PARES) {
+    return { assign: false, motivo: "fora_da_faixa_de_pares" };
+  }
+  const humanTalking = input.messages.some((m) =>
+    isHumanSellerMessage(m, new Set(), input.now - HUMAN_RECENT_MS),
+  );
+  if (humanTalking) return { assign: false, motivo: "time_ja_conversando" };
+  return { assign: true };
 }
 
 /**

@@ -48,6 +48,7 @@ import {
   sendWhatsAppMessage,
   writeBudgetChain,
 } from "./ghl-actions";
+import { escalationAvailability } from "./hours";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
 import { buildContextText, buildSellerInstructions } from "./prompt";
 import {
@@ -114,7 +115,7 @@ async function clientKeptWriting(contactId: string): Promise<boolean> {
 
 /**
  * Trava por contato, esperando a rodada anterior terminar: o cliente que
- * escreve enquanto a Lia pensa ganha resposta da chamada seguinte, em vez de
+ * escreve enquanto a Cami pensa ganha resposta da chamada seguinte, em vez de
  * a chamada desistir e a conversa ir para humano. Devolve o id da trava e o
  * início da rodada, ou null se a outra rodada passou de LOCK_WAIT_MS.
  */
@@ -131,15 +132,21 @@ async function acquireRunLockWaiting(
   }
 }
 
+/** Aviso de passagem quando a IA não escreveu o seu (fallbacks): diz quando a pessoa volta, fora do horário. */
 function handoffMessage(): string {
-  return `Vou pedir pra ${escalationUserName()} continuar seu atendimento por aqui, tá bom? 😊`;
+  const name = escalationUserName();
+  const { available, returnsAt } = escalationAvailability(Date.now());
+  if (available || !returnsAt) {
+    return `Vou pedir pra ${name} continuar seu atendimento por aqui, tá bom? 😊`;
+  }
+  return `Vou pedir pra ${name} continuar seu atendimento por aqui. Ela te responde ${returnsAt}, tá bom? 😊`;
 }
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function findCurrentOpportunity(contactId: string): Promise<GhlOpportunity | null> {
+export async function findCurrentOpportunity(contactId: string): Promise<GhlOpportunity | null> {
   const opportunities = await searchGhlOpportunitiesByContact(contactId);
   const open = opportunities.filter(
     (o) =>
@@ -476,6 +483,7 @@ async function respondToContactUnsafe(
   const pipeline = pipelines.find((p) => p.id === opportunity.pipelineId) ?? null;
   const stage = pipeline?.stages?.find((s) => s.id === opportunity.pipelineStageId) ?? null;
 
+  const availability = escalationAvailability(Date.now());
   const trimmed = trimForSeller(transcript.messages);
   const transcriptParts = await buildTranscriptParts(trimmed.messages, {
     ownMessageIds: history.sentMessageIds,
@@ -489,6 +497,12 @@ async function respondToContactUnsafe(
     crmPares: await getQtyParesForOpportunity(opportunity),
     crmValor: opportunity.monetaryValue,
     omittedAutomated: trimmed.omittedAutomated,
+    nowLabel: availability.nowLabel,
+    escalation: {
+      name: escalationUserName(),
+      available: availability.available,
+      returnsAt: availability.returnsAt,
+    },
   });
 
   const actions = dryRun

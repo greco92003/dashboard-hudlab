@@ -269,7 +269,20 @@ export function UnreadInbox() {
                       >
                         Janela fecha em {formatDuration(item.windowRemainingMs)}
                       </Badge>
+                      {item.withAi && (
+                        <Badge
+                          variant="outline"
+                          className="font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                        >
+                          🤖 Cami atendendo
+                        </Badge>
+                      )}
                     </div>
+                    {item.withAi && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                        A Cami está respondendo este cliente. Não responda: se alguém do time escrever, ela sai da conversa.
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Esperando há {formatWaiting(item.lastInboundAt)}
                       {item.unreadCount > 1 && ` · ${item.unreadCount} não lidas`}
@@ -300,20 +313,22 @@ export function UnreadInbox() {
                         GHL
                       </a>
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => generateInsight(item.conversationId)}
-                      disabled={generatingFor === item.conversationId}
-                    >
-                      {generatingFor === item.conversationId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4" />
-                          {insight ? (item.insightOutdated ? "Atualizar insight" : "Gerar de novo") : "Insight e resposta"}
-                        </>
-                      )}
-                    </Button>
+                    {!item.withAi && (
+                      <Button
+                        size="sm"
+                        onClick={() => generateInsight(item.conversationId)}
+                        disabled={generatingFor === item.conversationId}
+                      >
+                        {generatingFor === item.conversationId ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />
+                            {insight ? (item.insightOutdated ? "Atualizar insight" : "Gerar de novo") : "Insight e resposta"}
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
 
