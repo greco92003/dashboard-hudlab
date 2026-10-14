@@ -29,6 +29,18 @@ test("tira o robô antes da entrega da amostra e mantém o cliente", () => {
   assert.equal(trimmed.omittedAutomated, 2);
 });
 
+test("orçamento e formas de pagamento do robô ficam", () => {
+  const messages = [
+    robot("r1", "Quantos pares de chinelo você pretende pedir?"),
+    robot("r2", "📦 Quantidade: 33 pares\n🚚 Frete: R$ 59\n💰 Valor unitário: R$ 57.9"),
+    robot("r3", "📌 Formas de pagamento:\n\n*PIX à vista: 5% de desconto*"),
+    robot("r4", "Suas amostras digitais ficaram prontas!"),
+  ];
+  const trimmed = trimForSeller(messages);
+  assert.deepEqual(trimmed.messages.map((m) => m.id), ["r2", "r3", "r4"]);
+  assert.equal(trimmed.omittedAutomated, 1);
+});
+
 test("mensagem de alguém do time antes da amostra fica", () => {
   const messages = [
     msg("v1", "outbound", "Oi, aqui é a Schay", { userId: "u1" }),

@@ -25,6 +25,8 @@ Regras comerciais:
 - Pedido mínimo de 12 pares. Frete grátis a partir de 36 pares.
 - Desconto só o que o manual permite. Tema marcado como "pendente de decisão" no manual não é decidido por você.
 - Nunca peça pagamento antes de a Amostra Digital estar aprovada.
+- O robô de atendimento estima o frete pelo estado. Se a sua cotação pelo CEP der outro valor, diga que o anterior era uma estimativa pelo estado e que este é o valor exato para o endereço.
+- Uma automação de acompanhamento pode oferecer desconto por tempo limitado (ex.: "5% até amanhã"). Se o cliente quiser usar essa oferta, não recalcule nem negue: escale (desconto_ou_excecao) citando no resumo a oferta e a data em que foi enviada.
 
 Como ler o histórico:
 - CLIENTE é o cliente. VOCÊ são as suas mensagens anteriores. VENDEDOR é uma pessoa do time. AUTOMAÇÃO são mensagens automáticas do sistema (robô de atendimento, campanhas de desconto): trate como contexto real e não repita o que uma automação acabou de enviar.
@@ -42,7 +44,7 @@ Ferramentas:
   - houver reclamação, garantia, defeito ou problema com pedido anterior (reclamacao);
   - o cliente pedir para falar com uma pessoa (cliente_pediu_pessoa);
   - o cliente estiver pronto para pagar: arte aprovada, grade de numerações, CEP e forma de pagamento definidos (pronto_para_pagar).
-  Em mensagem_cliente, avise de forma breve que ${escalationName} vai continuar o atendimento por aqui.
+  Em mensagem_cliente, avise de forma breve que ${escalationName} vai continuar o atendimento por aqui. Se o contexto disser que ${escalationName} está fora do horário, diga quando ela volta.
 - nao_responder: quando nenhuma resposta cabe (despedida já encerrada, "ok" no fim da conversa, mensagem que não era para a Hud Lab, spam).
 - enviar_mensagens: a sua resposta ao cliente.
 
@@ -62,15 +64,25 @@ export interface SellerContext {
   crmValor: number | null;
   /** Mensagens automáticas anteriores à Amostra Digital tiradas da conversa (ver trimForSeller). */
   omittedAutomated?: number;
+  /** Hora agora em Brasília ("HH:MM") e se quem recebe as passagens está no horário. */
+  nowLabel?: string;
+  escalation?: { name: string; available: boolean; returnsAt: string | null };
 }
 
 export function buildContextText(ctx: SellerContext): string {
   const valor = ctx.crmValor != null ? `R$ ${ctx.crmValor.toFixed(2)}` : "não informado";
   const omitted = ctx.omittedAutomated
-    ? `\n\nAs ${ctx.omittedAutomated} mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas; o orçamento delas é o valor do CRM acima.`
+    ? `\n\nAs ${ctx.omittedAutomated} mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas (fotos de exemplo e perguntas do cadastro); o orçamento e as formas de pagamento que o robô enviou foram mantidos.`
+    : "";
+  const escalation = ctx.escalation
+    ? `\n- ${ctx.escalation.name}: ${
+        ctx.escalation.available
+          ? "em horário de atendimento agora"
+          : `fora do horário de atendimento; volta ${ctx.escalation.returnsAt ?? "no próximo dia útil"}`
+      }`
     : "";
   return `Contexto:
-- Data de hoje: ${ctx.today}
+- Data de hoje: ${ctx.today}${ctx.nowLabel ? `, ${ctx.nowLabel} (horário de Brasília)` : ""}${escalation}
 - Cliente: ${ctx.contactName ?? "nome não informado"}
 - Pipeline / etapa atual: ${ctx.pipelineName ?? "desconhecido"} / ${ctx.stageName ?? "desconhecida"}
 - Quantidade de pares no CRM: ${ctx.crmPares ?? "não informada"}

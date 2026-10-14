@@ -1,5 +1,7 @@
 // Leitura da fila de não lidas (aba Atendimentos Reais), usada pelas rotas de listar e atualizar.
+import { summarizeRuns, type RunHistoryRow } from "@/lib/ghl/ai-seller/history";
 import type { createClient } from "@/lib/supabase/server";
+import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
 import { sortTriage, windowRemainingMs, type TriageCategory } from "./triage";
 
 export interface UnreadInboxItem {
@@ -25,7 +27,35 @@ export interface UnreadInboxItem {
   insightAt: string | null;
   /** Chegou mensagem depois do insight: vale gerar de novo. */
   insightOutdated: boolean;
+  /** A IA está com o cliente: se alguém do time responder, ela sai da conversa. */
+  withAi: boolean;
   refreshedAt: string;
+}
+
+/** Contatos com sessão aberta da IA (mesma regra que a IA usa para saber se ainda é dela). */
+async function contactsWithAi(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  contactIds: string[],
+  now: number,
+): Promise<Set<string>> {
+  if (contactIds.length === 0) return new Set();
+  const rows = await fetchAllSupabaseRows<RunHistoryRow & { contact_id: string }>(
+    (from, to) =>
+      supabase
+        .from("ai_seller_runs")
+        .select("contact_id, triggered_at, decision, escalation_reason, sent_message_ids")
+        .in("contact_id", contactIds)
+        .order("triggered_at", { ascending: true })
+        .range(from, to),
+    "ai_seller_runs",
+  );
+  const byContact = new Map<string, RunHistoryRow[]>();
+  for (const row of rows) {
+    byContact.set(row.contact_id, [...(byContact.get(row.contact_id) ?? []), row]);
+  }
+  return new Set(
+    [...byContact].filter(([, runs]) => summarizeRuns(runs, now).sessionStartedAt != null).map(([id]) => id),
+  );
 }
 
 export async function loadUnreadInbox(
@@ -38,6 +68,11 @@ export async function loadUnreadInbox(
   if (error) throw new Error(`ghl_unread_triage: ${error.message}`);
 
   const now = Date.now();
+  const withAi = await contactsWithAi(
+    supabase,
+    [...new Set((data ?? []).map((r) => r.contact_id as string))],
+    now,
+  );
   const items: UnreadInboxItem[] = (data ?? []).map((r) => ({
     conversationId: r.conversation_id,
     contactId: r.contact_id,
@@ -59,6 +94,7 @@ export async function loadUnreadInbox(
     insight: r.insight,
     insightAt: r.insight_at,
     insightOutdated: !!r.insight && r.insight_message_id !== r.last_message_id,
+    withAi: withAi.has(r.contact_id),
     refreshedAt: r.refreshed_at,
   }));
   // Saiu da janela entre uma atualização e outra: some da fila na hora.

@@ -47,9 +47,31 @@ export const MODEL_ESCALATION_REASONS = [
 ] as const;
 export type ModelEscalationReason = (typeof MODEL_ESCALATION_REASONS)[number];
 
+/** Nome da IA para o cliente e no CRM (era Lia no piloto). Fixo no código: a variável de ambiente antiga é ignorada. */
+export const PERSONA_NAME = "Cami";
+
 export function personaName(): string {
-  return process.env.AI_SELLER_PERSONA_NAME || "Lia";
+  return PERSONA_NAME;
 }
+
+/** Valor gravado no campo Vendedor da oportunidade quando a Cami assume: as vendas dela aparecem como dela. */
+export const AI_VENDEDOR_NAME = "CAMI";
+export const VENDEDOR_FIELD_ID = "QbfXsa8G1pDMFEFuRyUX";
+
+/**
+ * Pedidos que a Cami assume sozinha quando a amostra é entregue. Começa pelos
+ * de 12 pares (39% das amostras, ~3% da receita) e cresce com os resultados.
+ */
+export const ASSIGN_MIN_PARES = 12;
+export const ASSIGN_MAX_PARES = 12;
+/** Alguém do time escreveu ao cliente nesse período: a conversa é dele, a Cami não entra. */
+export const HUMAN_RECENT_MS = 72 * 60 * 60 * 1000;
+
+/** Atendimento de quem recebe as passagens (horário de Brasília), segunda a sexta. */
+export const ESCALATION_SHIFTS: ReadonlyArray<readonly [start: string, end: string]> = [
+  ["08:30", "12:00"],
+  ["14:00", "18:00"],
+];
 
 export function escalationUserId(): string {
   const id = process.env.AI_SELLER_ESCALATION_USER_ID;
