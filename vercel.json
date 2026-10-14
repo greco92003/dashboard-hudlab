@@ -27,11 +27,21 @@
     {
       "path": "/api/cron/prewarm-meta-marketing",
       "schedule": "45 12 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-cami",
+      "schedule": "*/15 * * * *"
     }
   ],
   "functions": {
     "app/api/ai-seller/respond/route.ts": {
       "maxDuration": 240
+    },
+    "app/api/cron/refresh-cami/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cami/refresh/route.ts": {
+      "maxDuration": 300
     },
     "app/api/cron/evaluate-negotiations/route.ts": {
       "maxDuration": 300

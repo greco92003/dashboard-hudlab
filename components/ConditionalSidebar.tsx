@@ -85,6 +85,7 @@ export function ConditionalSidebar({
     "/estoque",
     "/sellers",
     "/sellers_v2",
+    "/cami",
     "/designers",
     "/representantes",
     "/direct-costs",
