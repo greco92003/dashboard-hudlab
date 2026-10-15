@@ -221,6 +221,14 @@ export function TrainingPanel({
   } | null>(null);
 
   const endingSessionRef = useRef(false);
+  const chatCardRef = useRef<HTMLDivElement>(null);
+
+  // No celular o chat ocupa a tela: quando o treino começa, ele sobe até o
+  // topo para a caixa de resposta ficar visível sem rolar a página.
+  useEffect(() => {
+    if (!sessionActive || !window.matchMedia("(max-width: 1023px)").matches) return;
+    chatCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [sessionActive]);
 
   const applyTrainingSession = useCallback((session: TrainingSessionSnapshot) => {
     const deadline = new Date(session.deadlineAt).getTime();
@@ -452,7 +460,10 @@ export function TrainingPanel({
   return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-[650px] lg:grid-rows-1">
           {/* Chat Area */}
-          <Card className="lg:col-span-2 flex h-full min-h-[400px] flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none dark:border-white/10">
+          <Card
+            ref={chatCardRef}
+            className="lg:col-span-2 flex h-[calc(100dvh-5.5rem)] min-h-[420px] scroll-mt-20 flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none lg:h-full lg:min-h-[400px] dark:border-white/10"
+          >
             <CardHeader className="shrink-0 border-b border-border/60 px-5 pt-4 [.border-b]:pb-4 dark:border-white/10">
               <CardTitle className="text-base sm:text-lg flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-blue-500" />
@@ -778,8 +789,8 @@ export function TrainingPanel({
             </CardContent>
           </Card>
     
-          {/* Training gauges sidebar */}
-          <div className="flex flex-col gap-6 h-full min-h-[400px]">
+          {/* Training gauges sidebar: no celular a home da Arena já mostra a semana. */}
+          <div className="hidden h-full min-h-[400px] flex-col gap-6 lg:flex">
             <Card className="flex flex-1 flex-col gap-0 overflow-hidden rounded-2xl border-border/60 py-0 shadow-none dark:border-white/10">
               <CardHeader className="border-b border-border/60 px-4 pt-4 [.border-b]:pb-4 dark:border-white/10">
                 <CardTitle className="text-sm font-medium text-center">
