@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -28,14 +28,10 @@ export function ConditionalSidebar({
   const pathname = usePathname();
   const { isHydrated, hasHydrationError, isRecovering } = useHydrationFix();
 
-  // State to control sidebar open/close - only for non-collapsible pages
-  const [forcedOpen, setForcedOpen] = useState(true);
-  const [isClientReady, setIsClientReady] = useState(false);
-
-  // Full-height Kanban pages can collapse the sidebar to maximize board space.
+  // A barra lembra o último estado (cookie) em todas as telas: o botão de
+  // recolher/expandir fica sempre no topo dela, então nunca some de vez.
   const isBoardPage = fullHeightBoardRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
-  const isCollapsiblePage = isBoardPage || isNctsPage;
 
   // Board pages keep full height while using the same inset as /dashboard.
   // NCT pages continue to handle their own padding via layout.tsx.
@@ -45,18 +41,6 @@ export function ConditionalSidebar({
     : isBoardPage
       ? fullHeightContentClassName
       : standardContentClassName;
-
-  // Mark client as ready after hydration
-  useEffect(() => {
-    setIsClientReady(true);
-  }, []);
-
-  // Force sidebar to open when navigating away from collapsible pages
-  useEffect(() => {
-    if (isClientReady && !isCollapsiblePage) {
-      setForcedOpen(true);
-    }
-  }, [isCollapsiblePage, isClientReady]);
 
   // Routes that should not have the sidebar
   const routesWithoutSidebar = [
@@ -164,11 +148,6 @@ export function ConditionalSidebar({
       <div suppressHydrationWarning>
         <SidebarProvider
           defaultOpen={defaultSidebarOpen}
-          // Force sidebar open for all pages except collapsible pages (only after client is ready)
-          open={isClientReady && !isCollapsiblePage ? forcedOpen : undefined}
-          onOpenChange={
-            isClientReady && !isCollapsiblePage ? setForcedOpen : undefined
-          }
           style={
             {
               "--header-height": "4rem", // 64px = h-16
@@ -198,11 +177,6 @@ export function ConditionalSidebar({
   return (
     <SidebarProvider
       defaultOpen={shouldStartClosed ? false : defaultSidebarOpen}
-      // Force sidebar open for all pages except collapsible pages (only after client is ready)
-      open={isClientReady && !isCollapsiblePage ? forcedOpen : undefined}
-      onOpenChange={
-        isClientReady && !isCollapsiblePage ? setForcedOpen : undefined
-      }
       style={
         {
           "--header-height": "4rem", // 64px = h-16

@@ -14,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { supabase } from "@/lib/supabase";
 import { storage } from "@/lib/storage";
 import {
@@ -598,7 +597,6 @@ export default function ProgramacaoPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <SidebarTrigger />
               <Button
                 variant="ghost"
                 size="icon"

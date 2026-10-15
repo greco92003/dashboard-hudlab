@@ -57,6 +57,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/Logo";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
@@ -406,10 +407,17 @@ export function AppSidebar() {
   const filteredMenuGroups = getFilteredMenuGroups();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3">
-        <Logo className="h-14 w-max mb-6" />
-        <ThemeToggle />
+    // Recolhida, vira uma coluna de ícones (o nome aparece ao passar o mouse)
+    // e o botão de expandir continua no mesmo lugar, no topo da barra.
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
+        <div className="flex w-full items-start justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Logo className="h-14 w-max mb-6 group-data-[collapsible=icon]:hidden" />
+          <SidebarToggle />
+        </div>
+        <div className="group-data-[collapsible=icon]:hidden">
+          <ThemeToggle />
+        </div>
         {/* Banco de Imagens - visível para admin, owner, manager, team-leader e user */}
         {(isOwner || isAdmin || isTeamLeader || isUser) && (
           <Button
@@ -421,14 +429,15 @@ export function AppSidebar() {
             }
             variant="outline"
             size="sm"
-            className="flex items-center gap-1.5 cursor-pointer w-full"
+            className="flex items-center gap-1.5 cursor-pointer w-full group-data-[collapsible=icon]:hidden"
           >
             <ExternalLink className="h-3 w-3" />
             <span className="text-xs">Banco de Imagens</span>
           </Button>
         )}
       </SidebarHeader>
-      <SidebarContent>
+      {/* Recolhida, a lista também rola (são mais de 30 itens), sem barra de rolagem visível. */}
+      <SidebarContent className="group-data-[collapsible=icon]:overflow-auto group-data-[collapsible=icon]:[scrollbar-width:none]">
         {filteredMenuGroups.map((group) => (
           <SidebarGroup key={group.label}>
             <SidebarGroupLabel>{group.label}</SidebarGroupLabel>

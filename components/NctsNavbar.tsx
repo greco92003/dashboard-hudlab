@@ -2,8 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   Map,
@@ -40,11 +38,6 @@ export function NctsNavbar() {
 
   return (
     <nav className="flex h-12 shrink-0 items-center gap-1 border-b border-sidebar-border bg-background px-3">
-      {/* Botão de toggle da sidebar */}
-      <SidebarTrigger className="shrink-0" />
-
-      <Separator orientation="vertical" className="mx-2 h-5" />
-
       {/* Links de navegação */}
       <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none">
         {NCT_LINKS.map(({ href, label, icon: Icon, exact }) => {

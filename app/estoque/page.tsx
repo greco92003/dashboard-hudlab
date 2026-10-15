@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AlertCircle, Package, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PainelPolitica } from "@/components/estoque/painel-politica";
@@ -101,7 +100,6 @@ export default function EstoquePage() {
   return (
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div className="flex flex-wrap items-center gap-3">
-        <SidebarTrigger className="-ml-1" />
         <Package className="h-5 w-5" />
         <h1 className="text-xl font-semibold">Estoque de Solados</h1>
         <div className="ml-auto flex items-center gap-1">
