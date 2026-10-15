@@ -117,10 +117,10 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
 
   return (
     <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-card to-card py-0 lg:col-span-2">
-      <CardContent className="p-5 sm:p-7 space-y-6">
-        <div className="flex flex-wrap items-center gap-5">
+      <CardContent className="p-4 sm:p-7 space-y-5 sm:space-y-6">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-5">
           <div className="relative shrink-0">
-            <div className="h-20 w-20 rounded-full p-[5px]" style={{ background: ring }}>
+            <div className="h-16 w-16 rounded-full p-[4px] sm:h-20 sm:w-20 sm:p-[5px]" style={{ background: ring }}>
               <Avatar className="h-full w-full border-2 border-card">
                 {me.avatarUrl && <AvatarImage src={me.avatarUrl} alt={me.nome} />}
                 <AvatarFallback className="text-2xl font-extrabold">{initial(me.nome)}</AvatarFallback>
@@ -132,7 +132,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Olá, {firstName(me.nome)}</p>
-            <h2 className="text-3xl font-extrabold tracking-tight">{me.nivel.name}</h2>
+            <h2 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{me.nivel.name}</h2>
             <p className="text-sm text-muted-foreground">
               {me.nivel.nextName ? (
                 <>
@@ -148,7 +148,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
             size="lg"
             onClick={onTrain}
             disabled={me.bloqueado}
-            className="h-12 gap-2 px-6 text-base font-bold shadow-lg shadow-primary/25"
+            className="h-12 w-full gap-2 px-6 text-base font-bold shadow-lg shadow-primary/25 sm:w-auto"
           >
             {me.bloqueado ? <Lock className="h-5 w-5" /> : <Play className="h-5 w-5 fill-current" />}
             {me.treinoAtivoId ? "Continuar treino" : "Treinar agora"}
@@ -175,19 +175,20 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
           <XpBar pct={me.nivel.progressPct} />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border bg-background/60 p-4 space-y-1">
+        {/* Celular: sequência e posição lado a lado, meta da semana embaixo na largura toda. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border bg-background/60 p-3 space-y-1 sm:p-4">
             <span className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
               <Flame className="h-4 w-4" /> Sequência
             </span>
-            <p className="text-2xl font-extrabold">
+            <p className="text-xl font-extrabold sm:text-2xl">
               {me.sequencia} {me.sequencia === 1 ? "dia" : "dias"}
             </p>
             <p className="text-xs text-muted-foreground">
               {me.treinouHoje ? "Hoje já contou. Volte amanhã!" : "Treine hoje para não perder"}
             </p>
           </div>
-          <div className="rounded-xl border bg-background/60 p-4 space-y-2">
+          <div className="order-last col-span-2 rounded-xl border bg-background/60 p-3 space-y-2 sm:order-none sm:col-span-1 sm:p-4">
             <span className="text-sm font-semibold text-muted-foreground">Meta da semana · {me.diasDaSemana.length}/5</span>
             <div className="flex gap-1.5">
               {WEEK.map((label, i) => {
@@ -207,9 +208,11 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
               })}
             </div>
           </div>
-          <div className="rounded-xl border bg-background/60 p-4 space-y-1">
-            <span className="text-sm font-semibold text-muted-foreground">Posição na temporada</span>
-            <p className="text-2xl font-extrabold">{me.posicao ? `${me.posicao}º lugar` : "—"}</p>
+          <div className="rounded-xl border bg-background/60 p-3 space-y-1 sm:p-4">
+            <span className="text-sm font-semibold text-muted-foreground">
+              Posição<span className="hidden sm:inline"> na temporada</span>
+            </span>
+            <p className="text-xl font-extrabold sm:text-2xl">{me.posicao ? `${me.posicao}º lugar` : "—"}</p>
             <p className="text-xs text-muted-foreground">
               {me.posicao == null
                 ? "Treine para entrar no ranking"
@@ -397,10 +400,10 @@ function ChallengeCard({
     <Card className="border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-card to-card">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
-          <span className="flex items-center gap-2 font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+          <span className="flex items-center gap-2 whitespace-nowrap font-extrabold uppercase tracking-wider text-amber-600 sm:tracking-widest dark:text-amber-400">
             <Zap className="h-4 w-4" /> Desafio da semana
           </span>
-          <span className="text-xs font-normal text-muted-foreground">
+          <span className="whitespace-nowrap text-xs font-normal text-muted-foreground">
             termina em {dias} {dias === 1 ? "dia" : "dias"}
           </span>
         </CardTitle>
@@ -442,7 +445,7 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
   const anterior = (m: ArenaMission) => data.missoes.find((x) => x.ordem === m.ordem - 1);
   const visiveis = data.missoes.filter((m) => filtro === 0 || m.dificuldade === filtro);
   return (
-    <Card className="lg:col-span-3">
+    <Card className="order-1 lg:order-none lg:col-span-3">
       <CardHeader>
         <CardTitle className="flex flex-wrap items-end justify-between gap-3">
           <span>
@@ -451,7 +454,11 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
               Situações reais da Hud Lab. Tire 70 ou mais para liberar a próxima da trilha.
             </span>
           </span>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por dificuldade">
+          <div
+            className="-mx-1 flex w-[calc(100%+0.5rem)] gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0"
+            role="group"
+            aria-label="Filtrar por dificuldade"
+          >
             {(
               [
                 [0, "Todas"],
@@ -460,7 +467,14 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
                 [3, "★★★ Difícil"],
               ] as const
             ).map(([id, label]) => (
-              <Button key={id} size="sm" variant={filtro === id ? "default" : "outline"} onClick={() => setFiltro(id)} aria-pressed={filtro === id}>
+              <Button
+                key={id}
+                size="sm"
+                variant={filtro === id ? "default" : "outline"}
+                className="shrink-0"
+                onClick={() => setFiltro(id)}
+                aria-pressed={filtro === id}
+              >
                 {label}
               </Button>
             ))}
@@ -475,7 +489,8 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
               <div
                 key={m.id}
                 className={cn(
-                  "flex min-h-44 flex-col gap-2 rounded-xl border p-4 transition-colors",
+                  // Celular: cartão compacto; a bloqueada mostra só título e cadeado.
+                  "flex flex-col gap-1.5 rounded-xl border p-3 transition-colors sm:min-h-44 sm:gap-2 sm:p-4",
                   !m.liberada && "opacity-60",
                   m.desafio && "border-amber-500/50",
                   m.liberada && !feita && !m.desafio && "border-primary/40",
@@ -486,7 +501,7 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
                   {stars(m.dificuldade)}
                 </div>
                 <h3 className="font-bold leading-snug">{m.titulo}</h3>
-                <p className="flex-1 text-sm text-muted-foreground">{m.resumo}</p>
+                <p className={cn("flex-1 text-sm text-muted-foreground", !m.liberada && "hidden sm:block")}>{m.resumo}</p>
                 {!m.liberada ? (
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Lock className="h-3.5 w-3.5" /> Libera com 70+ na missão {String(anterior(m)?.ordem ?? m.ordem - 1).padStart(2, "0")}
@@ -511,7 +526,7 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
             );
           })}
           {filtro === 0 && (
-            <div className="flex min-h-44 flex-col gap-2 rounded-xl border border-dashed p-4">
+            <div className="flex flex-col gap-1.5 rounded-xl border border-dashed p-3 sm:min-h-44 sm:gap-2 sm:p-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-extrabold text-muted-foreground">LIVRE</span>
                 {stars(2)}
@@ -536,7 +551,7 @@ const ACH_ICON = { play: Play, check: Check, star: Star, flame: Flame, crown: Cr
 function AchievementsCard({ conquistas }: { conquistas: ArenaAchievement[] }) {
   const liberadas = conquistas.filter((c) => c.liberada).length;
   return (
-    <Card>
+    <Card className="order-2 lg:order-none">
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-lg">
           Conquistas
@@ -578,7 +593,7 @@ function TrailCard({ missoes }: { missoes: ArenaMission[] }) {
   const done = ordered.filter((m) => (m.melhorNota ?? -1) >= 70).length;
   const currentOrdem = ordered.find((m) => (m.melhorNota ?? -1) < 70)?.ordem ?? null;
   return (
-    <Card className="lg:col-span-3">
+    <Card className="order-2 lg:order-none lg:col-span-3">
       <CardHeader>
         <CardTitle className="flex flex-wrap items-end justify-between gap-2">
           <span>
@@ -590,17 +605,18 @@ function TrailCard({ missoes }: { missoes: ArenaMission[] }) {
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ol className="flex items-start overflow-x-auto pb-2">
+      <CardContent className="px-3 sm:px-6">
+        {/* Celular: grade de 5 por linha (a fila horizontal cortava os passos). */}
+        <ol className="grid grid-cols-5 gap-y-4 sm:flex sm:items-start sm:overflow-x-auto sm:pb-2">
           {ordered.map((m, i) => {
             const isDone = (m.melhorNota ?? -1) >= 70;
             const isCurrent = m.ordem === currentOrdem;
             return (
-              <li key={m.id} className="flex shrink-0 items-start">
-                <div className="flex w-20 flex-col items-center gap-1.5">
+              <li key={m.id} className="flex justify-center sm:shrink-0 sm:items-start">
+                <div className="flex w-full flex-col items-center gap-1.5 sm:w-20">
                   <div
                     className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-full text-sm font-extrabold",
+                      "flex h-9 w-9 items-center justify-center rounded-full text-sm font-extrabold sm:h-10 sm:w-10",
                       isDone && "bg-primary text-primary-foreground",
                       isCurrent && "border-2 border-primary text-primary ring-4 ring-primary/15",
                       !isDone && !isCurrent && "border text-muted-foreground",
@@ -608,10 +624,17 @@ function TrailCard({ missoes }: { missoes: ArenaMission[] }) {
                   >
                     {isDone ? <Check className="h-4 w-4" /> : m.ordem}
                   </div>
-                  <span className={cn("text-center text-[11px]", isDone || isCurrent ? "font-semibold" : "text-muted-foreground")}>{m.curto}</span>
+                  <span
+                    className={cn(
+                      "w-full whitespace-nowrap text-center text-[10px] leading-tight tracking-tight sm:text-[11px] sm:tracking-normal",
+                      isDone || isCurrent ? "font-semibold" : "text-muted-foreground",
+                    )}
+                  >
+                    {m.curto}
+                  </span>
                 </div>
                 {i < ordered.length - 1 && (
-                  <div className={cn("mt-5 h-0.5 w-6", isDone ? "bg-primary" : "bg-border")} aria-hidden="true" />
+                  <div className={cn("mt-5 hidden h-0.5 w-6 sm:block", isDone ? "bg-primary" : "bg-border")} aria-hidden="true" />
                 )}
               </li>
             );
@@ -624,7 +647,7 @@ function TrailCard({ missoes }: { missoes: ArenaMission[] }) {
 
 function LevelsCard({ totalXp }: { totalXp: number }) {
   return (
-    <Card>
+    <Card className="order-2 lg:order-none">
       <CardHeader>
         <CardTitle className="text-lg">Níveis</CardTitle>
       </CardHeader>
@@ -662,7 +685,7 @@ function XpRulesCard() {
     ["Dias seguidos treinando", "+10 por dia, até +50"],
   ];
   return (
-    <Card>
+    <Card className="order-2 lg:order-none">
       <CardHeader>
         <CardTitle className="text-lg">Como ganhar XP</CardTitle>
       </CardHeader>

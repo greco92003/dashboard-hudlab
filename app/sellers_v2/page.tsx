@@ -181,14 +181,14 @@ export default function SellersV2Page() {
         <div className="space-y-4">
           {mission && (
             <Card className={mission.desafio ? "border-amber-500/40" : "border-primary/30"}>
-              <CardContent className="flex flex-wrap items-start gap-x-6 gap-y-2 p-4">
-                <div className="min-w-56 flex-1">
+              <CardContent className="flex flex-wrap items-start gap-x-6 gap-y-2 p-3 sm:p-4">
+                <div className="min-w-0 flex-1 sm:min-w-56">
                   <p className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground">
                     {mission.desafio ? "Desafio da semana · " : ""}Missão {String(mission.ordem).padStart(2, "0")}{" "}
                     <span className="text-amber-500">{"★".repeat(mission.dificuldade)}</span>
                   </p>
                   <h2 className="text-lg font-extrabold">{mission.titulo}</h2>
-                  <p className="text-sm text-muted-foreground">{mission.resumo}</p>
+                  <p className="hidden text-sm text-muted-foreground sm:block">{mission.resumo}</p>
                 </div>
                 <p className="flex max-w-xl items-start gap-2 text-sm">
                   <Target className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
