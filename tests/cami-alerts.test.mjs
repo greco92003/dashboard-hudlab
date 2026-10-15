@@ -1,28 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDailySummary, DEFAULT_ALERTS, fmtMinutes, handoffAlertsDue } from "../lib/ghl/ai-seller/alerts.ts";
+import {
+  buildDailySummary,
+  DEFAULT_ALERTS,
+  fmtMinutes,
+  handoffAlertsDue,
+  handoffNoticeText,
+} from "../lib/ghl/ai-seller/alerts.ts";
 import { normalizeSettings, validateSettingsInput } from "../lib/ghl/ai-seller/settings-shape.ts";
 
 // Horário de Brasília (UTC-3) -> ms. 14/10/2026 é quarta-feira.
 const brt = (iso) => Date.parse(`${iso}-03:00`);
 const iso = (local) => new Date(brt(local)).toISOString();
+// Padrão: passagem no turno, já avisada na hora pela rodada da Cami.
 const handoff = (over) => ({
   id: "h1",
   escalated_at: iso("2026-10-14T09:00:00"),
   answered_at: null,
+  notified_at: iso("2026-10-14T09:00:00"),
   alerted_at: null,
   owner_alerted_at: null,
   ...over,
 });
 
-test("passagem sem resposta: 1h útil avisa quem recebe, 2h avisa o owner, uma vez cada", () => {
+test("passagem sem resposta: 1h útil lembra quem recebe, 2h avisa o owner, uma vez cada", () => {
   assert.deepEqual(handoffAlertsDue([handoff()], brt("2026-10-14T09:30:00"), DEFAULT_ALERTS), []);
   assert.deepEqual(handoffAlertsDue([handoff()], brt("2026-10-14T10:05:00"), DEFAULT_ALERTS), [
-    { id: "h1", pessoa: true, owner: false, minutos: 65 },
+    { id: "h1", aviso: false, pessoa: true, owner: false, minutos: 65 },
   ]);
   assert.deepEqual(
     handoffAlertsDue([handoff({ alerted_at: iso("2026-10-14T10:05:00") })], brt("2026-10-14T11:10:00"), DEFAULT_ALERTS),
-    [{ id: "h1", pessoa: false, owner: true, minutos: 130 }],
+    [{ id: "h1", aviso: false, pessoa: false, owner: true, minutos: 130 }],
   );
   // Já avisados os dois, ou já respondida: nada.
   const done = handoff({ alerted_at: iso("2026-10-14T10:05:00"), owner_alerted_at: iso("2026-10-14T11:10:00") });
@@ -30,10 +38,50 @@ test("passagem sem resposta: 1h útil avisa quem recebe, 2h avisa o owner, uma v
   assert.deepEqual(handoffAlertsDue([handoff({ answered_at: iso("2026-10-14T09:20:00") })], brt("2026-10-14T15:00:00"), DEFAULT_ALERTS), []);
 });
 
-test("passagem à noite só conta a partir do turno seguinte", () => {
-  const night = handoff({ escalated_at: iso("2026-10-14T21:00:00") });
-  assert.deepEqual(handoffAlertsDue([night], brt("2026-10-15T08:00:00"), DEFAULT_ALERTS), []);
-  assert.equal(handoffAlertsDue([night], brt("2026-10-15T09:40:00"), DEFAULT_ALERTS)[0].minutos, 70);
+test("passagem à noite: aviso no primeiro minuto do turno, lembrete 60 min úteis depois", () => {
+  const night = handoff({ escalated_at: iso("2026-10-14T21:00:00"), notified_at: null });
+  // De madrugada e antes do turno, nada.
+  assert.deepEqual(handoffAlertsDue([night], brt("2026-10-14T22:00:00"), DEFAULT_ALERTS), []);
+  assert.deepEqual(handoffAlertsDue([night], brt("2026-10-15T08:15:00"), DEFAULT_ALERTS), []);
+  // 8h30: o aviso sai, sem lembrete junto.
+  assert.deepEqual(handoffAlertsDue([night], brt("2026-10-15T08:30:00"), DEFAULT_ALERTS), [
+    { id: "h1", aviso: true, pessoa: false, owner: false, minutos: 0 },
+  ]);
+  // Avisada às 8h30: o lembrete vem às 9h30 (60 min depois do aviso).
+  const avisada = { ...night, notified_at: iso("2026-10-15T08:30:00") };
+  assert.deepEqual(handoffAlertsDue([avisada], brt("2026-10-15T09:15:00"), DEFAULT_ALERTS), []);
+  assert.deepEqual(handoffAlertsDue([avisada], brt("2026-10-15T09:30:00"), DEFAULT_ALERTS), [
+    { id: "h1", aviso: false, pessoa: true, owner: false, minutos: 60 },
+  ]);
+});
+
+test("passagem no almoço espera as 14h; aviso que falhou na hora sai no cron; respondida não avisa", () => {
+  const almoco = handoff({ escalated_at: iso("2026-10-14T12:20:00"), notified_at: null });
+  assert.deepEqual(handoffAlertsDue([almoco], brt("2026-10-14T13:45:00"), DEFAULT_ALERTS), []);
+  assert.equal(handoffAlertsDue([almoco], brt("2026-10-14T14:00:00"), DEFAULT_ALERTS)[0].aviso, true);
+
+  // No turno, mas o aviso da rodada não saiu (falha): o cron seguinte manda.
+  const falhou = handoff({ notified_at: null });
+  assert.equal(handoffAlertsDue([falhou], brt("2026-10-14T09:15:00"), DEFAULT_ALERTS)[0].aviso, true);
+
+  const respondida = handoff({ notified_at: null, answered_at: iso("2026-10-14T09:05:00") });
+  assert.deepEqual(handoffAlertsDue([respondida], brt("2026-10-14T09:15:00"), DEFAULT_ALERTS), []);
+});
+
+test("texto do aviso de passagem", () => {
+  assert.deepEqual(
+    handoffNoticeText({ nome: "Amanda", motivo: "outro motivo", resumo: "Não consegue abrir a Amostra Digital no iPhone." }),
+    {
+      title: "Cliente passado para você",
+      message: "A Cami passou Amanda para você (outro motivo). Não consegue abrir a Amostra Digital no iPhone.",
+    },
+  );
+  assert.equal(
+    handoffNoticeText({ nome: null, motivo: "Cami desligada", resumo: null }).message,
+    "A Cami passou um cliente para você (Cami desligada).",
+  );
+  const longo = handoffNoticeText({ nome: "Carlos", motivo: "pediu desconto", resumo: "x".repeat(300) }).message;
+  assert.ok(longo.endsWith("…") && longo.length < 220);
 });
 
 test("minutos por extenso", () => {

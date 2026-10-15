@@ -60,17 +60,18 @@ export async function insertAssignment(row: {
   if (error) throw new Error(`ai_seller_assignments insert: ${error.message}`);
 }
 
-/** Cada passagem da IA para humano. Lança em falha. */
+/** Cada passagem da IA para humano. Devolve o id. Lança em falha. */
 export async function insertHandoff(row: {
   contact_id: string;
   opportunity_id: string | null;
   motivo: EscalationReason;
   resumo: string | null;
   to_user_id: string | null;
-}): Promise<void> {
+}): Promise<string> {
   const supabase = await createSupabaseServerForSync();
-  const { error } = await supabase.from("ai_seller_handoffs").insert(row);
+  const { data, error } = await supabase.from("ai_seller_handoffs").insert(row).select("id").single();
   if (error) throw new Error(`ai_seller_handoffs insert: ${error.message}`);
+  return data.id as string;
 }
 
 /** Lança em falha; quem chama decide se loga ou repete. */

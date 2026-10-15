@@ -268,13 +268,14 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
         <CardHeader>
           <CardTitle className="text-base">Alertas</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Chegam no sininho do dashboard e no celular de quem ativou as notificações. Contam só minutos dos turnos acima.
+            Chegam no sininho do dashboard e no celular de quem ativou as notificações. Quem recebe a passagem é avisado na
+            hora (fora do turno, no início do turno seguinte); os prazos abaixo contam só minutos dos turnos acima.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-4">
             <div className="space-y-1">
-              <Label htmlFor="alerta-pessoa">Avisar quem recebe a passagem após (min)</Label>
+              <Label htmlFor="alerta-pessoa">Lembrar quem recebe, sem resposta após (min)</Label>
               <Input
                 id="alerta-pessoa"
                 type="number"
