@@ -69,7 +69,10 @@ async function sendNotice(
     console.warn("CAMI alertas: quem recebe a passagem não tem usuário no dashboard", { ghlId: h.to_user_id });
     return false;
   }
-  const { title, message } = handoffNoticeText({ nome, motivo: MOTIVO[h.motivo] ?? h.motivo, resumo: h.resumo });
+  // Falha técnica: o resumo é o erro cru (em inglês); fica na nota do GHL, não no push.
+  const resumo =
+    h.motivo === "falha_tecnica" ? "A Cami não conseguiu responder; siga pela conversa no GHL." : h.resumo;
+  const { title, message } = handoffNoticeText({ nome, motivo: MOTIVO[h.motivo] ?? h.motivo, resumo });
   await notifyUsers({
     userIds: [userId],
     title,
