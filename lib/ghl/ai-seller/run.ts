@@ -41,6 +41,7 @@ import {
   sendWhatsAppMessage,
   writeBudgetChain,
 } from "./ghl-actions";
+import { notifyHandoffNow } from "./alerts-send";
 import { escalationAvailability } from "./hours";
 import { findCurrentOpportunity } from "./opportunity";
 import { loadActiveRules } from "./rules";
@@ -159,6 +160,8 @@ interface RunContext {
   /** Primeira mensagem enviada ao cliente nesta rodada. */
   repliedAt: number | null;
   settings: SellerSettings;
+  /** Primeiro nome do cliente, para o aviso de passagem (lido no início da rodada). */
+  contactName: string | null;
 }
 
 /** Quem recebe as passagens: o do Controle, senão a variável de ambiente. */
@@ -166,12 +169,21 @@ function escalationTarget(settings: SellerSettings): string {
   return settings.escalationUserId ?? escalationUserId();
 }
 
-/** Registro da passagem para a CAMI Intelligence; falha não interrompe a passagem. */
-async function recordHandoff(row: Parameters<typeof insertHandoff>[0]): Promise<void> {
+/**
+ * Registro da passagem para a CAMI Intelligence e aviso a quem recebe: na
+ * hora, se está no turno; senão o cron avisa no início do turno seguinte.
+ * Falha não interrompe a passagem.
+ */
+async function recordHandoff(ctx: RunContext, row: Parameters<typeof insertHandoff>[0]): Promise<void> {
+  let id: string;
   try {
-    await insertHandoff(row);
+    id = await insertHandoff(row);
   } catch (err) {
     console.error("IA vendedora: passagem não registrada", { contactId: row.contact_id, err });
+    return;
+  }
+  if (escalationAvailability(Date.now(), ctx.settings.shifts).available) {
+    await notifyHandoffNow({ id, ...row }, ctx.contactName);
   }
 }
 
@@ -256,7 +268,7 @@ function realActions(
         title: `IA ${persona} passou o atendimento — ${motivo}`,
         body: `Motivo: ${motivo}\n\n${resumo}`,
       });
-      await recordHandoff({
+      await recordHandoff(ctx, {
         contact_id: contactId,
         opportunity_id: opportunityId || null,
         motivo,
@@ -366,6 +378,7 @@ export async function respondToContact(
     receivedAt,
     repliedAt: null,
     settings: await loadSellerSettings(),
+    contactName: null,
   };
 
   try {
@@ -442,6 +455,7 @@ async function respondToContactUnsafe(
     findCurrentOpportunity(contactId),
   ]);
 
+  ctx.contactName = contact.firstName ?? contact.contactName ?? null;
   const lastClientMessage = [...transcript.messages].reverse().find((m) => m.direction === "inbound");
   const record = async (row: Partial<AiSellerRunInsert> & { decision: RunDecision }) => {
     if (dryRun) return;
@@ -494,7 +508,7 @@ async function respondToContactUnsafe(
         title: `IA ${personaName()} desligada`,
         body: "A IA foi desligada no Controle da CAMI Intelligence; o cliente escreveu e ficou com o time, sem mensagem da IA.",
       });
-      await recordHandoff({
+      await recordHandoff(ctx, {
         contact_id: contactId,
         opportunity_id: opportunity?.id ?? null,
         motivo: "cami_desligada",
