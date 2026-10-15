@@ -231,10 +231,14 @@ export async function executeTool(
       const resumo = String(args.resumo_ajuste ?? "").trim();
       if (!resumo) return erro("resumo_ajuste vazio");
       const status = await actions.requestArtChange(resumo);
+      // Prazo só no pedido que abre o ajuste: nos detalhes seguintes o cliente
+      // já sabe, e repetir a cada mensagem soa robótico.
       return ok({
         status,
         instrucao:
-          "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui.",
+          status === "ja_em_alteracao"
+            ? "Este detalhe foi somado ao ajuste que já está com o time de design. Confirme em uma frase curta o que vai mudar, sem repetir o prazo, a menos que o cliente pergunte."
+            : "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui.",
       });
     }
 

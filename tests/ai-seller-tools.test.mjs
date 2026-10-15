@@ -175,6 +175,16 @@ test("solicitar_ajuste_arte move a demanda e não encerra", async () => {
   );
   assert.deepEqual(calls[0], ["requestArtChange", "Trocar o monograma para branco"]);
   assert.equal(result.terminal, false);
+  assert.match(JSON.parse(result.output).instrucao, /24h úteis/);
+});
+
+test("solicitar_ajuste_arte: detalhe de ajuste já aberto não repete o prazo", async () => {
+  const { actions } = fakeActions({ requestArtChange: async () => "ja_em_alteracao" });
+  const result = await executeTool(call("solicitar_ajuste_arte", { resumo_ajuste: "Logo maior" }), actions);
+  const out = JSON.parse(result.output);
+  assert.equal(out.status, "ja_em_alteracao");
+  assert.doesNotMatch(out.instrucao, /24h/);
+  assert.match(out.instrucao, /sem repetir o prazo/);
 });
 
 test("ferramenta desconhecida ou argumento inválido volta como erro para o modelo", async () => {
