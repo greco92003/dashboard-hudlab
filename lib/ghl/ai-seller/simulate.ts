@@ -5,7 +5,7 @@ import { MAX_AGENT_STEPS, personaName } from "./config";
 import { escalationAvailability } from "./hours";
 import { runAgentLoop } from "./loop";
 import { buildContextText, buildSellerInstructions } from "./prompt";
-import { MAX_REFERENCES_PER_TEST, validateRuleText } from "./rules-shape";
+import { MAX_REFERENCES_PER_TEST, simulatedArtChangeStatus, validateRuleText } from "./rules-shape";
 import { getReferences, listReferences, loadActiveRules, RuleError, type Reference } from "./rules";
 import { dryRunActions, makeCallModel } from "./run";
 import { loadSellerSettings, type SellerSettings } from "./settings";
@@ -67,7 +67,8 @@ export async function simulateReply(
     escalation: { name: settings.escalationName, available: availability.available, returnsAt: availability.returnsAt },
   });
 
-  const actions = dryRunActions();
+  const artChange = simulatedArtChangeStatus(reference.context.stageName);
+  const actions = { ...dryRunActions(), requestArtChange: async () => artChange };
   const result = await runAgentLoop({
     initialInput: [{ role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] }],
     callModel: makeCallModel(buildSellerInstructions({ persona, escalationName: settings.escalationName, rules })),

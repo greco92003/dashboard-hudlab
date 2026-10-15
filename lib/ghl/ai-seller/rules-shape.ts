@@ -1,5 +1,6 @@
 // Regras da casa e conversas de referência da Cami. Módulo puro.
 import type { NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
+import { ART_CHANGE_STAGE_NAME } from "./config";
 
 /** Teto de regras ligadas: regra que se provou vai para o manual e sai da lista. */
 export const MAX_ACTIVE_RULES = 15;
@@ -51,6 +52,15 @@ export function cutReferenceSnapshot(
   });
   if (endIndex < 0) return null;
   return messages.slice(0, endIndex + 1).map((m) => ({ ...m, own: ownMessageIds.has(m.id) }));
+}
+
+/**
+ * No teste, o pedido de ajuste de arte responde como em produção: cliente que
+ * já estava na etapa Alteração quando a referência foi guardada tem o ajuste
+ * aberto ("ja_em_alteracao", e a Cami não repete o prazo).
+ */
+export function simulatedArtChangeStatus(stageName: string | null): "movido" | "ja_em_alteracao" {
+  return stageName?.trim().toLowerCase() === ART_CHANGE_STAGE_NAME.toLowerCase() ? "ja_em_alteracao" : "movido";
 }
 
 /** Aceita o ID do contato ou um link do GHL que o contenha (…/contacts/detail/<id>). */

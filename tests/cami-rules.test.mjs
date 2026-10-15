@@ -1,4 +1,13 @@
 import test from "node:test";
+import { simulatedArtChangeStatus } from "../lib/ghl/ai-seller/rules-shape.ts";
+
+test("teste de regra: ajuste de arte responde como em produção pela etapa guardada", async () => {
+  const { strict: assert } = await import("node:assert");
+  assert.equal(simulatedArtChangeStatus("Alteração"), "ja_em_alteracao");
+  assert.equal(simulatedArtChangeStatus(" alteração "), "ja_em_alteracao");
+  assert.equal(simulatedArtChangeStatus("Negociação"), "movido");
+  assert.equal(simulatedArtChangeStatus(null), "movido");
+});
 import assert from "node:assert/strict";
 import {
   MAX_ACTIVE_RULES,
