@@ -3,10 +3,9 @@
 import { Suspense, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RefreshCw, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { useSidebar } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
 import { VisaoGeral } from "./components/visao-geral";
@@ -24,8 +23,6 @@ function MetaMarketingContent() {
   const searchParams = useSearchParams();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const { state: sidebarState, toggleSidebar } = useSidebar();
-  const sidebarAberta = sidebarState === "expanded";
 
   const abaParam = searchParams.get("aba");
   const aba = (ABAS as readonly string[]).includes(abaParam ?? "")
@@ -73,18 +70,6 @@ function MetaMarketingContent() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={toggleSidebar}
-            className="flex items-center gap-2"
-          >
-            {sidebarAberta ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeftOpen className="h-4 w-4" />
-            )}
-            {sidebarAberta ? "Ocultar menu" : "Mostrar menu"}
-          </Button>
           <Button
             variant="outline"
             onClick={handleRefresh}

@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { AlertCircle, ArrowLeft, FileText, Plus, Truck } from "lucide-react";
 import { toast } from "sonner";
 import type { ConsolidadoCompra, OrdemCompra } from "@/lib/estoque/ordem-compra";
@@ -221,7 +220,6 @@ export default function OrdensPage() {
   return (
     <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
       <div className="flex flex-wrap items-center gap-3">
-        <SidebarTrigger className="-ml-1" />
         <Truck className="h-5 w-5" />
         <h1 className="text-xl font-semibold">Ordens de Compra</h1>
         <div className="ml-auto flex items-center gap-2">

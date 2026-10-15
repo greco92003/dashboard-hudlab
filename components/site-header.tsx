@@ -11,14 +11,15 @@ export function SiteHeader() {
   const { isOwnerOrAdmin, loading: permissionsLoading } = usePermissions();
   const [isHydrated, setIsHydrated] = useState(false);
   const pathname = usePathname();
-  const { state } = useSidebar();
+  const { state, isMobile } = useSidebar();
 
   useEffect(() => {
     setIsHydrated(true);
   }, []);
 
-  // Hide header on programacao page when sidebar is collapsed
-  const shouldHideHeader = pathname === "/programacao" && state === "collapsed";
+  // Hide header on programacao page when sidebar is collapsed. No celular o
+  // cabeçalho fica: é onde está o único botão que abre o menu.
+  const shouldHideHeader = !isMobile && pathname === "/programacao" && state === "collapsed";
 
   if (shouldHideHeader) {
     return null;
@@ -27,6 +28,7 @@ export function SiteHeader() {
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear duration-200 border-b border-sidebar-border">
       <div className="flex w-full items-center gap-2 px-4 lg:gap-2 lg:px-6">
+        {/* Só no celular, onde o menu fica escondido; no computador o botão fica dentro da barra. */}
         <SidebarTrigger className="-ml-1 md:hidden" />
 
         <div className="flex-1" />

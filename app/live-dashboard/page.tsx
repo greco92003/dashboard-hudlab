@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils";
 import { RefreshCw, TrendingUp, Target, Zap, BarChart3 } from "lucide-react";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 
 function LiveDot() {
   return (
@@ -159,7 +158,6 @@ export default function LiveDashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <SidebarTrigger />
           <LiveDot />
           <h1 className="text-xl sm:text-2xl font-bold">Live Dashboard</h1>
           <IntegrationHealthNotice />

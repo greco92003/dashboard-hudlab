@@ -18,7 +18,6 @@ import { ChartPieGeneric } from "@/components/ui/chart-pie-generic";
 import { useManualSync } from "@/hooks/useManualSync";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ultimosDias } from "@/lib/periodo";
 
 // Define the deal type based on the new flat API response
@@ -621,7 +620,6 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-1 flex-col gap-1">
       <div className="flex items-center gap-2">
-        <SidebarTrigger />
         <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
       </div>
 

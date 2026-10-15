@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/Logo";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
@@ -29,10 +30,15 @@ import { ExternalLink } from "lucide-react";
  */
 export function SidebarSkeleton() {
   return (
-    <Sidebar>
-      <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3">
-        <Logo className="h-14 w-max mb-6" />
-        <ThemeToggle />
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
+        <div className="flex w-full items-start justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Logo className="h-14 w-max mb-6 group-data-[collapsible=icon]:hidden" />
+          <SidebarToggle />
+        </div>
+        <div className="group-data-[collapsible=icon]:hidden">
+          <ThemeToggle />
+        </div>
         <Button
           onClick={() =>
             window.open(
@@ -42,7 +48,7 @@ export function SidebarSkeleton() {
           }
           variant="outline"
           size="sm"
-          className="flex items-center gap-1.5 cursor-pointer w-full"
+          className="flex items-center gap-1.5 cursor-pointer w-full group-data-[collapsible=icon]:hidden"
         >
           <ExternalLink className="h-3 w-3" />
           <span className="text-xs">Banco de Imagens</span>
