@@ -43,6 +43,7 @@ import {
 } from "./ghl-actions";
 import { notifyHandoffNow } from "./alerts-send";
 import { escalationAvailability } from "./hours";
+import { isImageTooLargeError, withLowDetailImages } from "./images";
 import { findCurrentOpportunity } from "./opportunity";
 import { loadActiveRules } from "./rules";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
@@ -330,8 +331,8 @@ export function dryRunActions(): SellerActions {
 }
 
 export function makeCallModel(instructions: string): CallModel {
-  return async (input) => {
-    const response = await openai.responses.create({
+  const create = (input: unknown[]) =>
+    openai.responses.create({
       model: AI_SELLER_MODEL,
       instructions,
       input: input as ResponseInput,
@@ -343,6 +344,17 @@ export function makeCallModel(instructions: string): CallModel {
       include: ["reasoning.encrypted_content"],
       max_output_tokens: 6000,
     });
+  return async (input) => {
+    let response: Awaited<ReturnType<typeof create>>;
+    try {
+      response = await create(input);
+    } catch (err) {
+      // Imagem grande demais para o modelo: refaz com as imagens em baixa resolução (ver images.ts).
+      const lowered = isImageTooLargeError(err) ? withLowDetailImages(input) : null;
+      if (!lowered) throw err;
+      console.warn("IA vendedora: imagem grande demais; refazendo em baixa resolução", describe(err));
+      response = await create(lowered);
+    }
     const functionCalls = response.output
       .filter((item): item is ResponseFunctionToolCall => item.type === "function_call")
       .map((item) => ({ call_id: item.call_id, name: item.name, arguments: item.arguments }));
