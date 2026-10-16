@@ -1,7 +1,8 @@
 import "server-only";
 
 import { fetchGhlContactById, fetchGhlLocationUsers } from "@/lib/ghl/api";
-import { dashboardUserIdForGhlUser, notifyUsers, ownerUserIds } from "@/lib/notifications/notify-users";
+import { dashboardUserIdForGhlUser, notifyUsers } from "@/lib/notifications/notify-users";
+import { camiAdminUserIds } from "./admin-access";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import {
   buildDailySummary,
@@ -143,7 +144,7 @@ export async function sendHandoffAlerts(
 
   const ghlUsers = await loadGhlUsers();
   const cache = new Map<string, string | null>();
-  const owners = await ownerUserIds();
+  const owners = await camiAdminUserIds();
   let aviso = 0;
   let pessoa = 0;
   let owner = 0;
@@ -216,7 +217,7 @@ export async function sendDailySummary(): Promise<{ enviado: boolean; motivo?: s
     escalationName: payload.settings.escalationName,
   });
   if (!summary) return { enviado: false, motivo: "sem atividade hoje" };
-  const owners = await ownerUserIds();
+  const owners = await camiAdminUserIds();
   if (!owners.length) return { enviado: false, motivo: "nenhum owner" };
   await notifyUsers({ userIds: owners, title: summary.title, message: summary.message, url: "/cami" });
   return { enviado: true };

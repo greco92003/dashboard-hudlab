@@ -13,7 +13,6 @@ import { CamiOverview } from "@/components/cami/overview";
 import { CamiAnnex } from "@/components/cami/annex";
 import { ESTADO_LABEL, fmtDateTime } from "@/components/cami/format";
 import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
-import { usePermissions } from "@/hooks/usePermissions";
 import type { ConversationItem, OverviewPayload } from "@/lib/ghl/ai-seller/intel-load";
 import type { Periodo } from "@/lib/ghl/ai-seller/intel";
 import { fmtVigencia, promocaoAtiva } from "@/lib/ghl/ai-seller/vigentes";
@@ -38,9 +37,8 @@ export default function CamiIntelligencePage() {
     },
     { history: "replace" },
   );
-  const { isOwner } = usePermissions();
 
-  const [overview, setOverview] = useState<OverviewPayload | null>(null);
+  const [overview, setOverview] = useState<(OverviewPayload & { podeAdministrar?: boolean }) | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
@@ -200,7 +198,7 @@ export default function CamiIntelligencePage() {
           <CamiConversations
             items={conversations}
             loading={conversationsLoading}
-            isOwner={isOwner}
+            isOwner={overview?.podeAdministrar === true}
             escalationName={settings?.escalationName ?? "Schay"}
             openId={conversa}
             onOpenChange={(id) => void setRoute({ conversa: id })}

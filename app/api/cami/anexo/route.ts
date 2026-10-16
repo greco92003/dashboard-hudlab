@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
+import { isCamiAdmin } from "@/lib/ghl/ai-seller/admin-shape";
 import { loadAnnexPage } from "@/lib/ghl/ai-seller/annex";
 import { nextReviewLabel } from "@/lib/ghl/ai-seller/feedback-shape";
 
@@ -11,7 +12,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ...(await loadAnnexPage()),
-        podeAprovar: access.profile?.role === "owner",
+        podeAprovar: isCamiAdmin(access.profile?.role, access.user.email),
         proximaRevisao: nextReviewLabel(Date.now()),
       },
       { headers: { "Cache-Control": "no-store" } },

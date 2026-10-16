@@ -1,7 +1,9 @@
 import "server-only";
 
 import { fetchGhlLocationUsers } from "@/lib/ghl/api";
-import { dashboardUserIdForGhlUser, notifyUsers, ownerUserIds } from "@/lib/notifications/notify-users";
+import { dashboardUserIdForGhlUser, notifyUsers } from "@/lib/notifications/notify-users";
+import { camiAdminUserIds } from "./admin-access";
+import { isCamiAdmin } from "./admin-shape";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { escalationUserId } from "./config";
 import { FEEDBACK_ATALHOS, type FeedbackInput } from "./feedback-shape";
@@ -33,9 +35,13 @@ async function escalationDashboardUserId(): Promise<string | null> {
   return dashboardUserIdForGhlUser(users.find((u) => u.id === ghlId));
 }
 
-/** Ensina a Cami: o owner e quem recebe as passagens (hoje a Schay). */
-export async function canGiveFeedback(userId: string, role: string | null | undefined): Promise<boolean> {
-  if (role === "owner") return true;
+/** Ensina a Cami: quem administra a Cami e quem recebe as passagens (hoje a Schay). */
+export async function canGiveFeedback(
+  userId: string,
+  role: string | null | undefined,
+  email: string | null | undefined,
+): Promise<boolean> {
+  if (isCamiAdmin(role, email)) return true;
   return (await escalationDashboardUserId()) === userId;
 }
 
@@ -97,7 +103,7 @@ export async function notifyUrgentFeedback(input: {
   contactName: string | null;
   userId: string;
 }): Promise<void> {
-  const owners = (await ownerUserIds()).filter((id) => id !== input.userId);
+  const owners = (await camiAdminUserIds()).filter((id) => id !== input.userId);
   if (!owners.length) return;
   const atalhos = input.feedback.atalhos
     .map((id) => FEEDBACK_ATALHOS.find((a) => a.id === id)?.label)

@@ -15,8 +15,8 @@ export async function POST(
   const { opportunityId } = await params;
 
   try {
-    if (!(await canGiveFeedback(access.user.id, access.profile?.role))) {
-      return NextResponse.json({ error: "Só o dono e quem recebe as passagens dão feedback para a Cami" }, { status: 403 });
+    if (!(await canGiveFeedback(access.user.id, access.profile?.role, access.user.email))) {
+      return NextResponse.json({ error: "Só quem administra a Cami e quem recebe as passagens dão feedback" }, { status: 403 });
     }
     const valid = validateFeedbackInput(await request.json().catch(() => null));
     if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
