@@ -45,7 +45,7 @@ import { notifyHandoffNow } from "./alerts-send";
 import { escalationAvailability } from "./hours";
 import { isImageTooLargeError, withLowDetailImages } from "./images";
 import { findCurrentOpportunity } from "./opportunity";
-import { loadActiveRules } from "./rules";
+import { loadActiveAnnex } from "./annex-store";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
 import { buildContextText, buildSellerInstructions } from "./prompt";
 import {
@@ -604,7 +604,7 @@ async function respondToContactUnsafe(
       { role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] },
     ],
     callModel: makeCallModel(
-      buildSellerInstructions({ persona, escalationName: settings.escalationName, rules: await loadActiveRules() }),
+      buildSellerInstructions({ persona, escalationName: settings.escalationName, anexo: await loadActiveAnnex() }),
     ),
     executeTool: (call) => executeTool(call, actions),
     maxSteps: MAX_AGENT_STEPS,

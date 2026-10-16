@@ -2,8 +2,8 @@ import "server-only";
 
 import OpenAI from "openai";
 import type { AuditorResult } from "@/lib/ghl/sales-agent/agent";
-import { loadActiveRules, type Reference } from "@/lib/ghl/ai-seller/rules";
-import type { SnapshotMessage } from "@/lib/ghl/ai-seller/rules-shape";
+import type { Reference, SnapshotMessage } from "@/lib/ghl/ai-seller/annex-shape";
+import { loadActiveAnnex } from "@/lib/ghl/ai-seller/annex-store";
 import { loadSellerSettings } from "@/lib/ghl/ai-seller/settings";
 import { simulateReply } from "@/lib/ghl/ai-seller/simulate";
 import type { Mission } from "./missions";
@@ -95,7 +95,6 @@ export async function compareWithCami(
   const reference: Reference = {
     id: "treino",
     nome: mission?.titulo ?? "Treino",
-    boaResposta: null,
     contactId: "treino",
     messages,
     context: {
@@ -106,12 +105,11 @@ export async function compareWithCami(
       crmValor: null,
       at: messages[messages.length - 1].dateAdded,
     },
-    createdAt: new Date().toISOString(),
   };
 
   try {
-    const [rules, settings] = await Promise.all([loadActiveRules(), loadSellerSettings()]);
-    const reply = await simulateReply(reference, rules, settings);
+    const [anexo, settings] = await Promise.all([loadActiveAnnex(), loadSellerSettings()]);
+    const reply = await simulateReply(reference, anexo, settings);
     return {
       cliente: cut.cliente,
       vendedor: cut.vendedor,

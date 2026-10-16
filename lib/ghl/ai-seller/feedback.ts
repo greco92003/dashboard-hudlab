@@ -88,9 +88,33 @@ async function authorName(userId: string): Promise<string | null> {
 }
 
 /**
- * Guarda o feedback. Urgente avisa o owner na hora (push), sem esperar a
- * revisão de segunda.
+ * Push simples de feedback urgente para o dono: só quando a revisão urgente
+ * não pôde ser gerada (ela mesma já avisa quando fica pronta).
  */
+export async function notifyUrgentFeedback(input: {
+  feedback: Feedback;
+  opportunityId: string;
+  contactName: string | null;
+  userId: string;
+}): Promise<void> {
+  const owners = (await ownerUserIds()).filter((id) => id !== input.userId);
+  if (!owners.length) return;
+  const atalhos = input.feedback.atalhos
+    .map((id) => FEEDBACK_ATALHOS.find((a) => a.id === id)?.label)
+    .filter(Boolean)
+    .join(", ");
+  const corpo = input.feedback.texto || atalhos;
+  await notifyUsers({
+    userIds: owners,
+    title: "Feedback urgente sobre a Cami",
+    message: `${input.feedback.autor} sobre ${input.contactName || "um cliente"}: ${corpo.length > 160 ? `${corpo.slice(0, 159)}…` : corpo}`,
+    type: "warning",
+    url: `/cami?tab=conversas&conversa=${encodeURIComponent(input.opportunityId)}`,
+    data: { opportunityId: input.opportunityId, feedbackId: input.feedback.id },
+  });
+}
+
+/** Guarda o feedback (pendente para a próxima revisão do anexo). */
 export async function createFeedback(input: FeedbackInput & {
   opportunityId: string;
   contactId: string;
@@ -114,25 +138,5 @@ export async function createFeedback(input: FeedbackInput & {
     .select("*")
     .single();
   if (error) throw new Error(`ai_seller_feedback: ${error.message}`);
-  const feedback = toFeedback(data);
-
-  if (input.urgente) {
-    const owners = (await ownerUserIds()).filter((id) => id !== input.userId);
-    if (owners.length) {
-      const atalhos = input.atalhos
-        .map((id) => FEEDBACK_ATALHOS.find((a) => a.id === id)?.label)
-        .filter(Boolean)
-        .join(", ");
-      const corpo = input.texto || atalhos;
-      await notifyUsers({
-        userIds: owners,
-        title: "Feedback urgente sobre a Cami",
-        message: `${autor ?? "Alguém do time"} sobre ${input.contactName || "um cliente"}: ${corpo.length > 160 ? `${corpo.slice(0, 159)}…` : corpo}`,
-        type: "warning",
-        url: `/cami?tab=conversas&conversa=${encodeURIComponent(input.opportunityId)}`,
-        data: { opportunityId: input.opportunityId, feedbackId: feedback.id },
-      });
-    }
-  }
-  return feedback;
+  return toFeedback(data);
 }

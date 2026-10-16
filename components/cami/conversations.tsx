@@ -203,7 +203,7 @@ function FeedbackForm({
       if (!res.ok) throw new Error(data.error || "Não foi possível guardar");
       toast.success(
         urgente
-          ? "Feedback urgente enviado ao dono"
+          ? "Feedback urgente guardado: a revisão do anexo sai em instantes para o dono aprovar"
           : `Feedback guardado · entra na revisão de segunda, ${data.proximaRevisao ?? proximaRevisao} (${data.pendentes} na fila)`,
       );
       onSaved(data.feedback);
