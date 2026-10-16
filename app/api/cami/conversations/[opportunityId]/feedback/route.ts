@@ -1,0 +1,48 @@
+import { NextResponse } from "next/server";
+import { requireApprovedUser } from "@/lib/security/route-guards";
+import { createSupabaseServerForSync } from "@/lib/supabase/server";
+import { canGiveFeedback, createFeedback, pendingFeedbackCount } from "@/lib/ghl/ai-seller/feedback";
+import { nextReviewLabel, validateFeedbackInput } from "@/lib/ghl/ai-seller/feedback-shape";
+
+// Feedback sobre um atendimento da Cami: o owner e quem recebe as passagens.
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ opportunityId: string }> },
+) {
+  const access = await requireApprovedUser();
+  if (!access.ok) return access.response;
+  const { opportunityId } = await params;
+
+  try {
+    if (!(await canGiveFeedback(access.user.id, access.profile?.role))) {
+      return NextResponse.json({ error: "Só o dono e quem recebe as passagens dão feedback para a Cami" }, { status: 403 });
+    }
+    const valid = validateFeedbackInput(await request.json().catch(() => null));
+    if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
+
+    const supabase = await createSupabaseServerForSync();
+    const { data: conv, error } = await supabase
+      .from("ai_seller_conversations")
+      .select("contact_id, contact_name")
+      .eq("opportunity_id", opportunityId)
+      .maybeSingle();
+    if (error) throw new Error(`ai_seller_conversations: ${error.message}`);
+    if (!conv) return NextResponse.json({ error: "Atendimento não encontrado" }, { status: 404 });
+
+    const feedback = await createFeedback({
+      ...valid.value,
+      opportunityId,
+      contactId: conv.contact_id as string,
+      contactName: (conv.contact_name as string) || null,
+      userId: access.user.id,
+    });
+    return NextResponse.json({
+      feedback,
+      pendentes: await pendingFeedbackCount(),
+      proximaRevisao: nextReviewLabel(Date.now()),
+    });
+  } catch (error) {
+    console.error("cami feedback error:", { opportunityId, error });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro interno" }, { status: 500 });
+  }
+}

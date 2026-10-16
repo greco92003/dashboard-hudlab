@@ -15,6 +15,9 @@ import type { SellerSettings } from "./settings";
 
 const HANDOFF_ALERT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const CONVERSAS_URL = "/cami?tab=conversas";
+/** Toque no push abre o atendimento, quando a passagem sabe a oportunidade. */
+const conversaUrl = (opportunityId: string | null | undefined) =>
+  opportunityId ? `${CONVERSAS_URL}&conversa=${encodeURIComponent(opportunityId)}` : CONVERSAS_URL;
 
 const MOTIVO: Record<string, string> = {
   pronto_para_pagar: "pronto para pagar",
@@ -52,6 +55,7 @@ async function loadGhlUsers(): Promise<GhlUsers> {
 interface HandoffForNotice {
   id: string;
   contact_id: string;
+  opportunity_id: string | null;
   motivo: string;
   resumo: string | null;
   to_user_id: string | null;
@@ -78,7 +82,7 @@ async function sendNotice(
     title,
     message,
     type: "warning",
-    url: CONVERSAS_URL,
+    url: conversaUrl(h.opportunity_id),
     data: { contactId: h.contact_id, handoffId: h.id },
   });
   return true;
@@ -122,7 +126,7 @@ export async function sendHandoffAlerts(
   const supabase = await createSupabaseServerForSync();
   const { data, error } = await supabase
     .from("ai_seller_handoffs")
-    .select("id, contact_id, motivo, resumo, to_user_id, escalated_at, answered_at, notified_at, alerted_at, owner_alerted_at")
+    .select("id, contact_id, opportunity_id, motivo, resumo, to_user_id, escalated_at, answered_at, notified_at, alerted_at, owner_alerted_at")
     .is("answered_at", null)
     .gte("escalated_at", new Date(now - HANDOFF_ALERT_WINDOW_MS).toISOString());
   if (error) throw new Error(`ai_seller_handoffs: ${error.message}`);
@@ -171,7 +175,7 @@ export async function sendHandoffAlerts(
           title: "Cliente esperando sua resposta",
           message: `${nome ?? "Um cliente"} espera há ${espera} úteis (${motivo}). A Cami passou o atendimento para você.`,
           type: "warning",
-          url: CONVERSAS_URL,
+          url: conversaUrl(h.opportunity_id),
           data: { contactId: h.contact_id, handoffId: h.id },
         });
         pessoa++;
@@ -187,7 +191,7 @@ export async function sendHandoffAlerts(
         title: "Passagem da Cami sem resposta",
         message: `${nome ?? "Um cliente"} espera há ${espera} úteis (${motivo}) e ninguém do time respondeu ainda.`,
         type: "warning",
-        url: CONVERSAS_URL,
+        url: conversaUrl(h.opportunity_id),
         data: { contactId: h.contact_id, handoffId: h.id },
       });
       owner++;
