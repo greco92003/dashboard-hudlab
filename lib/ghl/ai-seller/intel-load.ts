@@ -1,7 +1,9 @@
 import "server-only";
 
+import { getNegotiationTranscript } from "@/lib/ghl/negotiation-conversations";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { fetchAllSupabaseRows } from "@/lib/supabase-pagination";
+import { buildConversationView, type ConversaItem } from "./feedback-shape";
 import {
   computeOverview,
   needsReview,
@@ -193,9 +195,28 @@ export interface Promessa {
 }
 
 export interface ConversationDetail {
+  contactId: string;
+  /** A conversa do WhatsApp como no celular; null se o GHL não respondeu. */
+  conversa: ConversaItem[] | null;
   runs: RunDetail[];
   promessas: Promessa[];
   passagem: { motivo: string; resumo: string | null; escalatedAt: string; answeredAt: string | null } | null;
+}
+
+/** Conversa completa do contato, com as mensagens da Cami marcadas. Nunca lança. */
+async function loadConversa(supabase: Supabase, contactId: string): Promise<ConversaItem[] | null> {
+  try {
+    const [transcript, { data: runs, error }] = await Promise.all([
+      getNegotiationTranscript(contactId),
+      supabase.from("ai_seller_runs").select("sent_message_ids").eq("contact_id", contactId),
+    ]);
+    if (error) throw new Error(error.message);
+    const camiIds = new Set((runs ?? []).flatMap((r) => (r.sent_message_ids as string[] | null) ?? []));
+    return buildConversationView(transcript.messages, camiIds);
+  } catch (err) {
+    console.error("CAMI Intelligence: conversa não lida no GHL", { contactId, err });
+    return null;
+  }
 }
 
 /** Linha do tempo das rodadas da Cami com o cliente, desde a entrada, e o que ela prometeu. */
@@ -209,7 +230,7 @@ export async function loadConversationDetail(opportunityId: string): Promise<Con
   if (error) throw new Error(`ai_seller_conversations: ${error.message}`);
   if (!conv) return null;
 
-  const [{ data: runs, error: runsError }, { data: handoff, error: handoffError }] = await Promise.all([
+  const [{ data: runs, error: runsError }, { data: handoff, error: handoffError }, conversa] = await Promise.all([
     supabase
       .from("ai_seller_runs")
       .select("triggered_at, decision, escalation_reason, latency_ms, usage, tool_calls, client_message_at, replied_at, error")
@@ -225,6 +246,7 @@ export async function loadConversationDetail(opportunityId: string): Promise<Con
       .order("escalated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    loadConversa(supabase, conv.contact_id),
   ]);
   if (runsError) throw new Error(`ai_seller_runs: ${runsError.message}`);
   if (handoffError) throw new Error(`ai_seller_handoffs: ${handoffError.message}`);
@@ -264,6 +286,8 @@ export async function loadConversationDetail(opportunityId: string): Promise<Con
   });
 
   return {
+    contactId: conv.contact_id,
+    conversa,
     runs: details,
     promessas,
     passagem: handoff

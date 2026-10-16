@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { parseAsStringLiteral, useQueryStates } from "nuqs";
+import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { Bot, Gauge, Inbox, ListChecks, Loader2, MessagesSquare, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CamiControl } from "@/components/cami/control";
 import { CamiConversations } from "@/components/cami/conversations";
 import { CamiOverview } from "@/components/cami/overview";
-import { CamiRules, type RuleDraft } from "@/components/cami/rules";
+import { CamiRules } from "@/components/cami/rules";
 import { ESTADO_LABEL, fmtDateTime } from "@/components/cami/format";
 import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -26,12 +26,15 @@ const PERIODOS: Array<{ id: Periodo; label: string }> = [
   { id: "tudo", label: "Desde o lançamento" },
 ];
 const PERIODO_IDS = PERIODOS.map((p) => p.id);
+const noop = () => {};
 
 export default function CamiIntelligencePage() {
-  const [{ tab, periodo }, setRoute] = useQueryStates(
+  const [{ tab, periodo, conversa }, setRoute] = useQueryStates(
     {
       tab: parseAsStringLiteral(TABS).withDefault("visao"),
       periodo: parseAsStringLiteral(PERIODO_IDS).withDefault("7d"),
+      // Atendimento aberto (link de push: /cami?tab=conversas&conversa=<oportunidade>).
+      conversa: parseAsString,
     },
     { history: "replace" },
   );
@@ -42,8 +45,6 @@ export default function CamiIntelligencePage() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [ruleDraft, setRuleDraft] = useState<RuleDraft | null>(null);
-  const clearDraft = useCallback(() => setRuleDraft(null), []);
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -195,15 +196,13 @@ export default function CamiIntelligencePage() {
             loading={conversationsLoading}
             isOwner={isOwner}
             escalationName={settings?.escalationName ?? "Schay"}
+            openId={conversa}
+            onOpenChange={(id) => void setRoute({ conversa: id })}
             onReviewed={() => void loadConversations()}
-            onCorrect={(item) => {
-              setRuleDraft({ texto: "", contactId: item.contactId, contactName: item.contactName });
-              void setRoute({ tab: "regras" });
-            }}
           />
         </TabsContent>
         <TabsContent value="regras" className="mt-4">
-          <CamiRules draft={ruleDraft} onDraftUsed={clearDraft} />
+          <CamiRules draft={null} onDraftUsed={noop} />
         </TabsContent>
         <TabsContent value="nao-lidas" className="mt-4">
           <UnreadInbox />
