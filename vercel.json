@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/arena-lembrete",
       "schedule": "0 18 * * 1-5"
+    },
+    {
+      "path": "/api/cron/cami-anexo-semanal",
+      "schedule": "30 11 * * 1"
     }
   ],
   "functions": {
@@ -47,11 +51,14 @@
     "app/api/cami/refresh/route.ts": {
       "maxDuration": 300
     },
-    "app/api/cami/rules/test/route.ts": {
+    "app/api/cami/anexo/gerar/route.ts": {
       "maxDuration": 300
     },
-    "app/api/cami/references/route.ts": {
-      "maxDuration": 60
+    "app/api/cron/cami-anexo-semanal/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cami/conversations/[opportunityId]/feedback/route.ts": {
+      "maxDuration": 300
     },
     "app/api/cron/evaluate-negotiations/route.ts": {
       "maxDuration": 300
