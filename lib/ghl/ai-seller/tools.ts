@@ -6,14 +6,9 @@ import {
   type AiMovableStage,
   type ModelEscalationReason,
 } from "./config";
-import {
-  hasFreeShipping,
-  MIN_PARES,
-  roundMoney,
-  subtotalForPares,
-  unitPriceForPares,
-} from "./pricing";
+import { hasFreeShipping, MIN_PARES, roundMoney } from "./pricing";
 import type { FunctionCall, SellerActions, ToolExecution } from "./types";
+import { fmtVigencia, precoComPromocao, type Promocao } from "./vigentes";
 
 function objectSchema(properties: Record<string, unknown>) {
   return {
@@ -130,6 +125,8 @@ function parseArgs(raw: string): Record<string, unknown> | null {
 export async function executeTool(
   call: FunctionCall,
   actions: SellerActions,
+  /** Promoção que vale agora (Controle): o orçamento já sai com o desconto. */
+  ctx: { promocao?: Promocao | null } = {},
 ): Promise<ToolExecution> {
   const args = parseArgs(call.arguments);
   if (!args) return erro("argumentos inválidos");
@@ -198,11 +195,11 @@ export async function executeTool(
           instrucao: `Pedidos de ${LARGE_ORDER_PARES} pares ou mais vão para uma pessoa do time: use escalar_para_humano com motivo pedido_grande.`,
         });
       }
-      const unitario = unitPriceForPares(pares);
-      const subtotal = subtotalForPares(pares);
-      if (unitario == null || subtotal == null) {
+      const preco = precoComPromocao(pares, ctx.promocao ?? null);
+      if (preco == null) {
         return ok({ erro: "abaixo_do_minimo", minimo: MIN_PARES });
       }
+      const { unitario, subtotal } = preco;
       const cep = typeof args.cep === "string" && args.cep.trim() ? args.cep.trim() : null;
       const freteGratis = hasFreeShipping(pares);
       const frete = freteGratis
@@ -218,6 +215,16 @@ export async function executeTool(
         frete,
         frete_gratis: freteGratis,
         total: frete == null ? null : roundMoney(subtotal + frete),
+        promocao:
+          preco.aplicada && ctx.promocao
+            ? {
+                nome: ctx.promocao.nome,
+                desconto_pct: ctx.promocao.descontoPct,
+                valida_ate: fmtVigencia(ctx.promocao.fim),
+                valor_unitario_sem_promocao: preco.unitarioCheio,
+                subtotal_sem_promocao: preco.subtotalCheio,
+              }
+            : null,
         observacao:
           frete == null
             ? cep

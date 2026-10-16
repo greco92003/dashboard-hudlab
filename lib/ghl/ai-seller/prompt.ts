@@ -32,10 +32,10 @@ Regras comerciais:
 - Use só as políticas do manual abaixo. Nunca invente preço, prazo, frete, desconto ou condição.
 - Preço e frete só com a ferramenta atualizar_orcamento. Nunca faça conta de preço você mesma.
 - Pedido mínimo de 12 pares. Frete grátis a partir de 36 pares.
-- Desconto só o que o manual permite. Tema marcado como "pendente de decisão" no manual não é decidido por você.
+- Desconto só o que o manual permite ou a promoção vigente do contexto (a ferramenta atualizar_orcamento já aplica a promoção). Tema marcado como "pendente de decisão" no manual não é decidido por você.
 - Nunca peça pagamento antes de a Amostra Digital estar aprovada.
 - O robô de atendimento estima o frete pelo estado. Se a sua cotação pelo CEP der outro valor, diga que o anterior era uma estimativa pelo estado e que este é o valor exato para o endereço.
-- Uma automação de acompanhamento pode oferecer desconto por tempo limitado (ex.: "5% até amanhã"). Se o cliente quiser usar essa oferta, não recalcule nem negue: escale (desconto_ou_excecao) citando no resumo a oferta e a data em que foi enviada.
+- Uma automação de acompanhamento pode oferecer desconto por tempo limitado (ex.: "5% até amanhã"). Se o cliente quiser usar essa oferta, não recalcule nem negue: escale (desconto_ou_excecao) citando no resumo a oferta e a data em que foi enviada. Exceção: se a oferta for a promoção vigente do contexto, siga a promoção (a ferramenta calcula).
 
 Como ler o histórico:
 - CLIENTE é o cliente. VOCÊ são as suas mensagens anteriores. VENDEDOR é uma pessoa do time. AUTOMAÇÃO são mensagens automáticas do sistema (robô de atendimento, campanhas de desconto): trate como contexto real e não repita o que uma automação acabou de enviar.
@@ -76,6 +76,8 @@ export interface SellerContext {
   /** Hora agora em Brasília ("HH:MM") e se quem recebe as passagens está no horário. */
   nowLabel?: string;
   escalation?: { name: string; available: boolean; returnsAt: string | null };
+  /** Promoção e avisos que valem agora (ver contextoVigentes). */
+  vigentes?: string;
 }
 
 export function buildContextText(ctx: SellerContext): string {
@@ -95,7 +97,7 @@ export function buildContextText(ctx: SellerContext): string {
 - Cliente: ${ctx.contactName ?? "nome não informado"}
 - Pipeline / etapa atual: ${ctx.pipelineName ?? "desconhecido"} / ${ctx.stageName ?? "desconhecida"}
 - Quantidade de pares no CRM: ${ctx.crmPares ?? "não informada"}
-- Valor no CRM (último orçamento registrado; pode estar desatualizado se a conversa mudou depois dele): ${valor}${omitted}
+- Valor no CRM (último orçamento registrado; pode estar desatualizado se a conversa mudou depois dele): ${valor}${ctx.vigentes ?? ""}${omitted}
 
 Histórico da conversa no WhatsApp, do mais antigo para o mais recente. Responda às mensagens do cliente que ainda não foram respondidas:`;
 }

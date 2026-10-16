@@ -44,6 +44,7 @@ import {
 import { notifyHandoffNow } from "./alerts-send";
 import { escalationAvailability } from "./hours";
 import { isImageTooLargeError, withLowDetailImages } from "./images";
+import { avisosAtivos, contextoVigentes, promocaoAtiva } from "./vigentes";
 import { findCurrentOpportunity } from "./opportunity";
 import { loadActiveAnnex } from "./annex-store";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
@@ -572,6 +573,8 @@ async function respondToContactUnsafe(
   const stage = pipeline?.stages?.find((s) => s.id === opportunity.pipelineStageId) ?? null;
 
   const availability = escalationAvailability(Date.now(), settings.shifts);
+  // Regras comerciais vigentes (Controle): a promoção entra no orçamento e no contexto só enquanto vale.
+  const promocao = promocaoAtiva(settings.promocao, Date.now());
   const trimmed = trimForSeller(transcript.messages);
   const transcriptParts = await buildTranscriptParts(trimmed.messages, {
     ownMessageIds: history.sentMessageIds,
@@ -591,6 +594,7 @@ async function respondToContactUnsafe(
       available: availability.available,
       returnsAt: availability.returnsAt,
     },
+    vigentes: contextoVigentes(promocao, avisosAtivos(settings.avisos, Date.now())),
   });
 
   const actions = dryRun
@@ -606,7 +610,7 @@ async function respondToContactUnsafe(
     callModel: makeCallModel(
       buildSellerInstructions({ persona, escalationName: settings.escalationName, anexo: await loadActiveAnnex() }),
     ),
-    executeTool: (call) => executeTool(call, actions),
+    executeTool: (call) => executeTool(call, actions, { promocao }),
     maxSteps: MAX_AGENT_STEPS,
     deadlineMs: startedAt + AGENT_DEADLINE_MS,
   });

@@ -16,6 +16,7 @@ import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { ConversationItem, OverviewPayload } from "@/lib/ghl/ai-seller/intel-load";
 import type { Periodo } from "@/lib/ghl/ai-seller/intel";
+import { fmtVigencia, promocaoAtiva } from "@/lib/ghl/ai-seller/vigentes";
 import { cn } from "@/lib/utils";
 
 const TABS = ["visao", "conversas", "anexo", "nao-lidas", "controle"] as const;
@@ -100,6 +101,7 @@ export default function CamiIntelligencePage() {
   };
 
   const settings = overview?.settings;
+  const promoAtiva = promocaoAtiva(settings?.promocao, Date.now());
   const paraRevisar = conversations.filter((c) => c.paraRevisar).length;
   const estadoClass =
     settings?.estado === "ligada"
@@ -129,6 +131,11 @@ export default function CamiIntelligencePage() {
                   · passa para {settings.escalationName}
                 </span>
                 <span>· atualizado {fmtDateTime(overview?.atualizadoEm)}</span>
+                {promoAtiva && (
+                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                    {promoAtiva.nome}: {promoAtiva.descontoPct}% até {fmtVigencia(promoAtiva.fim)}
+                  </Badge>
+                )}
               </>
             ) : (
               <span>Carregando…</span>
