@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/security/route-guards";
+import { requireCamiAdmin } from "@/lib/ghl/ai-seller/admin-access";
 import { generateAnnexDraft } from "@/lib/ghl/ai-seller/annex";
 
 // "Gerar revisão agora": o dono não precisa esperar segunda.
 export async function POST() {
-  const access = await requireRole(["owner"]);
+  const access = await requireCamiAdmin();
   if (!access.ok) return access.response;
   try {
     const rascunho = await generateAnnexDraft("manual");

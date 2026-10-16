@@ -2,7 +2,8 @@ import "server-only";
 
 import OpenAI from "openai";
 import { getNegotiationTranscript, type NegotiationMessage } from "@/lib/ghl/negotiation-conversations";
-import { notifyUsers, ownerUserIds } from "@/lib/notifications/notify-users";
+import { notifyUsers } from "@/lib/notifications/notify-users";
+import { camiAdminUserIds } from "./admin-access";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { ANNEX_INSTRUCTIONS, ANNEX_SCHEMA, buildAnnexInput, type FeedbackForAnnex } from "./annex-prompt";
 import {
@@ -228,7 +229,7 @@ export async function generateAnnexDraft(origem: "semanal" | "urgente" | "manual
   const draft = toAnnex(row);
 
   const stats = annexStats(itens);
-  const owners = await ownerUserIds();
+  const owners = await camiAdminUserIds();
   if (owners.length) {
     await notifyUsers({
       userIds: owners,

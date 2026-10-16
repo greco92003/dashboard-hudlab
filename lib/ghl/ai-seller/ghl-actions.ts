@@ -177,7 +177,12 @@ export async function moveOpportunityForward(
   const targetIndex = stages.findIndex(
     (s) => s.name.trim().toLowerCase() === etapa.toLowerCase(),
   );
-  if (targetIndex < 0) throw new Error(`Etapa "${etapa}" não existe no pipeline Atendimento`);
+  // Etapa renomeada ou removida no GHL: não move, mas a conversa segue (antes isso
+  // virava erro e passava o cliente para humano por falha técnica).
+  if (targetIndex < 0) {
+    console.warn(`IA vendedora: etapa "${etapa}" não existe no pipeline Atendimento; cliente não movido`);
+    return "sem_mudanca";
+  }
   // Etapa atual desconhecida (renomeada ou removida): sem saber a direção, não move.
   if (currentIndex < 0 || currentIndex >= targetIndex) return "sem_mudanca";
 

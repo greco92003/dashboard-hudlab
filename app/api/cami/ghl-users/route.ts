@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/security/route-guards";
+import { requireCamiAdmin } from "@/lib/ghl/ai-seller/admin-access";
 import { fetchGhlLocationUsers } from "@/lib/ghl/api";
 
 // Pessoas do GHL que podem receber as passagens da Cami (Controle, só owner).
 export async function GET() {
-  const access = await requireRole(["owner"]);
+  const access = await requireCamiAdmin();
   if (!access.ok) return access.response;
   try {
     return NextResponse.json({ users: await fetchGhlLocationUsers() });

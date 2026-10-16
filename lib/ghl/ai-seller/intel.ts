@@ -128,11 +128,13 @@ export function summarizeConversation(input: {
 
   const paid = handoff?.motivo === "pronto_para_pagar";
   const rank = opp.stageRank;
+  // Etapa que não existe no pipeline (rank -1, ex.: renomeada no GHL) nunca conta como alcançada.
+  const reached = (target: number) => target >= 0 && rank != null && rank >= target;
   return {
     situacao,
     clientReplied: runs.length > 0,
-    reachedNegociacao: opp.won || paid || (rank != null && rank >= ranks.negociacao),
-    reachedPrioridade: opp.won || paid || (rank != null && rank >= ranks.prioridade),
+    reachedNegociacao: opp.won || paid || reached(ranks.negociacao),
+    reachedPrioridade: opp.won || paid || reached(ranks.prioridade),
     lastClientAt,
     lastCamiAt,
     replies,

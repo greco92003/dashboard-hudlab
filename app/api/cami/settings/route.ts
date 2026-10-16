@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
-import { requireApprovedUser, requireRole } from "@/lib/security/route-guards";
+import { requireApprovedUser } from "@/lib/security/route-guards";
+import { requireCamiAdmin } from "@/lib/ghl/ai-seller/admin-access";
+import { isCamiAdmin } from "@/lib/ghl/ai-seller/admin-shape";
 import { loadSellerSettings } from "@/lib/ghl/ai-seller/settings";
 import { validateSettingsInput } from "@/lib/ghl/ai-seller/settings-shape";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 
-// Controle da Cami. Todo o time vê; só o owner muda.
+// Controle da Cami. Todo o time vê; só quem administra a Cami muda.
 export async function GET() {
   const access = await requireApprovedUser();
   if (!access.ok) return access.response;
   return NextResponse.json(
-    { settings: await loadSellerSettings(), podeEditar: access.profile?.role === "owner" },
+    { settings: await loadSellerSettings(), podeEditar: isCamiAdmin(access.profile?.role, access.user.email) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
 
 export async function PUT(request: Request) {
-  const access = await requireRole(["owner"]);
+  const access = await requireCamiAdmin();
   if (!access.ok) return access.response;
 
   const validated = validateSettingsInput(await request.json().catch(() => null));

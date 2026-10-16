@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/security/route-guards";
+import { requireCamiAdmin } from "@/lib/ghl/ai-seller/admin-access";
 import { markReviewed } from "@/lib/ghl/ai-seller/intel-load";
 
 // "Revisado": só o owner corrige e revisa a Cami.
@@ -7,7 +7,7 @@ export async function POST(
   _request: Request,
   { params }: { params: Promise<{ opportunityId: string }> },
 ) {
-  const access = await requireRole(["owner"]);
+  const access = await requireCamiAdmin();
   if (!access.ok) return access.response;
 
   const { opportunityId } = await params;

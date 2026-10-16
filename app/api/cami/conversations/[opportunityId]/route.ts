@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 import { loadConversationDetail } from "@/lib/ghl/ai-seller/intel-load";
+import { isCamiAdmin } from "@/lib/ghl/ai-seller/admin-shape";
 import { canGiveFeedback, listFeedback } from "@/lib/ghl/ai-seller/feedback";
 import { nextReviewLabel } from "@/lib/ghl/ai-seller/feedback-shape";
 
@@ -18,11 +19,17 @@ export async function GET(
     const [detail, feedbacks, podeDarFeedback] = await Promise.all([
       loadConversationDetail(opportunityId),
       listFeedback(opportunityId),
-      canGiveFeedback(access.user.id, access.profile?.role),
+      canGiveFeedback(access.user.id, access.profile?.role, access.user.email),
     ]);
     if (!detail) return NextResponse.json({ error: "Conversa não encontrada" }, { status: 404 });
     return NextResponse.json(
-      { ...detail, feedbacks, podeDarFeedback, proximaRevisao: nextReviewLabel(Date.now()) },
+      {
+        ...detail,
+        feedbacks,
+        podeDarFeedback,
+        podeRevisar: isCamiAdmin(access.profile?.role, access.user.email),
+        proximaRevisao: nextReviewLabel(Date.now()),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
