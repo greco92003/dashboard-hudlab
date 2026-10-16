@@ -10,6 +10,7 @@ import { dryRunActions, makeCallModel } from "./run";
 import type { SellerSettings } from "./settings";
 import { executeTool } from "./tools";
 import { trimForSeller } from "./transcript";
+import { avisosAtivos, contextoVigentes, promocaoAtiva } from "./vigentes";
 
 // Sem trava de tempo do webhook: aqui ninguém espera resposta no WhatsApp.
 const SIMULATION_DEADLINE_MS = 110_000;
@@ -50,6 +51,8 @@ export async function simulateReply(
   const persona = personaName();
   const at = Date.parse(reference.context.at);
   const availability = escalationAvailability(at, settings.shifts);
+  // A simulação vale para hoje: usa a promoção e os avisos vigentes agora.
+  const promocao = promocaoAtiva(settings.promocao, Date.now());
   const trimmed = trimForSeller(reference.messages);
   const transcriptParts = await buildTranscriptParts(trimmed.messages, {
     ownMessageIds: new Set(reference.messages.filter((m) => m.own).map((m) => m.id)),
@@ -65,6 +68,7 @@ export async function simulateReply(
     omittedAutomated: trimmed.omittedAutomated,
     nowLabel: availability.nowLabel,
     escalation: { name: settings.escalationName, available: availability.available, returnsAt: availability.returnsAt },
+    vigentes: contextoVigentes(promocao, avisosAtivos(settings.avisos, Date.now())),
   });
 
   const artChange = simulatedArtChangeStatus(reference.context.stageName);
@@ -72,7 +76,7 @@ export async function simulateReply(
   const result = await runAgentLoop({
     initialInput: [{ role: "user", content: [{ type: "input_text", text: contextText }, ...transcriptParts] }],
     callModel: makeCallModel(buildSellerInstructions({ persona, escalationName: settings.escalationName, anexo })),
-    executeTool: (call) => executeTool(call, actions),
+    executeTool: (call) => executeTool(call, actions, { promocao }),
     maxSteps: MAX_AGENT_STEPS,
     deadlineMs: Date.now() + SIMULATION_DEADLINE_MS,
   });

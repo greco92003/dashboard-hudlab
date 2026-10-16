@@ -16,7 +16,279 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { SellerSettings } from "@/lib/ghl/ai-seller/settings-shape";
+import {
+  fmtVigencia,
+  isoToLocalInput,
+  localInputToIso,
+  precoComPromocao,
+  vigencia,
+  type Aviso,
+  type Promocao,
+  type Vigencia,
+} from "@/lib/ghl/ai-seller/vigentes";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+
+const VIGENCIA: Record<Vigencia, { label: (fim: string, inicio: string) => string; cls: string }> = {
+  agendada: { label: (_f, i) => `Agendada · começa ${fmtVigencia(i)}`, cls: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200" },
+  ativa: { label: (f) => `Ativa até ${fmtVigencia(f)}`, cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  encerrada: { label: (f) => `Encerrada em ${fmtVigencia(f)}`, cls: "text-muted-foreground" },
+};
+
+const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Hora cheia de agora e o último minuto do mês, em Brasília: o padrão de uma promoção nova. */
+function defaultPeriodo(): { inicio: string; fim: string } {
+  const local = new Date(Date.now() - 3 * 3600e3);
+  const p = (n: number) => String(n).padStart(2, "0");
+  const y = local.getUTCFullYear();
+  const m = local.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return {
+    inicio: `${y}-${p(m)}-${p(local.getUTCDate())}T${p(local.getUTCHours())}:00:00-03:00`,
+    fim: `${y}-${p(m)}-${p(lastDay)}T23:59:00-03:00`,
+  };
+}
+
+function DateTimeField({
+  id,
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (iso: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="datetime-local"
+        className="w-52"
+        disabled={disabled}
+        value={isoToLocalInput(value)}
+        onChange={(e) => {
+          const iso = localInputToIso(e.target.value);
+          if (iso) onChange(iso);
+        }}
+      />
+    </div>
+  );
+}
+
+function VigenciaBadge({ item }: { item: { inicio: string; fim: string } }) {
+  const v = vigencia(item, Date.now());
+  return (
+    <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", VIGENCIA[v].cls)}>
+      {VIGENCIA[v].label(item.fim, item.inicio)}
+    </span>
+  );
+}
+
+function VigentesCard({
+  promocao,
+  avisos,
+  canEdit,
+  saving,
+  onPromocao,
+  onAvisos,
+  onSave,
+  onRemovePromocao,
+}: {
+  promocao: Promocao | null;
+  avisos: Aviso[];
+  canEdit: boolean;
+  saving: boolean;
+  onPromocao: (p: Promocao | null) => void;
+  onAvisos: (a: Aviso[]) => void;
+  onSave: () => void;
+  onRemovePromocao: () => void;
+}) {
+  const exemploPares = Math.max(12, promocao?.minPares ?? 12);
+  const preco = promocao ? precoComPromocao(exemploPares, promocao) : null;
+  const setP = <K extends keyof Promocao>(k: K, v: Promocao[K]) => promocao && onPromocao({ ...promocao, [k]: v });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Regras comerciais vigentes</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Valem só no período e não mudam o jeito de atender da Cami. Preço, frete e prazos fixos continuam no manual.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Promoção vigente</h3>
+              <p className="text-xs text-muted-foreground">Uma por vez. Termina sozinha no fim do período.</p>
+            </div>
+            {promocao && <VigenciaBadge item={promocao} />}
+          </div>
+          {!promocao ? (
+            canEdit ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onPromocao({ nome: "", ...defaultPeriodo(), descontoPct: 5, minPares: 12, texto: "" })}
+              >
+                <Plus className="h-4 w-4" />
+                Criar promoção
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma promoção.</p>
+            )
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="promo-nome">Nome</Label>
+                  <Input
+                    id="promo-nome"
+                    className="w-56"
+                    placeholder="Ex.: Fecha Mês"
+                    disabled={!canEdit}
+                    value={promocao.nome}
+                    onChange={(e) => setP("nome", e.target.value)}
+                  />
+                </div>
+                <DateTimeField id="promo-inicio" label="Começa" value={promocao.inicio} disabled={!canEdit} onChange={(v) => setP("inicio", v)} />
+                <DateTimeField id="promo-fim" label="Termina" value={promocao.fim} disabled={!canEdit} onChange={(v) => setP("fim", v)} />
+                <div className="space-y-1">
+                  <Label htmlFor="promo-desconto">Desconto nos pares (%)</Label>
+                  <Input
+                    id="promo-desconto"
+                    type="number"
+                    step="0.5"
+                    min={0.5}
+                    max={30}
+                    className="w-28"
+                    disabled={!canEdit}
+                    value={promocao.descontoPct}
+                    onChange={(e) => setP("descontoPct", Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="promo-minimo">A partir de (pares)</Label>
+                  <Input
+                    id="promo-minimo"
+                    type="number"
+                    min={12}
+                    className="w-28"
+                    disabled={!canEdit}
+                    value={promocao.minPares}
+                    onChange={(e) => setP("minPares", Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">Sempre acumula com os 5% do PIX, que é desconto pela forma de pagamento.</p>
+              <div className="space-y-1">
+                <Label htmlFor="promo-texto">Como a Cami apresenta (opcional)</Label>
+                <Textarea
+                  id="promo-texto"
+                  rows={2}
+                  disabled={!canEdit}
+                  placeholder="Ex.: Fecha Mês: 5% de desconto nos pares para pedidos fechados até 31/10."
+                  value={promocao.texto}
+                  onChange={(e) => setP("texto", e.target.value)}
+                />
+              </div>
+              {preco && preco.aplicada && (
+                <div className="space-y-0.5 rounded-lg border border-dashed p-3 text-sm">
+                  <p className="text-xs font-semibold text-muted-foreground">No orçamento da Cami ({exemploPares} pares)</p>
+                  <p>
+                    {brl(preco.unitarioCheio)} → <strong>{brl(preco.unitario)}</strong> o par
+                  </p>
+                  <p>
+                    {exemploPares} pares: {brl(preco.subtotalCheio)} → <strong>{brl(preco.subtotal)}</strong> + frete
+                  </p>
+                  <p className="text-xs text-muted-foreground">No PIX, mais 5% de desconto.</p>
+                </div>
+              )}
+              {canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" onClick={onSave} disabled={saving}>
+                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Salvar promoção
+                  </Button>
+                  <Button type="button" variant="outline" onClick={onRemovePromocao} disabled={saving}>
+                    Remover promoção
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Avisos com prazo</h3>
+            <p className="text-xs text-muted-foreground">
+              Mesma ideia, sem desconto. Ex.: &quot;Férias coletivas: prazos de produção contam a partir de 06/01&quot;.
+            </p>
+          </div>
+          {avisos.length === 0 && !canEdit && <p className="text-sm text-muted-foreground">Nenhum aviso.</p>}
+          {avisos.map((a, i) => (
+            <div key={i} className="space-y-3 rounded-lg border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <VigenciaBadge item={a} />
+                {canEdit && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Remover aviso ${i + 1}`}
+                    onClick={() => onAvisos(avisos.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <Input
+                aria-label={`Texto do aviso ${i + 1}`}
+                disabled={!canEdit}
+                value={a.texto}
+                placeholder="O que a Cami precisa saber neste período"
+                onChange={(e) => onAvisos(avisos.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)))}
+              />
+              <div className="flex flex-wrap gap-4">
+                <DateTimeField
+                  id={`aviso-inicio-${i}`}
+                  label="Começa"
+                  value={a.inicio}
+                  disabled={!canEdit}
+                  onChange={(v) => onAvisos(avisos.map((x, j) => (j === i ? { ...x, inicio: v } : x)))}
+                />
+                <DateTimeField
+                  id={`aviso-fim-${i}`}
+                  label="Termina"
+                  value={a.fim}
+                  disabled={!canEdit}
+                  onChange={(v) => onAvisos(avisos.map((x, j) => (j === i ? { ...x, fim: v } : x)))}
+                />
+              </div>
+            </div>
+          ))}
+          {canEdit && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onAvisos([...avisos, { texto: "", ...defaultPeriodo() }])}
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar aviso
+            </Button>
+          )}
+        </section>
+      </CardContent>
+    </Card>
+  );
+}
 
 const ESTADOS: Array<{ id: SellerSettings["estado"]; titulo: string; texto: string }> = [
   { id: "ligada", titulo: "Ligada", texto: "Assume clientes novos na faixa de pares e responde quem já está com ela." },
@@ -67,13 +339,13 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
   const set = <K extends keyof SellerSettings>(key: K, value: SellerSettings[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f));
 
-  const save = async () => {
+  const save = async (next: SellerSettings = form) => {
     setSaving(true);
     try {
       const res = await fetch("/api/cami/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(next),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Não foi possível salvar");
@@ -166,6 +438,22 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
           <span className="text-sm text-muted-foreground pb-2">pares</span>
         </CardContent>
       </Card>
+
+      <VigentesCard
+        promocao={form.promocao}
+        avisos={form.avisos}
+        canEdit={canEdit}
+        saving={saving}
+        onPromocao={(p) => set("promocao", p)}
+        onAvisos={(a) => set("avisos", a)}
+        onSave={() => void save()}
+        onRemovePromocao={() => {
+          // Remover vale na hora: a Cami para de dar o desconto já na próxima resposta.
+          const next = { ...form, promocao: null };
+          setForm(next);
+          void save(next);
+        }}
+      />
 
       <Card>
         <CardHeader>
@@ -345,7 +633,7 @@ export function CamiControl({ onSaved }: { onSaved: () => void }) {
 
       {canEdit && (
         <div className="flex justify-end">
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={() => void save()} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Salvar Controle
           </Button>

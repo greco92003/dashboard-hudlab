@@ -2,6 +2,7 @@
 // código como reserva. Módulo puro.
 import { DEFAULT_ALERTS, type AlertSettings } from "./alerts";
 import { ASSIGN_MAX_PARES, ASSIGN_MIN_PARES, ESCALATION_SHIFTS } from "./config";
+import type { Aviso, Promocao } from "./vigentes";
 
 export type SellerState = "ligada" | "nao_pega_novos" | "desligada";
 export type Shift = readonly [start: string, end: string];
@@ -17,6 +18,9 @@ export interface SellerSettings {
   /** Para estimar o custo: preço do modelo (US$ por milhão de tokens) e dólar. */
   custo: { entradaUsdPorMilhao: number; saidaUsdPorMilhao: number; dolar: number };
   alertas: AlertSettings;
+  /** Regras comerciais vigentes: uma promoção por vez e avisos, cada um com prazo. */
+  promocao: Promocao | null;
+  avisos: Aviso[];
 }
 
 export const DEFAULT_SETTINGS: SellerSettings = {
@@ -28,7 +32,54 @@ export const DEFAULT_SETTINGS: SellerSettings = {
   shifts: ESCALATION_SHIFTS,
   custo: { entradaUsdPorMilhao: 2.5, saidaUsdPorMilhao: 15, dolar: 5.4 },
   alertas: DEFAULT_ALERTS,
+  promocao: null,
+  avisos: [],
 };
+
+const MAX_AVISOS = 10;
+const MAX_DESCONTO_PCT = 30;
+
+const validDate = (s: unknown): s is string => typeof s === "string" && !Number.isNaN(Date.parse(s));
+const trimText = (s: unknown) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim() : "");
+
+/** Promoção válida, ou a explicação do que está errado. */
+function checkPromocao(value: unknown): { ok: true; value: Promocao } | { ok: false; error: string } {
+  if (!value || typeof value !== "object") return { ok: false, error: "Promoção inválida" };
+  const v = value as Record<string, unknown>;
+  const nome = trimText(v.nome);
+  if (nome.length < 2 || nome.length > 60) return { ok: false, error: "Dê um nome à promoção (até 60 caracteres)" };
+  if (!validDate(v.inicio) || !validDate(v.fim)) return { ok: false, error: "Promoção: informe início e fim" };
+  if (Date.parse(v.fim) <= Date.parse(v.inicio)) return { ok: false, error: "Promoção: o fim precisa ser depois do início" };
+  const pct = v.descontoPct;
+  if (typeof pct !== "number" || !Number.isFinite(pct) || pct <= 0 || pct > MAX_DESCONTO_PCT) {
+    return { ok: false, error: `Promoção: desconto entre 0 e ${MAX_DESCONTO_PCT}%` };
+  }
+  if (!Number.isInteger(v.minPares) || (v.minPares as number) < 12) {
+    return { ok: false, error: "Promoção: o mínimo de pares é 12 ou mais" };
+  }
+  const texto = trimText(v.texto);
+  if (texto.length > 300) return { ok: false, error: "Promoção: a frase de apresentação tem até 300 caracteres" };
+  return {
+    ok: true,
+    value: { nome, inicio: v.inicio, fim: v.fim, descontoPct: Math.round(pct * 10) / 10, minPares: v.minPares as number, texto },
+  };
+}
+
+function checkAvisos(value: unknown): { ok: true; value: Aviso[] } | { ok: false; error: string } {
+  if (value == null) return { ok: true, value: [] };
+  if (!Array.isArray(value)) return { ok: false, error: "Avisos inválidos" };
+  if (value.length > MAX_AVISOS) return { ok: false, error: `No máximo ${MAX_AVISOS} avisos` };
+  const avisos: Aviso[] = [];
+  for (const [i, a] of value.entries()) {
+    const o = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+    const texto = trimText(o.texto);
+    if (texto.length < 5 || texto.length > 300) return { ok: false, error: `Aviso ${i + 1}: escreva o aviso (5 a 300 caracteres)` };
+    if (!validDate(o.inicio) || !validDate(o.fim)) return { ok: false, error: `Aviso ${i + 1}: informe início e fim` };
+    if (Date.parse(o.fim) <= Date.parse(o.inicio)) return { ok: false, error: `Aviso ${i + 1}: o fim precisa ser depois do início` };
+    avisos.push({ texto, inicio: o.inicio, fim: o.fim });
+  }
+  return { ok: true, value: avisos };
+}
 
 const validMinutes = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 15 && n <= 24 * 60;
 
@@ -94,6 +145,8 @@ export function normalizeSettings(row: Record<string, unknown> | null | undefine
     shifts: validShifts(row.escalation_shifts) ?? DEFAULT_SETTINGS.shifts,
     custo: validCusto(row.custo) ?? DEFAULT_SETTINGS.custo,
     alertas: validAlertas(row.alertas) ?? DEFAULT_SETTINGS.alertas,
+    promocao: row.promocao ? ((p) => (p.ok ? p.value : null))(checkPromocao(row.promocao)) : null,
+    avisos: ((a) => (a.ok ? a.value : []))(checkAvisos(row.avisos)),
   };
 }
 
@@ -127,6 +180,10 @@ export function validateSettingsInput(
   if (alertas.ownerAposMin < alertas.passagemSemRespostaMin) {
     return { ok: false, error: "O aviso para o dono não pode vir antes do aviso para quem recebe as passagens" };
   }
+  const promocao = b.promocao == null ? null : checkPromocao(b.promocao);
+  if (promocao && !promocao.ok) return { ok: false, error: promocao.error };
+  const avisos = checkAvisos(b.avisos);
+  if (!avisos.ok) return { ok: false, error: avisos.error };
   return {
     ok: true,
     row: {
@@ -138,6 +195,8 @@ export function validateSettingsInput(
       escalation_shifts: shifts,
       custo,
       alertas,
+      promocao: promocao ? promocao.value : null,
+      avisos: avisos.value,
     },
   };
 }
