@@ -11,16 +11,24 @@ import {
   getRecentWhatsappMessages,
   getVendedorForOpportunity,
   searchUnreadWhatsappConversations,
+  type NegotiationMessage,
   type UnreadWhatsappConversation,
 } from "@/lib/ghl/negotiation-conversations";
 import { isGhlWonDeal } from "@/lib/ghl/pipelines";
-import { runCopiloto, runTriage, type CopilotoReport } from "@/lib/ghl/sales-agent/agent";
+import {
+  runCopiloto,
+  runTriage,
+  transcribeAudioAttachment,
+  type CopilotoReport,
+} from "@/lib/ghl/sales-agent/agent";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import {
   cutTranscript,
   isPostSale,
   isWindowOpen,
   lastClientMessageText,
+  recentClientAttachments,
+  withAudioTranscripts,
   type TriageCategory,
 } from "./triage";
 
@@ -73,8 +81,19 @@ async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) =>
   );
 }
 
+/** Áudio recente do cliente transcrito, por mensagem. Anexo que não é áudio ou falha fica de fora. */
+async function transcribeClientAudios(messages: NegotiationMessage[]): Promise<Map<string, string[]>> {
+  const transcripts = new Map<string, string[]>();
+  for (const { messageId, url } of recentClientAttachments(messages)) {
+    const text = await transcribeAudioAttachment(url);
+    if (text) transcripts.set(messageId, [...(transcripts.get(messageId) ?? []), text]);
+  }
+  return transcripts;
+}
+
 interface ExistingRow {
   conversation_id: string;
+  last_message_body: string | null;
   category: TriageCategory | null;
   reason: string | null;
   subject: string | null;
@@ -135,10 +154,21 @@ async function triageConversation(
     refreshed_at: refreshedAt,
   };
 
-  // Classificação já feita sobre esta mesma última mensagem: não gasta de novo.
+  // Classificação já feita sobre esta mesma última mensagem: não gasta de novo
+  // (nem a transcrição do áudio, que ficou guardada no texto).
   if (existing?.category && existing.classified_message_id === lastMessageId) {
-    return { ...row, ...keptClassification(existing), classify_error: null };
+    return {
+      ...row,
+      last_message_body: existing.last_message_body ?? row.last_message_body,
+      ...keptClassification(existing),
+      classify_error: null,
+    };
   }
+
+  // Áudio do cliente vira texto: sem isso a fila mostra "Enviou um anexo" e a triagem classifica às cegas.
+  const cut = cutTranscript(messages);
+  const transcribed = withAudioTranscripts(cut.messages, await transcribeClientAudios(cut.messages));
+  row.last_message_body = lastClientMessageText(transcribed) ?? row.last_message_body;
 
   const won = picked?.won ?? false;
   if (isPostSale({ won, pipelineName, stageName, atendimentoStages: index.atendimentoStages })) {
@@ -148,7 +178,7 @@ async function triageConversation(
       reason: won
         ? `Venda ganha${stageName ? ` (card em ${stageName})` : ""}.`
         : `Pedido já pago: card em ${stageName}.`,
-      subject: lastClientMessageText(messages)?.slice(0, 80) ?? null,
+      subject: (row.last_message_body as string | null)?.slice(0, 80) ?? null,
       classified_message_id: lastMessageId,
       classified_at: new Date().toISOString(),
       classify_error: null,
@@ -156,8 +186,7 @@ async function triageConversation(
   }
 
   try {
-    const cut = cutTranscript(messages);
-    const triage = await runTriage(cut.messages, { etapaCrm: stageName, qtyPares });
+    const triage = await runTriage(transcribed, { etapaCrm: stageName, qtyPares });
     return {
       ...row,
       category: triage.categoria,
@@ -197,7 +226,7 @@ export async function refreshUnreadInbox(): Promise<{ total: number; errors: num
   const { data: existingRows, error: existingError } = ids.length
     ? await supabase
         .from(TABLE)
-        .select("conversation_id, category, reason, subject, classified_message_id, classified_at")
+        .select("conversation_id, last_message_body, category, reason, subject, classified_message_id, classified_at")
         .in("conversation_id", ids)
     : { data: [], error: null };
   if (existingError) throw new Error(`${TABLE}: ${existingError.message}`);

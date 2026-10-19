@@ -127,16 +127,38 @@ async function fetchAttachmentContent(url: string): Promise<AttachmentContent | 
       return { kind: "image", part: { type: "input_image", image_url: dataUrl, detail: "auto" } };
     }
 
-    const file = await toFile(buffer, audioFileNameForMimeType(mimeType), { type: mimeType });
-    const transcription = await openai.audio.transcriptions.create({
-      file,
-      model: TRANSCRIPTION_MODEL,
-      language: "pt",
-    });
-    const transcript = transcription.text?.trim();
+    const transcript = await transcribeAudio(buffer, mimeType);
     return transcript ? { kind: "audio", transcript } : null;
   } catch (err) {
     console.error(`negotiation agent: failed to fetch/process attachment ${url}`, err);
+    return null;
+  }
+}
+
+async function transcribeAudio(buffer: Buffer, mimeType: string): Promise<string | null> {
+  const file = await toFile(buffer, audioFileNameForMimeType(mimeType), { type: mimeType });
+  const transcription = await openai.audio.transcriptions.create({
+    file,
+    model: TRANSCRIPTION_MODEL,
+    language: "pt",
+  });
+  return transcription.text?.trim() || null;
+}
+
+/**
+ * Transcrição de um anexo só se for áudio; imagem, vídeo, arquivo ou falha
+ * devolvem null. A triagem da fila de não lidas usa para ler o que o cliente
+ * falou sem mandar mídia à IA.
+ */
+export async function transcribeAudioAttachment(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(ATTACHMENT_FETCH_TIMEOUT_MS) });
+    if (!response.ok) return null;
+    const mimeType = (response.headers.get("content-type") || "").split(";")[0].trim();
+    if (!mimeType.startsWith("audio/")) return null;
+    return await transcribeAudio(Buffer.from(await response.arrayBuffer()), mimeType);
+  } catch (err) {
+    console.error(`negotiation agent: failed to transcribe attachment ${url}`, err);
     return null;
   }
 }

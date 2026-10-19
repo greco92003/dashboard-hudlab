@@ -71,6 +71,34 @@ export function lastClientMessageText(messages: NegotiationMessage[]): string | 
   return last.attachments.length ? "Enviou um anexo (imagem, áudio ou arquivo)" : null;
 }
 
+/** Anexos do cliente baixados por conversa para achar áudio: os mais recentes bastam para a triagem. */
+export const MAX_CLIENT_ATTACHMENTS = 3;
+
+/** Anexos das mensagens do cliente, da mais recente para a mais antiga, até o teto. */
+export function recentClientAttachments(
+  messages: NegotiationMessage[],
+): Array<{ messageId: string; url: string }> {
+  const refs: Array<{ messageId: string; url: string }> = [];
+  for (const m of [...messages].reverse()) {
+    if (m.direction !== "inbound") continue;
+    for (const url of m.attachments) refs.push({ messageId: m.id, url });
+  }
+  return refs.slice(0, MAX_CLIENT_ATTACHMENTS);
+}
+
+/** Põe a transcrição do áudio no texto da mensagem, para a triagem e a fila lerem o que o cliente falou. */
+export function withAudioTranscripts(
+  messages: NegotiationMessage[],
+  transcripts: ReadonlyMap<string, readonly string[]>,
+): NegotiationMessage[] {
+  return messages.map((m) => {
+    const audios = transcripts.get(m.id);
+    if (!audios?.length) return m;
+    const spoken = audios.map((t) => `(áudio) ${t}`).join(" ");
+    return { ...m, body: m.body.trim() ? `${m.body} ${spoken}` : spoken };
+  });
+}
+
 /**
  * Pós-venda sem precisar de IA: venda ganha, pedido de representante ou card
  * do Atendimento já na etapa de pagamento confirmado ou depois.
