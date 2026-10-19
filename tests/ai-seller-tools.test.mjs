@@ -175,7 +175,10 @@ test("solicitar_ajuste_arte move a demanda e não encerra", async () => {
   );
   assert.deepEqual(calls[0], ["requestArtChange", "Trocar o monograma para branco"]);
   assert.equal(result.terminal, false);
-  assert.match(JSON.parse(result.output).instrucao, /24h úteis/);
+  const { instrucao } = JSON.parse(result.output);
+  assert.match(instrucao, /24h úteis/);
+  // O ajuste não para a venda: enquanto o design trabalha, o pedido avança.
+  assert.match(instrucao, /adiantar os detalhes do pedido/);
 });
 
 test("solicitar_ajuste_arte: detalhe de ajuste já aberto não repete o prazo", async () => {

@@ -245,7 +245,7 @@ export async function executeTool(
         instrucao:
           status === "ja_em_alteracao"
             ? "Este detalhe foi somado ao ajuste que já está com o time de design. Confirme em uma frase curta o que vai mudar, sem repetir o prazo, a menos que o cliente pergunte."
-            : "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui.",
+            : "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui. Enquanto isso, convide a adiantar os detalhes do pedido (grade, prazo, pagamento), a menos que ele tenha dito que quer ver a arte nova antes.",
       });
     }
 
