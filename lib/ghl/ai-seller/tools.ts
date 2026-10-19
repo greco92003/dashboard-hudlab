@@ -9,6 +9,7 @@ import {
 import { hasFreeShipping, MIN_PARES, roundMoney } from "./pricing";
 import type { FunctionCall, SellerActions, ToolExecution } from "./types";
 import { fmtVigencia, precoComPromocao, type Promocao } from "./vigentes";
+import { semTravessao } from "./writing";
 
 function objectSchema(properties: Record<string, unknown>) {
   return {
@@ -135,7 +136,7 @@ export async function executeTool(
     case "enviar_mensagens": {
       const mensagens = (Array.isArray(args.mensagens) ? args.mensagens : [])
         .filter((m): m is string => typeof m === "string")
-        .map((m) => m.trim())
+        .map(semTravessao)
         .filter(Boolean)
         .slice(0, 3);
       if (mensagens.length === 0) return erro("nenhuma mensagem com texto");
@@ -175,7 +176,7 @@ export async function executeTool(
       const ids = await actions.escalate({
         motivo,
         resumo: String(args.resumo ?? ""),
-        mensagemCliente: String(args.mensagem_cliente ?? ""),
+        mensagemCliente: semTravessao(String(args.mensagem_cliente ?? "")),
       });
       return {
         output: JSON.stringify({ ok: true }),

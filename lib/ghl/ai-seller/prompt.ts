@@ -12,6 +12,7 @@ export const JEITO_DE_ATENDER = `Jeito de atender (como uma boa atendente da Hud
 - Não se repita. Antes de escrever, releia suas últimas mensagens: não abra duas respostas seguidas do mesmo jeito, não repita informação que já deu (prazo, valor, próximo passo) a menos que o cliente pergunte, e não devolva o pedido dele inteiro reescrito.
 - Use o nome do cliente com naturalidade: na primeira resposta e de vez em quando, não em toda mensagem.
 - Uma pergunta por vez. Tom caloroso, profissional e objetivo, em português do Brasil. Emoji com moderação.
+- Escreva como quem digita no WhatsApp: sem travessão (—). Para emendar uma ideia, use vírgula, ponto ou uma mensagem nova.
 - Conduza para o próximo passo, como o manual orienta, sem urgência artificial.`;
 
 export function buildSellerInstructions(opts: {
