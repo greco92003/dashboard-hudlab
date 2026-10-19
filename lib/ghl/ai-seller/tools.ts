@@ -9,6 +9,7 @@ import {
 import { hasFreeShipping, MIN_PARES, roundMoney } from "./pricing";
 import type { FunctionCall, SellerActions, ToolExecution } from "./types";
 import { fmtVigencia, precoComPromocao, type Promocao } from "./vigentes";
+import { semTravessao } from "./writing";
 
 function objectSchema(properties: Record<string, unknown>) {
   return {
@@ -135,7 +136,7 @@ export async function executeTool(
     case "enviar_mensagens": {
       const mensagens = (Array.isArray(args.mensagens) ? args.mensagens : [])
         .filter((m): m is string => typeof m === "string")
-        .map((m) => m.trim())
+        .map(semTravessao)
         .filter(Boolean)
         .slice(0, 3);
       if (mensagens.length === 0) return erro("nenhuma mensagem com texto");
@@ -175,7 +176,7 @@ export async function executeTool(
       const ids = await actions.escalate({
         motivo,
         resumo: String(args.resumo ?? ""),
-        mensagemCliente: String(args.mensagem_cliente ?? ""),
+        mensagemCliente: semTravessao(String(args.mensagem_cliente ?? "")),
       });
       return {
         output: JSON.stringify({ ok: true }),
@@ -245,7 +246,7 @@ export async function executeTool(
         instrucao:
           status === "ja_em_alteracao"
             ? "Este detalhe foi somado ao ajuste que já está com o time de design. Confirme em uma frase curta o que vai mudar, sem repetir o prazo, a menos que o cliente pergunte."
-            : "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui.",
+            : "Avise o cliente que o time de design faz o ajuste em até 24h úteis e que a nova arte chega por aqui. Enquanto isso, convide a adiantar os detalhes do pedido (grade, prazo, pagamento), a menos que ele tenha dito que quer ver a arte nova antes.",
       });
     }
 

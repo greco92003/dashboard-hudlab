@@ -15,7 +15,7 @@
 // evaluation/insight record stores which version produced it, so old
 // records keep their original meaning.
 
-export const MANUAL_VERSION = "1.1 — Setembro/2026";
+export const MANUAL_VERSION = "1.2 — Outubro/2026";
 
 export const MANUAL_COMERCIAL_TEXT = `# Manual Comercial e Agente de Vendas — Hud Lab
 
@@ -115,16 +115,18 @@ A grade é livre. O cliente distribui a quantidade entre as numerações dispon�
 
 1. Entendimento inicial da necessidade.
 2. Recebimento do logo e das informações básicas do projeto.
-3. Criação da Amostra Digital em até 24 horas úteis.
-4. Ajustes da Amostra Digital, quando solicitados.
-5. Aprovação do cliente.
-6. Definição de quantidade, grade, endereço e forma de pagamento.
+3. Criação da Amostra Digital em até 24 horas úteis, com opções de modelo.
+4. Escolha de uma opção pelo cliente: é a aprovação da base do projeto.
+5. Definição de quantidade, grade, prazo, endereço e forma de pagamento.
+6. Ajustes da arte, quando o cliente pedir: correm junto com o passo 5 e deixam a arte alinhada para a produção.
 7. Pagamento ou entrada de 50%.
 8. Início da produção: 15 dias úteis a partir do pagamento.
 9. Pagamento do saldo, quando aplicável.
 10. Expedição e transporte.
 
-**Regra central:** não existe fluxo de pagamento antes da Amostra Digital. A visualização e a aprovação do projeto vêm primeiro; o pagamento libera a produção.
+**Regra central:** não existe fluxo de pagamento antes da Amostra Digital. O cliente vê as opções e escolhe uma primeiro; o pagamento libera a produção.
+
+**Depois da escolha, o foco é avançar o pedido.** Como a Amostra Digital é automática, detalhes da arte sempre se ajustam ao longo do negócio. Por isso o vendedor não sugere ajuste: deixa claro que qualquer ajuste pode ser pedido a qualquer momento e conduz para grade, prazo e pagamento. Se o cliente pedir ajuste, o vendedor encaminha ao time de Design e segue alinhando o pedido enquanto a arte é feita. Se ver a arte ajustada for condição do cliente para seguir, respeite.
 
 ### 3.2 Frete
 
@@ -220,7 +222,7 @@ Essas informações podem ser obtidas ao longo da conversa. A ausência de uma i
 
 ### 5.4 Próximo melhor passo
 
-O vendedor deve priorizar uma ação por vez. Exemplos: receber o logo, confirmar a quantidade, obter aprovação da arte, definir a grade, validar a condição comercial ou encaminhar o pagamento.
+O vendedor deve priorizar uma ação por vez. Exemplos: receber o logo, confirmar a quantidade, confirmar a opção escolhida, definir a grade, validar a condição comercial ou encaminhar o pagamento.
 
 ## 6. Biblioteca de scripts
 
@@ -248,8 +250,11 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 **Prazo da Amostra Digital:**
 "A primeira Amostra Digital é preparada em até 24 horas úteis. Depois você pode pedir os ajustes necessários antes de aprovar e realizar o pagamento."
 
-**Envio da Amostra Digital:**
-"Sua Amostra Digital ficou pronta. Dá uma olhada na aplicação, nas cores e na composição geral. Você prefere aprovar essa versão ou quer ajustar algum detalhe antes de avançarmos?"
+**Cliente escolheu uma opção da Amostra Digital:**
+"Ótima escolha! Agora podemos ir alinhando a grade de tamanhos, o prazo de entrega e as condições de pagamento. Qualquer ajuste na arte, pode me mandar por aqui que eu encaminho pro nosso time de Design deixar tudo alinhado para a produção."
+
+**Cliente pediu ajuste na arte:**
+"Perfeito, já passei pro time de Design, a arte ajustada chega por aqui em até 24h úteis. Enquanto eles trabalham nela, vamos adiantando os detalhes do pedido?"
 
 **Após alteração:**
 "Fizemos o ajuste solicitado e esta é a nova versão. Agora ela representa o que vocês imaginavam para o projeto?"
@@ -259,8 +264,8 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 **Resumo comercial** (quando o cliente já definiu quantidade e solução):
 "Para [quantidade] pares, o valor fica em [valor por par], com [condição de frete]. A produção leva 15 dias úteis a partir do pagamento, mais o transporte. No PIX há 5% de desconto; no cartão, até 3x sem juros; ou podemos fazer 50% para liberar a produção e 50% antes do envio."
 
-**Aprovação e grade** (quando a Amostra Digital foi aprovada):
-"Perfeito, arte aprovada. Agora preciso da distribuição das numerações e do CEP de entrega para deixarmos o pedido pronto para pagamento e produção."
+**Grade e entrega** (depois que o cliente escolheu a opção):
+"Pra deixar o pedido pronto para pagamento e produção, preciso da distribuição das numerações e do CEP de entrega."
 
 **Envio do pagamento:**
 "Está tudo confirmado: arte, quantidade, grade e entrega. Vou te enviar a condição de pagamento escolhida. Assim que o pagamento for identificado, começa o prazo de 15 dias úteis de produção."

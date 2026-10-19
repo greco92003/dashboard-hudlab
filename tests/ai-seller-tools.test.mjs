@@ -167,6 +167,17 @@ test("mover_etapa só aceita as etapas liberadas", async () => {
   assert.ok(JSON.parse(r2.output).erro);
 });
 
+test("travessão não chega ao cliente, nem na resposta nem na passagem", async () => {
+  const { actions, calls } = fakeActions();
+  await executeTool(call("enviar_mensagens", { mensagens: ["Entendo, Cristiano — e agradeço!"] }), actions);
+  assert.deepEqual(calls.at(-1), ["sendMessages", ["Entendo, Cristiano, e agradeço!"]]);
+  await executeTool(
+    call("escalar_para_humano", { motivo: "reclamacao", resumo: "x", mensagem_cliente: "Sinto muito — a Schay segue com você." }),
+    actions,
+  );
+  assert.equal(calls.at(-1)[1].mensagemCliente, "Sinto muito, a Schay segue com você.");
+});
+
 test("solicitar_ajuste_arte move a demanda e não encerra", async () => {
   const { actions, calls } = fakeActions();
   const result = await executeTool(
@@ -175,7 +186,10 @@ test("solicitar_ajuste_arte move a demanda e não encerra", async () => {
   );
   assert.deepEqual(calls[0], ["requestArtChange", "Trocar o monograma para branco"]);
   assert.equal(result.terminal, false);
-  assert.match(JSON.parse(result.output).instrucao, /24h úteis/);
+  const { instrucao } = JSON.parse(result.output);
+  assert.match(instrucao, /24h úteis/);
+  // O ajuste não para a venda: enquanto o design trabalha, o pedido avança.
+  assert.match(instrucao, /adiantar os detalhes do pedido/);
 });
 
 test("solicitar_ajuste_arte: detalhe de ajuste já aberto não repete o prazo", async () => {

@@ -11,6 +11,7 @@ import type { SellerSettings } from "./settings";
 import { executeTool } from "./tools";
 import { trimForSeller } from "./transcript";
 import { avisosAtivos, contextoVigentes, promocaoAtiva } from "./vigentes";
+import { semTravessao } from "./writing";
 
 // Sem trava de tempo do webhook: aqui ninguém espera resposta no WhatsApp.
 const SIMULATION_DEADLINE_MS = 110_000;
@@ -87,10 +88,11 @@ export async function simulateReply(
   const args = final ? parseArgs(final.arguments) : {};
   let mensagens: string[] = [];
   let motivo: string | null = null;
+  // Como sairia no WhatsApp: com a mesma limpeza do envio.
   if (final?.name === "enviar_mensagens") {
-    mensagens = Array.isArray(args.mensagens) ? (args.mensagens as unknown[]).map(String) : [];
+    mensagens = Array.isArray(args.mensagens) ? (args.mensagens as unknown[]).map((m) => semTravessao(String(m))) : [];
   } else if (final?.name === "escalar_para_humano") {
-    mensagens = typeof args.mensagem_cliente === "string" && args.mensagem_cliente ? [args.mensagem_cliente] : [];
+    mensagens = typeof args.mensagem_cliente === "string" && args.mensagem_cliente ? [semTravessao(args.mensagem_cliente)] : [];
     motivo = [args.motivo, args.resumo].filter(Boolean).join(": ") || null;
   } else if (final?.name === "nao_responder") {
     motivo = typeof args.motivo === "string" ? args.motivo : null;
