@@ -5,9 +5,12 @@ import {
   isPostSale,
   isWindowOpen,
   lastClientMessageText,
+  recentClientAttachments,
+  withAudioTranscripts,
   windowRemainingMs,
   sortTriage,
   FALLBACK_RECENT_MESSAGES,
+  MAX_CLIENT_ATTACHMENTS,
   MAX_CUT_MESSAGES,
 } from "../lib/ghl/unread-inbox/triage.ts";
 
@@ -114,6 +117,46 @@ test("última mensagem do cliente ignora as nossas e as automáticas", () => {
   assert.equal(lastClientMessageText(messages), "Enviou um anexo (imagem, áudio ou arquivo)");
   assert.equal(lastClientMessageText(messages.slice(0, 1)), "quero 20 pares");
   assert.equal(lastClientMessageText([msg("r1", "outbound", "oi")]), null);
+});
+
+test("anexos do cliente para transcrever: só dele, do mais recente, até o teto", () => {
+  const messages = [
+    msg("c1", "inbound", "", ["https://x/velho.ogg"]),
+    msg("r1", "outbound", "segue a arte", ["https://x/arte.png"]),
+    msg("c2", "inbound", "", ["https://x/a.ogg", "https://x/b.ogg"]),
+    msg("c3", "inbound", "", ["https://x/novo.ogg"]),
+    msg("c4", "inbound", "texto sem anexo"),
+  ];
+  assert.equal(MAX_CLIENT_ATTACHMENTS, 3);
+  assert.deepEqual(recentClientAttachments(messages), [
+    { messageId: "c3", url: "https://x/novo.ogg" },
+    { messageId: "c2", url: "https://x/a.ogg" },
+    { messageId: "c2", url: "https://x/b.ogg" },
+  ]);
+});
+
+test("áudio transcrito vira o texto do cliente na fila e na triagem", () => {
+  const messages = [
+    msg("r1", "outbound", "Bom dia, este link aqui"),
+    msg("c1", "inbound", "", ["https://x/audio.ogg"]),
+    msg("c2", "inbound", "olha", ["https://x/a.ogg", "https://x/b.ogg"]),
+  ];
+  const transcribed = withAudioTranscripts(
+    messages,
+    new Map([
+      ["c1", ["Gostei muito da segunda arte"]],
+      ["c2", ["primeiro", "segundo"]],
+    ]),
+  );
+  assert.equal(transcribed[0], messages[0]);
+  assert.equal(transcribed[1].body, "(áudio) Gostei muito da segunda arte");
+  assert.equal(transcribed[2].body, "olha (áudio) primeiro (áudio) segundo");
+  assert.equal(lastClientMessageText(transcribed.slice(0, 2)), "(áudio) Gostei muito da segunda arte");
+  // Sem transcrição (falhou ou não era áudio) continua o aviso de anexo.
+  assert.equal(
+    lastClientMessageText(withAudioTranscripts(messages.slice(0, 2), new Map())),
+    "Enviou um anexo (imagem, áudio ou arquivo)",
+  );
 });
 
 test("tempo que falta para a janela fechar", () => {
