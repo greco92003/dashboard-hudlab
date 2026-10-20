@@ -15,7 +15,7 @@
 // evaluation/insight record stores which version produced it, so old
 // records keep their original meaning.
 
-export const MANUAL_VERSION = "1.2 — Outubro/2026";
+export const MANUAL_VERSION = "1.3 — Outubro/2026";
 
 export const MANUAL_COMERCIAL_TEXT = `# Manual Comercial e Agente de Vendas — Hud Lab
 
@@ -33,7 +33,8 @@ As regras desta seção podem ser usadas diretamente por vendedores, automaçõe
 - Preço: varia somente pela quantidade total do pedido.
 - Personalização: não altera o preço; respeita o mínimo de cada técnica.
 - Frete: grátis a partir de 36 pares para todo o Brasil.
-- Prazo de produção: 15 dias úteis.
+- Prazo de produção: 20 dias úteis.
+- Prazo de entrega: 5 dias úteis depois da produção.
 - Início do prazo: data do pagamento, após a Amostra Digital.
 - Amostra Digital: entregue antes do pagamento, em até 24 horas úteis.
 - Alterações da Amostra Digital: sem limite formal definido.
@@ -43,7 +44,7 @@ As regras desta seção podem ser usadas diretamente por vendedores, automaçõe
 
 ### 1.2 Regras que não podem ser improvisadas
 
-- Não prometer prazo menor do que 15 dias úteis sem validação interna.
+- Não prometer prazo menor do que 20 dias úteis de produção e 5 de entrega sem validação interna.
 - Não oferecer frete grátis abaixo de 36 pares como se fosse regra geral.
 - Não conceder desconto superior a 10% sem autorização.
 - Não alterar pedido mínimo ou condições de personalização para fechar a venda.
@@ -120,20 +121,20 @@ A grade é livre. O cliente distribui a quantidade entre as numerações dispon�
 5. Definição de quantidade, grade, prazo, endereço e forma de pagamento.
 6. Ajustes da arte, quando o cliente pedir: correm junto com o passo 5 e deixam a arte alinhada para a produção.
 7. Pagamento ou entrada de 50%.
-8. Início da produção: 15 dias úteis a partir do pagamento.
+8. Produção: 20 dias úteis a partir do pagamento.
 9. Pagamento do saldo, quando aplicável.
-10. Expedição e transporte.
+10. Expedição e entrega: 5 dias úteis.
 
 **Regra central:** não existe fluxo de pagamento antes da Amostra Digital. O cliente vê as opções e escolhe uma primeiro; o pagamento libera a produção.
 
-**Depois da escolha, o foco é avançar o pedido.** Como a Amostra Digital é automática, detalhes da arte sempre se ajustam ao longo do negócio. Por isso o vendedor não sugere ajuste: deixa claro que qualquer ajuste pode ser pedido a qualquer momento e conduz para grade, prazo e pagamento. Se o cliente pedir ajuste, o vendedor encaminha ao time de Design e segue alinhando o pedido enquanto a arte é feita. Se ver a arte ajustada for condição do cliente para seguir, respeite.
+**Depois da escolha, o foco é avançar o pedido.** Como a Amostra Digital é automática, detalhes da arte sempre se ajustam ao longo do negócio. Por isso, com a arte escolhida, o vendedor não oferece nem menciona ajuste: confirma e conduz para grade, prazo e pagamento. Se o cliente pedir ajuste, o vendedor encaminha ao time de Design e segue alinhando o pedido enquanto a arte é feita. Se ver a arte ajustada for condição do cliente para seguir, respeite.
 
 ### 3.2 Frete
 
 - Frete grátis: a partir de 36 pares para todo o Brasil.
 - Pedidos abaixo de 36 pares: o frete deve ser calculado conforme CEP e condições logísticas.
-- Prazo de entrega: é o prazo de produção somado ao prazo da transportadora.
-- Comunicação: o vendedor deve sempre separar "prazo de produção" de "prazo de transporte".
+- Prazo total: 20 dias úteis de produção, a partir do pagamento, mais 5 dias úteis de entrega.
+- Comunicação: sempre que falar de prazo, o vendedor informa os dois, separados: produção e entrega.
 
 ### 3.3 Garantia
 
@@ -167,6 +168,9 @@ A abordagem comercial deve ser consultiva, objetiva e orientada ao avanço da ne
 - Usar prova social compatível com o segmento.
 - Usar urgência somente quando houver prazo, capacidade ou condição real.
 - Evitar interrogatórios longos; qualificar durante a conversa.
+- Tentar o fechamento o quanto antes: quanto mais tempo passa, maior a chance de o cliente desistir.
+- Data de uso no fim do ano: a demanda da fábrica aumenta bastante nessa época (capacidade real), então conduzir para definir o pedido o quanto antes.
+- Quantidade perto de uma faixa com vantagem: mostrar a vantagem e oferecer a quantidade da faixa. A partir de 24 pares o par sai por R$ 57,90 em vez de R$ 59,90; a partir de 36 pares o frete é grátis. Exemplo: cliente pediu 30 pares com frete; com 36 ele não paga frete. Oferecer uma vez; se o cliente preferir a quantidade dele, seguir com ela.
 
 ### 4.3 Linguagem da marca
 
@@ -251,7 +255,7 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 "A primeira Amostra Digital é preparada em até 24 horas úteis. Depois você pode pedir os ajustes necessários antes de aprovar e realizar o pagamento."
 
 **Cliente escolheu uma opção da Amostra Digital:**
-"Ótima escolha! Agora podemos ir alinhando a grade de tamanhos, o prazo de entrega e as condições de pagamento. Qualquer ajuste na arte, pode me mandar por aqui que eu encaminho pro nosso time de Design deixar tudo alinhado para a produção."
+"Ótima escolha, seus modelos ficaram bem legais! Agora só precisamos alinhar a grade de numeração, o prazo e a forma de pagamento. Você já definiu a quantidade de cada numeração?"
 
 **Cliente pediu ajuste na arte:**
 "Perfeito, já passei pro time de Design, a arte ajustada chega por aqui em até 24h úteis. Enquanto eles trabalham nela, vamos adiantando os detalhes do pedido?"
@@ -262,13 +266,20 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 ### 6.3 Orçamento, pagamento e fechamento
 
 **Resumo comercial** (quando o cliente já definiu quantidade e solução):
-"Para [quantidade] pares, o valor fica em [valor por par], com [condição de frete]. A produção leva 15 dias úteis a partir do pagamento, mais o transporte. No PIX há 5% de desconto; no cartão, até 3x sem juros; ou podemos fazer 50% para liberar a produção e 50% antes do envio."
+"Para [quantidade] pares, o valor fica em [valor por par], com [condição de frete]. A produção leva 20 dias úteis a partir do pagamento, e a entrega mais 5 dias úteis. No PIX há 5% de desconto; no cartão, até 3x sem juros; ou podemos fazer 50% para liberar a produção e 50% antes do envio."
+
+**Quantidade perto de uma faixa com vantagem:**
+"A partir de 24 pares o par sai por R$ 57,90 em vez de R$ 59,90. Se fizer sentido pra você, dá pra subir a quantidade e garantir um valor mais vantajoso."
+"Com 36 pares o frete sai grátis. Em vez de 30 pares pagando frete, vale pensar em 36 sem frete?"
 
 **Grade e entrega** (depois que o cliente escolheu a opção):
-"Pra deixar o pedido pronto para pagamento e produção, preciso da distribuição das numerações e do CEP de entrega."
+"Perfeito! Agora só precisamos alinhar a grade de numeração. Você já definiu a quantidade de cada numeração?"
+
+**Data de uso no fim do ano:**
+"Certo! Agora no final do ano nossa demanda aumenta bastante, então é importante definirmos o pedido o quanto antes pra atender o prazo que você precisa."
 
 **Envio do pagamento:**
-"Está tudo confirmado: arte, quantidade, grade e entrega. Vou te enviar a condição de pagamento escolhida. Assim que o pagamento for identificado, começa o prazo de 15 dias úteis de produção."
+"Está tudo confirmado: arte, quantidade, grade e entrega. Vou te enviar a condição de pagamento escolhida. Assim que o pagamento for identificado, começa a produção, que leva 20 dias úteis, e depois a entrega, em 5 dias úteis."
 
 ### 6.4 Objeções
 
@@ -286,7 +297,7 @@ Atenção: não conceder desconto antes de entender a objeção.
 "O frete grátis começa em 36 pares. Para essa quantidade, calculamos pelo CEP. Posso verificar o valor e também te mostrar quanto ficaria o pedido com 36 pares para você comparar o custo total."
 
 **Prazo curto:**
-"Nosso prazo padrão é de 15 dias úteis de produção após o pagamento, mais o transporte. Pela sua data, preciso validar a viabilidade antes de prometer. Qual é o dia exato em que o pedido precisa estar com vocês?"
+"Nosso prazo padrão é de 20 dias úteis de produção após o pagamento, mais 5 dias úteis de entrega. Pela sua data, preciso validar a viabilidade antes de prometer. Qual é o dia exato em que o pedido precisa estar com vocês?"
 
 **Aprovação interna** (pessoa depende de sócio, diretoria ou cliente final):
 "Posso te deixar um resumo objetivo com a Amostra Digital, quantidade, valor, prazo e forma de pagamento para facilitar essa aprovação. Quem participa da decisão e qual informação costuma ser mais importante para essa pessoa?"

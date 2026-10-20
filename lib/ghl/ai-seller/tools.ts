@@ -6,7 +6,7 @@ import {
   type AiMovableStage,
   type ModelEscalationReason,
 } from "./config";
-import { hasFreeShipping, MIN_PARES, roundMoney } from "./pricing";
+import { advantageLabel, hasFreeShipping, MIN_PARES, nextAdvantagePares, roundMoney } from "./pricing";
 import type { FunctionCall, SellerActions, ToolExecution } from "./types";
 import { fmtVigencia, precoComPromocao, type Promocao } from "./vigentes";
 import { semTravessao } from "./writing";
@@ -112,6 +112,40 @@ function erro(mensagem: string): ToolExecution {
   return ok({ erro: mensagem });
 }
 
+/**
+ * Quantidade com vantagem logo acima do pedido (preço por par menor ou frete
+ * grátis), com os valores já calculados: a Cami oferece sem fazer conta e sem
+ * gravar um orçamento que o cliente não pediu.
+ */
+function proximaFaixa(
+  pares: number,
+  unitario: number,
+  freteGratis: boolean,
+  totalAtual: number | null,
+  promocao: Promocao | null,
+) {
+  const proxima = nextAdvantagePares(pares, LARGE_ORDER_PARES);
+  const preco = proxima == null ? null : precoComPromocao(proxima, promocao);
+  if (proxima == null || !preco) return null;
+  // Com frete grátis o total é o subtotal; sem ele, o frete da nova quantidade não foi cotado.
+  const total = hasFreeShipping(proxima) ? preco.subtotal : null;
+  return {
+    pares: proxima,
+    pares_a_mais: proxima - pares,
+    vantagem: advantageLabel({
+      unitAtual: unitario,
+      unitNovo: preco.unitario,
+      freteGratisAtual: freteGratis,
+      freteGratisNovo: hasFreeShipping(proxima),
+    }),
+    valor_unitario: preco.unitario,
+    subtotal: preco.subtotal,
+    frete_gratis: hasFreeShipping(proxima),
+    total,
+    diferenca_no_total: total != null && totalAtual != null ? roundMoney(total - totalAtual) : null,
+  };
+}
+
 function parseArgs(raw: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(raw);
@@ -209,13 +243,15 @@ export async function executeTool(
           ? await actions.quoteFreight({ cep, pares, valorNf: subtotal })
           : null;
       await actions.writeBudget({ pares, unitario, subtotal, frete });
+      const total = frete == null ? null : roundMoney(subtotal + frete);
       return ok({
         pares,
         valor_unitario: unitario,
         subtotal,
         frete,
         frete_gratis: freteGratis,
-        total: frete == null ? null : roundMoney(subtotal + frete),
+        total,
+        proxima_faixa: proximaFaixa(pares, unitario, freteGratis, total, ctx.promocao ?? null),
         promocao:
           preco.aplicada && ctx.promocao
             ? {

@@ -45,7 +45,7 @@ REGRAS COMERCIAIS REAIS (use exatamente estes números ao perguntar ou fazer obj
 - Frete grátis a partir de 36 pares para todo o Brasil; abaixo disso o frete é calculado por CEP.
 - Personalização: Hud Lab Start (12 pares, Silk 1 cor); Silk a partir de 24 pares (até 3 cores entre 24 e 35 pares; até 4 cores a partir de 36 pares); Silk Relevo (60 pares); 3D (132 pares); Sola colorida (adicional de R$ 5,00/par, mín. 100 pares). O preço não muda pela técnica escolhida, só pela quantidade total.
 - Pagamento: PIX à vista (5% de desconto), cartão até 3x sem juros ou até 6x com juros da operadora, ou 50% para liberar a produção + 50% antes do envio.
-- Prazo de produção: 15 dias úteis a partir do pagamento. A Amostra Digital é entregue antes do pagamento, em até 24h úteis.
+- Prazo: produção de 20 dias úteis a partir do pagamento, mais 5 dias úteis de entrega. A Amostra Digital é entregue antes do pagamento, em até 24h úteis.
 - Materiais: sola Micro Expandida Comfort, gáspea em Napa Way de aproximadamente 3,5 mm, etiqueta lateral externa em TPU, caixa personalizada, cola base d'água e acabamento de fábrica.
 - Numerações: infantil 28/29, 30/31 e 32/33; adulto 34/35, 36/37, 38/39, 40/41, 42/43 e 44/45. A grade é livre entre as numerações disponíveis.
 - Fluxo: entender a necessidade, receber logo, criar a Amostra Digital, ajustar e aprovar, definir quantidade/grade/endereço/pagamento, receber pagamento ou entrada, produzir e expedir. Nunca existe pagamento antes da Amostra Digital.

@@ -30,3 +30,38 @@ export function subtotalForPares(pares: number): number | null {
 export function hasFreeShipping(pares: number): boolean {
   return pares >= FREE_SHIPPING_MIN_PARES;
 }
+
+/** Quantidades a partir das quais o pedido ganha algo: preço por par menor ou frete grátis. */
+const ADVANTAGE_MINS = [...new Set([...PRICE_TIERS.map((t) => t.min), FREE_SHIPPING_MIN_PARES])]
+  .filter((min) => min > MIN_PARES)
+  .sort((a, b) => a - b);
+
+/** "Perto" da faixa seguinte: até 30% a mais de pares (20 → 24 e 30 → 36 contam; 12 → 24 não). */
+export const NEXT_ADVANTAGE_MAX_GAP_PCT = 30;
+
+/**
+ * Próxima quantidade com vantagem, quando o pedido está perto dela e ela fica
+ * abaixo de `limit` (pedido grande vai para uma pessoa do time). null se não há.
+ */
+export function nextAdvantagePares(pares: number, limit: number): number | null {
+  const next = ADVANTAGE_MINS.find((min) => min > pares);
+  if (next == null || next >= limit) return null;
+  return (next - pares) * 100 <= pares * NEXT_ADVANTAGE_MAX_GAP_PCT ? next : null;
+}
+
+const brl = (value: number) => `R$ ${value.toFixed(2).replace(".", ",")}`;
+
+/** O que o cliente ganha subindo de faixa: "preço por par cai para R$ 57,90", "frete grátis" ou os dois. */
+export function advantageLabel(input: {
+  unitAtual: number;
+  unitNovo: number;
+  freteGratisAtual: boolean;
+  freteGratisNovo: boolean;
+}): string {
+  return [
+    input.unitNovo < input.unitAtual ? `preço por par cai para ${brl(input.unitNovo)}` : null,
+    input.freteGratisNovo && !input.freteGratisAtual ? "frete grátis" : null,
+  ]
+    .filter(Boolean)
+    .join(" e ");
+}
