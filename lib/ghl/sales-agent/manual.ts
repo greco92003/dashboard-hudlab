@@ -127,7 +127,7 @@ A grade é livre. O cliente distribui a quantidade entre as numerações dispon�
 
 **Regra central:** não existe fluxo de pagamento antes da Amostra Digital. O cliente vê as opções e escolhe uma primeiro; o pagamento libera a produção.
 
-**Depois da escolha, o foco é avançar o pedido.** Como a Amostra Digital é automática, detalhes da arte sempre se ajustam ao longo do negócio. Por isso o vendedor não sugere ajuste: deixa claro que qualquer ajuste pode ser pedido a qualquer momento e conduz para grade, prazo e pagamento. Se o cliente pedir ajuste, o vendedor encaminha ao time de Design e segue alinhando o pedido enquanto a arte é feita. Se ver a arte ajustada for condição do cliente para seguir, respeite.
+**Depois da escolha, o foco é avançar o pedido.** Como a Amostra Digital é automática, detalhes da arte sempre se ajustam ao longo do negócio. Por isso, com a arte escolhida, o vendedor não oferece nem menciona ajuste: confirma e conduz para grade, prazo e pagamento. Se o cliente pedir ajuste, o vendedor encaminha ao time de Design e segue alinhando o pedido enquanto a arte é feita. Se ver a arte ajustada for condição do cliente para seguir, respeite.
 
 ### 3.2 Frete
 
@@ -255,7 +255,7 @@ Os textos abaixo são estruturas adaptáveis. O vendedor deve preservar a inform
 "A primeira Amostra Digital é preparada em até 24 horas úteis. Depois você pode pedir os ajustes necessários antes de aprovar e realizar o pagamento."
 
 **Cliente escolheu uma opção da Amostra Digital:**
-"Ótima escolha! Agora podemos ir alinhando a grade de tamanhos, o prazo de entrega e as condições de pagamento. Qualquer ajuste na arte, pode me mandar por aqui que eu encaminho pro nosso time de Design deixar tudo alinhado para a produção."
+"Ótima escolha, seus modelos ficaram bem legais! Agora só precisamos alinhar a grade de numeração, o prazo e a forma de pagamento. Você já definiu a quantidade de cada numeração?"
 
 **Cliente pediu ajuste na arte:**
 "Perfeito, já passei pro time de Design, a arte ajustada chega por aqui em até 24h úteis. Enquanto eles trabalham nela, vamos adiantando os detalhes do pedido?"

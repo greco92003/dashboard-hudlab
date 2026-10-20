@@ -66,6 +66,13 @@ test("instruções: prazo com produção e entrega, manual com 20 dias úteis", 
   assert.doesNotMatch(text, /15 dias úteis/);
 });
 
+test("instruções: arte escolhida não ganha oferta de ajuste (decisão de 20/10)", () => {
+  const text = buildSellerInstructions({ persona: "Cami", escalationName: "Schay" });
+  assert.match(text, /Não ofereça nem mencione ajuste na arte/);
+  assert.doesNotMatch(text, /ajuste pode ser pedido a qualquer momento/);
+  assert.doesNotMatch(text, /Qualquer ajuste na arte, pode me mandar/);
+});
+
 test("contexto diz a hora e quando quem recebe a passagem volta", () => {
   const ctx = {
     today: "14/10/2026",
