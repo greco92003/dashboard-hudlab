@@ -111,6 +111,38 @@ test("atualizar_orcamento sem CEP abaixo de 36 pares deixa o frete em aberto", a
   assert.equal(JSON.parse(result.output).total, null);
 });
 
+test("atualizar_orcamento oferece a faixa com vantagem logo acima, sem gravar outro orçamento", async () => {
+  const { actions, calls } = fakeActions();
+  const vinte = JSON.parse((await executeTool(call("atualizar_orcamento", { pares: 20, cep: null }), actions)).output);
+  assert.deepEqual(vinte.proxima_faixa, {
+    pares: 24,
+    pares_a_mais: 4,
+    vantagem: "preço por par cai para R$ 57,90",
+    valor_unitario: 57.9,
+    subtotal: 1389.6,
+    frete_gratis: false,
+    total: null,
+    diferenca_no_total: null,
+  });
+
+  const trinta = JSON.parse(
+    (await executeTool(call("atualizar_orcamento", { pares: 30, cep: "03911-040" }), actions)).output,
+  );
+  assert.equal(trinta.total, 1890); // 30 × 57,90 + frete 153
+  assert.equal(trinta.proxima_faixa.pares, 36);
+  assert.equal(trinta.proxima_faixa.vantagem, "frete grátis");
+  assert.equal(trinta.proxima_faixa.total, 2084.4);
+  assert.equal(trinta.proxima_faixa.diferenca_no_total, 194.4);
+  // Só os orçamentos pedidos foram gravados.
+  assert.deepEqual(
+    calls.filter(([name]) => name === "writeBudget").map(([, b]) => b.pares),
+    [20, 30],
+  );
+
+  const longe = JSON.parse((await executeTool(call("atualizar_orcamento", { pares: 12, cep: null }), actions)).output);
+  assert.equal(longe.proxima_faixa, null);
+});
+
 test("atualizar_orcamento recusa pedido grande e abaixo do mínimo sem gravar", async () => {
   const grande = fakeActions();
   const r1 = await executeTool(call("atualizar_orcamento", { pares: 600, cep: null }), grande.actions);

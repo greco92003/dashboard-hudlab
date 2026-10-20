@@ -47,6 +47,25 @@ test("contexto avisa quando o robô de antes da amostra foi omitido", () => {
   assert.match(text, /As 7 mensagens automáticas do robô anteriores à entrega da Amostra Digital foram omitidas/);
 });
 
+test("contexto aponta a faixa com vantagem perto da quantidade que veio do robô", () => {
+  const base = { today: "20/10/2026", contactName: "Roberto", pipelineName: "Atendimento", stageName: "Atendimento", crmValor: null };
+  assert.match(
+    buildContextText({ ...base, crmPares: 20 }),
+    /com 24 pares, preço por par cai para R\$ 57,90\. Ofereça uma vez/,
+  );
+  assert.match(buildContextText({ ...base, crmPares: 30 }), /com 36 pares, frete grátis\./);
+  assert.doesNotMatch(buildContextText({ ...base, crmPares: 12 }), /Faixa com vantagem/);
+  assert.doesNotMatch(buildContextText({ ...base, crmPares: null }), /Faixa com vantagem/);
+});
+
+test("instruções: prazo com produção e entrega, manual com 20 dias úteis", () => {
+  const text = buildSellerInstructions({ persona: "Cami", escalationName: "Schay" });
+  assert.match(text, /diga os dois, separados/);
+  assert.match(text, /Prazo de produção: 20 dias úteis/);
+  assert.match(text, /Prazo de entrega: 5 dias úteis/);
+  assert.doesNotMatch(text, /15 dias úteis/);
+});
+
 test("contexto diz a hora e quando quem recebe a passagem volta", () => {
   const ctx = {
     today: "14/10/2026",

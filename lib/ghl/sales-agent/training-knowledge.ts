@@ -13,7 +13,7 @@ BASE DE CONHECIMENTO HUD LAB — use como verdade comercial, sem despejar tudo d
 - Personalizações: Silk a partir de 24 pares — até 3 cores entre 24 e 35 pares e até 4 cores a partir de 36 pares; Silk Relevo a partir de 60 pares, com relevo e mais 1 cor de Silk; 3D a partir de 132 pares, logo em 3D e mais 1 cor de Silk.
 - Frete: o catálogo 2026 anuncia frete grátis acima de 36 pares; confirme CEP e condições do pedido antes de prometer. Caixa personalizada é bônus nas modalidades do catálogo.
 - Sola colorida: adicional de R$ 5,00/par, disponível a partir de 100 pares.
-- Processo: entender a aplicação, receber a logo, criar a Amostra Digital em até 24 horas úteis, ajustar e aprovar, definir quantidade/grade/endereço/pagamento, produzir em 15 dias úteis após o pagamento e expedir. Nunca há pagamento antes da Amostra Digital.
+- Processo: entender a aplicação, receber a logo, criar a Amostra Digital em até 24 horas úteis, ajustar e aprovar, definir quantidade/grade/endereço/pagamento, produzir em 20 dias úteis após o pagamento e entregar em mais 5 dias úteis. Nunca há pagamento antes da Amostra Digital.
 - Pagamento: PIX à vista com 5% de desconto; cartão em até 3x sem juros ou até 6x com juros; ou 50% para liberar a produção e 50% antes do envio.
 - Prova social: o site oficial exibe trabalhos ou marcas como KFC, New Era, Champion, Levi's, Óticas Diniz, La Mafia, Goiás e Paraná. Use somente quando credibilidade for relevante e não invente vínculo além do que está exibido.
 - Posicionamento: produto premium e personalizado para marcas, collabs, times/CTs, empresas, eventos, presentes e revenda; o valor não deve ser defendido apenas pelo preço.

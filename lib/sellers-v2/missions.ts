@@ -68,8 +68,8 @@ export const MISSIONS: readonly Mission[] = [
     resumo: "O evento é daqui a 3 semanas. O que dá para garantir?",
     abertura: "Preciso de 60 pares para um evento daqui a 3 semanas. Vocês conseguem entregar a tempo?",
     cliente:
-      "Você organiza uma corrida de rua em outra cidade, daqui a 3 semanas, e precisa de 60 pares. Está ansioso com o prazo e quer garantia de entrega. Testa se o vendedor promete algo que não pode cumprir. Valoriza honestidade sobre produção (15 dias úteis após pagamento) mais transporte.",
-    objetivo: "Explicar o prazo real (amostra, pagamento, 15 dias úteis, transporte) sem prometer o impossível e acelerar as etapas.",
+      "Você organiza uma corrida de rua em outra cidade, daqui a 3 semanas, e precisa de 60 pares. Está ansioso com o prazo e quer garantia de entrega. Testa se o vendedor promete algo que não pode cumprir. Valoriza honestidade sobre produção (20 dias úteis após pagamento) mais 5 dias úteis de entrega.",
+    objetivo: "Explicar o prazo real (amostra, pagamento, 20 dias úteis de produção, 5 de entrega) sem prometer o impossível e acelerar as etapas.",
   },
   {
     id: "pedido-desconto",
