@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable, { type CellInput, type UserOptions } from "jspdf-autotable";
 import sharp from "sharp";
 import type { OrderDocument } from "./tiny-order-documents";
-import { packVolumes } from "./romaneio-packing";
+import { packVolumes, packVolumesBySku } from "./romaneio-packing";
 
 const MARGIN = 15;
 const PAGE_WIDTH = 210;
@@ -123,10 +123,11 @@ export async function buildTalaoPdf(order: OrderDocument) {
   return Buffer.from(doc.output("arraybuffer"));
 }
 
-export function buildRomaneioPdf(order: OrderDocument) {
+export function buildRomaneioPdf(order: OrderDocument, options: { bySku?: boolean } = {}) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const volumes = packVolumes(order.products.flatMap((product) =>
-    product.sizes.map((entry) => ({ reference: product.reference, size: entry.size, quantity: entry.quantity }))));
+  const lines = order.products.flatMap((product) =>
+    product.sizes.map((entry) => ({ reference: product.reference, size: entry.size, quantity: entry.quantity })));
+  const volumes = options.bySku ? packVolumesBySku(lines) : packVolumes(lines);
   if (volumes.length === 0) {
     doc.setFontSize(11).setFont("helvetica", "normal").text(`Pedido ${order.number} sem pares para despacho.`, MARGIN, 20);
   }

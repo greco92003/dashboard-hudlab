@@ -2,6 +2,7 @@ import {
   isOrderDocumentKind,
   orderDocumentError,
   orderDocumentResponse,
+  romaneioBySku,
 } from "@/lib/erp/order-document-response";
 import { requireApprovedUser } from "@/lib/security/route-guards";
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string; document: string }> },
 ) {
   const access = await requireApprovedUser();
@@ -20,5 +21,5 @@ export async function GET(
   if (!Number.isInteger(orderId) || orderId <= 0 || !isOrderDocumentKind(document)) {
     return orderDocumentError("Documento não encontrado.", 404);
   }
-  return orderDocumentResponse(orderId, document);
+  return orderDocumentResponse(orderId, document, { bySku: romaneioBySku(request) });
 }

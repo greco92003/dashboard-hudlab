@@ -67,3 +67,19 @@ export function packVolumes(lines: PackingLine[], capacities: readonly number[] 
   }
   return volumes;
 }
+
+/**
+ * Romaneio por SKU: SKU aqui é o modelo (referência), com todas as suas
+ * numerações. Cada caixa leva um único modelo, podendo misturar numerações
+ * dele. Cada modelo escolhe as próprias caixas, então a sobra (até 2 pares)
+ * pode aparecer em cada modelo, e não só na última caixa do pedido.
+ */
+export function packVolumesBySku(lines: PackingLine[], capacities: readonly number[] = BOX_CAPACITIES): PackedVolume[] {
+  const models = new Map<string, PackingLine[]>();
+  for (const line of lines) {
+    const modelLines = models.get(line.reference) ?? [];
+    modelLines.push(line);
+    models.set(line.reference, modelLines);
+  }
+  return [...models.values()].flatMap((modelLines) => packVolumes(modelLines, capacities));
+}

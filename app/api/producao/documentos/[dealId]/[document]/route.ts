@@ -2,6 +2,7 @@ import {
   isOrderDocumentKind,
   orderDocumentError,
   orderDocumentResponse,
+  romaneioBySku,
 } from "@/lib/erp/order-document-response";
 import { findTinyOrderIdByDeal } from "@/lib/erp/tiny-order-documents";
 import { requireApprovedUser } from "@/lib/security/route-guards";
@@ -11,7 +12,7 @@ export const maxDuration = 120;
 
 /** Talão e romaneio a partir do card do GHL, para o painel da produção. */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ dealId: string; document: string }> },
 ) {
   const access = await requireApprovedUser({ permitirProducao: true });
@@ -30,7 +31,7 @@ export async function GET(
         404,
       );
     }
-    return orderDocumentResponse(orderId, document);
+    return orderDocumentResponse(orderId, document, { bySku: romaneioBySku(request) });
   } catch (error) {
     console.error("Producao order lookup failed", error);
     return orderDocumentError("Não foi possível localizar o pedido no Tiny.", 502);

@@ -21,17 +21,24 @@ export function orderDocumentError(message: string, status: number) {
   });
 }
 
-export async function orderDocumentResponse(orderId: number, kind: OrderDocumentKind) {
+/** `?agrupar=sku` pede o romaneio com um único SKU por caixa. */
+export function romaneioBySku(request: Request) {
+  return new URL(request.url).searchParams.get("agrupar") === "sku";
+}
+
+export async function orderDocumentResponse(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean } = {}) {
   try {
     const isTalao = kind === "talao";
+    const bySku = !isTalao && Boolean(options.bySku);
     const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao });
-    const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order);
-    const label = isTalao ? "Talão" : "Romaneio";
+    const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order, { bySku });
+    const label = isTalao ? "Talão" : bySku ? "Romaneio por SKU" : "Romaneio";
     const fileName = `${label} pedido ${order.number}.pdf`;
+    const asciiName = isTalao ? "Talao" : bySku ? "Romaneio-por-SKU" : "Romaneio";
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${isTalao ? "Talao" : "Romaneio"}-pedido-${order.number}.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+        "Content-Disposition": `inline; filename="${asciiName}-pedido-${order.number}.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
         "Cache-Control": "private, no-store",
       },
     });

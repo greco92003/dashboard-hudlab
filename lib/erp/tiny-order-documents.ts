@@ -185,6 +185,16 @@ export async function loadTinyOrderDocument(
     soles: Set<string>;
   };
   const groups = new Map<string, Group>();
+  const groupFor = (key: string, parentId: number | null, reference: string) => {
+    const group = groups.get(key) ?? { parentId, reference, sizes: new Map(), materials: new Map(), soles: new Set<string>() };
+    groups.set(key, group);
+    return group;
+  };
+  // O romaneio só precisa de referência e numeração, que já vêm na descrição
+  // do item ("Chinelo Slide 102601 - CLIENTE - Cor - 38/39"). Ler cada produto
+  // no Tiny custa uma chamada por item, e com 30 chamadas por minuto um pedido
+  // de 155 itens passava dos 300 s da função.
+  const fromDescriptionOnly = !options.materials && !options.images;
 
   for (const item of order.itens ?? []) {
     const quantity = Number(item.quantidade ?? 0);
@@ -193,6 +203,13 @@ export async function loadTinyOrderDocument(
     const description = item.produto?.descricao?.trim() ?? "";
     // O Livro Digital e outros serviços entram no pedido, mas não em caixa nem em talão.
     if (/livro digital/i.test(description)) continue;
+    const describedSize = sizeFromDescription(description);
+    if (fromDescriptionOnly && describedSize) {
+      const reference = referenceFromDescription(description) || description;
+      const group = groupFor(`r:${reference}`, null, reference);
+      group.sizes.set(describedSize, (group.sizes.get(describedSize) ?? 0) + quantity);
+      continue;
+    }
     const variation = await getProduct(productId);
     if (variation.tipo === "S") continue;
 
@@ -202,13 +219,11 @@ export async function loadTinyOrderDocument(
       ?.find((entry) => entry.id === productId)
       ?.grade?.find((grade) => /tamanho|numera|grade/i.test(grade.chave ?? "") || /^\d{2}\s*\/\s*\d{2}$/.test(grade.valor ?? ""))
       ?.valor?.replace(/\s/g, "");
-    const size = gradeSize || sizeFromDescription(description) || "Único";
+    const size = gradeSize || describedSize || "Único";
     const reference = parent?.descricao?.trim()
       || referenceFromDescription(variation.descricao?.trim() || description)
       || description;
-    const key = parentId ? `p:${parentId}` : `r:${reference}`;
-    const group = groups.get(key) ?? { parentId, reference, sizes: new Map(), materials: new Map(), soles: new Set<string>() };
-    groups.set(key, group);
+    const group = groupFor(parentId ? `p:${parentId}` : `r:${reference}`, parentId, reference);
     group.sizes.set(size, (group.sizes.get(size) ?? 0) + quantity);
 
     if (options.materials && variation.tipo === "F") {
