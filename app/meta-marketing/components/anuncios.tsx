@@ -385,6 +385,8 @@ export function Anuncios({
         investimento,
         taxa: leads > 0 ? (compraram / leads) * 100 : 0,
         custoPorVenda: compraram > 0 && investimento > 0 ? investimento / compraram : null,
+        // Mesma conta do ROAS da tabela de cima, sobre os leads maduros.
+        roas: investimento > 0 ? Math.round((Number(r.faturamento) / investimento) * 100) / 100 : null,
       };
     });
     const visiveis = linhas
@@ -646,6 +648,7 @@ export function Anuncios({
                     <TableHead className="text-right">Faturamento</TableHead>
                     <TableHead className="text-right">Investimento</TableHead>
                     <TableHead className="text-right">Custo por venda</TableHead>
+                    <TableHead className="text-right">ROAS</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -667,6 +670,9 @@ export function Anuncios({
                       <TableCell className="text-right">{fmtBrl(r.faturamento)}</TableCell>
                       <TableCell className="text-right">{fmtBrl(r.investimento)}</TableCell>
                       <TableCell className="text-right">{fmtBrl(r.custoPorVenda)}</TableCell>
+                      <TableCell className="text-right">
+                        {r.roas != null ? `${r.roas}x` : "—"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
