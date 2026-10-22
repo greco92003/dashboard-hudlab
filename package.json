@@ -12,7 +12,7 @@
     "test:security-package3": "node --experimental-strip-types --test tests/security-package3.test.mjs",
     "test:meta-marketing": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/meta-marketing-report-catalog.test.mjs tests/top-campaigns.test.mjs tests/brazil-map-geometry.test.mjs tests/brazil-map-scale.test.mjs tests/meta-marketing-regioes.test.mjs",
     "gerar:mapa-brasil": "node scripts/gerar-mapa-brasil.mjs",
-    "test:periodo": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/periodo.test.mjs tests/meta-marketing-janela.test.mjs tests/fechamento-mensal.test.mjs",
+    "test:periodo": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/periodo.test.mjs tests/meta-marketing-janela.test.mjs tests/meta-marketing-leads-maduros.test.mjs tests/fechamento-mensal.test.mjs",
     "test:erp": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/erp-production-order.test.mjs",
     "test:programacao": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/programacao-relatorio.test.mjs",
     "test:ghl": "node --experimental-strip-types --import ./tests/ts-extension-resolve.mjs --test tests/ghl-closing-date.test.mjs tests/ghl-cursor-pagination.test.mjs tests/ghl-funnel-dates.test.mjs tests/ghl-funnel-sales.test.mjs tests/ghl-pipelines.test.mjs tests/webhook-rejections.test.mjs tests/won-deal-diff.test.mjs tests/ghl-fetch-resiliencia.test.mjs tests/deal-fields.test.mjs",

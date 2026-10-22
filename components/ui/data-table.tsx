@@ -9,8 +9,12 @@ import {
   getSortedRowModel,
   getPaginationRowModel,
 } from "@tanstack/react-table";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  HorizontalScroll,
+  STICKY_COLUMN_CLASS,
+} from "@/components/ui/horizontal-scroll";
 
 import {
   Table,
@@ -48,55 +52,6 @@ interface DataTableProps<TData, TValue> {
 /** Coluna com meta.sticky fica presa à esquerda ao rolar a tabela para o lado. */
 function isSticky(meta: unknown) {
   return Boolean((meta as { sticky?: boolean } | undefined)?.sticky);
-}
-
-// A sombra de 1px marca onde a coluna fixa termina; borda some no sticky.
-const STICKY_CLASS =
-  "sticky left-0 z-10 bg-background shadow-[1px_0_0_0_var(--border)]";
-
-/**
- * Barra de rolagem lateral também em cima da tabela, sincronizada com a de
- * baixo: em tabela longa a de baixo só aparecia depois de descer tudo.
- */
-function useTopScrollbar() {
-  const topRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [scrollWidth, setScrollWidth] = useState(0);
-  const [overflowing, setOverflowing] = useState(false);
-
-  useEffect(() => {
-    const body = bodyRef.current;
-    if (!body) return;
-    const measure = () => {
-      setScrollWidth(body.scrollWidth);
-      setOverflowing(body.scrollWidth > body.clientWidth + 1);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(body);
-    if (body.firstElementChild) observer.observe(body.firstElementChild);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const top = topRef.current;
-    const body = bodyRef.current;
-    if (!top || !body) return;
-    const fromTop = () => {
-      if (body.scrollLeft !== top.scrollLeft) body.scrollLeft = top.scrollLeft;
-    };
-    const fromBody = () => {
-      if (top.scrollLeft !== body.scrollLeft) top.scrollLeft = body.scrollLeft;
-    };
-    top.addEventListener("scroll", fromTop, { passive: true });
-    body.addEventListener("scroll", fromBody, { passive: true });
-    return () => {
-      top.removeEventListener("scroll", fromTop);
-      body.removeEventListener("scroll", fromBody);
-    };
-  }, [overflowing]);
-
-  return { topRef, bodyRef, scrollWidth, overflowing };
 }
 
 function visiblePages(
@@ -147,23 +102,13 @@ export function DataTable<TData, TValue>({
     },
   });
 
-  const { topRef, bodyRef, scrollWidth, overflowing } = useTopScrollbar();
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
 
   return (
     <div className="space-y-4">
       <div className="rounded-md border overflow-hidden">
-        {overflowing ? (
-          <div
-            ref={topRef}
-            className="overflow-x-auto border-b"
-            aria-hidden="true"
-          >
-            <div style={{ width: scrollWidth, height: 1 }} />
-          </div>
-        ) : null}
-        <div ref={bodyRef} className="overflow-x-auto">
+        <HorizontalScroll>
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
@@ -173,7 +118,8 @@ export function DataTable<TData, TValue>({
                       <TableHead
                         key={header.id}
                         className={cn(
-                          isSticky(header.column.columnDef.meta) && STICKY_CLASS,
+                          isSticky(header.column.columnDef.meta) &&
+                            cn(STICKY_COLUMN_CLASS, "bg-background"),
                         )}
                       >
                         {header.isPlaceholder
@@ -199,7 +145,8 @@ export function DataTable<TData, TValue>({
                       <TableCell
                         key={cell.id}
                         className={cn(
-                          isSticky(cell.column.columnDef.meta) && STICKY_CLASS,
+                          isSticky(cell.column.columnDef.meta) &&
+                            cn(STICKY_COLUMN_CLASS, "bg-background"),
                         )}
                       >
                         {flexRender(
@@ -222,7 +169,7 @@ export function DataTable<TData, TValue>({
               )}
             </TableBody>
           </Table>
-        </div>
+        </HorizontalScroll>
       </div>
       {pagination && data.length > 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -95,6 +95,28 @@ export function periodoAnterior(inicio: string, fim: string): { inicio: string; 
 // mudar nos dois lugares.
 export const INICIO_COLETA_META = "2026-07-01";
 
+/** Lead time do produto: antes disso o lead ainda não teve tempo de comprar. */
+export const DIAS_MATURACAO_LEAD = 35;
+
+/**
+ * Leads usados na conversão por criativo: só os que já completaram
+ * DIAS_MATURACAO_LEAD. Período que termina antes disso vale como está; o que
+ * termina depois (ex.: últimos 30 dias) mantém a duração e recua até o
+ * último dia maduro. Nunca antes do início da coleta do Meta. null quando
+ * não sobra nenhum dia.
+ */
+export function janelaLeadsMaduros(
+  inicio: string,
+  fim: string,
+): { inicio: string; fim: string } | null {
+  const limite = addDias(hojeSaoPaulo(), -DIAS_MATURACAO_LEAD);
+  const dias = Math.round((Date.parse(fim) - Date.parse(inicio)) / 86_400_000);
+  const fimMaduro = fim <= limite ? fim : limite;
+  const inicioBruto = fim <= limite ? inicio : addDias(limite, -dias);
+  const inicioMaduro = inicioBruto < INICIO_COLETA_META ? INICIO_COLETA_META : inicioBruto;
+  return inicioMaduro <= fimMaduro ? { inicio: inicioMaduro, fim: fimMaduro } : null;
+}
+
 export interface JanelaComparacao {
   /** Início efetivo do período (recortado no início da coleta). */
   inicio: string;
