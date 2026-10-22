@@ -17,7 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -290,24 +289,6 @@ const MIN_LEADS_CONVERSAO = 20;
 
 type SortKey = keyof FunnelRow;
 
-function DiagnosticoBadge({ valor }: { valor: string }) {
-  if (valor === "GERA VENDA") {
-    return (
-      <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">
-        GERA VENDA
-      </Badge>
-    );
-  }
-  if (valor === "LEAD BARATO VENDA CARA") {
-    return (
-      <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
-        LEAD BARATO VENDA CARA
-      </Badge>
-    );
-  }
-  return <Badge variant="secondary">REVISAR</Badge>;
-}
-
 export function Anuncios({
   periodo,
   customRange,
@@ -506,12 +487,10 @@ export function Anuncios({
         <CardHeader>
           <CardTitle>Funil por anúncio</CardTitle>
           <CardDescription>
-            Leads = criados no período; orçamento, mockup e negociação =
-            eventos no período. Vendas e faturamento = pedidos fechados no
+            Leads = criados no período; mockup e negociação = eventos no
+            período. Vendas e faturamento = pedidos fechados no
             período (pela data da venda), mesmo que o lead seja de antes — a
-            soma bate com o &quot;Do Meta&quot; da Visão Geral. Valor e pares de
-            orçamento contam a partir de Orçamento Gerado (mede o anúncio no
-            caminho). &quot;Via bio do Instagram&quot; = quem chegou pela bio
+            soma bate com o &quot;Do Meta&quot; da Visão Geral. &quot;Via bio do Instagram&quot; = quem chegou pela bio
             trazendo a campanha de origem. Lead time ~35 dias.
           </CardDescription>
           <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
@@ -556,19 +535,14 @@ export function Anuncios({
                     {th("spend_total", "Invest.")}
                     {th("leads_ghl", "Leads")}
                     {th("custo_por_lead", "R$/Lead")}
-                    {th("orcamentos", "Orçam.")}
-                    {th("valor_orcamentos", "Valor Orç.")}
-                    {th("pares_orcamentos", "Pares Orç.")}
-                    {th("custo_por_orcamento", "R$/Orç.")}
                     {th("mockups", "Mockups")}
                     {th("custo_por_mockup", "R$/Mockup")}
                     {th("negociacoes", "Negoc.")}
                     {th("custo_por_negociacao", "R$/Negoc.")}
                     {th("vendas", "Vendas")}
-                    {th("faturamento", "Faturamento")}
                     {th("cpa_venda", "R$/Venda")}
+                    {th("faturamento", "Faturamento")}
                     {th("roas", "ROAS")}
-                    {th("diagnostico", "Diagnóstico", false)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -598,26 +572,6 @@ export function Anuncios({
                         </Valor>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Valor varKey="orcamentos" variacao={r.variacao}>
-                          {fmtNum(r.orcamentos)}
-                        </Valor>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Valor varKey="valor_orcamentos" variacao={r.variacao}>
-                          {fmtBrl(r.valor_orcamentos)}
-                        </Valor>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Valor varKey="pares_orcamentos" variacao={r.variacao}>
-                          {fmtNum(r.pares_orcamentos)}
-                        </Valor>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Valor varKey="custo_por_orcamento" variacao={r.variacao}>
-                          {fmtBrl(r.custo_por_orcamento)}
-                        </Valor>
-                      </TableCell>
-                      <TableCell className="text-right">
                         <Valor varKey="mockups" variacao={r.variacao}>
                           {fmtNum(r.mockups)}
                         </Valor>
@@ -643,26 +597,19 @@ export function Anuncios({
                         </Valor>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Valor varKey="faturamento" variacao={r.variacao}>
-                          {fmtBrl(r.faturamento)}
+                        <Valor varKey="cpa_venda" variacao={r.variacao}>
+                          {fmtBrl(r.cpa_venda)}
                         </Valor>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Valor varKey="cpa_venda" variacao={r.variacao}>
-                          {fmtBrl(r.cpa_venda)}
+                        <Valor varKey="faturamento" variacao={r.variacao}>
+                          {fmtBrl(r.faturamento)}
                         </Valor>
                       </TableCell>
                       <TableCell className="text-right">
                         <Valor varKey="roas" variacao={r.variacao}>
                           {r.roas != null ? `${r.roas}x` : "—"}
                         </Valor>
-                      </TableCell>
-                      <TableCell>
-                        {r.ad_id === "_sem_investimento" || !(Number(r.spend_total) > 0) ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          <DiagnosticoBadge valor={r.diagnostico} />
-                        )}
                       </TableCell>
                     </TableRow>
                   ))}
