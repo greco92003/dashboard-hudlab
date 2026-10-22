@@ -34,7 +34,7 @@ test("relatório fora da lista e nomes herdados de Object são recusados", () =>
 
 test("catálogo cobre os relatórios que as telas usam", () => {
   assert.deepEqual(Object.keys(REPORTS).sort(), [
-    "ads", "funnel", "health", "leads-without-sale", "pipelines", "regions", "regions-history",
+    "ads", "creative-conversion", "funnel", "health", "pipelines", "regions", "regions-history",
     "sales-without-pairs", "series", "sources", "summary", "top-campaigns", "utm-unmatched",
   ]);
 });

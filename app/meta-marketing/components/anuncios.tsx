@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchMarketingReport, fetchMarketingSnapshot } from "../report-client";
+import { fetchMarketingReport } from "../report-client";
 import {
   Card,
   CardContent,
@@ -29,9 +29,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import {
+  DIAS_MATURACAO_LEAD,
   fmtBrl,
+  fmtDataCurta,
   fmtNum,
+  fmtPct,
   janelaComparacao,
+  janelaLeadsMaduros,
   periodoParaDatas,
   textoComparacao,
   type Periodo,
@@ -263,14 +267,18 @@ function Valor({
   );
 }
 
-interface LeadFrioRow {
+interface ConversaoRow {
   ad_id: string;
   ad_name: string | null;
   campaign_name: string | null;
-  qtd_leads_frios: number;
-  spend: number;
-  custo_por_lead_frio: number | null;
+  leads: number;
+  compraram: number;
+  faturamento: number;
+  investimento: number;
 }
+
+// Abaixo disso, 1 venda a mais ou a menos muda a taxa demais para comparar.
+const MIN_LEADS_CONVERSAO = 20;
 
 type SortKey = keyof FunnelRow;
 
@@ -304,7 +312,7 @@ export function Anuncios({
   const [rawAtual, setRawAtual] = useState<FunnelRow[]>([]);
   const [rawFechado, setRawFechado] = useState<FunnelRow[]>([]);
   const [rawAnterior, setRawAnterior] = useState<FunnelRow[]>([]);
-  const [frios, setFrios] = useState<LeadFrioRow[]>([]);
+  const [conversao, setConversao] = useState<ConversaoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
@@ -315,6 +323,7 @@ export function Anuncios({
 
   const selecionado = periodoParaDatas(periodo, customRange);
   const janela = janelaComparacao(selecionado.inicio, selecionado.fim);
+  const maduros = janelaLeadsMaduros(selecionado.inicio, selecionado.fim);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -327,7 +336,7 @@ export function Anuncios({
     let cancel = false;
     setLoading(true);
     (async () => {
-      const [atual, fechadoQ, anteriorQ, leadsFrios] = await Promise.all([
+      const [atual, fechadoQ, anteriorQ, conversaoQ] = await Promise.all([
         fetchMarketingReport<FunnelRow[]>("ads", inicio, fim, controller.signal),
         precisaFechado
           ? fetchMarketingReport<FunnelRow[]>("ads", atualFechado!.inicio, atualFechado!.fim, controller.signal)
@@ -335,7 +344,19 @@ export function Anuncios({
         anterior
           ? fetchMarketingReport<FunnelRow[]>("ads", anterior.inicio, anterior.fim, controller.signal)
           : vazio,
-        fetchMarketingSnapshot<LeadFrioRow[]>("leads-without-sale", controller.signal),
+        // Seção à parte: se ela falhar, a tabela de anúncios continua.
+        maduros
+          ? fetchMarketingReport<ConversaoRow[]>(
+              "creative-conversion",
+              maduros.inicio,
+              maduros.fim,
+              controller.signal,
+            ).catch((error) => {
+              // Busca cancelada (troca de período) não é falha.
+              if (!controller.signal.aborted) console.error("Conversão por criativo", error);
+              return { data: [] as ConversaoRow[] };
+            })
+          : Promise.resolve({ data: [] as ConversaoRow[] }),
       ]);
       if (cancel) return;
 
@@ -345,7 +366,7 @@ export function Anuncios({
       setRawAtual(linhasAtuais);
       setRawFechado(precisaFechado ? ((fechadoQ.data as FunnelRow[]) ?? []) : linhasAtuais);
       setRawAnterior((anteriorQ.data as FunnelRow[]) ?? []);
-      setFrios((leadsFrios.data as LeadFrioRow[]) ?? []);
+      setConversao((conversaoQ.data as ConversaoRow[]) ?? []);
       setLoading(false);
     })().catch((error) => {
       if (!cancel) {
@@ -357,8 +378,31 @@ export function Anuncios({
       cancel = true;
       controller.abort();
     };
-    // janela deriva só de periodo/customRange (e do dia de hoje).
+    // janela e maduros derivam só de periodo/customRange (e do dia de hoje).
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
+
+  // Conversão por criativo: só anúncios com leads suficientes, do que mais
+  // converte para o que menos.
+  const conversaoRows = useMemo(() => {
+    const linhas = conversao.map((r) => {
+      const leads = Number(r.leads);
+      const compraram = Number(r.compraram);
+      const investimento = Number(r.investimento);
+      return {
+        ...r,
+        leads,
+        compraram,
+        faturamento: Number(r.faturamento),
+        investimento,
+        taxa: leads > 0 ? (compraram / leads) * 100 : 0,
+        custoPorVenda: compraram > 0 && investimento > 0 ? investimento / compraram : null,
+      };
+    });
+    const visiveis = linhas
+      .filter((r) => r.leads >= MIN_LEADS_CONVERSAO)
+      .sort((a, b) => b.taxa - a.taxa || b.leads - a.leads);
+    return { visiveis, ocultos: linhas.length - visiveis.length };
+  }, [conversao]);
 
   // Agrupamento é 100% client-side a partir do nível de anúncio já
   // buscado -- trocar o seletor de nível não refaz a busca no banco, só
@@ -619,18 +663,17 @@ export function Anuncios({
 
       <Card>
         <CardHeader>
-          <CardTitle>Leads frios</CardTitle>
+          <CardTitle>Conversão por criativo</CardTitle>
           <CardDescription>
-            Leads com mais de 35 dias (lead time do produto) sem nenhuma
-            venda, por anúncio — detecta anúncios que queimam verba com lead
-            ruim. Histórico completo (não segue o período selecionado), sem a
-            base importada do CRM anterior.
+            {maduros
+              ? `Leads que chegaram por cada anúncio de ${fmtDataCurta(maduros.inicio)} a ${fmtDataCurta(maduros.fim)} e já completaram ${DIAS_MATURACAO_LEAD} dias (lead time do produto): quantos compraram. Mesma duração do período selecionado, recuada para os leads terem tido tempo de fechar. Sem a base importada do CRM anterior.`
+              : `Nenhum lead do período completou ${DIAS_MATURACAO_LEAD} dias (lead time do produto) ainda. Escolha um período mais longo.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {frios.length === 0 ? (
+          {conversaoRows.visiveis.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              Nenhum lead frio identificado ainda.
+              Nenhum anúncio com {MIN_LEADS_CONVERSAO} leads ou mais nessa janela.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -638,13 +681,16 @@ export function Anuncios({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Anúncio</TableHead>
-                    <TableHead className="text-right">Leads frios</TableHead>
+                    <TableHead className="text-right">Leads</TableHead>
+                    <TableHead className="text-right">Compraram</TableHead>
+                    <TableHead className="text-right">Conversão</TableHead>
+                    <TableHead className="text-right">Faturamento</TableHead>
                     <TableHead className="text-right">Investimento</TableHead>
-                    <TableHead className="text-right">Custo por lead frio</TableHead>
+                    <TableHead className="text-right">Custo por venda</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {frios.map((r) => (
+                  {conversaoRows.visiveis.map((r) => (
                     <TableRow key={r.ad_id}>
                       <TableCell className="max-w-64">
                         <div className="truncate font-medium" title={r.ad_name ?? r.ad_id}>
@@ -654,15 +700,27 @@ export function Anuncios({
                           {r.campaign_name}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">{fmtNum(r.qtd_leads_frios)}</TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.spend)}</TableCell>
-                      <TableCell className="text-right">{fmtBrl(r.custo_por_lead_frio)}</TableCell>
+                      <TableCell className="text-right">{fmtNum(r.leads)}</TableCell>
+                      <TableCell className="text-right">{fmtNum(r.compraram)}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {fmtPct(Math.round(r.taxa * 10) / 10)}
+                      </TableCell>
+                      <TableCell className="text-right">{fmtBrl(r.faturamento)}</TableCell>
+                      <TableCell className="text-right">{fmtBrl(r.investimento)}</TableCell>
+                      <TableCell className="text-right">{fmtBrl(r.custoPorVenda)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
           )}
+          {conversaoRows.ocultos > 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {conversaoRows.ocultos} anúncio(s) com menos de {MIN_LEADS_CONVERSAO} leads
+              ficaram de fora: com tão poucos leads, uma venda a mais ou a menos muda a
+              taxa demais. Poucas vendas por anúncio ainda indicam tendência, não decisão.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>
