@@ -27,6 +27,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  HorizontalScroll,
+  STICKY_COLUMN_CLASS,
+} from "@/components/ui/horizontal-scroll";
+import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import {
   DIAS_MATURACAO_LEAD,
@@ -277,6 +282,9 @@ interface ConversaoRow {
   investimento: number;
 }
 
+// Nome do anúncio fixo ao rolar para o lado; fundo do card por baixo.
+const COLUNA_FIXA = cn(STICKY_COLUMN_CLASS, "bg-card");
+
 // Abaixo disso, 1 venda a mais ou a menos muda a taxa demais para comparar.
 const MIN_LEADS_CONVERSAO = 20;
 
@@ -459,9 +467,13 @@ export function Anuncios({
     return [...ordenadas, semNome];
   }, [rows, busca, sortKey, sortDesc]);
 
-  const th = (key: SortKey, label: string, right = true) => (
+  const th = (key: SortKey, label: string, right = true, fixa = false) => (
     <TableHead
-      className={`cursor-pointer select-none whitespace-nowrap ${right ? "text-right" : ""}`}
+      className={cn(
+        "cursor-pointer select-none whitespace-nowrap",
+        right && "text-right",
+        fixa && COLUNA_FIXA,
+      )}
       onClick={() => {
         if (sortKey === key) setSortDesc(!sortDesc);
         else {
@@ -536,11 +548,11 @@ export function Anuncios({
               Nenhum anúncio encontrado. Rode o sync-meta para popular os dados.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <HorizontalScroll>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {th("ad_name", NIVEIS.find((n) => n.value === nivel)!.label, false)}
+                    {th("ad_name", NIVEIS.find((n) => n.value === nivel)!.label, false, true)}
                     {th("spend_total", "Invest.")}
                     {th("leads_ghl", "Leads")}
                     {th("custo_por_lead", "R$/Lead")}
@@ -562,7 +574,7 @@ export function Anuncios({
                 <TableBody>
                   {visiveis.map((r) => (
                     <TableRow key={r.ad_id}>
-                      <TableCell className="max-w-64">
+                      <TableCell className={cn("max-w-40 sm:max-w-64", COLUNA_FIXA)}>
                         <div className="truncate font-medium" title={r.ad_name ?? r.ad_id}>
                           {r.ad_name ?? r.ad_id}
                         </div>
@@ -656,7 +668,7 @@ export function Anuncios({
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </HorizontalScroll>
           )}
         </CardContent>
       </Card>
@@ -676,11 +688,11 @@ export function Anuncios({
               Nenhum anúncio com {MIN_LEADS_CONVERSAO} leads ou mais nessa janela.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <HorizontalScroll>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Anúncio</TableHead>
+                    <TableHead className={COLUNA_FIXA}>Anúncio</TableHead>
                     <TableHead className="text-right">Leads</TableHead>
                     <TableHead className="text-right">Compraram</TableHead>
                     <TableHead className="text-right">Conversão</TableHead>
@@ -692,7 +704,7 @@ export function Anuncios({
                 <TableBody>
                   {conversaoRows.visiveis.map((r) => (
                     <TableRow key={r.ad_id}>
-                      <TableCell className="max-w-64">
+                      <TableCell className={cn("max-w-40 sm:max-w-64", COLUNA_FIXA)}>
                         <div className="truncate font-medium" title={r.ad_name ?? r.ad_id}>
                           {r.ad_name ?? r.ad_id}
                         </div>
@@ -712,7 +724,7 @@ export function Anuncios({
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </HorizontalScroll>
           )}
           {conversaoRows.ocultos > 0 ? (
             <p className="mt-3 text-xs text-muted-foreground">
