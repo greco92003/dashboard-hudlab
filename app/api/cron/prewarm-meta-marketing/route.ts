@@ -4,7 +4,11 @@
  */
 import { NextResponse } from "next/server";
 import { requireCronSecret } from "@/lib/security/route-guards";
-import { periodoParaDatas, janelaComparacao } from "@/app/meta-marketing/lib";
+import {
+  janelaComparacao,
+  janelaLeadsMaduros,
+  periodoParaDatas,
+} from "@/app/meta-marketing/lib";
 import { parseReportRequest } from "@/app/meta-marketing/report-catalog";
 import { warmReport, type ParsedOk } from "@/lib/meta-marketing/report-cache";
 
@@ -13,7 +17,7 @@ export const maxDuration = 300;
 
 const COM_PERIODO = ["summary", "funnel", "sources", "ads", "top-campaigns", "sales-without-pairs", "regions"];
 const COM_COMPARACAO = ["funnel", "ads"];
-const SEM_PERIODO = ["pipelines", "health", "utm-unmatched", "leads-without-sale", "regions-history"];
+const SEM_PERIODO = ["pipelines", "health", "utm-unmatched", "regions-history"];
 
 function pedido(report: string, inicio?: string, fim?: string): ParsedOk | null {
   const params = new URLSearchParams({ report });
@@ -41,6 +45,9 @@ export async function GET(request: Request) {
     if (anterior) add(pedido(report, anterior.inicio, anterior.fim));
   }
   for (const report of SEM_PERIODO) add(pedido(report));
+  // Conversão por criativo usa a janela de leads maduros, não a do período.
+  const maduros = janelaLeadsMaduros(base.inicio, base.fim);
+  if (maduros) add(pedido("creative-conversion", maduros.inicio, maduros.fim));
 
   const resultados: { report: string; inicio: string | null; fim: string | null; resultado: string; ms: number }[] = [];
   for (const req of pedidos) {
