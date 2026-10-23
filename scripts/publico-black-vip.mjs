@@ -25,9 +25,17 @@
 // pagou hoje de manhã já saia do lote de hoje. ghl_opportunities entra só
 // para o nome da etapa e os pares do Cadastro Inicial.
 //
+// Revisão (--revisar): os três lotes foram marcados em 23/10, e quem pagar um
+// pedido entre a marcação e o envio do seu lote não pode receber a promoção.
+// Na manhã do envio, tira a tag do lote de quem tem a tag, ainda não recebeu o
+// convite e agora cai numa exclusão. Depende do sync das 06:10, que traz as
+// tags campanha_* para ghl_contact_tags.
+//
 // Uso (rodar na pasta do projeto que tem o .env.local):
 //   node scripts/publico-black-vip.mjs --lote 1             (simulação)
 //   node scripts/publico-black-vip.mjs --lote 1 --aplicar
+//   node scripts/publico-black-vip.mjs --lote 2 --revisar   (simulação da revisão)
+//   node scripts/publico-black-vip.mjs --lote 2 --revisar --aplicar
 import dotenv from "dotenv";
 import pg from "pg";
 
@@ -36,6 +44,7 @@ dotenv.config({ path: ".env.local", quiet: true });
 const argv = process.argv.slice(2);
 const lote = Number(argv[argv.indexOf("--lote") + 1]);
 const aplicar = argv.includes("--aplicar");
+const revisar = argv.includes("--revisar");
 if (![1, 2, 3].includes(lote)) throw new Error("use --lote 1, 2 ou 3");
 
 for (const nome of ["DATABASE_URL", "GHL_PRIVATE_INTEGRATION_TOKEN"]) {
@@ -77,7 +86,8 @@ const SQL = `
     SELECT contact_id,
       BOOL_OR(tag = 'campanha_blackvip_enviado') AS recebeu,
       BOOL_OR(tag IN ('campanha_blackvip_lote1','campanha_blackvip_lote2')) AS lote_anterior,
-      BOOL_OR(tag = 'campanha_blackvip_lote3') AS lote3
+      BOOL_OR(tag = 'campanha_blackvip_lote3') AS lote3,
+      BOOL_OR(tag = $2) AS este_lote
     FROM ghl_contact_tags
     WHERE tag LIKE 'campanha\\_blackvip\\_%'
     GROUP BY 1
@@ -109,6 +119,7 @@ const SQL = `
     COALESCE(t.recebeu, false) AS recebeu,
     COALESCE(t.lote_anterior, false) AS lote_anterior,
     COALESCE(t.lote3, false) AS lote3,
+    COALESCE(t.este_lote, false) AS este_lote,
     p.excluido
   FROM por p
   LEFT JOIN pares pa USING (contact_id)
@@ -147,8 +158,33 @@ async function conectar() {
 
 async function main() {
   const db = await conectar();
-  const { rows } = await db.query(SQL, [POS_PAGAMENTO]);
+  const { rows } = await db.query(SQL, [POS_PAGAMENTO, TAG]);
   await db.end();
+
+  if (revisar) {
+    const comTag = rows.filter((r) => r.este_lote);
+    const tirar = comTag.filter((r) => r.excluido && !r.recebeu);
+    console.log(`Revisão do lote ${lote} (${TAG}): ${comTag.length} contatos com a tag no banco`);
+    console.log(`  passaram a ter pedido em andamento / Finalizando Venda: ${tirar.length}`);
+    if (comTag.length === 0) console.log("  ATENÇÃO: nenhuma tag do lote no banco. O sync das 06:10 rodou?");
+    if (!aplicar) {
+      console.log("\nSimulação. Rode com --revisar --aplicar para tirar a tag deles.");
+      return;
+    }
+    let ok = 0;
+    for (const r of tirar) {
+      const res = await fetch(`${base}/contacts/${r.contact_id}/tags`, {
+        method: "DELETE",
+        headers: cabecalho,
+        body: JSON.stringify({ tags: [TAG] }),
+      });
+      if (res.ok) ok++;
+      else console.log(`  falhou ${r.contact_id}: ${res.status}`);
+      await espera(220);
+    }
+    console.log(`\nTag removida de ${ok} de ${tirar.length}`);
+    return;
+  }
 
   const doLote = rows.filter((r) => {
     if (r.excluido || r.recebeu) return false;
