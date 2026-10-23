@@ -221,8 +221,8 @@ function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
             {campanhas.map((c) => {
               const etapas = [
                 { rotulo: "Receberam", valor: c.enviados },
-                { rotulo: "Quiseram ver o vídeo", valor: c.queroVer },
-                { rotulo: "Não quiseram ver", valor: c.naoQuero, secundaria: true },
+                { rotulo: "Aceitaram o convite", valor: c.queroVer },
+                { rotulo: "Recusaram o convite", valor: c.naoQuero, secundaria: true },
                 { rotulo: "Quero fazer pedido", valor: c.queroPedido },
                 // Só a Black VIP tem esse botão; nas outras a linha ficaria
                 // sempre em zero.
