@@ -26,6 +26,11 @@ const NEW_LEAD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // (follow_atendimento_d1, follow_negociacao_m2_v2...) e campanhas para a base
 // de clientes (campanha_politica_enviado...). Ver runFollowUpTags.
 const TRACKED_TAG_PREFIXES = ["follow_", "campanha_"];
+// Tags medidas pelo nome exato. lista_vip = Lista VIP permanente, criada na
+// Black November de 2026: quem aceitou receber novidades. Entra e sai (o
+// contato pode pedir para sair), então o tamanho atual é quem foi visto no
+// último sync, não toda linha da tabela.
+const TRACKED_TAGS = ["lista_vip"];
 
 // Escopo do BI (definido em 2026-07-21): apenas o pipeline
 // "Atendimento" (Fábrica de Mockups é passagem dos mesmos clientes)
@@ -388,7 +393,8 @@ async function runFollowUpTags(supabase: any, token: string, locationId: string,
     const tags: string[] = (body.tags ?? [])
       .map((t: { name?: string }) => String(t.name ?? ""))
       .filter((name: string) =>
-        TRACKED_TAG_PREFIXES.some((prefixo) => name.toLowerCase().startsWith(prefixo))
+        TRACKED_TAG_PREFIXES.some((prefixo) => name.toLowerCase().startsWith(prefixo)) ||
+        TRACKED_TAGS.includes(name.toLowerCase())
       )
       .sort();
 

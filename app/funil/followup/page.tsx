@@ -50,6 +50,7 @@ interface Campanha {
   naoQuero: number;
   queroPedido: number;
   agoraNao: number;
+  consultarPrazo: number;
   novosNegocios: number;
   fecharam: number;
   faturamento: number | null;
@@ -59,6 +60,7 @@ interface FollowUpReguaResponse {
   atendimento: FollowUpDegrau[];
   negociacao: FollowUpDegrau[];
   campanhas: Campanha[];
+  listaVip?: { membros: number; vistoEm: string } | null;
   meta: { geradoEm: string; aguardandoPrimeiraObservacao: boolean };
 }
 
@@ -196,11 +198,33 @@ function regraDaCampanha(c: Campanha) {
  * cima para baixo, e cada linha mostra a fatia de quem recebeu -- assim dá
  * para ver onde as pessoas param.
  */
-function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
+function BlocoCampanhas({
+  campanhas,
+  listaVip,
+}: {
+  campanhas: Campanha[];
+  listaVip?: { membros: number; vistoEm: string } | null;
+}) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Campanhas</CardTitle>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <CardTitle>Campanhas</CardTitle>
+          {listaVip && (
+            <div
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-right"
+              title={`Contatos com a tag lista_vip no último sync (${new Date(listaVip.vistoEm).toLocaleString("pt-BR")})`}
+            >
+              <div className="text-xs text-muted-foreground">Lista VIP</div>
+              <div className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {inteiro.format(listaVip.membros)}{" "}
+                <span className="text-xs font-normal text-muted-foreground">
+                  membros
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
         <CardDescription>
           Disparos de WhatsApp. Cada venda conta só na última campanha que o
           contato recebeu.
@@ -220,9 +244,14 @@ function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
             {campanhas.map((c) => {
               const etapas = [
                 { rotulo: "Receberam", valor: c.enviados },
-                { rotulo: "Quiseram ver o vídeo", valor: c.queroVer },
-                { rotulo: "Não quiseram ver", valor: c.naoQuero, secundaria: true },
+                { rotulo: "Aceitaram o convite", valor: c.queroVer },
+                { rotulo: "Recusaram o convite", valor: c.naoQuero, secundaria: true },
                 { rotulo: "Quero fazer pedido", valor: c.queroPedido },
+                // Só a Black VIP tem esse botão; nas outras a linha ficaria
+                // sempre em zero.
+                ...(c.consultarPrazo > 0
+                  ? [{ rotulo: "Consultar prazo", valor: c.consultarPrazo }]
+                  : []),
                 { rotulo: "Agora não", valor: c.agoraNao, secundaria: true },
                 { rotulo: "Abriram negócio novo", valor: c.novosNegocios },
                 { rotulo: "Fecharam pedido", valor: c.fecharam },
@@ -404,7 +433,10 @@ export default function FollowUpPage() {
             vazio="Nenhuma promoção registrada ainda."
             comFaturamento
           />
-          <BlocoCampanhas campanhas={data.campanhas ?? []} />
+          <BlocoCampanhas
+            campanhas={data.campanhas ?? []}
+            listaVip={data.listaVip}
+          />
           <p className="text-center text-xs text-muted-foreground">
             Cada disparo recebe o crédito do avanço porque a régua para quando o
             lead reage: a última mensagem que ele tem é a que estava valendo.
