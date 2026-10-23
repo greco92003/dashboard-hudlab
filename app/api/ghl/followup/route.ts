@@ -53,6 +53,8 @@ interface CampanhaRow {
   nao_quero: number;
   quero_pedido: number;
   agora_nao: number;
+  /** Botão "Consultar prazo" da Black VIP (ver get_campanhas_black_vip). */
+  consultar_prazo: number;
   novos_negocios: number;
   fecharam: number;
   faturamento: string | number | null;
@@ -68,6 +70,7 @@ export interface Campanha {
   naoQuero: number;
   queroPedido: number;
   agoraNao: number;
+  consultarPrazo: number;
   novosNegocios: number;
   fecharam: number;
   faturamento: number | null;
@@ -101,6 +104,7 @@ function toCampanha(row: CampanhaRow): Campanha {
     naoQuero: row.nao_quero,
     queroPedido: row.quero_pedido,
     agoraNao: row.agora_nao,
+    consultarPrazo: row.consultar_prazo ?? 0,
     novosNegocios: row.novos_negocios,
     fecharam: row.fecharam,
     faturamento: toNumber(row.faturamento),

@@ -50,6 +50,7 @@ interface Campanha {
   naoQuero: number;
   queroPedido: number;
   agoraNao: number;
+  consultarPrazo: number;
   novosNegocios: number;
   fecharam: number;
   faturamento: number | null;
@@ -223,6 +224,11 @@ function BlocoCampanhas({ campanhas }: { campanhas: Campanha[] }) {
                 { rotulo: "Quiseram ver o vídeo", valor: c.queroVer },
                 { rotulo: "Não quiseram ver", valor: c.naoQuero, secundaria: true },
                 { rotulo: "Quero fazer pedido", valor: c.queroPedido },
+                // Só a Black VIP tem esse botão; nas outras a linha ficaria
+                // sempre em zero.
+                ...(c.consultarPrazo > 0
+                  ? [{ rotulo: "Consultar prazo", valor: c.consultarPrazo }]
+                  : []),
                 { rotulo: "Agora não", valor: c.agoraNao, secundaria: true },
                 { rotulo: "Abriram negócio novo", valor: c.novosNegocios },
                 { rotulo: "Fecharam pedido", valor: c.fecharam },
