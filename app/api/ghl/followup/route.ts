@@ -89,6 +89,8 @@ export interface FollowUpReguaResponse {
     geradoEm: string;
     /** Nenhuma tag foi observada aparecendo ainda: tudo veio da carga inicial. */
     aguardandoPrimeiraObservacao: boolean;
+    /** Fim da última leitura de tags no GHL (cron, sync manual ou botão Atualizar). */
+    tagsLidasEm: string | null;
   };
 }
 
@@ -173,13 +175,21 @@ export async function GET() {
       return { membros: count ?? 0, vistoEm };
     };
 
-    const [regua, campanhas, observadas] = await Promise.all([
+    const [regua, campanhas, observadas, ultimaLeitura] = await Promise.all([
       supabase.rpc("get_followup_regua"),
       supabase.rpc("get_campanhas"),
       supabase
         .from("ghl_contact_tags")
         .select("contact_id", { count: "exact", head: true })
         .eq("origem_primeiro_visto", "observado"),
+      supabase
+        .from("sync_log")
+        .select("finished_at")
+        .eq("source", "ghl_contact_tags")
+        .eq("status", "success")
+        .order("finished_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     if (regua.error) throw new Error(regua.error.message);
@@ -207,6 +217,8 @@ export async function GET() {
       meta: {
         geradoEm: new Date().toISOString(),
         aguardandoPrimeiraObservacao: (observadas.count ?? 0) === 0,
+        tagsLidasEm:
+          (ultimaLeitura.data as { finished_at?: string } | null)?.finished_at ?? null,
       },
     };
 

@@ -61,8 +61,23 @@ interface FollowUpReguaResponse {
   negociacao: FollowUpDegrau[];
   campanhas: Campanha[];
   listaVip?: { membros: number; vistoEm: string } | null;
-  meta: { geradoEm: string; aguardandoPrimeiraObservacao: boolean };
+  meta: {
+    geradoEm: string;
+    aguardandoPrimeiraObservacao: boolean;
+    tagsLidasEm?: string | null;
+  };
 }
+
+const horaLeitura = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const diaLeitura = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+});
 
 const inteiro = new Intl.NumberFormat("pt-BR");
 const moeda = new Intl.NumberFormat("pt-BR", {
@@ -360,6 +375,45 @@ export default function FollowUpPage() {
     carregar();
   }, [carregar]);
 
+  // O botão lê de novo as tags no GHL (~1 min) antes de recarregar: sem isso
+  // ele só relia o banco, que o sync completo atualiza 1x/dia.
+  const [lendoGhl, setLendoGhl] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const atualizar = useCallback(async () => {
+    setLendoGhl(true);
+    setAviso(null);
+    try {
+      const res = await fetch("/api/ghl/followup/atualizar", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        recente?: boolean;
+        error?: string;
+      };
+      if (!res.ok) {
+        setAviso(
+          `Não foi possível ler o GHL agora (${body.error ?? `erro ${res.status}`}). Os números abaixo são da última leitura.`,
+        );
+      } else if (body.recente) {
+        setAviso(
+          "O GHL foi lido há menos de 10 min. Os números abaixo já são dessa leitura.",
+        );
+      }
+    } catch {
+      setAviso(
+        "Não foi possível ler o GHL agora. Os números abaixo são da última leitura.",
+      );
+    } finally {
+      setLendoGhl(false);
+    }
+    await carregar();
+  }, [carregar]);
+
+  const tagsLidasEm = data?.meta.tagsLidasEm
+    ? new Date(data.meta.tagsLidasEm)
+    : null;
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -382,16 +436,34 @@ export default function FollowUpPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={carregar}
-          disabled={loading}
-          title="Atualizar"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-3">
+          <p className="text-right text-xs text-muted-foreground">
+            {lendoGhl
+              ? "Lendo as tags no GHL… cerca de 1 min"
+              : tagsLidasEm
+                ? `GHL lido às ${horaLeitura.format(tagsLidasEm)} de ${diaLeitura.format(tagsLidasEm)}`
+                : null}
+          </p>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={atualizar}
+            disabled={loading || lendoGhl}
+            title="Ler o GHL de novo e atualizar"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${loading || lendoGhl ? "animate-spin" : ""}`}
+            />
+          </Button>
+        </div>
       </div>
+
+      {aviso && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>{aviso}</AlertDescription>
+        </Alert>
+      )}
 
       {erro && (
         <Alert variant="destructive">

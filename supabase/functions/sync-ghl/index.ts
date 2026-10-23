@@ -8,6 +8,8 @@
 // Cada invocação processa até TIME_BUDGET_MS e, se não terminou,
 // dispara a si mesma com o cursor (EdgeRuntime.waitUntil).
 // Body: {} inicia do zero; {"phase",...,"hop"} é uso interno.
+// {"phase":"tags","soTags":true} lê só as tags e devolve o cursor (botão
+// Atualizar da aba Follow-Up; ver ChainState.soTags).
 //
 // Secrets necessários:
 //   GHL_API_TOKEN   - token de Private Integration (API v2)
@@ -55,6 +57,13 @@ interface ChainState {
   offset?: number;
   tagIndex?: number;
   hop?: number;
+  /**
+   * Botão "Atualizar" da aba Follow-Up (rota /api/ghl/followup/atualizar):
+   * só a fase tags, sem contacts/snapshot, e quem encadeia os hops é a rota
+   * -- a função devolve o cursor em `next` em vez de se disparar, para a
+   * página saber quando terminou.
+   */
+  soTags?: boolean;
 }
 
 function ghlHeaders(token: string) {
@@ -718,19 +727,26 @@ Deno.serve(async (req: Request) => {
       try {
         r = await runFollowUpTags(supabase, token, locationId, state, deadline);
       } catch (tagErr) {
+        const error = tagErr instanceof Error ? tagErr.message : String(tagErr);
+        if (state.soTags) return json({ phase: "tags", error, continua: false, hop });
         chainNext({ phase: "contacts", hop });
         return json({
           phase: "tags",
-          error: tagErr instanceof Error ? tagErr.message : String(tagErr),
+          error,
           continua: false,
           proxima: "contacts",
           hop,
         });
       }
       if (r.next && hop < MAX_HOPS - 1) {
+        if (state.soTags) {
+          const next: ChainState = { phase: "tags", ...r.next, hop, soTags: true };
+          return json({ phase: "tags", rows: r.rows, continua: true, next, hop });
+        }
         chainNext({ phase: "tags", ...r.next, hop });
         return json({ phase: "tags", rows: r.rows, continua: true, hop });
       }
+      if (state.soTags) return json({ phase: "tags", rows: r.rows, continua: false, hop });
       chainNext({ phase: "contacts", hop });
       return json({ phase: "tags", rows: r.rows, continua: false, proxima: "contacts", hop });
     }
