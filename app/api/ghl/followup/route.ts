@@ -197,7 +197,12 @@ export async function GET() {
         .filter((row) => row.bloco === "atendimento")
         .map(toDegrau),
       negociacao: rows.filter((row) => row.bloco === "negociacao").map(toDegrau),
-      campanhas: ((campanhas.data ?? []) as CampanhaRow[]).map(toCampanha),
+      // Linha sem nome de campanha derruba a tela (23/10: tags de lote da
+      // Black VIP viraram uma "campanha" NULL). A RPC já filtra; aqui é a
+      // segunda trava.
+      campanhas: ((campanhas.data ?? []) as CampanhaRow[])
+        .filter((row) => typeof row.campanha === "string" && row.campanha !== "")
+        .map(toCampanha),
       listaVip,
       meta: {
         geradoEm: new Date().toISOString(),
