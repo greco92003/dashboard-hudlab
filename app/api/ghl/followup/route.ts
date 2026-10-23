@@ -80,6 +80,11 @@ export interface FollowUpReguaResponse {
   atendimento: FollowUpDegrau[];
   negociacao: FollowUpDegrau[];
   campanhas: Campanha[];
+  /**
+   * Lista VIP permanente (tag lista_vip), criada na Black November de 2026.
+   * null quando o sync ainda não viu a tag.
+   */
+  listaVip: { membros: number; vistoEm: string } | null;
   meta: {
     geradoEm: string;
     /** Nenhuma tag foi observada aparecendo ainda: tudo veio da carga inicial. */
@@ -140,6 +145,34 @@ export async function GET() {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    /**
+     * Tamanho ATUAL da Lista VIP. ghl_contact_tags é histórico (linha de tag
+     * removida no GHL não é apagada), e da lista o contato pode sair pedindo
+     * SAIR. Por isso conta só quem o sync viu na última passada: o sync regrava
+     * ultimo_visto_em de todo contato que ainda tem a tag, e 2 h de folga cobrem
+     * a passada inteira.
+     */
+    const contarListaVip = async (): Promise<{ membros: number; vistoEm: string } | null> => {
+      const ultima = await supabase
+        .from("ghl_contact_tags")
+        .select("ultimo_visto_em")
+        .eq("tag", "lista_vip")
+        .order("ultimo_visto_em", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const vistoEm = (ultima.data as { ultimo_visto_em?: string } | null)?.ultimo_visto_em;
+      if (ultima.error || !vistoEm) return null;
+
+      const corte = new Date(new Date(vistoEm).getTime() - 2 * 3_600_000).toISOString();
+      const { count, error } = await supabase
+        .from("ghl_contact_tags")
+        .select("contact_id", { count: "exact", head: true })
+        .eq("tag", "lista_vip")
+        .gte("ultimo_visto_em", corte);
+      if (error) return null;
+      return { membros: count ?? 0, vistoEm };
+    };
+
     const [regua, campanhas, observadas] = await Promise.all([
       supabase.rpc("get_followup_regua"),
       supabase.rpc("get_campanhas"),
@@ -157,6 +190,7 @@ export async function GET() {
     }
 
     const rows = (regua.data ?? []) as ReguaRow[];
+    const listaVip = await contarListaVip();
 
     const body: FollowUpReguaResponse = {
       atendimento: rows
@@ -164,6 +198,7 @@ export async function GET() {
         .map(toDegrau),
       negociacao: rows.filter((row) => row.bloco === "negociacao").map(toDegrau),
       campanhas: ((campanhas.data ?? []) as CampanhaRow[]).map(toCampanha),
+      listaVip,
       meta: {
         geradoEm: new Date().toISOString(),
         aguardandoPrimeiraObservacao: (observadas.count ?? 0) === 0,
