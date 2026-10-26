@@ -15,7 +15,7 @@ import { warmReport, type ParsedOk } from "@/lib/meta-marketing/report-cache";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const COM_PERIODO = ["summary", "funnel", "sources", "ads", "top-campaigns", "sales-without-pairs", "regions"];
+const COM_PERIODO = ["summary", "funnel", "sources", "ads", "top-campaigns", "sales-without-pairs", "regions", "freight"];
 const COM_COMPARACAO = ["funnel", "ads"];
 const SEM_PERIODO = ["pipelines", "health", "utm-unmatched", "regions-history"];
 

@@ -60,7 +60,12 @@ export async function PATCH(
       (field) => field.id === definition.id,
     );
     const currentValue = current ? extractOpportunityFieldValue(current)?.trim() : null;
-    if (currentValue) {
+    // Em campo de dinheiro, R$ 0 é o que a equipe grava no lado de quem não
+    // pagou o frete: conta como vazio.
+    const preenchido =
+      Boolean(currentValue) &&
+      !(DEAL_EDITABLE_FIELDS[campo].kind === "dinheiro" && Number(currentValue) === 0);
+    if (preenchido) {
       return erro(
         `${label} já está preenchido no GHL (${currentValue}). Atualize a lista.`,
         409,

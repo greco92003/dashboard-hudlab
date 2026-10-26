@@ -69,6 +69,17 @@ interface Kpis {
   custo_por_mockup: number | null;
 }
 
+// get_frete_periodo: só vendas com o frete informado (grátis com valor da Hud,
+// ou pago pelo cliente). Ver a migration homônima.
+interface FreteRow {
+  frete_hud: number;
+  pares_base: number;
+  pares_gratis: number;
+  faturamento_base: number;
+  frete_cliente: number;
+  vendas_sem_frete: number;
+}
+
 interface Resumo {
   atual: Kpis;
   anterior: Kpis;
@@ -180,6 +191,7 @@ export function VisaoGeral({
   const [serieAnterior, setSerieAnterior] = useState<SerieDiaRow[]>([]);
   const [pipelineNomes, setPipelineNomes] = useState<Map<string, string>>(new Map());
   const [vendasSemPares, setVendasSemPares] = useState<VendaSemParesRow[]>([]);
+  const [frete, setFrete] = useState<FreteRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingFunil, setLoadingFunil] = useState(true);
   const [loadingSerie, setLoadingSerie] = useState(true);
@@ -358,6 +370,19 @@ export function VisaoGeral({
     return () => controller.abort();
   }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setFrete(null);
+    fetchMarketingReport<FreteRow[]>("freight", inicio, fim, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setFrete(result.data?.[0] ?? null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) console.error("Frete por par", error);
+      });
+    return () => controller.abort();
+  }, [periodo, customRange?.inicio, customRange?.fim, refreshKey]);
+
   const a = resumo?.atual ?? {} as Kpis;
   const v = resumo?.variacao_pct ?? {};
   const nd = (x: number | null | undefined, fmt: (n: number) => string) =>
@@ -438,6 +463,18 @@ export function VisaoGeral({
   // quantidade de pares" abaixo).
   const temVendasSemPares = (a.vendas_sem_pares ?? 0) > 0;
 
+  // Frete por par: o número principal divide pelo total de pares das vendas
+  // com frete informado (inclui as pagas pelo cliente, com Hud = R$ 0) --
+  // é o que mostra quanto a regra de frete grátis pesa em cada par vendido.
+  const fretePares = Number(frete?.pares_base) || 0;
+  const freteHud = Number(frete?.frete_hud) || 0;
+  const fretePorPar = fretePares > 0 ? freteHud / fretePares : null;
+  const freteGratisPorPar =
+    Number(frete?.pares_gratis) > 0 ? freteHud / Number(frete?.pares_gratis) : null;
+  const fretePctFaturamento =
+    Number(frete?.faturamento_base) > 0 ? (freteHud / Number(frete?.faturamento_base)) * 100 : null;
+  const vendasSemFrete = Number(frete?.vendas_sem_frete) || 0;
+
   // Série diária investimento vs faturamento (já somada por dia no banco),
   // alinhada por posição (dia 0, 1, 2...) com o período anterior de mesma
   // duração -- permite sobrepor as linhas mesmo com datas diferentes. Sem
@@ -492,8 +529,8 @@ export function VisaoGeral({
       )}
 
       {/* KPIs com variação vs período anterior */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {loading && !resumo ? Array.from({ length: 8 }).map((_, i) => (
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5 2xl:grid-cols-9">
+        {loading && !resumo ? Array.from({ length: 9 }).map((_, i) => (
           <Skeleton key={i} className="h-28" />
         )) : erro && !resumo ? (
           <p className="text-sm text-destructive col-span-full">Erro ao carregar resumo: {erro}</p>
@@ -529,6 +566,38 @@ export function VisaoGeral({
             </CardHeader>
           </Card>
         ))}
+        {resumo && (
+          <Card>
+            <CardHeader
+              className="pb-2 px-4 pt-4"
+              title="Frete pago pela Hud Lab ÷ pares das vendas com frete informado (inclui as que o cliente pagou)"
+            >
+              <CardDescription className="text-xs">Frete por par</CardDescription>
+              <CardTitle className="text-xl leading-tight">
+                {frete ? nd(fretePorPar, fmtBrl) : "…"}
+              </CardTitle>
+              <div className="min-h-4" />
+              {frete && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Frete grátis/par {nd(freteGratisPorPar, fmtBrl)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    {nd(fretePctFaturamento, (n) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`)} do faturamento
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Pago pelos clientes {fmtBrl(Number(frete.frete_cliente) || 0)}
+                  </p>
+                </div>
+              )}
+              {vendasSemFrete > 0 && (
+                <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
+                  {fmtNum(vendasSemFrete)} venda(s) sem frete informado ficaram fora
+                </p>
+              )}
+            </CardHeader>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">

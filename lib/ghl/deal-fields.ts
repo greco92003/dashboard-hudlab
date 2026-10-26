@@ -7,13 +7,24 @@
  * Sem dependência de servidor: a tela usa a lista e a validação para não
  * mandar valor que o servidor recusaria.
  */
-export type DealFieldKind = "texto" | "uf" | "numero" | "data";
+export type DealFieldKind = "texto" | "uf" | "numero" | "data" | "opcao" | "dinheiro";
+
+export interface DealFieldOption {
+  /** Texto exato da opção no GHL. */
+  valor: string;
+  /** Como a planilha mostra. */
+  rotulo: string;
+}
 
 export interface DealEditableField {
   fieldKey: string;
   kind: DealFieldKind;
   label: string;
+  opcoes?: readonly DealFieldOption[];
 }
+
+export const FRETE_GRATIS = "Frete Pago pela Empresa (Frete Grátis)";
+export const FRETE_CLIENTE = "Frete Pago pelo Cliente";
 
 export const DEAL_EDITABLE_FIELDS = {
   data_embarque: { fieldKey: "data_de_embarque", kind: "data", label: "Data de Embarque" },
@@ -37,6 +48,27 @@ export const DEAL_EDITABLE_FIELDS = {
     kind: "texto",
     label: "Intenção de Compra",
   },
+  // Frete: a chave é a do provider_payload (ghl_ + fieldKey), que a rota
+  // /api/deals-cache expõe com o mesmo nome.
+  ghl_condio_de_frete: {
+    fieldKey: "condio_de_frete",
+    kind: "opcao",
+    label: "Frete",
+    opcoes: [
+      { valor: FRETE_GRATIS, rotulo: "Grátis" },
+      { valor: FRETE_CLIENTE, rotulo: "Cliente" },
+    ],
+  },
+  ghl_valor_do_frete_pago_hud_lab: {
+    fieldKey: "valor_do_frete_pago_hud_lab",
+    kind: "dinheiro",
+    label: "Frete pago pela Hud Lab",
+  },
+  ghl_valor_do_frete_pago_cliente: {
+    fieldKey: "valor_do_frete_pago_cliente",
+    kind: "dinheiro",
+    label: "Frete pago pelo cliente",
+  },
 } as const satisfies Record<string, DealEditableField>;
 
 export type DealEditableColumn = keyof typeof DEAL_EDITABLE_FIELDS;
@@ -56,6 +88,44 @@ export const UFS = [
 /** Maior valor da coluna integer onde os pares são gravados. */
 const MAX_PARES = 2_147_483_647;
 const MAX_TEXTO = 200;
+const MAX_FRETE = 1_000_000;
+
+export type TipoFrete = "gratis" | "cliente";
+
+function valorPositivo(valor: unknown): boolean {
+  const n = typeof valor === "number" ? valor : Number(String(valor ?? "").trim());
+  return Number.isFinite(n) && n > 0;
+}
+
+/**
+ * Quem pagou o frete: a "Condição de Frete" do GHL, quando preenchida; em
+ * branco, deduzido pelo valor (Hud > 0 = grátis, cliente > 0 = cliente).
+ * Zero não é sinal -- a equipe grava R$ 0 no campo de quem não pagou. Mesma
+ * regra de get_frete_periodo no banco.
+ */
+export function tipoDoFrete(
+  condicao: unknown,
+  freteHud: unknown,
+  freteCliente: unknown,
+): TipoFrete | null {
+  const cond = typeof condicao === "string" ? condicao.trim().toLowerCase() : "";
+  if (cond.includes("cliente")) return "cliente";
+  if (cond) return "gratis";
+  if (valorPositivo(freteHud)) return "gratis";
+  if (valorPositivo(freteCliente)) return "cliente";
+  return null;
+}
+
+/** Dinheiro digitado ("1.234,56", "1234.56", "R$ 120") -> número com 2 casas. */
+function lerDinheiro(texto: string): number | null {
+  const limpo = texto.replace(/r\$/i, "").replace(/\s/g, "");
+  if (!/^[0-9.,]+$/.test(limpo)) return null;
+  const normalizado = limpo.includes(",")
+    ? limpo.replace(/\./g, "").replace(",", ".")
+    : limpo;
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(normalizado)) return null;
+  return Math.round(Number(normalizado) * 100) / 100;
+}
 
 export type DealFieldValue = string | number;
 
@@ -111,6 +181,21 @@ export function parseDealFieldValue(
         ok: true,
         value: `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`,
       };
+    }
+    case "opcao": {
+      const opcoes: readonly DealFieldOption[] =
+        (DEAL_EDITABLE_FIELDS[column] as DealEditableField).opcoes ?? [];
+      const alvo = text.toLowerCase();
+      const opcao = opcoes.find(
+        (o) => o.valor.toLowerCase() === alvo || o.rotulo.toLowerCase() === alvo,
+      );
+      return opcao ? { ok: true, value: opcao.valor } : { ok: false, error: "Escolha uma das opções." };
+    }
+    case "dinheiro": {
+      const valor = lerDinheiro(text);
+      return valor != null && valor > 0 && valor <= MAX_FRETE
+        ? { ok: true, value: valor }
+        : { ok: false, error: "Valor inválido (ex.: 189,90)." };
     }
     case "texto":
       return text.length <= MAX_TEXTO
