@@ -21,6 +21,7 @@ import {
 } from "@/components/deals/editable-deal-cell";
 import {
   DEAL_EDITABLE_FIELDS,
+  tipoDoFrete,
   type DealEditableColumn,
 } from "@/lib/ghl/deal-fields";
 import jsPDF from "jspdf";
@@ -50,6 +51,32 @@ interface Deal {
   api_updated_at: string | null;
   segmento_de_negocio: string | null; // Contact field ID 7 (Segmento de Negócio)
   intencao_de_compra: string | null; // Contact field ID 50 (Intenção de Compra)
+  ghl_condio_de_frete: string | null; // GHL "Condição de Frete"
+  ghl_valor_do_frete_pago_hud_lab: string | null;
+  ghl_valor_do_frete_pago_cliente: string | null;
+}
+
+/** Quem pagou o frete: Condição do GHL ou deduzido pelo valor (ver tipoDoFrete). */
+function tipoFreteDoNegocio(deal: Deal) {
+  return tipoDoFrete(
+    deal.ghl_condio_de_frete,
+    deal.ghl_valor_do_frete_pago_hud_lab,
+    deal.ghl_valor_do_frete_pago_cliente,
+  );
+}
+
+/** Campo de valor que corresponde a quem pagou o frete. */
+function campoValorFrete(deal: Deal) {
+  const tipo = tipoFreteDoNegocio(deal);
+  if (tipo === "gratis") return "ghl_valor_do_frete_pago_hud_lab" as const;
+  if (tipo === "cliente") return "ghl_valor_do_frete_pago_cliente" as const;
+  return null;
+}
+
+function valorFrete(deal: Deal): number | null {
+  const campo = campoValorFrete(deal);
+  const valor = campo ? Number(deal[campo]) : NaN;
+  return Number.isFinite(valor) && valor > 0 ? valor : null;
 }
 
 /** dd/mm/aaaa -> aaaa-mm-dd, para ordenar; vazio vai para o fim. */
@@ -132,6 +159,26 @@ export default function DealsPage() {
     }
     return exibir(String(valor));
   };
+
+  const cabecalhoOrdenavel = (
+    column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | "asc" | "desc" },
+    rotulo: string,
+  ) => (
+    <Button
+      variant="ghost"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      className="px-0"
+    >
+      {rotulo}
+      {column.getIsSorted() === "asc" ? (
+        <ArrowUp className="ml-2 h-4 w-4" />
+      ) : column.getIsSorted() === "desc" ? (
+        <ArrowDown className="ml-2 h-4 w-4" />
+      ) : (
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      )}
+    </Button>
+  );
 
   // Define columns for the data table
   const columns: ColumnDef<Deal>[] = [
@@ -372,6 +419,51 @@ export default function DealsPage() {
         );
       },
       cell: ({ row }) => celulaEditavel(row.original, "quantidade-de-pares"),
+    },
+    {
+      // Só preenchimento: quem pagou o frete. Condição em branco é deduzida
+      // pelo valor já preenchido (sem gravar nada no GHL).
+      id: "frete_tipo",
+      accessorFn: (deal) => tipoFreteDoNegocio(deal) ?? "",
+      header: ({ column }) => cabecalhoOrdenavel(column, "Frete"),
+      cell: ({ row }) => {
+        const deal = row.original;
+        const tipo = tipoFreteDoNegocio(deal);
+        if (!tipo) return celulaEditavel(deal, "ghl_condio_de_frete");
+        const deduzido = !deal.ghl_condio_de_frete?.trim();
+        return (
+          <span title={deduzido ? "Deduzido pelo valor do frete preenchido" : undefined}>
+            {tipo === "gratis" ? "Grátis" : "Cliente"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "frete_valor",
+      accessorFn: (deal) => valorFrete(deal) ?? -1,
+      header: ({ column }) => cabecalhoOrdenavel(column, "Valor do frete"),
+      cell: ({ row }) => {
+        const deal = row.original;
+        const valor = valorFrete(deal);
+        if (valor != null) return formatCurrency(valor, "BRL");
+        const campo = campoValorFrete(deal);
+        if (!campo) {
+          return (
+            <span className="text-muted-foreground" title="Defina antes quem pagou o frete">
+              -
+            </span>
+          );
+        }
+        // R$ 0 conta como vazio: é o que a equipe grava no lado de quem não pagou.
+        return (
+          <EditableDealCell
+            dealId={deal.deal_id}
+            column={campo}
+            suggestions={[]}
+            onSaved={aplicarEdicao}
+          />
+        );
+      },
     },
     {
       accessorKey: "vendedor",

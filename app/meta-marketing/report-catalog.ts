@@ -14,6 +14,7 @@ export const REPORTS = {
   health: { rpc: "get_atribuicao_saude", period: false },
   "utm-unmatched": { rpc: "get_utm_sem_match", period: false },
   "creative-conversion": { rpc: "get_conversao_criativos", period: true },
+  freight: { rpc: "get_frete_periodo", period: true },
 } as const satisfies Record<string, { rpc: string; period: boolean }>;
 
 export type MarketingReport = keyof typeof REPORTS;

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   DEAL_EDITABLE_FIELDS,
   parseDealFieldValue,
+  type DealEditableField,
   UFS,
   type DealEditableColumn,
 } from "@/lib/ghl/deal-fields";
@@ -36,7 +37,7 @@ export function EditableDealCell({
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { kind, label } = DEAL_EDITABLE_FIELDS[column];
+  const { kind, label, opcoes } = DEAL_EDITABLE_FIELDS[column] as DealEditableField;
   const listId = `sugestoes-${column}-${dealId}`;
 
   function cancel() {
@@ -114,10 +115,27 @@ export function EditableDealCell({
               </option>
             ))}
           </select>
+        ) : kind === "opcao" ? (
+          <select
+            autoFocus
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            aria-label={label}
+          >
+            <option value="">Escolha</option>
+            {(opcoes ?? []).map((opcao) => (
+              <option key={opcao.valor} value={opcao.valor}>
+                {opcao.rotulo}
+              </option>
+            ))}
+          </select>
         ) : (
           <Input
             autoFocus
             type={kind === "data" ? "date" : kind === "numero" ? "number" : "text"}
+            inputMode={kind === "dinheiro" ? "decimal" : undefined}
+            placeholder={kind === "dinheiro" ? "0,00" : undefined}
             min={kind === "numero" ? 1 : undefined}
             step={kind === "numero" ? 1 : undefined}
             list={kind === "texto" ? listId : undefined}

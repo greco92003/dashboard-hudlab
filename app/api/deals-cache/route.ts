@@ -108,7 +108,10 @@ export async function GET(request: NextRequest) {
         estado, "quantidade-de-pares", vendedor, designer,
         "utm-source", "utm-medium", custom_field_54, data_embarque,
         contact_id, organization_id, api_updated_at, last_synced_at,
-        segmento_de_negocio, intencao_de_compra
+        segmento_de_negocio, intencao_de_compra,
+        ghl_condio_de_frete:provider_payload->>ghl_condio_de_frete,
+        ghl_valor_do_frete_pago_hud_lab:provider_payload->>ghl_valor_do_frete_pago_hud_lab,
+        ghl_valor_do_frete_pago_cliente:provider_payload->>ghl_valor_do_frete_pago_cliente
       `,
           )
           .eq("source_system", "ghl")
