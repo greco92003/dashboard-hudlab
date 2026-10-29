@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/cami-anexo-semanal",
       "schedule": "30 11 * * 1"
+    },
+    {
+      "path": "/api/cron/avisos-time",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {
@@ -110,6 +114,9 @@
     },
     "app/api/cron/prewarm-meta-marketing/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/avisos-time/route.ts": {
+      "maxDuration": 120
     }
   },
   "headers": [

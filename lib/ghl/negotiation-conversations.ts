@@ -239,8 +239,14 @@ interface GhlConversationListItem {
   lastInboundWhatsappMessageDate?: number;
   lastMessageBody?: string;
   lastMessageDirection?: "inbound" | "outbound";
+  lastMessageDate?: number;
+  /** Tags do contato, que a busca de conversas já devolve. */
+  tags?: string[];
   sort?: number[];
 }
+
+/** Contato da equipe (Schay e cia.): fica fora da fila de não lidas e dos avisos de clique. */
+export const TAG_INTERNO = "interno";
 
 const MAX_UNREAD_PAGES = 10; // 1.000 conversas não lidas; hoje são ~230, quase todas do Instagram
 
@@ -268,7 +274,7 @@ export async function searchUnreadWhatsappConversations(): Promise<UnreadWhatsap
   }
 
   return all
-    .filter((c) => c.lastInboundWhatsappMessageDate != null)
+    .filter((c) => c.lastInboundWhatsappMessageDate != null && !(c.tags ?? []).includes(TAG_INTERNO))
     .map((c) => ({
       conversationId: c.id,
       contactId: c.contactId,
@@ -279,6 +285,63 @@ export async function searchUnreadWhatsappConversations(): Promise<UnreadWhatsap
       lastMessageBody: c.lastMessageBody ?? null,
       lastMessageDirection: c.lastMessageDirection ?? null,
     }));
+}
+
+export interface RecentInboundConversation {
+  conversationId: string;
+  contactId: string;
+  contactName: string | null;
+  lastInboundAtMs: number;
+}
+
+/**
+ * Conversas de WhatsApp em que o cliente escreveu desde `sinceMs`, das mais
+ * recentes para as mais antigas, sem os contatos internos. Para pelos avisos
+ * de clique: a busca vem ordenada pela última mensagem, então corta quando
+ * passa do início da janela.
+ */
+export async function searchRecentInboundWhatsappConversations(
+  sinceMs: number,
+  maxPages = 3,
+): Promise<RecentInboundConversation[]> {
+  const { locationId } = requireGhlEnv();
+  const all: GhlConversationListItem[] = [];
+  let startAfter: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const params: Record<string, string> = { locationId, sortBy: "last_message_date", sort: "desc", limit: "100" };
+    if (startAfter) params.startAfterDate = startAfter;
+    const result = await ghlConversationsFetch<{ conversations?: GhlConversationListItem[] }>(
+      "/conversations/search",
+      params,
+    );
+    const conversations = result.conversations ?? [];
+    all.push(...conversations);
+    const cursor = conversations.at(-1)?.sort?.[0];
+    const oldest = conversations.at(-1)?.lastMessageDate;
+    if (conversations.length < 100 || cursor == null || (oldest != null && oldest < sinceMs)) break;
+    startAfter = String(cursor);
+  }
+  return all
+    .filter((c) => (c.lastInboundWhatsappMessageDate ?? 0) >= sinceMs && !(c.tags ?? []).includes(TAG_INTERNO))
+    .map((c) => ({
+      conversationId: c.id,
+      contactId: c.contactId,
+      contactName: c.fullName || c.contactName || null,
+      lastInboundAtMs: c.lastInboundWhatsappMessageDate as number,
+    }));
+}
+
+/** Última mensagem de WhatsApp que o contato mandou (ms), para saber se a janela de 24h está aberta. null se nunca escreveu. */
+export async function lastInboundWhatsappAt(contactId: string): Promise<number | null> {
+  const { locationId } = requireGhlEnv();
+  const result = await ghlConversationsFetch<{ conversations?: Array<GhlConversationListItem & { type?: string }> }>(
+    "/conversations/search",
+    { locationId, contactId, limit: "10" },
+  );
+  const datas = (result.conversations ?? [])
+    .map((c) => c.lastInboundWhatsappMessageDate)
+    .filter((d): d is number => typeof d === "number");
+  return datas.length ? Math.max(...datas) : null;
 }
 
 export interface ResponseGapStats {
