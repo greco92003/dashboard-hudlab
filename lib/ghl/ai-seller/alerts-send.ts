@@ -12,6 +12,8 @@ import {
   type PendingHandoff,
 } from "./alerts";
 import { loadConversations, loadOverview } from "./intel-load";
+import { avisarTime } from "@/lib/ghl/team-alerts/send";
+import { avisoDeEspera, avisoDePassagem, avisoDoResumo, linkDoContato } from "@/lib/ghl/team-alerts/text";
 import type { SellerSettings } from "./settings";
 
 const HANDOFF_ALERT_WINDOW_MS = 72 * 60 * 60 * 1000;
@@ -62,6 +64,18 @@ interface HandoffForNotice {
   to_user_id: string | null;
 }
 
+/** O resumo da passagem que pode ir para o time: na falha técnica é o erro cru (em inglês). */
+function resumoParaOTime(h: HandoffForNotice): string | null {
+  return h.motivo === "falha_tecnica" ? "A Cami não conseguiu responder; siga pela conversa no GHL." : h.resumo;
+}
+
+/** WhatsApp do time na passagem, junto com o push. */
+function avisarPassagemNoWhatsApp(h: HandoffForNotice, nome: string | null) {
+  return avisarTime(
+    avisoDePassagem({ nome, motivo: MOTIVO[h.motivo] ?? h.motivo, resumo: resumoParaOTime(h), link: linkDoContato(h.contact_id) }),
+  );
+}
+
 /** Push "cliente passado para você" a quem recebeu. true se havia destinatário. */
 async function sendNotice(
   h: HandoffForNotice,
@@ -75,8 +89,7 @@ async function sendNotice(
     return false;
   }
   // Falha técnica: o resumo é o erro cru (em inglês); fica na nota do GHL, não no push.
-  const resumo =
-    h.motivo === "falha_tecnica" ? "A Cami não conseguiu responder; siga pela conversa no GHL." : h.resumo;
+  const resumo = resumoParaOTime(h);
   const { title, message } = handoffNoticeText({ nome, motivo: MOTIVO[h.motivo] ?? h.motivo, resumo });
   await notifyUsers({
     userIds: [userId],
@@ -103,6 +116,7 @@ export async function notifyHandoffNow(h: HandoffForNotice, contactName: string 
         .catch(() => null);
     }
     await sendNotice(h, nome, await loadGhlUsers(), new Map());
+    await avisarPassagemNoWhatsApp(h, nome);
     const supabase = await createSupabaseServerForSync();
     const { error } = await supabase
       .from("ai_seller_handoffs")
@@ -164,6 +178,7 @@ export async function sendHandoffAlerts(
           .then((c) => c.firstName ?? c.contactName ?? null)
           .catch(() => null));
       if (await sendNotice(h, nomeAviso, ghlUsers, cache)) aviso++;
+      await avisarPassagemNoWhatsApp(h, nomeAviso);
       // Marca mesmo sem destinatário: não repete a cada 15 min.
       patch.notified_at = nowIso;
     }
@@ -183,9 +198,15 @@ export async function sendHandoffAlerts(
       } else {
         console.warn("CAMI alertas: quem recebe a passagem não tem usuário no dashboard", { ghlId: h.to_user_id });
       }
+      await avisarTime(avisoDeEspera({ nome, espera, motivo, link: linkDoContato(h.contact_id), owner: false }));
       patch.alerted_at = nowIso;
     }
 
+    if (d.owner) {
+      await avisarTime(avisoDeEspera({ nome, espera, motivo, link: linkDoContato(h.contact_id), owner: true }));
+      // Marca mesmo sem owner no dashboard: o WhatsApp não repete a cada 15 min.
+      patch.owner_alerted_at = nowIso;
+    }
     if (d.owner && owners.length) {
       await notifyUsers({
         userIds: owners,
@@ -220,5 +241,6 @@ export async function sendDailySummary(): Promise<{ enviado: boolean; motivo?: s
   const owners = await camiAdminUserIds();
   if (!owners.length) return { enviado: false, motivo: "nenhum owner" };
   await notifyUsers({ userIds: owners, title: summary.title, message: summary.message, url: "/cami" });
+  await avisarTime(avisoDoResumo(summary));
   return { enviado: true };
 }
