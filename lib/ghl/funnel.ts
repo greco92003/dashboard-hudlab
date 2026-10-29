@@ -3,6 +3,7 @@ export const GHL_FUNNEL_STAGES = {
   commockautomatico: "Com Mockup Automático",
   semmockautomatico: "Sem Mockup Automático",
   atendimentoladob: "Atendimento Lado B",
+  blacknovember: "Black November",
   solicitouorcamento: "Solicitou Orçamento",
   solicitoumockupoficial: "Solicitou Mockup Oficial",
   emnegociacao: "Em Negociação",
@@ -10,12 +11,17 @@ export const GHL_FUNNEL_STAGES = {
 } as const;
 
 export type GhlFunnelStageSlug = keyof typeof GHL_FUNNEL_STAGES;
-export type GhlFunnelVariant = "with_mockup" | "without_mockup" | "lado_b";
+export type GhlFunnelVariant =
+  | "with_mockup"
+  | "without_mockup"
+  | "lado_b"
+  | "black_november";
 
 export const GHL_FUNNEL_TITLES: Record<GhlFunnelVariant, string> = {
   with_mockup: "Com Mockup Automático",
   without_mockup: "Sem Mockup Automático",
   lado_b: "Atendimento Lado B",
+  black_november: "Black November",
 };
 
 /**
@@ -24,6 +30,7 @@ export const GHL_FUNNEL_TITLES: Record<GhlFunnelVariant, string> = {
  * (calculado pela data do último webhook) mostra sozinho que parou.
  */
 export const GHL_FUNNEL_VARIANTS: readonly GhlFunnelVariant[] = [
+  "black_november",
   "lado_b",
   "without_mockup",
   "with_mockup",
@@ -39,6 +46,10 @@ export const GHL_FUNNEL_VARIANTS: readonly GhlFunnelVariant[] = [
 export const GHL_FUNNEL_RETIRED: Partial<Record<GhlFunnelVariant, string>> = {
   // Substituído pelo "Atendimento Lado B".
   with_mockup: "2026-08-26",
+  // Em novembro de 2026 todo lead novo vai para o fluxo da Black November, e
+  // a partir de 01/12 o Atendimento Inicial volta 100% Sem Mockup (decisão de
+  // 29/10/2026). O Sem Mockup não é aposentado: ele volta em dezembro.
+  lado_b: "2026-11-01",
 };
 
 export const GHL_FUNNEL_PATHS: Record<
@@ -69,6 +80,16 @@ export const GHL_FUNNEL_PATHS: Record<
     "emnegociacao",
     "negociofechado",
   ],
+  // Fluxo de entrada da Black November (01/11 a 30/11/2026), com webhook
+  // próprio no GHL ("[webhook] blacknovember").
+  black_november: [
+    "lead",
+    "blacknovember",
+    "solicitouorcamento",
+    "solicitoumockupoficial",
+    "emnegociacao",
+    "negociofechado",
+  ],
 };
 
 /**
@@ -91,6 +112,7 @@ export const GHL_FUNNEL_VARIANT_MARKER: Record<
   with_mockup: "commockautomatico",
   without_mockup: "semmockautomatico",
   lado_b: "atendimentoladob",
+  black_november: "blacknovember",
 };
 
 const STAGE_ALIASES: Record<string, GhlFunnelStageSlug> = {
@@ -122,5 +144,6 @@ export function getGhlFunnelVariant(
   if (stage === "commockautomatico") return "with_mockup";
   if (stage === "semmockautomatico") return "without_mockup";
   if (stage === "atendimentoladob") return "lado_b";
+  if (stage === "blacknovember") return "black_november";
   return null;
 }
