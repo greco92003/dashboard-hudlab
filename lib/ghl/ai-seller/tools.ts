@@ -63,7 +63,7 @@ export const TOOL_DEFINITIONS: FunctionTool[] = [
     type: "function",
     name: "atualizar_orcamento",
     description:
-      "Calcula preço (tabela do manual) e frete, grava o orçamento no CRM e devolve os valores. Use sempre que o cliente definir ou mudar a quantidade de pares, ou pedir o valor com frete.",
+      "Calcula preço (tabela do manual, com a promoção vigente), o valor no PIX à vista e o frete, grava o orçamento no CRM e devolve os valores. Use sempre que o cliente definir ou mudar a quantidade de pares, ou pedir o valor com frete.",
     strict: true,
     parameters: objectSchema({
       pares: { type: "integer" },
@@ -140,6 +140,7 @@ function proximaFaixa(
     }),
     valor_unitario: preco.unitario,
     subtotal: preco.subtotal,
+    valor_unitario_pix: preco.pixUnitario,
     frete_gratis: hasFreeShipping(proxima),
     total,
     diferenca_no_total: total != null && totalAtual != null ? roundMoney(total - totalAtual) : null,
@@ -251,12 +252,19 @@ export async function executeTool(
         frete,
         frete_gratis: freteGratis,
         total,
+        // PIX à vista: o % da promoção (se houver) mais os 5% do PIX, sobre a tabela.
+        pix: {
+          desconto_pct: preco.pixDescontoPct,
+          valor_unitario: preco.pixUnitario,
+          subtotal: preco.pixSubtotal,
+          total: frete == null ? null : roundMoney(preco.pixSubtotal + frete),
+        },
         proxima_faixa: proximaFaixa(pares, unitario, freteGratis, total, ctx.promocao ?? null),
         promocao:
           preco.aplicada && ctx.promocao
             ? {
                 nome: ctx.promocao.nome,
-                desconto_pct: ctx.promocao.descontoPct,
+                desconto_pct: preco.descontoPct,
                 valida_ate: fmtVigencia(ctx.promocao.fim),
                 valor_unitario_sem_promocao: preco.unitarioCheio,
                 subtotal_sem_promocao: preco.subtotalCheio,

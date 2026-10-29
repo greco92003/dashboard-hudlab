@@ -15,7 +15,7 @@ import { ESTADO_LABEL, fmtDateTime } from "@/components/cami/format";
 import { UnreadInbox } from "@/components/sellers-v2/unread-inbox";
 import type { ConversationItem, OverviewPayload } from "@/lib/ghl/ai-seller/intel-load";
 import type { Periodo } from "@/lib/ghl/ai-seller/intel";
-import { fmtVigencia, promocaoAtiva } from "@/lib/ghl/ai-seller/vigentes";
+import { fmtVigencia, promocaoAtiva, resumoDesconto } from "@/lib/ghl/ai-seller/vigentes";
 import { cn } from "@/lib/utils";
 
 const TABS = ["visao", "conversas", "anexo", "nao-lidas", "controle"] as const;
@@ -131,7 +131,7 @@ export default function CamiIntelligencePage() {
                 <span>· atualizado {fmtDateTime(overview?.atualizadoEm)}</span>
                 {promoAtiva && (
                   <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200">
-                    {promoAtiva.nome}: {promoAtiva.descontoPct}% até {fmtVigencia(promoAtiva.fim)}
+                    {promoAtiva.nome}: {resumoDesconto(promoAtiva)} até {fmtVigencia(promoAtiva.fim)}
                   </Badge>
                 )}
               </>

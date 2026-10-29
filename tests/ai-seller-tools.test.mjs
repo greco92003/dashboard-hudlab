@@ -120,6 +120,7 @@ test("atualizar_orcamento oferece a faixa com vantagem logo acima, sem gravar ou
     vantagem: "preço por par cai para R$ 57,90",
     valor_unitario: 57.9,
     subtotal: 1389.6,
+    valor_unitario_pix: 55.01,
     frete_gratis: false,
     total: null,
     diferenca_no_total: null,

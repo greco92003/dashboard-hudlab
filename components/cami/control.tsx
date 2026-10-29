@@ -17,12 +17,14 @@ import {
 } from "@/components/ui/select";
 import type { SellerSettings } from "@/lib/ghl/ai-seller/settings-shape";
 import {
+  faixasDaPromocao,
   fmtVigencia,
   isoToLocalInput,
   localInputToIso,
   precoComPromocao,
   vigencia,
   type Aviso,
+  type FaixaPromocao,
   type Promocao,
   type Vigencia,
 } from "@/lib/ghl/ai-seller/vigentes";
@@ -109,9 +111,21 @@ function VigentesCard({
   onSave: () => void;
   onRemovePromocao: () => void;
 }) {
-  const exemploPares = Math.max(12, promocao?.minPares ?? 12);
-  const preco = promocao ? precoComPromocao(exemploPares, promocao) : null;
+  // Prévia: o primeiro par de cada faixa, com o preço no cartão e no PIX.
+  const previa = promocao
+    ? faixasDaPromocao(promocao)
+        .map((f) => ({ pares: Math.max(12, f.minPares), preco: precoComPromocao(Math.max(12, f.minPares), promocao) }))
+        .filter((p) => p.preco?.aplicada)
+    : [];
   const setP = <K extends keyof Promocao>(k: K, v: Promocao[K]) => promocao && onPromocao({ ...promocao, [k]: v });
+  const faixas = promocao?.faixas ?? [];
+  const setFaixa = (i: number, patch: Partial<FaixaPromocao>) =>
+    setP("faixas", faixas.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  const addFaixa = () => {
+    if (!promocao) return;
+    const ultima = faixas.at(-1) ?? { minPares: promocao.minPares, descontoPct: promocao.descontoPct };
+    setP("faixas", [...faixas, { minPares: ultima.minPares + 1, descontoPct: ultima.descontoPct + 1 }]);
+  };
   return (
     <Card>
       <CardHeader>
@@ -185,6 +199,55 @@ function VigentesCard({
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-sm font-medium">Faixas com mais desconto (opcional)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Cada faixa vale a partir da quantidade dela. Ex.: Black November com 7% a partir de 36 pares, 10% a partir de 100 e 15% a partir de 500.
+                  </p>
+                </div>
+                {faixas.map((f, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`promo-faixa-min-${i}`}>A partir de (pares)</Label>
+                      <Input
+                        id={`promo-faixa-min-${i}`}
+                        type="number"
+                        min={13}
+                        className="w-28"
+                        disabled={!canEdit}
+                        value={f.minPares}
+                        onChange={(e) => setFaixa(i, { minPares: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`promo-faixa-pct-${i}`}>Desconto nos pares (%)</Label>
+                      <Input
+                        id={`promo-faixa-pct-${i}`}
+                        type="number"
+                        step="0.5"
+                        min={0.5}
+                        max={30}
+                        className="w-28"
+                        disabled={!canEdit}
+                        value={f.descontoPct}
+                        onChange={(e) => setFaixa(i, { descontoPct: Number(e.target.value) })}
+                      />
+                    </div>
+                    {canEdit && (
+                      <Button type="button" variant="ghost" onClick={() => setP("faixas", faixas.filter((_, j) => j !== i))}>
+                        Remover faixa
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                {canEdit && (
+                  <Button type="button" variant="outline" onClick={addFaixa}>
+                    <Plus className="h-4 w-4" />
+                    Adicionar faixa
+                  </Button>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">Sempre acumula com os 5% do PIX, que é desconto pela forma de pagamento.</p>
               <div className="space-y-1">
                 <Label htmlFor="promo-texto">Como a Cami apresenta (opcional)</Label>
@@ -197,16 +260,18 @@ function VigentesCard({
                   onChange={(e) => setP("texto", e.target.value)}
                 />
               </div>
-              {preco && preco.aplicada && (
-                <div className="space-y-0.5 rounded-lg border border-dashed p-3 text-sm">
-                  <p className="text-xs font-semibold text-muted-foreground">No orçamento da Cami ({exemploPares} pares)</p>
-                  <p>
-                    {brl(preco.unitarioCheio)} → <strong>{brl(preco.unitario)}</strong> o par
-                  </p>
-                  <p>
-                    {exemploPares} pares: {brl(preco.subtotalCheio)} → <strong>{brl(preco.subtotal)}</strong> + frete
-                  </p>
-                  <p className="text-xs text-muted-foreground">No PIX, mais 5% de desconto.</p>
+              {previa.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-dashed p-3 text-sm">
+                  <p className="text-xs font-semibold text-muted-foreground">No orçamento da Cami (preço do par)</p>
+                  {previa.map(({ pares, preco }) =>
+                    preco ? (
+                      <p key={pares}>
+                        {pares} pares: {brl(preco.unitarioCheio)} → <strong>{brl(preco.unitario)}</strong> no cartão ({preco.descontoPct}%)
+                        {" · "}
+                        <strong>{brl(preco.pixUnitario)}</strong> no PIX ({preco.pixDescontoPct}%)
+                      </p>
+                    ) : null,
+                  )}
                 </div>
               )}
               {canEdit && (
