@@ -2,7 +2,7 @@
 // código como reserva. Módulo puro.
 import { DEFAULT_ALERTS, type AlertSettings } from "./alerts";
 import { ASSIGN_MAX_PARES, ASSIGN_MIN_PARES, ESCALATION_SHIFTS } from "./config";
-import type { Aviso, Promocao } from "./vigentes";
+import type { Aviso, FaixaPromocao, Promocao } from "./vigentes";
 
 export type SellerState = "ligada" | "nao_pega_novos" | "desligada";
 export type Shift = readonly [start: string, end: string];
@@ -59,10 +59,48 @@ function checkPromocao(value: unknown): { ok: true; value: Promocao } | { ok: fa
   }
   const texto = trimText(v.texto);
   if (texto.length > 300) return { ok: false, error: "Promoção: a frase de apresentação tem até 300 caracteres" };
+  const faixas = checkFaixas(v.faixas, v.minPares as number);
+  if (!faixas.ok) return faixas;
   return {
     ok: true,
-    value: { nome, inicio: v.inicio, fim: v.fim, descontoPct: Math.round(pct * 10) / 10, minPares: v.minPares as number, texto },
+    value: {
+      nome,
+      inicio: v.inicio,
+      fim: v.fim,
+      descontoPct: Math.round(pct * 10) / 10,
+      minPares: v.minPares as number,
+      // Sem faixas extras o objeto fica igual ao de antes, sem o campo.
+      ...(faixas.value.length ? { faixas: faixas.value } : {}),
+      texto,
+    },
   };
+}
+
+const MAX_FAIXAS = 6;
+
+/** Faixas acima da primeira: mínimo de pares crescente, cada uma com o próprio %. */
+function checkFaixas(
+  value: unknown,
+  minPrimeira: number,
+): { ok: true; value: FaixaPromocao[] } | { ok: false; error: string } {
+  if (value == null) return { ok: true, value: [] };
+  if (!Array.isArray(value)) return { ok: false, error: "Promoção: faixas inválidas" };
+  if (value.length > MAX_FAIXAS) return { ok: false, error: `Promoção: no máximo ${MAX_FAIXAS} faixas a mais` };
+  const faixas: FaixaPromocao[] = [];
+  let anterior = minPrimeira;
+  for (const [i, f] of value.entries()) {
+    const o = (f && typeof f === "object" ? f : {}) as Record<string, unknown>;
+    if (!Number.isInteger(o.minPares) || (o.minPares as number) <= anterior) {
+      return { ok: false, error: `Promoção, faixa ${i + 2}: o mínimo de pares precisa ser maior que o da faixa anterior (${anterior})` };
+    }
+    const fpct = o.descontoPct;
+    if (typeof fpct !== "number" || !Number.isFinite(fpct) || fpct <= 0 || fpct > MAX_DESCONTO_PCT) {
+      return { ok: false, error: `Promoção, faixa ${i + 2}: desconto entre 0 e ${MAX_DESCONTO_PCT}%` };
+    }
+    anterior = o.minPares as number;
+    faixas.push({ minPares: anterior, descontoPct: Math.round(fpct * 10) / 10 });
+  }
+  return { ok: true, value: faixas };
 }
 
 function checkAvisos(value: unknown): { ok: true; value: Aviso[] } | { ok: false; error: string } {
