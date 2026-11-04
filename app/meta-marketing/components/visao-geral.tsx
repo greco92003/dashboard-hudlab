@@ -515,7 +515,7 @@ export function VisaoGeral({
             <ShieldCheck className="h-4 w-4" />
           )}
           Atribuição: {saudePct.toLocaleString("pt-BR")}% dos leads da última
-          semana com UTM — detalhes na aba Saúde da Atribuição
+          semana ligados a um anúncio — detalhes na aba Saúde da Atribuição
         </div>
       )}
 

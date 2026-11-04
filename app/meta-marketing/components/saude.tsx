@@ -97,9 +97,10 @@ export function Saude({ refreshKey }: { refreshKey?: number }) {
           <AlertTitle>Atribuição degradada</AlertTitle>
           <AlertDescription>
             Na semana de {fmtDataCurta(referenciaAlerta!.semana)}, só{" "}
-            {referenciaAlerta!.pct_com_utm}% dos contatos chegaram com
-            utm_content. Verifique os parâmetros de URL nos anúncios do Meta e a
-            gravação de UTMs no GHL.
+            {referenciaAlerta!.pct_com_utm}% dos contatos chegaram ligados a um
+            anúncio (pelo ID ou pelo nome do anúncio no link). Verifique o
+            utm_medium dos anúncios do Meta (nome único por anúncio) e a gravação
+            de UTMs no GHL.
           </AlertDescription>
         </Alert>
       )}
@@ -108,7 +109,9 @@ export function Saude({ refreshKey }: { refreshKey?: number }) {
         <CardHeader>
           <CardTitle>Saúde da atribuição</CardTitle>
           <CardDescription>
-            % de contatos com utm_content por semana, % atribuído ao Meta (ad
+            % de contatos ligados a um anúncio por semana (pelo utm_content ou,
+            quando a Meta não manda o ID, pelo nome do anúncio no utm_medium), %
+            atribuído ao Meta (ad
             específico ou tráfego de perfil/Bio do Instagram-Facebook, que já
             entra no ROAS geral) e, dentro desse atribuído, % que identifica
             um anúncio específico. Abaixo de {LIMITE_ALERTA}% de UTM indica
@@ -148,7 +151,7 @@ export function Saude({ refreshKey }: { refreshKey?: number }) {
                     <Line
                       type="monotone"
                       dataKey="pct_com_utm"
-                      name="% com UTM"
+                      name="% ligado a anúncio"
                       stroke="#3b82f6"
                       strokeWidth={2}
                     />
