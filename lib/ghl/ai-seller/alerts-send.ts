@@ -19,12 +19,15 @@ import {
   avisoDePassagem,
   avisoDoResumo,
   juntarAvisos,
+  diaEHora,
   linkDoContato,
   type Aviso,
 } from "@/lib/ghl/team-alerts/text";
 import type { SellerSettings } from "./settings";
 
 const HANDOFF_ALERT_WINDOW_MS = 72 * 60 * 60 * 1000;
+/** Aviso que sai mais tarde que isso depois da passagem leva a data e a hora dela. */
+const AVISO_ATRASADO_MS = 20 * 60 * 1000;
 const CONVERSAS_URL = "/cami?tab=conversas";
 /** Toque no push abre o atendimento, quando a passagem sabe a oportunidade. */
 const conversaUrl = (opportunityId: string | null | undefined) =>
@@ -78,8 +81,14 @@ function resumoParaOTime(h: HandoffForNotice): string | null {
 }
 
 /** Aviso de passagem para o WhatsApp do time, junto com o push. */
-function avisoDaPassagem(h: HandoffForNotice, nome: string | null): Aviso {
-  return avisoDePassagem({ nome, motivo: MOTIVO[h.motivo] ?? h.motivo, resumo: resumoParaOTime(h), link: linkDoContato(h.contact_id) });
+function avisoDaPassagem(h: HandoffForNotice, nome: string | null, passadaEm: string | null = null): Aviso {
+  return avisoDePassagem({
+    nome,
+    motivo: MOTIVO[h.motivo] ?? h.motivo,
+    resumo: resumoParaOTime(h),
+    link: linkDoContato(h.contact_id),
+    passadaEm,
+  });
 }
 
 /** Push "cliente passado para você" a quem recebeu. true se havia destinatário. */
@@ -201,7 +210,8 @@ export async function sendHandoffAlerts(
         patchOf(h.id).notified_at = nowIso;
       }
       if (d.whatsapp) {
-        avisos.push(avisoDaPassagem(h, nomeAviso));
+        const passagem = Date.parse(h.escalated_at);
+        avisos.push(avisoDaPassagem(h, nomeAviso, now - passagem > AVISO_ATRASADO_MS ? diaEHora(passagem) : null));
         noWhatsApp.push(h);
       }
     }

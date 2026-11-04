@@ -5,6 +5,7 @@ import {
   avisoDeEspera,
   avisoDePassagem,
   botaoDoClique,
+  diaEHora,
   campanhaDoEnvio,
   juntarAvisos,
   linhaDeModelo,
@@ -136,6 +137,21 @@ test("avisos da Cami: passagem e espera, sem travessão", () => {
   const e = avisoDeEspera({ nome: "Caio", espera: "1h 10min", motivo: "pediu uma pessoa", link: null, owner: true });
   assert.match(e.texto, /Passagem da Cami sem resposta/);
   assert.match(e.texto, /Caio espera há 1h 10min úteis/);
+});
+
+test("aviso de passagem atrasado leva a data e a hora da passagem, também no modelo", () => {
+  assert.equal(diaEHora(brt("2026-11-03T13:50:00")), "03/11 às 13h50");
+  const p = avisoDePassagem({
+    nome: "Paula",
+    motivo: "pediu uma pessoa",
+    resumo: "Schay volta hoje às 14h.",
+    link: null,
+    passadaEm: diaEHora(brt("2026-11-03T13:50:00")),
+  });
+  assert.match(p.texto, /Paula precisa do time \(pediu uma pessoa\), passagem de 03\/11 às 13h50\./);
+  const junto = juntarAvisos([p, avisoDePassagem({ nome: "Riani", motivo: "outro motivo", resumo: null, link: null })]);
+  assert.match(junto.linha, /Paula precisa do time \(pediu uma pessoa\), passagem de 03\/11 às 13h50\./);
+  assert.match(junto.linha, /Riani precisa do time \(outro motivo\)\./);
 });
 
 test("aviso entregue: basta um destino receber, livre ou pelo modelo", () => {
