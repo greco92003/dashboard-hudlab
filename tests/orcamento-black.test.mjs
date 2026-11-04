@@ -7,58 +7,91 @@ const par = (pares) => {
   return [o.parTabela, o.parCartao, o.parPix, o.pctCartao, o.pctPix];
 };
 
-test("as seis faixas batem com a tabela do plano (cartão e PIX)", () => {
-  assert.deepEqual(par(12), [59.9, 56.91, 53.91, 5, 10]);
-  assert.deepEqual(par(23), [59.9, 56.91, 53.91, 5, 10]);
-  assert.deepEqual(par(24), [57.9, 55.01, 52.11, 5, 10]);
-  assert.deepEqual(par(36), [57.9, 53.85, 50.95, 7, 12]);
-  assert.deepEqual(par(100), [54.9, 49.41, 46.67, 10, 15]);
-  assert.deepEqual(par(500), [52.9, 44.97, 42.32, 15, 20]);
-  assert.deepEqual(par(1000), [49.9, 42.42, 39.92, 15, 20]);
+test("as seis faixas batem com a tabela, arredondadas para baixo na dezena de centavos (cartão e PIX)", () => {
+  assert.deepEqual(par(12), [59.9, 56.9, 53.9, 5, 10]);
+  assert.deepEqual(par(23), [59.9, 56.9, 53.9, 5, 10]);
+  assert.deepEqual(par(24), [57.9, 55, 52.1, 5, 10]);
+  assert.deepEqual(par(36), [57.9, 53.8, 50.9, 7, 12]);
+  assert.deepEqual(par(100), [54.9, 49.4, 46.6, 10, 15]);
+  assert.deepEqual(par(500), [52.9, 44.9, 42.3, 15, 20]);
+  assert.deepEqual(par(1000), [49.9, 42.4, 39.9, 15, 20]);
 });
 
-test("exemplo do plano: 50 pares, frete grátis", () => {
+test("50 pares, frete grátis: preço normal em cima, Black embaixo, sem subtotal", () => {
   const o = orcamentoBlack(50, 119);
   assert.equal(o.freteGratis, true);
   assert.equal(o.frete, 0);
   assert.equal(o.totalCheio, 2895);
-  assert.equal(o.totalCartao, 2692.5);
-  assert.equal(o.totalPix, 2547.5);
+  assert.equal(o.totalCartao, 2690);
+  assert.equal(o.totalPix, 2545);
   assert.equal(
     o.texto,
     [
-      "📦 Quantidade: 50 pares",
-      "💰 Valor do par: ~R$ 57,90~ *R$ 53,85* em até 6x sem juros (7% OFF)",
-      "⚡ No PIX: *R$ 50,95* o par (12% OFF)",
-      "🚚 Frete: *GRÁTIS*",
-      "💳 Total: ~R$ 2.895,00~ *R$ 2.692,50* em até 6x sem juros ou *R$ 2.547,50* no PIX",
+      "📦 *Seu orçamento: 50 pares*",
+      "",
+      "*Preço normal*",
+      "R$ 57,90 o par",
+      "Frete: *GRÁTIS*",
+      "Total: R$ 2.895,00",
+      "",
+      "🖤 *Com o desconto da Black*",
+      "⚡ PIX à vista (12% OFF): R$ 50,90 o par",
+      "Total: *R$ 2.545,00*",
+      "",
+      "💳 Cartão em até 6x sem juros (7% OFF): R$ 53,80 o par",
+      "Total: *R$ 2.690,00* (6x de R$ 448,33)",
+      "",
       "🎁 Bônus da sua faixa: arte digital de divulgação + frete grátis",
     ].join("\n"),
   );
 });
 
-test("abaixo de 36 pares o frete soma nos três totais", () => {
-  const o = orcamentoBlack(25, 119);
+test("34 pares com frete: subtotal e frete no preço normal, frete somado nos três totais", () => {
+  const o = orcamentoBlack(34, 119);
   assert.equal(o.freteGratis, false);
-  assert.equal(o.subtotalCartao, 1375.25);
-  assert.equal(o.totalCartao, 1494.25);
-  assert.equal(o.totalPix, 1302.75 + 119);
-  assert.equal(o.totalCheio, 1447.5 + 119);
-  assert.match(o.texto, /🚚 Frete: R\$ 119,00/);
+  assert.equal(o.subtotalCartao, 1870);
+  assert.equal(o.totalCartao, 1989);
+  assert.equal(o.totalPix, 1890.4);
+  assert.equal(o.totalCheio, 2087.6);
+  assert.equal(
+    o.texto,
+    [
+      "📦 *Seu orçamento: 34 pares*",
+      "",
+      "*Preço normal*",
+      "R$ 57,90 o par",
+      "Subtotal: R$ 1.968,60",
+      "Frete: R$ 119,00",
+      "Total: R$ 2.087,60",
+      "",
+      "🖤 *Com o desconto da Black*",
+      "⚡ PIX à vista (10% OFF): R$ 52,10 o par",
+      "Total: *R$ 1.890,40*",
+      "",
+      "💳 Cartão em até 6x sem juros (5% OFF): R$ 55,00 o par",
+      "Total: *R$ 1.989,00* (6x de R$ 331,50)",
+      "",
+      "🎁 Bônus da sua faixa: arte digital de divulgação",
+    ].join("\n"),
+  );
 });
 
-test("sem frete gravado: total sem o frete, e a mensagem avisa", () => {
+test("sem frete gravado: cada total termina em + frete, sem parcela e sem subtotal, e a mensagem avisa", () => {
   const o = orcamentoBlack(20, null);
   assert.equal(o.frete, null);
   assert.equal(o.totalCartao, o.subtotalCartao);
-  assert.match(o.texto, /🚚 Frete: a confirmar/);
-  assert.match(o.texto, /💳 Total \(sem o frete\):/);
+  assert.match(o.texto, /Total: R\$ 1\.198,00 \+ frete/);
+  assert.match(o.texto, /Total: \*R\$ 1\.078,00\* \+ frete/);
+  assert.match(o.texto, /Total: \*R\$ 1\.138,00\* \+ frete\n/);
+  assert.doesNotMatch(o.texto, /6x de/);
+  assert.doesNotMatch(o.texto, /Subtotal/);
+  assert.match(o.texto, /🚚 O frete é calculado pelo seu CEP antes do fechamento\./);
 });
 
 test("menos de 12 pares orça 12, como o 02 avisa", () => {
   const o = orcamentoBlack(5, 90);
   assert.equal(o.pares, 12);
-  assert.equal(o.subtotalCartao, 682.92);
+  assert.equal(o.subtotalCartao, 682.8);
   assert.equal(orcamentoBlack(null, 90), null);
 });
 
