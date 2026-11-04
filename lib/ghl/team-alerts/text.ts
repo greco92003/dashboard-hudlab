@@ -81,12 +81,23 @@ export function juntarAvisos(avisos: Aviso[]): Aviso {
   };
 }
 
-/** A Cami passou o cliente para o time (aviso na hora). */
-export function avisoDePassagem(input: { nome: string | null; motivo: string; resumo: string | null; link: string | null }): Aviso {
+/**
+ * A Cami passou o cliente para o time. Aviso atrasado (fora do turno, nova
+ * tentativa) leva quando foi a passagem: o resumo fala do momento dela ("volta
+ * hoje às 14h").
+ */
+export function avisoDePassagem(input: {
+  nome: string | null;
+  motivo: string;
+  resumo: string | null;
+  link: string | null;
+  passadaEm?: string | null;
+}): Aviso {
   const resumo = (input.resumo ?? "").replace(/\s+/g, " ").trim();
+  const quando = input.passadaEm ? `, passagem de ${input.passadaEm}` : "";
   return montarAviso({
     titulo: "A Cami passou um cliente",
-    linhas: [`${input.nome?.trim() || "Um cliente"} precisa do time (${input.motivo}).`, resumo ? `Resumo: ${resumo}` : null],
+    linhas: [`${input.nome?.trim() || "Um cliente"} precisa do time (${input.motivo})${quando}.`, resumo ? `Resumo: ${resumo}` : null],
     link: input.link,
   });
 }
@@ -109,6 +120,12 @@ export function avisoDoResumo(input: { title: string; message: string }): Aviso 
 
 const hora = (ms: number) =>
   new Date(ms - 3 * 60 * 60 * 1000).toISOString().slice(11, 16).replace(":", "h");
+
+/** "03/11 às 13h50", horário de Brasília. */
+export function diaEHora(ms: number): string {
+  const local = new Date(ms - 3 * 60 * 60 * 1000).toISOString();
+  return `${local.slice(8, 10)}/${local.slice(5, 7)} às ${hora(ms)}`;
+}
 
 export function avisoDeClique(input: {
   nome: string | null;
