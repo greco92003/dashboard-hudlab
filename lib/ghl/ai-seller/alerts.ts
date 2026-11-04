@@ -24,14 +24,27 @@ export interface PendingHandoff {
   answered_at: string | null;
   /** Aviso "cliente passado para você"; null = ainda não saiu (passagem fora do turno). */
   notified_at: string | null;
+  /** O mesmo aviso no WhatsApp do time; null = não saiu ou falhou (o cron tenta de novo no turno). */
+  whatsapp_avisado_at?: string | null;
   alerted_at: string | null;
   owner_alerted_at: string | null;
+}
+
+export interface HandoffAlertDue {
+  id: string;
+  aviso: boolean;
+  whatsapp: boolean;
+  pessoa: boolean;
+  owner: boolean;
+  minutos: number;
 }
 
 /**
  * O que mandar agora sobre cada passagem ainda sem resposta:
  * - aviso: "cliente passado para você", na hora da passagem (a rodada da Cami
  *   manda) ou, fora do turno, no primeiro minuto do turno seguinte (aqui);
+ * - whatsapp: o mesmo aviso no WhatsApp do time, repetido a cada rodada do
+ *   turno enquanto não for entregue;
  * - pessoa: lembrete a quem recebe, depois de passagemSemRespostaMin úteis;
  * - owner: aviso ao dono, depois de ownerAposMin úteis.
  * Cada um sai uma vez só (notified_at / alerted_at / owner_alerted_at). Conta
@@ -42,16 +55,17 @@ export function handoffAlertsDue(
   now: number,
   alertas: AlertSettings,
   shifts?: ReadonlyArray<Shift>,
-): Array<{ id: string; aviso: boolean; pessoa: boolean; owner: boolean; minutos: number }> {
-  const due: Array<{ id: string; aviso: boolean; pessoa: boolean; owner: boolean; minutos: number }> = [];
+): HandoffAlertDue[] {
+  const due: HandoffAlertDue[] = [];
   const noTurno = escalationAvailability(now, shifts).available;
   for (const h of handoffs) {
     if (h.answered_at) continue;
     const minutos = businessMinutesBetween(Date.parse(h.escalated_at), now, shifts);
     const aviso = !h.notified_at && noTurno;
+    const whatsapp = !h.whatsapp_avisado_at && noTurno;
     const pessoa = !h.alerted_at && minutos >= alertas.passagemSemRespostaMin;
     const owner = !h.owner_alerted_at && minutos >= alertas.ownerAposMin;
-    if (aviso || pessoa || owner) due.push({ id: h.id, aviso, pessoa, owner, minutos: Math.round(minutos) });
+    if (aviso || whatsapp || pessoa || owner) due.push({ id: h.id, aviso, whatsapp, pessoa, owner, minutos: Math.round(minutos) });
   }
   return due;
 }
@@ -85,10 +99,13 @@ export function buildDailySummary(input: {
   overview: Overview;
   paraRevisar: number;
   escalationName: string;
+  /** Passagens cujo aviso no WhatsApp falhou e ainda não saiu. */
+  whatsappSemEntrega?: number;
 }): { title: string; message: string } | null {
   const o = input.overview;
   const pagamento = o.passagens.porMotivo.find((p) => p.motivo === "pronto_para_pagar")?.n ?? 0;
-  const atividade = o.assumidos + o.custo.rodadas + o.passagens.total + input.paraRevisar;
+  const semEntrega = input.whatsappSemEntrega ?? 0;
+  const atividade = o.assumidos + o.custo.rodadas + o.passagens.total + input.paraRevisar + semEntrega;
   if (atividade === 0) return null;
 
   const partes = [
@@ -100,5 +117,8 @@ export function buildDailySummary(input: {
   const revisar = input.paraRevisar
     ? ` ${input.paraRevisar} ${input.paraRevisar === 1 ? "conversa" : "conversas"} para revisar.`
     : "";
-  return { title: "Cami hoje", message: `${partes.join(" · ")}.${revisar}` };
+  const falha = semEntrega
+    ? ` ${semEntrega} ${semEntrega === 1 ? "aviso de passagem não chegou" : "avisos de passagem não chegaram"} no WhatsApp; confira o workflow Aviso Time.`
+    : "";
+  return { title: "Cami hoje", message: `${partes.join(" · ")}.${revisar}${falha}` };
 }

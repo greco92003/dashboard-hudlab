@@ -14,6 +14,11 @@ export function escolherVia(
   return temWorkflow ? "modelo" : "sem_modelo";
 }
 
+/** O aviso chegou ao time: ao menos um destino recebeu (livre ou pelo modelo). */
+export function algumEntregue(resultados: ReadonlyArray<{ via: string }>): boolean {
+  return resultados.some((r) => r.via === "livre" || r.via === "modelo");
+}
+
 const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
 /** Avisos de clique só das 8h às 21h (Brasília). O que chega à noite sai às 8h, se ninguém respondeu. */
 export const HORARIO_DE_AVISO = { inicio: 8, fim: 21 } as const;

@@ -15,7 +15,36 @@ function label(hhmm: string): string {
   return m === "00" ? `${Number(h)}h` : `${Number(h)}h${m}`;
 }
 
-const isWorkday = (weekday: number) => weekday >= 1 && weekday <= 5;
+/** Feriados nacionais de data fixa (mês-dia). Carnaval e Corpus Christi são ponto facultativo: ficam de fora. */
+const FERIADOS_FIXOS = new Set(["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"]);
+
+/** Sexta-feira Santa (dois dias antes da Páscoa, cálculo de Meeus), como "MM-DD". */
+function sextaSanta(ano: number): string {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - Math.floor(b / 4) - g + 15) % 30;
+  const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - (c % 4)) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const n = h + l - 7 * m + 114;
+  const pascoa = Date.UTC(ano, Math.floor(n / 31) - 1, (n % 31) + 1);
+  return new Date(pascoa - 2 * DAY_MS).toISOString().slice(5, 10);
+}
+
+/** Feriado nacional no dia de `localMs` (já em horário de Brasília). */
+export function isFeriado(localMs: number): boolean {
+  const iso = new Date(localMs).toISOString();
+  const mesDia = iso.slice(5, 10);
+  return FERIADOS_FIXOS.has(mesDia) || mesDia === sextaSanta(Number(iso.slice(0, 4)));
+}
+
+/** Dia de turno: segunda a sexta, fora de feriado. `localMs` já em horário de Brasília. */
+const isWorkday = (localMs: number) => {
+  const weekday = new Date(localMs).getUTCDay();
+  return weekday >= 1 && weekday <= 5 && !isFeriado(localMs);
+};
 const WEEKDAY_NAMES = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
 /**
@@ -35,7 +64,7 @@ export function businessMinutesBetween(
   // Teto de 90 dias: uma passagem esquecida não vira um laço longo.
   const lastDay = Math.min(end, start + 90 * DAY_MS);
   for (let day = Math.floor(start / DAY_MS) * DAY_MS; day < lastDay; day += DAY_MS) {
-    if (!isWorkday(new Date(day).getUTCDay())) continue;
+    if (!isWorkday(day)) continue;
     for (const [shiftStart, shiftEnd] of shifts) {
       const lo = Math.max(day + toMinutes(shiftStart) * 60_000, start);
       const hi = Math.min(day + toMinutes(shiftEnd) * 60_000, end);
@@ -60,10 +89,9 @@ export function escalationAvailability(
 ): Availability {
   const local = new Date(nowMs - BRT_OFFSET_MS);
   const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
-  const weekday = local.getUTCDay();
   const nowLabel = `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
 
-  if (isWorkday(weekday)) {
+  if (isWorkday(local.getTime())) {
     for (const [start, end] of shifts) {
       if (minutes >= toMinutes(start) && minutes < toMinutes(end)) {
         return { available: true, returnsAt: null, nowLabel };
@@ -76,9 +104,9 @@ export function escalationAvailability(
 
   const firstStart = label(shifts[0][0]);
   for (let days = 1; days <= 7; days++) {
-    const next = new Date(local.getTime() + days * DAY_MS).getUTCDay();
+    const next = local.getTime() + days * DAY_MS;
     if (!isWorkday(next)) continue;
-    const when = days === 1 ? "amanhã" : WEEKDAY_NAMES[next];
+    const when = days === 1 ? "amanhã" : WEEKDAY_NAMES[new Date(next).getUTCDay()];
     return { available: false, returnsAt: `${when} às ${firstStart}`, nowLabel };
   }
   return { available: false, returnsAt: null, nowLabel };
