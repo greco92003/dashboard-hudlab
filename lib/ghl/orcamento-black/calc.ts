@@ -108,19 +108,39 @@ export function orcamentoBlack(paresInformados: number | null, freteInformado: n
   return { ...o, texto: textoDoOrcamento(o) };
 }
 
+/**
+ * Texto do orçamento (opção A, decidida em 04/11): o preço normal em cima e
+ * a Black embaixo, PIX antes do cartão, o percentual ao lado de cada forma de
+ * pagamento. Com frete grátis não há subtotal; com o frete a confirmar, cada
+ * total termina em "+ frete" e não aparece o valor da parcela. A próxima faixa
+ * fica para a Cami ou a Schay: no orçamento, o cliente responderia e quebraria
+ * o fluxo.
+ */
 function textoDoOrcamento(o: Omit<OrcamentoBlack, "texto">): string {
-  const linhaFrete = o.freteGratis
-    ? "🚚 Frete: *GRÁTIS*"
-    : o.frete == null
-      ? "🚚 Frete: a confirmar"
-      : `🚚 Frete: ${brl(o.frete)}`;
-  const semFrete = !o.freteGratis && o.frete == null ? " (sem o frete)" : "";
+  const aConfirmar = !o.freteGratis && o.frete == null;
+  const maisFrete = aConfirmar ? " + frete" : "";
+  const normal = o.freteGratis
+    ? ["Frete: *GRÁTIS*"]
+    : aConfirmar
+      ? []
+      : [`Subtotal: ${brl(o.subtotalCheio)}`, `Frete: ${brl(o.frete ?? 0)}`];
+  const parcela = aConfirmar ? "" : ` (6x de ${brl(o.totalCartao / 6)})`;
   return [
-    `📦 Quantidade: ${o.pares} pares`,
-    `💰 Valor do par: ~${brl(o.parTabela)}~ *${brl(o.parCartao)}* em até 6x sem juros (${o.pctCartao}% OFF)`,
-    `⚡ No PIX: *${brl(o.parPix)}* o par (${o.pctPix}% OFF)`,
-    linhaFrete,
-    `💳 Total${semFrete}: ~${brl(o.totalCheio)}~ *${brl(o.totalCartao)}* em até 6x sem juros ou *${brl(o.totalPix)}* no PIX`,
+    `📦 *Seu orçamento: ${o.pares} pares*`,
+    "",
+    "*Preço normal*",
+    `${brl(o.parTabela)} o par`,
+    ...normal,
+    `Total: ${brl(o.totalCheio)}${maisFrete}`,
+    "",
+    "🖤 *Com o desconto da Black*",
+    `⚡ PIX à vista (${o.pctPix}% OFF): ${brl(o.parPix)} o par`,
+    `Total: *${brl(o.totalPix)}*${maisFrete}`,
+    "",
+    `💳 Cartão em até 6x sem juros (${o.pctCartao}% OFF): ${brl(o.parCartao)} o par`,
+    `Total: *${brl(o.totalCartao)}*${maisFrete}${parcela}`,
+    "",
+    ...(aConfirmar ? ["🚚 O frete é calculado pelo seu CEP antes do fechamento."] : []),
     `🎁 Bônus da sua faixa: ${o.bonus}`,
   ].join("\n");
 }

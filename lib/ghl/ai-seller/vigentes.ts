@@ -86,19 +86,25 @@ export interface PrecoPromocao {
 }
 
 /**
- * Preço com a promoção, em centavos para não errar o arredondamento:
- * R$ 59,90 com 5% = R$ 56,91 o par; o subtotal é o par já com desconto vezes
- * os pares (como fica gravado no orçamento). O PIX soma os percentuais sobre
- * a tabela, como a arte da Black mostra: 5% da faixa + 5% do PIX = 10%, ou
- * R$ 53,91. Abaixo do mínimo da promoção, preço cheio (e só os 5% do PIX).
+ * Preço com a promoção, em centavos para não errar o arredondamento. Com a
+ * promoção aplicada, o par (cartão e PIX) desce para a dezena de centavos,
+ * para terminar em zero como nos criativos (decisão de 04/11/2026): R$ 59,90
+ * com 5% = R$ 56,905, que vira R$ 56,90; o cliente paga um pouco menos do que
+ * o percentual, nunca mais. O subtotal é o par já com desconto vezes os pares
+ * (como fica gravado no orçamento). O PIX soma os percentuais sobre a tabela,
+ * como a arte da Black mostra: 5% da faixa + 5% do PIX = 10%, ou R$ 53,90.
+ * Abaixo do mínimo da promoção, preço cheio e só os 5% do PIX, sem arredondar.
  * null abaixo do pedido mínimo.
  */
 export function precoComPromocao(pares: number, promo: Promocao | null): PrecoPromocao | null {
   const unit = unitPriceForPares(pares);
   if (unit == null) return null;
   const cheioCents = Math.round(unit * 100);
-  const comDesconto = (pct: number) => Math.round((cheioCents * (100 - pct)) / 100);
   const pct = descontoDaFaixa(pares, promo);
+  const comDesconto = (desconto: number) => {
+    const cents = Math.round((cheioCents * (100 - desconto)) / 100);
+    return pct > 0 ? Math.floor(cents / 10) * 10 : cents;
+  };
   const unitCents = pct > 0 ? comDesconto(pct) : cheioCents;
   const pixPct = pct + PIX_DESCONTO_PCT;
   const pixCents = comDesconto(pixPct);

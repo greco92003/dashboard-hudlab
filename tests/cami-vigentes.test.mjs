@@ -37,24 +37,24 @@ test("vigência: agendada, ativa, encerrada sozinha no fim", () => {
   assert.deepEqual(avisosAtivos([aviso], brt("2026-10-25T10:00:00")), []);
 });
 
-test("preço com promoção em centavos: 59,90 com 5% = 56,91; subtotal = par × pares", () => {
+test("preço com promoção em centavos e arredondado para baixo: 59,90 com 5% = 56,905, vira 56,90; subtotal = par × pares", () => {
   assert.deepEqual(precoComPromocao(12, fechaMes), {
-    unitario: 56.91,
-    subtotal: 682.92,
+    unitario: 56.9,
+    subtotal: 682.8,
     unitarioCheio: 59.9,
     subtotalCheio: 718.8,
     aplicada: true,
     descontoPct: 5,
     pixDescontoPct: 10,
-    pixUnitario: 53.91,
-    pixSubtotal: 646.92,
+    pixUnitario: 53.9,
+    pixSubtotal: 646.8,
   });
-  assert.equal(precoComPromocao(24, fechaMes).unitario, 55.01);
+  assert.equal(precoComPromocao(24, fechaMes).unitario, 55);
   assert.equal(precoComPromocao(20, { ...fechaMes, minPares: 24 }).aplicada, false);
   assert.equal(precoComPromocao(20, { ...fechaMes, minPares: 24 }).unitario, 59.9);
   assert.equal(precoComPromocao(8, fechaMes), null);
   assert.equal(precoComPromocao(12, null).subtotal, 718.8);
-  // Sem promoção, o PIX é só os 5% da forma de pagamento.
+  // Sem promoção, o PIX é só os 5% da forma de pagamento, sem arredondar.
   assert.equal(precoComPromocao(12, null).pixUnitario, 56.91);
   assert.equal(precoComPromocao(12, null).pixDescontoPct, 5);
 });
@@ -71,10 +71,10 @@ test("orçamento da Cami com promoção: grava o valor com desconto e conta a pr
   };
   const call = { call_id: "c1", name: "atualizar_orcamento", arguments: JSON.stringify({ pares: 12, cep: "01001-000" }) };
   const result = await executeTool(call, actions, { promocao: fechaMes });
-  assert.deepEqual(calls[0], { pares: 12, unitario: 56.91, subtotal: 682.92, frete: 119 });
+  assert.deepEqual(calls[0], { pares: 12, unitario: 56.9, subtotal: 682.8, frete: 119 });
   const out = JSON.parse(result.output);
-  assert.equal(out.total, 801.92);
-  assert.deepEqual(out.pix, { desconto_pct: 10, valor_unitario: 53.91, subtotal: 646.92, total: 765.92 });
+  assert.equal(out.total, 801.8);
+  assert.deepEqual(out.pix, { desconto_pct: 10, valor_unitario: 53.9, subtotal: 646.8, total: 765.8 });
   assert.deepEqual(out.promocao, {
     nome: "Fecha Mês",
     desconto_pct: 5,
@@ -150,14 +150,14 @@ const blackNovember = {
 
 test("promoção por faixa: os preços da tabela da Black, no cartão e no PIX", () => {
   const casos = [
-    [12, 56.91, 53.91, 5, 10],
-    [24, 55.01, 52.11, 5, 10],
-    [35, 55.01, 52.11, 5, 10],
-    [36, 53.85, 50.95, 7, 12],
-    [99, 53.85, 50.95, 7, 12],
-    [120, 49.41, 46.67, 10, 15],
-    [500, 44.97, 42.32, 15, 20],
-    [1000, 42.42, 39.92, 15, 20],
+    [12, 56.9, 53.9, 5, 10],
+    [24, 55, 52.1, 5, 10],
+    [35, 55, 52.1, 5, 10],
+    [36, 53.8, 50.9, 7, 12],
+    [99, 53.8, 50.9, 7, 12],
+    [120, 49.4, 46.6, 10, 15],
+    [500, 44.9, 42.3, 15, 20],
+    [1000, 42.4, 39.9, 15, 20],
   ];
   for (const [pares, cartao, pix, pct, pixPct] of casos) {
     const preco = precoComPromocao(pares, blackNovember);
@@ -166,8 +166,8 @@ test("promoção por faixa: os preços da tabela da Black, no cartão e no PIX",
     assert.equal(preco.descontoPct, pct);
     assert.equal(preco.pixDescontoPct, pixPct);
   }
-  assert.equal(precoComPromocao(50, blackNovember).subtotal, 2692.5);
-  assert.equal(precoComPromocao(50, blackNovember).pixSubtotal, 2547.5);
+  assert.equal(precoComPromocao(50, blackNovember).subtotal, 2690);
+  assert.equal(precoComPromocao(50, blackNovember).pixSubtotal, 2545);
   assert.equal(descontoDaFaixa(8, blackNovember), 0);
   assert.equal(resumoDesconto(blackNovember), "5% a 15%");
   assert.equal(resumoDesconto(fechaMes), "5%");
