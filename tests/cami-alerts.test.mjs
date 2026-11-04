@@ -8,6 +8,7 @@ import {
   handoffNoticeText,
 } from "../lib/ghl/ai-seller/alerts.ts";
 import { normalizeSettings, validateSettingsInput } from "../lib/ghl/ai-seller/settings-shape.ts";
+import { businessMinutesBetween, escalationAvailability, isFeriado } from "../lib/ghl/ai-seller/hours.ts";
 
 // Horário de Brasília (UTC-3) -> ms. 14/10/2026 é quarta-feira.
 const brt = (iso) => Date.parse(`${iso}-03:00`);
@@ -18,6 +19,7 @@ const handoff = (over) => ({
   escalated_at: iso("2026-10-14T09:00:00"),
   answered_at: null,
   notified_at: iso("2026-10-14T09:00:00"),
+  whatsapp_avisado_at: iso("2026-10-14T09:00:00"),
   alerted_at: null,
   owner_alerted_at: null,
   ...over,
@@ -26,11 +28,11 @@ const handoff = (over) => ({
 test("passagem sem resposta: 1h útil lembra quem recebe, 2h avisa o owner, uma vez cada", () => {
   assert.deepEqual(handoffAlertsDue([handoff()], brt("2026-10-14T09:30:00"), DEFAULT_ALERTS), []);
   assert.deepEqual(handoffAlertsDue([handoff()], brt("2026-10-14T10:05:00"), DEFAULT_ALERTS), [
-    { id: "h1", aviso: false, pessoa: true, owner: false, minutos: 65 },
+    { id: "h1", aviso: false, whatsapp: false, pessoa: true, owner: false, minutos: 65 },
   ]);
   assert.deepEqual(
     handoffAlertsDue([handoff({ alerted_at: iso("2026-10-14T10:05:00") })], brt("2026-10-14T11:10:00"), DEFAULT_ALERTS),
-    [{ id: "h1", aviso: false, pessoa: false, owner: true, minutos: 130 }],
+    [{ id: "h1", aviso: false, whatsapp: false, pessoa: false, owner: true, minutos: 130 }],
   );
   // Já avisados os dois, ou já respondida: nada.
   const done = handoff({ alerted_at: iso("2026-10-14T10:05:00"), owner_alerted_at: iso("2026-10-14T11:10:00") });
@@ -39,19 +41,19 @@ test("passagem sem resposta: 1h útil lembra quem recebe, 2h avisa o owner, uma 
 });
 
 test("passagem à noite: aviso no primeiro minuto do turno, lembrete 60 min úteis depois", () => {
-  const night = handoff({ escalated_at: iso("2026-10-14T21:00:00"), notified_at: null });
+  const night = handoff({ escalated_at: iso("2026-10-14T21:00:00"), notified_at: null, whatsapp_avisado_at: null });
   // De madrugada e antes do turno, nada.
   assert.deepEqual(handoffAlertsDue([night], brt("2026-10-14T22:00:00"), DEFAULT_ALERTS), []);
   assert.deepEqual(handoffAlertsDue([night], brt("2026-10-15T08:15:00"), DEFAULT_ALERTS), []);
   // 8h30: o aviso sai, sem lembrete junto.
   assert.deepEqual(handoffAlertsDue([night], brt("2026-10-15T08:30:00"), DEFAULT_ALERTS), [
-    { id: "h1", aviso: true, pessoa: false, owner: false, minutos: 0 },
+    { id: "h1", aviso: true, whatsapp: true, pessoa: false, owner: false, minutos: 0 },
   ]);
   // Avisada às 8h30: o lembrete vem às 9h30 (60 min depois do aviso).
-  const avisada = { ...night, notified_at: iso("2026-10-15T08:30:00") };
+  const avisada = { ...night, notified_at: iso("2026-10-15T08:30:00"), whatsapp_avisado_at: iso("2026-10-15T08:30:00") };
   assert.deepEqual(handoffAlertsDue([avisada], brt("2026-10-15T09:15:00"), DEFAULT_ALERTS), []);
   assert.deepEqual(handoffAlertsDue([avisada], brt("2026-10-15T09:30:00"), DEFAULT_ALERTS), [
-    { id: "h1", aviso: false, pessoa: true, owner: false, minutos: 60 },
+    { id: "h1", aviso: false, whatsapp: false, pessoa: true, owner: false, minutos: 60 },
   ]);
 });
 
@@ -144,4 +146,32 @@ test("alertas no Controle: lidos do banco e validados ao salvar", () => {
     /dono não pode vir antes/,
   );
   assert.match(validateSettingsInput({ ...base, alertas: { passagemSemRespostaMin: 5, ownerAposMin: 60 } }).error, /15 e 1440/);
+});
+
+test("WhatsApp da passagem que não chegou: tenta de novo no turno, sem repetir o push", () => {
+  const falhou = handoff({ whatsapp_avisado_at: null });
+  assert.deepEqual(handoffAlertsDue([falhou], brt("2026-10-14T09:15:00"), DEFAULT_ALERTS), [
+    { id: "h1", aviso: false, whatsapp: true, pessoa: false, owner: false, minutos: 15 },
+  ]);
+  // Fora do turno espera; entregue, para.
+  assert.deepEqual(handoffAlertsDue([falhou], brt("2026-10-14T12:30:00"), DEFAULT_ALERTS)[0]?.whatsapp ?? false, false);
+  assert.deepEqual(handoffAlertsDue([handoff()], brt("2026-10-14T09:15:00"), DEFAULT_ALERTS), []);
+});
+
+test("feriado nacional não é dia de turno: passagem guardada até o próximo dia útil", () => {
+  const local = (d) => brt(`${d}T10:00:00`) - 3 * 60 * 60 * 1000;
+  for (const d of ["2026-11-02", "2026-11-20", "2026-12-25", "2026-04-03", "2027-03-26"]) assert.equal(isFeriado(local(d)), true, d);
+  assert.equal(isFeriado(local("2026-11-04")), false);
+  assert.equal(escalationAvailability(brt("2026-11-02T10:00:00")).available, false);
+  // Quinta 19/11 à noite: sexta 20/11 é feriado, volta na segunda.
+  assert.equal(escalationAvailability(brt("2026-11-19T19:00:00")).returnsAt, "segunda às 8h30");
+  assert.equal(businessMinutesBetween(brt("2026-11-19T17:50:00"), brt("2026-11-23T08:40:00")), 20);
+  const noFeriado = handoff({ escalated_at: iso("2026-11-19T21:00:00"), notified_at: null, whatsapp_avisado_at: null });
+  assert.deepEqual(handoffAlertsDue([noFeriado], brt("2026-11-20T09:00:00"), DEFAULT_ALERTS), []);
+  assert.equal(handoffAlertsDue([noFeriado], brt("2026-11-23T08:30:00"), DEFAULT_ALERTS)[0].whatsapp, true);
+});
+
+test("resumo do dia conta os avisos de passagem que não chegaram no WhatsApp", () => {
+  const s = buildDailySummary({ overview: overview(), paraRevisar: 0, escalationName: "Schay", whatsappSemEntrega: 2 });
+  assert.match(s.message, /2 avisos de passagem não chegaram no WhatsApp; confira o workflow Aviso Time\.$/);
 });

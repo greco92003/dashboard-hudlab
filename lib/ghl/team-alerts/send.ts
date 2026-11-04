@@ -63,6 +63,30 @@ export async function destinosDoAviso(): Promise<Destino[]> {
   return lista;
 }
 
+let modeloCache: { em: number; publicado: boolean } | null = null;
+
+/**
+ * O GHL aceita a inscrição (201) mesmo com o workflow em rascunho, e o aviso
+ * some sem erro. Confere o status antes; se a leitura falhar, segue.
+ */
+async function modeloPublicado(): Promise<boolean> {
+  if (modeloCache && Date.now() - modeloCache.em < CACHE_DESTINOS_MS) return modeloCache.publicado;
+  try {
+    const locationId = encodeURIComponent(process.env.GHL_LOCATION_ID ?? "");
+    const data = await ghl<{ workflows?: Array<{ id: string; status?: string }> }>(
+      `/workflows/?locationId=${locationId}`,
+      "GET",
+      "2021-07-28",
+    );
+    const status = data.workflows?.find((w) => w.id === WORKFLOW_AVISO_ID)?.status;
+    modeloCache = { em: Date.now(), publicado: status === "published" };
+    return modeloCache.publicado;
+  } catch (err) {
+    console.warn("avisos do time: status do workflow do modelo não lido", err);
+    return true;
+  }
+}
+
 export interface ResultadoDoAviso {
   contactId: string;
   via: ReturnType<typeof escolherVia> | "falhou";
@@ -76,6 +100,7 @@ async function avisarUm(destino: Destino, aviso: Aviso): Promise<ResultadoDoAvis
     if (via === "livre") {
       await ghl("/conversations/messages", "POST", "2021-04-15", { type: "WhatsApp", contactId, message: aviso.texto });
     } else if (via === "modelo") {
+      if (!(await modeloPublicado())) throw new Error("workflow Aviso Time | WhatsApp não está publicado");
       await ghl(`/contacts/${contactId}`, "PUT", "2021-07-28", {
         customFields: [{ id: CAMPO_AVISO_ID, field_value: aviso.linha }],
       });

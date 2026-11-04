@@ -10,7 +10,7 @@ import {
   linhaDeModelo,
   linkDoContato,
 } from "../lib/ghl/team-alerts/text.ts";
-import { dentroDoHorarioDeAviso, escolherVia, inicioDaBusca, ultimoClique } from "../lib/ghl/team-alerts/rules.ts";
+import { algumEntregue, dentroDoHorarioDeAviso, escolherVia, inicioDaBusca, ultimoClique } from "../lib/ghl/team-alerts/rules.ts";
 
 const brt = (local) => Date.parse(`${local}-03:00`);
 const H = 60 * 60 * 1000;
@@ -136,4 +136,11 @@ test("avisos da Cami: passagem e espera, sem travessão", () => {
   const e = avisoDeEspera({ nome: "Caio", espera: "1h 10min", motivo: "pediu uma pessoa", link: null, owner: true });
   assert.match(e.texto, /Passagem da Cami sem resposta/);
   assert.match(e.texto, /Caio espera há 1h 10min úteis/);
+});
+
+test("aviso entregue: basta um destino receber, livre ou pelo modelo", () => {
+  assert.equal(algumEntregue([]), false);
+  assert.equal(algumEntregue([{ via: "falhou" }, { via: "sem_modelo" }]), false);
+  assert.equal(algumEntregue([{ via: "falhou" }, { via: "modelo" }]), true);
+  assert.equal(algumEntregue([{ via: "livre" }]), true);
 });
