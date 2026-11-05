@@ -278,7 +278,7 @@ export function validateOrderRegistrationDraft(
       `Grade adulta do modelo ${model.modelNumber}`,
       issues,
     );
-    if (adultTotal <= 0) {
+    if (adultTotal <= 0 && !model.hasChild) {
       issues.push(
         `Preencha ao menos uma quantidade na grade adulta do modelo ${model.modelNumber}.`,
       );

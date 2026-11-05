@@ -121,6 +121,24 @@ test("requires a child grade only when the checkbox is enabled", () => {
   assert.ok(issues.some((issue) => issue.includes("grade infantil")));
 });
 
+test("accepts an order with only child sizes", () => {
+  const draft = validDraft();
+  draft.models[0].adultGrade = { "adult-34": "", "adult-36": "" };
+  draft.models[0].hasChild = true;
+  draft.models[0].childGrade = { "child-28": "10" };
+
+  assert.deepEqual(validateOrderRegistrationDraft(draft, config, 1), []);
+});
+
+test("requires a filled grade when neither adult nor child sizes are entered", () => {
+  const draft = validDraft();
+  draft.models[0].adultGrade = { "adult-34": "", "adult-36": "" };
+  draft.models[0].hasChild = true;
+
+  const issues = validateOrderRegistrationDraft(draft, config, 1);
+  assert.ok(issues.some((issue) => issue.includes("grade infantil")));
+});
+
 test("requires a valid sole color for every model", () => {
   const draft = validDraft();
   draft.models[0].soleColor = "";
