@@ -58,3 +58,9 @@ next-env.d.ts
 
 # supabase CLI local state
 supabase/.temp/
+
+# Públicos de anúncio (scripts/publicos-anuncios.mjs): e-mail, telefone e nome
+# de cliente. Sem --saida o script grava na raiz, e o exemplo de uso aponta para
+# ./publicos — por isso o nome do arquivo fica ignorado em qualquer pasta.
+publicos/
+publico-*.csv
