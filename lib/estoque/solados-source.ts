@@ -33,7 +33,9 @@ import {
   montarResumo,
   parseSoladoDescricao,
   SOLADO_PARAMETROS_PADRAO,
+  SOLADO_PRODUTOS_DUPLICADOS,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
+  somarSaldoDosDuplicados,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
   type SoladoCor,
   type SoladoItemDemanda,
@@ -352,7 +354,29 @@ async function lerSkusTiny(): Promise<SoladoSkuTiny[]> {
       saldo,
     });
   }
-  return skus;
+
+  // Produto duplicado não aparece na busca por "SOLA SLIDE": o nome dele é o
+  // do fornecedor. O saldo é lido pelo id e somado no SKU certo.
+  const saldoPorDuplicado = new Map<number, number>();
+  for (const duplicado of SOLADO_PRODUTOS_DUPLICADOS.keys()) {
+    try {
+      const estoque = await tinyV3Request<{ saldo?: number | null }>(
+        `/estoque/${duplicado}`,
+      );
+      const saldo = Number(estoque.saldo);
+      if (!Number.isFinite(saldo)) {
+        throw new Error(`O Tiny não devolveu o saldo do produto ${duplicado}.`);
+      }
+      saldoPorDuplicado.set(duplicado, saldo);
+    } catch (error) {
+      // Duplicado apagado no Tiny depois da arrumação: o estoque dele já foi
+      // para o SKU certo, então zero é o valor verdadeiro. Qualquer outra falha
+      // sobe, pela mesma regra de cima.
+      if (/HTTP 404/.test(String(error))) continue;
+      throw error;
+    }
+  }
+  return somarSaldoDosDuplicados(skus, saldoPorDuplicado);
 }
 
 /**
