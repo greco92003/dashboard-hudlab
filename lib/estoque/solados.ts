@@ -287,6 +287,50 @@ export function parseSoladoDescricao(
   };
 }
 
+/**
+ * Produtos que o Tiny criou em duplicata de um SKU de solado, apontando para o
+ * SKU certo. Chave: id do duplicado. Valor: id do SKU canônico.
+ *
+ * Nasce na importação do XML do fornecedor: se alguém cria produto novo em vez
+ * de associar ao existente, o Tiny guarda essa associação e repete em TODA nota
+ * seguinte. Foi o que aconteceu com o Branco 44 na nota 017912 (02/10): as notas
+ * 017912, 017914 e 017915 jogaram 160 pares no duplicado. O saldo aparecia -8
+ * no SKU certo, e os 160 pares ficavam como "a caminho" para sempre, porque a
+ * nota não casava com nenhuma ordem.
+ *
+ * Os dois lados são corrigidos aqui — o saldo do duplicado soma no canônico, e
+ * a nota que cita o duplicado abate a ordem do canônico. Assim a tela fica certa
+ * qualquer que seja a arrumação feita no Tiny, e em qualquer ordem: transferir
+ * o estoque, corrigir a associação do fornecedor ou não mexer em nada.
+ */
+export const SOLADO_PRODUTOS_DUPLICADOS: ReadonlyMap<number, number> = new Map([
+  [762198548, 741133306], // "SOLADO MICRO MC180 BRANCO 44" → SOLA SLIDE - BRANCO 44/45
+]);
+
+/** O id do SKU certo para um produto — ele mesmo, se não for duplicado. */
+export function produtoCanonico(produtoId: number): number {
+  return SOLADO_PRODUTOS_DUPLICADOS.get(produtoId) ?? produtoId;
+}
+
+/**
+ * Soma no SKU canônico o saldo que o Tiny guardou no duplicado.
+ *
+ * Duplicado cujo canônico não está na lista é ignorado: sem o SKU certo não há
+ * onde pôr o saldo, e inventar uma linha esconderia o erro de cadastro.
+ */
+export function somarSaldoDosDuplicados(
+  skus: SoladoSkuTiny[],
+  saldoPorDuplicado: ReadonlyMap<number, number>,
+): SoladoSkuTiny[] {
+  return skus.map((sku) => {
+    let extra = 0;
+    for (const [duplicado, saldo] of saldoPorDuplicado) {
+      if (produtoCanonico(duplicado) === sku.produtoId) extra += saldo;
+    }
+    return extra ? { ...sku, saldo: sku.saldo + extra } : sku;
+  });
+}
+
 export function publicoDaNumeracao(numeracao: string): SoladoPublico {
   return (NUMERACOES_INFANTIL as readonly string[]).includes(numeracao)
     ? "infantil"

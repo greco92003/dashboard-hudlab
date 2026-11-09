@@ -13,12 +13,16 @@ const P40 = 728159280;
 const P42 = 728159353;
 const B36 = 728159007;
 const B40 = 728159134;
+const B44 = 741133306;
+/** Produto que o Tiny criou em duplicata do Branco 44/45 na importação do XML. */
+const B44_DUPLICADO = 762198548;
 
 const SKU = {
   [P40]: ["Preto", "40/41"],
   [P42]: ["Preto", "42/43"],
   [B36]: ["Branco", "36/37"],
   [B40]: ["Branco", "40/41"],
+  [B44]: ["Branco", "44/45"],
 };
 
 const item = (produtoId, quantidade) => {
@@ -182,4 +186,43 @@ test("a mesma numeração em ordens diferentes vira uma linha só", () => {
   assert.deepEqual(paresACaminho(consolidado), [
     { cor: "Preto", numeracao: "40/41", pares: 461 },
   ]);
+});
+
+// ── produto duplicado no Tiny ───────────────────────────────────────────────
+
+test("nota que cita o produto duplicado abate a ordem do SKU certo", () => {
+  // Caso real de outubro: as notas 017912, 017914 e 017915 jogaram 160 pares
+  // de Branco 44 no produto duplicado. A ordem pede o SKU certo, a nota cita o
+  // duplicado, e os 160 ficavam como "a caminho" para sempre.
+  const consolidado = consolidarCompras(
+    [
+      ordem({ id: 7, situacao: OC_SITUACAO.atendido, itens: [item(B44, 40)] }),
+      ordem({ id: 8, situacao: OC_SITUACAO.atendido, itens: [item(B44, 80)] }),
+      ordem({ id: 9, situacao: OC_SITUACAO.atendido, itens: [item(B44, 40)] }),
+    ],
+    [
+      nota({ numero: "017912", itens: [{ produtoId: B44_DUPLICADO, quantidade: 40 }] }),
+      nota({ numero: "017914", itens: [{ produtoId: B44_DUPLICADO, quantidade: 80 }] }),
+      nota({ numero: "017915", itens: [{ produtoId: B44_DUPLICADO, quantidade: 40 }] }),
+    ],
+  );
+  assert.deepEqual(
+    { ...linha(consolidado, B44) },
+    { produtoId: B44, cor: "Branco", numeracao: "44/45", pedido: 160, recebido: 160, faltando: 0 },
+  );
+  assert.deepEqual(paresACaminho(consolidado), []);
+});
+
+test("a correção vale também depois de arrumarem a associação no Tiny", () => {
+  // Notas antigas no duplicado e nota nova no SKU certo têm de somar juntas —
+  // a arrumação no Tiny não pode reabrir o que já chegou.
+  const consolidado = consolidarCompras(
+    [ordem({ id: 9, itens: [item(B44, 100)] })],
+    [
+      nota({ itens: [{ produtoId: B44_DUPLICADO, quantidade: 60 }] }),
+      nota({ itens: [{ produtoId: B44, quantidade: 30 }] }),
+    ],
+  );
+  assert.equal(linha(consolidado, B44).recebido, 90);
+  assert.equal(linha(consolidado, B44).faltando, 10);
 });

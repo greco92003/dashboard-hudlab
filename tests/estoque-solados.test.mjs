@@ -11,6 +11,7 @@ import {
   SOLADO_PARAMETROS_PADRAO,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
+  somarSaldoDosDuplicados,
 } from "../lib/estoque/solados.ts";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -431,4 +432,26 @@ test("o teto deixa de morder quando a amostra engorda", () => {
     negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
   );
   assert.equal(curvaDeDemanda(muitos, 0.1).get("Preto|40/41"), 200);
+});
+
+// ── produto duplicado no Tiny ───────────────────────────────────────────────
+
+test("o saldo do produto duplicado soma no SKU certo", () => {
+  // Caso real: Branco 44/45 aparecia com -8 enquanto os 160 pares recebidos
+  // estavam guardados no produto duplicado 762198548.
+  const skus = [
+    { produtoId: 741133306, descricao: "SOLA SLIDE - BRANCO 44/45", cor: "Branco", numeracao: "44/45", saldo: -8 },
+    { produtoId: 728159280, descricao: "SOLA SLIDE - PRETO 40/41", cor: "Preto", numeracao: "40/41", saldo: 50 },
+  ];
+  const resultado = somarSaldoDosDuplicados(skus, new Map([[762198548, 160]]));
+  assert.equal(resultado[0].saldo, 152);
+  assert.equal(resultado[1].saldo, 50, "SKU sem duplicado não muda");
+});
+
+test("produto que não é duplicado conhecido não mexe em saldo nenhum", () => {
+  const skus = [
+    { produtoId: 741133306, descricao: "SOLA SLIDE - BRANCO 44/45", cor: "Branco", numeracao: "44/45", saldo: -8 },
+  ];
+  const resultado = somarSaldoDosDuplicados(skus, new Map([[999999999, 500]]));
+  assert.equal(resultado[0].saldo, -8);
 });
