@@ -15,8 +15,12 @@ export const FALLBACK_RECENT_MESSAGES = 20;
 /** Teto de mensagens mandadas à IA, mesmo com o corte na amostra. */
 export const MAX_CUT_MESSAGES = 40;
 
-/** Primeira etapa pós-venda do pipeline Atendimento; dali em diante o cliente já pagou. */
-export const FIRST_POST_SALE_STAGE = "Pagamento Confirmado/Completar Dados";
+/**
+ * Primeira etapa pós-venda do pipeline Atendimento: dali em diante o pedido é
+ * do pós-venda (Amanda). Pagamento Confirmado ainda é do vendedor, que fecha
+ * arte e grade antes de passar o card para Cadastro ERP.
+ */
+export const FIRST_POST_SALE_STAGE = "Cadastro ERP";
 
 const SAMPLE_MENTION = /amostras?\s+digita(l|is)/i;
 

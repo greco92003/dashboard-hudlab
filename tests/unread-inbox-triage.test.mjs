@@ -77,15 +77,17 @@ const STAGES = [
   "Prioridade de Fechamento",
   "Finalizando Venda",
   "Pagamento Confirmado/Completar Dados",
+  "Cadastro ERP",
   "Impressão de Fotolitos",
   "Recebido Pedido",
 ];
 
-test("pós-venda: pagamento confirmado em diante, venda ganha ou representante", () => {
+test("pós-venda: Cadastro ERP em diante, venda ganha ou representante", () => {
   const base = { won: false, pipelineName: "Atendimento", atendimentoStages: STAGES };
   assert.equal(isPostSale({ ...base, stageName: "Negociação" }), false);
   assert.equal(isPostSale({ ...base, stageName: "Finalizando Venda" }), false);
-  assert.equal(isPostSale({ ...base, stageName: "Pagamento Confirmado/Completar Dados" }), true);
+  assert.equal(isPostSale({ ...base, stageName: "Pagamento Confirmado/Completar Dados" }), false);
+  assert.equal(isPostSale({ ...base, stageName: "Cadastro ERP" }), true);
   assert.equal(isPostSale({ ...base, stageName: "Impressão de Fotolitos" }), true);
   assert.equal(isPostSale({ ...base, stageName: null, won: true }), true);
   assert.equal(isPostSale({ ...base, pipelineName: "Representantes", stageName: "Produção" }), true);
