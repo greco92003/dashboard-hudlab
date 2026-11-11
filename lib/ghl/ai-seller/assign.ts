@@ -12,7 +12,7 @@ import {
   VENDEDOR_FIELD_ID,
 } from "./config";
 import { decideAssignment, type AssignDecision } from "./decide";
-import { addContactTags } from "./ghl-actions";
+import { addContactTags, clearContactOwner } from "./ghl-actions";
 import { findCurrentOpportunity } from "./opportunity";
 import { insertAssignment } from "./runs-store";
 import { loadSellerSettings } from "./settings";
@@ -27,8 +27,8 @@ export interface AssignResult {
 /**
  * Chamado pelo workflow "IA Vendedora | Entrada" quando a amostra digital é
  * entregue. Se o cliente é da Cami: tag ia-atendimento (a partir daí o
- * workflow "Responder" chama a Cami a cada mensagem) e Vendedor = CAMI na
- * oportunidade. dryRun só decide.
+ * workflow "Responder" chama a Cami a cada mensagem), Vendedor = CAMI na
+ * oportunidade e contato sem dono. dryRun só decide.
  */
 export async function assignToSeller(
   contactId: string,
@@ -62,8 +62,18 @@ export async function assignToSeller(
     await updateGhlOpportunity(opportunity.id, {
       customFields: [{ id: VENDEDOR_FIELD_ID, fieldValue: AI_VENDEDOR_NAME }],
     });
-    // Tag por último: é ela que liga a Cami no workflow "Responder".
+    // Tag antes do dono: é ela que liga a Cami no workflow "Responder" e que faz
+    // a barreira de donos do GHL ("Atendimento | Barreira: cliente sem dono")
+    // pular este contato.
     await addContactTags(contactId, [AI_TAG]);
+    // Enquanto a Cami atende, o contato fica sem dono: a conversa sai da caixa
+    // "atribuídas a mim" da Schay. Na passagem, assignContact devolve o dono.
+    // Falha aqui não desfaz a entrada (a Cami responde do mesmo jeito).
+    try {
+      await clearContactOwner(contactId);
+    } catch (err) {
+      console.error("IA vendedora: dono do contato não retirado", { contactId, err });
+    }
   }
 
   if (!dryRun) {
