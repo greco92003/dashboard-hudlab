@@ -153,6 +153,7 @@ async function triageConversation(
     last_message_id: lastMessageId,
     last_message_body: lastClientMessageText(messages),
     contact_tags: conversation.tags,
+    assigned_to: conversation.assignedTo,
     is_unread: true,
     refreshed_at: refreshedAt,
   };

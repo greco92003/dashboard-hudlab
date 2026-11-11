@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  decidirAviso,
   decidirAvisoQuente,
   primeiroNome,
+  textoDoAviso,
   textoDoAvisoQuente,
 } from "../lib/ghl/unread-inbox/hot-alert-rules.ts";
 
@@ -56,4 +58,26 @@ test("texto do aviso: vários leads juntos", () => {
   assert.equal(t.message, "Maria Teste, Cliente sem nome");
   assert.ok(t.aviso.texto.startsWith("🔔 *2 leads quentes esperando resposta*"));
   assert.ok(!t.aviso.linha.includes("\n"));
+});
+
+test("pós-venda só avisa a Amanda das conversas dela", () => {
+  const nenhuma = new Set();
+  assert.equal(decidirAviso(row({ assigned_to: "amanda" }), { passagensRecentes: nenhuma, dono: "amanda" }), "avisar");
+  assert.equal(decidirAviso(row({ assigned_to: "schay" }), { passagensRecentes: nenhuma, dono: "amanda" }), "outro_dono");
+  assert.equal(decidirAviso(row({ assigned_to: null }), { passagensRecentes: nenhuma, dono: "amanda" }), "outro_dono");
+  // Lead quente: qualquer dono.
+  assert.equal(decidirAviso(row({ assigned_to: "schay" }), { passagensRecentes: nenhuma }), "avisar");
+  // Clique de campanha de cliente entregue vai para o aviso de clique, não para a Amanda.
+  assert.equal(
+    decidirAviso(row({ assigned_to: "amanda", last_message_body: "Quero aproveitar" }), { passagensRecentes: nenhuma, dono: "amanda" }),
+    "clique_de_campanha",
+  );
+});
+
+test("texto do aviso do pós-venda", () => {
+  const um = textoDoAviso([row({ reason: "Pedido no pós-venda: card em Cadastro ERP." })], "pos_venda");
+  assert.equal(um.title, "📦 Cliente do pós-venda esperando: Maria Teste");
+  assert.ok(um.aviso.texto.startsWith("🔔 *Cliente do pós-venda esperando resposta*"));
+  const dois = textoDoAviso([row(), row({ contact_id: "contato-2" })], "pos_venda");
+  assert.equal(dois.title, "📦 2 clientes do pós-venda esperando resposta");
 });

@@ -229,6 +229,8 @@ export interface UnreadWhatsappConversation {
   lastMessageDirection: "inbound" | "outbound" | null;
   /** Tags do contato (ex.: ia-atendimento, cliente que a Cami está atendendo). */
   tags: string[];
+  /** Dono da conversa no GHL (usuário); null sem dono. */
+  assignedTo: string | null;
 }
 
 interface GhlConversationListItem {
@@ -244,6 +246,8 @@ interface GhlConversationListItem {
   lastMessageDate?: number;
   /** Tags do contato, que a busca de conversas já devolve. */
   tags?: string[];
+  /** Dono da conversa; a busca só traz quando há. */
+  assignedTo?: string;
   sort?: number[];
 }
 
@@ -287,6 +291,7 @@ export async function searchUnreadWhatsappConversations(): Promise<UnreadWhatsap
       lastMessageBody: c.lastMessageBody ?? null,
       lastMessageDirection: c.lastMessageDirection ?? null,
       tags: c.tags ?? [],
+      assignedTo: c.assignedTo ?? null,
     }));
 }
 
