@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   cutTranscript,
   isPostSale,
+  isStageClassification,
+  stageClassification,
+  stageVerdict,
   isWindowOpen,
   lastClientMessageText,
   recentClientAttachments,
@@ -77,20 +80,49 @@ const STAGES = [
   "Prioridade de Fechamento",
   "Finalizando Venda",
   "Pagamento Confirmado/Completar Dados",
+  "Cadastro ERP",
   "Impressão de Fotolitos",
   "Recebido Pedido",
 ];
 
-test("pós-venda: pagamento confirmado em diante, venda ganha ou representante", () => {
+test("pós-venda: Cadastro ERP em diante, venda ganha ou representante", () => {
   const base = { won: false, pipelineName: "Atendimento", atendimentoStages: STAGES };
   assert.equal(isPostSale({ ...base, stageName: "Negociação" }), false);
   assert.equal(isPostSale({ ...base, stageName: "Finalizando Venda" }), false);
-  assert.equal(isPostSale({ ...base, stageName: "Pagamento Confirmado/Completar Dados" }), true);
+  assert.equal(isPostSale({ ...base, stageName: "Pagamento Confirmado/Completar Dados" }), false);
+  assert.equal(isPostSale({ ...base, stageName: "Cadastro ERP" }), true);
   assert.equal(isPostSale({ ...base, stageName: "Impressão de Fotolitos" }), true);
   assert.equal(isPostSale({ ...base, stageName: null, won: true }), true);
   assert.equal(isPostSale({ ...base, pipelineName: "Representantes", stageName: "Produção" }), true);
   assert.equal(isPostSale({ ...base, pipelineName: "Fábrica de Mockups", stageName: "Criar Mockup" }), false);
   assert.equal(isPostSale({ ...base, stageName: "Etapa renomeada" }), false);
+  // Ganho antes de Cadastro ERP é pedido fechado, ainda do vendedor.
+  assert.equal(isPostSale({ ...base, stageName: "Pagamento Confirmado/Completar Dados", won: true }), false);
+  assert.equal(isPostSale({ ...base, stageName: "Cadastro ERP", won: true }), true);
+  assert.equal(isPostSale({ ...base, stageName: "Etapa renomeada", won: true }), true);
+  assert.equal(isPostSale({ ...base, pipelineName: "Fábrica de Mockups", stageName: "Serigrafia", won: true }), true);
+});
+
+test("pedido fechado antes do Cadastro ERP vira quente sem IA", () => {
+  const base = { won: false, pipelineName: "Atendimento", atendimentoStages: STAGES };
+  assert.equal(stageVerdict({ ...base, stageName: "Negociação" }), null);
+  assert.equal(stageVerdict({ ...base, stageName: "Pagamento Confirmado/Completar Dados" }), "pedido_fechado");
+  assert.equal(stageVerdict({ ...base, stageName: "Pagamento Confirmado/Completar Dados", won: true }), "pedido_fechado");
+  assert.equal(stageVerdict({ ...base, stageName: "Finalizando Venda", won: true }), "pedido_fechado");
+  assert.equal(stageVerdict({ ...base, stageName: "Cadastro ERP" }), "pos_venda");
+
+  const fechado = stageClassification("pedido_fechado", { won: true, pipelineName: "Atendimento", stageName: "Pagamento Confirmado/Completar Dados" });
+  assert.equal(fechado.category, "quente");
+  assert.equal(fechado.reason, "Pedido fechado: completar dados do pedido (card em Pagamento Confirmado/Completar Dados).");
+  assert.equal(isStageClassification(fechado), true);
+  assert.equal(isStageClassification({ category: "quente", reason: "Pediu o link de pagamento." }), false);
+  assert.equal(isStageClassification({ category: "pos_venda", reason: "Venda ganha." }), true);
+
+  assert.equal(
+    stageClassification("pos_venda", { won: false, pipelineName: "Atendimento", stageName: "Cadastro ERP" }).reason,
+    "Pedido no pós-venda: card em Cadastro ERP.",
+  );
+  assert.equal(stageClassification("pos_venda", { won: true, pipelineName: null, stageName: null }).reason, "Venda ganha.");
 });
 
 test("fila: quente, morno, frio, pós; dentro da categoria quem espera há mais tempo", () => {

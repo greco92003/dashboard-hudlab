@@ -45,21 +45,25 @@ export interface Destino {
   nome: string;
 }
 
-let destinosCache: { em: number; lista: Destino[] } | null = null;
+/** Quem recebe o aviso de cliente do pós-venda esperando resposta (a Amanda). */
+export const TAG_AVISOS_POS_VENDA = "avisos_pos_venda";
 
-/** Contatos com a tag `avisos_whatsapp`, filtrados na origem (busca do GHL por tag). */
-export async function destinosDoAviso(): Promise<Destino[]> {
-  if (destinosCache && Date.now() - destinosCache.em < CACHE_DESTINOS_MS) return destinosCache.lista;
+const destinosCache = new Map<string, { em: number; lista: Destino[] }>();
+
+/** Contatos com a tag (padrão `avisos_whatsapp`), filtrados na origem (busca do GHL por tag). */
+export async function destinosDoAviso(tag: string = TAG_AVISOS): Promise<Destino[]> {
+  const cache = destinosCache.get(tag);
+  if (cache && Date.now() - cache.em < CACHE_DESTINOS_MS) return cache.lista;
   const locationId = process.env.GHL_LOCATION_ID;
   if (!locationId) throw new Error("GHL_LOCATION_ID não configurado");
   const data = await ghl<{ contacts?: Array<{ id: string; firstName?: string; contactName?: string }> }>(
     "/contacts/search",
     "POST",
     "2021-07-28",
-    { locationId, pageLimit: 20, filters: [{ field: "tags", operator: "contains", value: TAG_AVISOS }] },
+    { locationId, pageLimit: 20, filters: [{ field: "tags", operator: "contains", value: tag }] },
   );
   const lista = (data.contacts ?? []).map((c) => ({ contactId: c.id, nome: c.firstName || c.contactName || "time" }));
-  destinosCache = { em: Date.now(), lista };
+  destinosCache.set(tag, { em: Date.now(), lista });
   return lista;
 }
 
@@ -115,14 +119,26 @@ async function avisarUm(destino: Destino, aviso: Aviso): Promise<ResultadoDoAvis
   }
 }
 
-/** Manda o aviso a todos os destinos, um de cada vez. Nunca lança. */
-export async function avisarTime(aviso: Aviso): Promise<ResultadoDoAviso[]> {
+/**
+ * Manda o aviso aos destinos, um de cada vez. Nunca lança. Com `so`, só a
+ * quem passa no filtro (ex.: o aviso de lead quente vai só para a Schay);
+ * `tag` troca a lista de destinos (ex.: TAG_AVISOS_POS_VENDA, a Amanda).
+ */
+export async function avisarTime(
+  aviso: Aviso,
+  so?: (destino: Destino) => boolean,
+  tag: string = TAG_AVISOS,
+): Promise<ResultadoDoAviso[]> {
   let destinos: Destino[];
   try {
-    destinos = await destinosDoAviso();
+    destinos = await destinosDoAviso(tag);
   } catch (err) {
     console.error("avisos do time: destinos não lidos", err);
     return [];
+  }
+  if (so) {
+    destinos = destinos.filter(so);
+    if (destinos.length === 0) console.warn("avisos do time: nenhum destino passou no filtro do aviso");
   }
   const resultados: ResultadoDoAviso[] = [];
   for (const destino of destinos) resultados.push(await avisarUm(destino, aviso));

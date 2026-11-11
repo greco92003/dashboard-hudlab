@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/avisos-time",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/nao-lidas",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {
@@ -117,6 +121,9 @@
     },
     "app/api/cron/avisos-time/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/nao-lidas/route.ts": {
+      "maxDuration": 300
     }
   },
   "headers": [

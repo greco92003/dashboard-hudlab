@@ -15,8 +15,15 @@ export const FALLBACK_RECENT_MESSAGES = 20;
 /** Teto de mensagens mandadas à IA, mesmo com o corte na amostra. */
 export const MAX_CUT_MESSAGES = 40;
 
-/** Primeira etapa pós-venda do pipeline Atendimento; dali em diante o cliente já pagou. */
-export const FIRST_POST_SALE_STAGE = "Pagamento Confirmado/Completar Dados";
+/**
+ * Primeira etapa pós-venda do pipeline Atendimento: dali em diante o pedido é
+ * do pós-venda (Amanda). Pagamento Confirmado ainda é do vendedor, que fecha
+ * arte e grade antes de passar o card para Cadastro ERP.
+ */
+export const FIRST_POST_SALE_STAGE = "Cadastro ERP";
+
+/** Primeira etapa de pedido fechado: dali até Cadastro ERP o cliente completa grade e arte com o vendedor. */
+export const FIRST_CLOSED_STAGE = "Pagamento Confirmado/Completar Dados";
 
 const SAMPLE_MENTION = /amostras?\s+digita(l|is)/i;
 
@@ -99,23 +106,66 @@ export function withAudioTranscripts(
   });
 }
 
-/**
- * Pós-venda sem precisar de IA: venda ganha, pedido de representante ou card
- * do Atendimento já na etapa de pagamento confirmado ou depois.
- */
-export function isPostSale(input: {
+export interface StageInput {
   won: boolean;
   pipelineName: string | null;
   stageName: string | null;
   /** Etapas do pipeline Atendimento, na ordem do funil. */
   atendimentoStages: readonly string[];
-}): boolean {
-  if (input.won) return true;
-  if (input.pipelineName === "Representantes") return true;
-  if (input.pipelineName !== "Atendimento" || !input.stageName) return false;
-  const stageIndex = input.atendimentoStages.indexOf(input.stageName);
-  const firstPostSale = input.atendimentoStages.indexOf(FIRST_POST_SALE_STAGE);
-  return stageIndex >= 0 && firstPostSale >= 0 && stageIndex >= firstPostSale;
+}
+
+/**
+ * Categoria que sai da etapa, sem IA:
+ * - "pos_venda": card do Atendimento de Cadastro ERP em diante, pedido de
+ *   representante ou venda ganha fora do Atendimento (ou em etapa que não
+ *   está mais no funil);
+ * - "pedido_fechado": card do Atendimento ganho, ou de Pagamento Confirmado em
+ *   diante, que ainda não chegou a Cadastro ERP. O GHL marca a venda como
+ *   ganha já em Pagamento Confirmado; o cliente ainda manda grade e arte, e é
+ *   do vendedor;
+ * - null: negociação, vai para a triagem da IA.
+ */
+export function stageVerdict(input: StageInput): "pos_venda" | "pedido_fechado" | null {
+  if (input.pipelineName === "Representantes") return "pos_venda";
+  if (input.pipelineName === "Atendimento" && input.stageName) {
+    const stageIndex = input.atendimentoStages.indexOf(input.stageName);
+    const firstPostSale = input.atendimentoStages.indexOf(FIRST_POST_SALE_STAGE);
+    const firstClosed = input.atendimentoStages.indexOf(FIRST_CLOSED_STAGE);
+    if (stageIndex >= 0 && firstPostSale >= 0) {
+      if (stageIndex >= firstPostSale) return "pos_venda";
+      if (input.won || (firstClosed >= 0 && stageIndex >= firstClosed)) return "pedido_fechado";
+      return null;
+    }
+  }
+  return input.won ? "pos_venda" : null;
+}
+
+export function isPostSale(input: StageInput): boolean {
+  return stageVerdict(input) === "pos_venda";
+}
+
+/** Começo do motivo do pedido fechado: marca que o Quente veio da etapa, não da IA. */
+export const CLOSED_ORDER_REASON = "Pedido fechado";
+
+/** Categoria e motivo do que a etapa decide. */
+export function stageClassification(
+  verdict: "pos_venda" | "pedido_fechado",
+  input: { won: boolean; pipelineName: string | null; stageName: string | null },
+): { category: TriageCategory; reason: string } {
+  const card = input.stageName ? ` (card em ${input.stageName})` : "";
+  if (verdict === "pedido_fechado") {
+    return { category: "quente", reason: `${CLOSED_ORDER_REASON}: completar dados do pedido${card}.` };
+  }
+  if (input.pipelineName === "Representantes") return { category: "pos_venda", reason: `Pedido de representante${card}.` };
+  if (input.pipelineName === "Atendimento" && input.stageName && !input.won) {
+    return { category: "pos_venda", reason: `Pedido no pós-venda: card em ${input.stageName}.` };
+  }
+  return { category: "pos_venda", reason: `Venda ganha${card}.` };
+}
+
+/** A classificação guardada veio da etapa (pós-venda ou pedido fechado), não da IA. */
+export function isStageClassification(row: { category: TriageCategory | null; reason: string | null }): boolean {
+  return row.category === "pos_venda" || (row.reason ?? "").startsWith(`${CLOSED_ORDER_REASON}:`);
 }
 
 /** Categoria na ordem da fila; dentro dela, quem espera há mais tempo primeiro. */
