@@ -115,6 +115,17 @@ export async function assignContact(contactId: string, userId: string): Promise<
   });
 }
 
+/**
+ * Tira o dono do contato (o GHL aceita assignedTo null). A conversa sai da
+ * caixa "atribuídas a mim" de quem era dono.
+ */
+export async function clearContactOwner(contactId: string): Promise<void> {
+  await ghlCall(`/contacts/${contactId}`, "PUT", CONTACTS_VERSION, {
+    body: { assignedTo: null },
+    retry: true,
+  });
+}
+
 /** Cadeia do orçamento: valores gravados, não fórmulas (memória ghl-escrita-via-api). */
 export const BUDGET_FIELDS = {
   oppPares: "TFp4L5VxK9mHBaAMXyo7",
