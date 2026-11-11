@@ -115,14 +115,21 @@ async function avisarUm(destino: Destino, aviso: Aviso): Promise<ResultadoDoAvis
   }
 }
 
-/** Manda o aviso a todos os destinos, um de cada vez. Nunca lança. */
-export async function avisarTime(aviso: Aviso): Promise<ResultadoDoAviso[]> {
+/**
+ * Manda o aviso aos destinos, um de cada vez. Nunca lança. Com `so`, só a
+ * quem passa no filtro (ex.: o aviso de lead quente vai só para a Schay).
+ */
+export async function avisarTime(aviso: Aviso, so?: (destino: Destino) => boolean): Promise<ResultadoDoAviso[]> {
   let destinos: Destino[];
   try {
     destinos = await destinosDoAviso();
   } catch (err) {
     console.error("avisos do time: destinos não lidos", err);
     return [];
+  }
+  if (so) {
+    destinos = destinos.filter(so);
+    if (destinos.length === 0) console.warn("avisos do time: nenhum destino passou no filtro do aviso");
   }
   const resultados: ResultadoDoAviso[] = [];
   for (const destino of destinos) resultados.push(await avisarUm(destino, aviso));

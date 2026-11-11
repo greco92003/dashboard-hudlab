@@ -227,6 +227,8 @@ export interface UnreadWhatsappConversation {
   lastInboundAt: string;
   lastMessageBody: string | null;
   lastMessageDirection: "inbound" | "outbound" | null;
+  /** Tags do contato (ex.: ia-atendimento, cliente que a Cami está atendendo). */
+  tags: string[];
 }
 
 interface GhlConversationListItem {
@@ -284,6 +286,7 @@ export async function searchUnreadWhatsappConversations(): Promise<UnreadWhatsap
       lastInboundAt: new Date(c.lastInboundWhatsappMessageDate as number).toISOString(),
       lastMessageBody: c.lastMessageBody ?? null,
       lastMessageDirection: c.lastMessageDirection ?? null,
+      tags: c.tags ?? [],
     }));
 }
 

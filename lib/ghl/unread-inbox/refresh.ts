@@ -24,10 +24,12 @@ import {
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import {
   cutTranscript,
-  isPostSale,
+  isStageClassification,
   isWindowOpen,
   lastClientMessageText,
   recentClientAttachments,
+  stageClassification,
+  stageVerdict,
   withAudioTranscripts,
   type TriageCategory,
 } from "./triage";
@@ -150,13 +152,19 @@ async function triageConversation(
     last_inbound_at: conversation.lastInboundAt,
     last_message_id: lastMessageId,
     last_message_body: lastClientMessageText(messages),
+    contact_tags: conversation.tags,
     is_unread: true,
     refreshed_at: refreshedAt,
   };
 
-  // Classificação já feita sobre esta mesma última mensagem: não gasta de novo
-  // (nem a transcrição do áudio, que ficou guardada no texto).
-  if (existing?.category && existing.classified_message_id === lastMessageId) {
+  const won = picked?.won ?? false;
+  const verdict = stageVerdict({ won, pipelineName, stageName, atendimentoStages: index.atendimentoStages });
+  const sameMessage = Boolean(existing?.category) && existing?.classified_message_id === lastMessageId;
+
+  // Triagem da IA já feita sobre esta mesma última mensagem: não gasta de novo
+  // (nem a transcrição do áudio, que ficou guardada no texto). O que veio da
+  // etapa não vale de cache: o card anda sem mensagem nova.
+  if (sameMessage && !verdict && existing && !isStageClassification(existing)) {
     return {
       ...row,
       last_message_body: existing.last_message_body ?? row.last_message_body,
@@ -165,25 +173,29 @@ async function triageConversation(
     };
   }
 
+  if (verdict) {
+    // Mesma mensagem: o texto guardado já tem o áudio transcrito.
+    if (sameMessage && existing) {
+      row.last_message_body = existing.last_message_body ?? row.last_message_body;
+    } else {
+      const cut = cutTranscript(messages);
+      const transcribed = withAudioTranscripts(cut.messages, await transcribeClientAudios(cut.messages));
+      row.last_message_body = lastClientMessageText(transcribed) ?? row.last_message_body;
+    }
+    return {
+      ...row,
+      ...stageClassification(verdict, { won, pipelineName, stageName }),
+      subject: (row.last_message_body as string | null)?.slice(0, 80) ?? null,
+      classified_message_id: lastMessageId,
+      classified_at: sameMessage && existing?.classified_at ? existing.classified_at : new Date().toISOString(),
+      classify_error: null,
+    };
+  }
+
   // Áudio do cliente vira texto: sem isso a fila mostra "Enviou um anexo" e a triagem classifica às cegas.
   const cut = cutTranscript(messages);
   const transcribed = withAudioTranscripts(cut.messages, await transcribeClientAudios(cut.messages));
   row.last_message_body = lastClientMessageText(transcribed) ?? row.last_message_body;
-
-  const won = picked?.won ?? false;
-  if (isPostSale({ won, pipelineName, stageName, atendimentoStages: index.atendimentoStages })) {
-    return {
-      ...row,
-      category: "pos_venda",
-      reason: won
-        ? `Venda ganha${stageName ? ` (card em ${stageName})` : ""}.`
-        : `Pedido já pago: card em ${stageName}.`,
-      subject: (row.last_message_body as string | null)?.slice(0, 80) ?? null,
-      classified_message_id: lastMessageId,
-      classified_at: new Date().toISOString(),
-      classify_error: null,
-    };
-  }
 
   try {
     const triage = await runTriage(transcribed, { etapaCrm: stageName, qtyPares });
