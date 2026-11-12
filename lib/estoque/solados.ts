@@ -129,8 +129,14 @@ export type SoladoParametros = {
    * quase saiu branco, mudou na última hora.
    */
   tetoInfluenciaPedido: number;
-  /** Consumo médio mensal em pares, do histórico de embarques. */
+  /**
+   * Consumo médio mensal em pares: embarques dos últimos
+   * `diasJanelaConsumo` dias, com o mesmo teto por pedido da curva. Ver
+   * `consumoMensalComTeto`.
+   */
   consumoMensalMedio: number;
+  /** Dias corridos de embarques que formam o consumo médio. */
+  diasJanelaConsumo: number;
 };
 
 export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
@@ -141,7 +147,40 @@ export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
   diasUteisPorMes: 21,
   tetoInfluenciaPedido: 0.1,
   consumoMensalMedio: 0,
+  diasJanelaConsumo: 90,
 };
+
+/** Dias de um mês médio, para converter a janela em média mensal. */
+const DIAS_POR_MES = 365.25 / 12;
+
+/**
+ * Média mensal de pares embarcados numa janela de dias, com teto por pedido.
+ *
+ * Até 12/11/2026 a média vinha dos 6 meses FECHADOS. Ela não acompanhava a
+ * Black: em novembro os últimos 90 dias rodavam a ~2.500 pares/mês e o mínimo
+ * seguia dimensionado por 1.844 — que ainda por cima só estava nesse nível por
+ * causa de um pedido atípico, os 1.990 pares da Larissa em outubro. Sem ela a
+ * média de 6 meses seria 1.513: maio a julho pesavam metade e não representavam
+ * mais o ritmo.
+ *
+ * A janela móvel de 90 dias acompanha a operação para cima e para baixo. O teto
+ * é o da curva (`tetoInfluenciaPedido`): nenhum pedido pesa mais que essa fatia
+ * do total da janela, então um pedido gigante entra amortecido em vez de virar
+ * base por três meses. Com 10%, em 12/11 só a Larissa foi cortada — de 1.990
+ * para 857.
+ */
+export function consumoMensalComTeto(
+  paresPorPedido: number[],
+  diasJanela: number,
+  tetoInfluencia: number,
+): number {
+  if (diasJanela <= 0) return 0;
+  const validos = paresPorPedido.filter((p) => Number.isFinite(p) && p > 0);
+  const total = validos.reduce((a, b) => a + b, 0);
+  const limite = total * tetoInfluencia;
+  const comTeto = validos.reduce((soma, p) => soma + Math.min(p, limite), 0);
+  return Math.round((comTeto * DIAS_POR_MES) / diasJanela);
+}
 
 /**
  * ⚠️  LISTA TEMPORÁRIA — APAGAR QUANDO ESVAZIAR.
