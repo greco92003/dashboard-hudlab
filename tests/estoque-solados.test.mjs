@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   combinacoesSolado,
   completarGrade,
+  consumoMensalComTeto,
   curvaDeDemanda,
   montarResumo,
   NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP,
@@ -11,6 +12,7 @@ import {
   SOLADO_PARAMETROS_PADRAO,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
+  somarSaldoDosDuplicados,
 } from "../lib/estoque/solados.ts";
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -431,4 +433,62 @@ test("o teto deixa de morder quando a amostra engorda", () => {
     negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 10 }] }),
   );
   assert.equal(curvaDeDemanda(muitos, 0.1).get("Preto|40/41"), 200);
+});
+
+// ── produto duplicado no Tiny ───────────────────────────────────────────────
+
+test("o saldo do produto duplicado soma no SKU certo", () => {
+  // Caso real: Branco 44/45 aparecia com -8 enquanto os 160 pares recebidos
+  // estavam guardados no produto duplicado 762198548.
+  const skus = [
+    { produtoId: 741133306, descricao: "SOLA SLIDE - BRANCO 44/45", cor: "Branco", numeracao: "44/45", saldo: -8 },
+    { produtoId: 728159280, descricao: "SOLA SLIDE - PRETO 40/41", cor: "Preto", numeracao: "40/41", saldo: 50 },
+  ];
+  const resultado = somarSaldoDosDuplicados(skus, new Map([[762198548, 160]]));
+  assert.equal(resultado[0].saldo, 152);
+  assert.equal(resultado[1].saldo, 50, "SKU sem duplicado não muda");
+});
+
+test("produto que não é duplicado conhecido não mexe em saldo nenhum", () => {
+  const skus = [
+    { produtoId: 741133306, descricao: "SOLA SLIDE - BRANCO 44/45", cor: "Branco", numeracao: "44/45", saldo: -8 },
+  ];
+  const resultado = somarSaldoDosDuplicados(skus, new Map([[999999999, 500]]));
+  assert.equal(resultado[0].saldo, -8);
+});
+
+// ── consumo médio: janela móvel com teto ────────────────────────────────────
+
+test("90 dias de embarque viram média mensal", () => {
+  // 3.000 pares em 90 dias, nenhum pedido acima do teto: ~1.015 por mês.
+  const pedidos = Array.from({ length: 30 }, () => 100);
+  assert.equal(consumoMensalComTeto(pedidos, 90, 0.1), 1015);
+});
+
+test("pedido gigante entra amortecido pelo teto", () => {
+  // Caso real de 12/11: 8.573 pares em 90 dias, a Larissa sozinha com 1.990.
+  // Com teto de 10% ela entra com 857, e só ela é cortada.
+  const outros = Array.from({ length: 156 }, () => (8573 - 1990) / 156);
+  const comLarissa = [1990, ...outros];
+  const cru = consumoMensalComTeto(comLarissa, 90, 1);
+  const comTeto = consumoMensalComTeto(comLarissa, 90, 0.1);
+  assert.equal(cru, 2899, "sem teto a Larissa vira base");
+  assert.equal(comTeto, 2516, "com teto: 7.440 pares na janela");
+});
+
+test("a janela acompanha a operação para baixo também", () => {
+  // Movimento caindo pela metade derruba a média na mesma proporção — o
+  // estoque de segurança não fica dimensionado pelo pico depois que ele passa.
+  const pico = Array.from({ length: 40 }, () => 60);
+  const calmo = Array.from({ length: 40 }, () => 30);
+  assert.equal(
+    consumoMensalComTeto(calmo, 90, 0.1) * 2,
+    consumoMensalComTeto(pico, 90, 0.1),
+  );
+});
+
+test("pares inválidos e janela vazia não quebram a conta", () => {
+  assert.equal(consumoMensalComTeto([100, NaN, -5, 0], 90, 1), 34);
+  assert.equal(consumoMensalComTeto([], 90, 0.1), 0);
+  assert.equal(consumoMensalComTeto([100], 0, 0.1), 0);
 });

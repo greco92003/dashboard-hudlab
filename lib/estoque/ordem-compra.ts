@@ -22,6 +22,7 @@
  * O preço é não saber o detalhe POR ORDEM — e a tela deixou de afirmar isso.
  */
 
+import { produtoCanonico } from "./solados";
 import type { SoladoCor, SoladoItemDemanda } from "./solados";
 
 /** Contato do INPU no Tiny — único fornecedor de solado hoje. */
@@ -97,15 +98,18 @@ export function consolidarCompras(
 ): ConsolidadoCompra[] {
   const linhas = new Map<number, ConsolidadoCompra>();
 
+  // Ordem e nota casam pelo SKU canônico: produto duplicado no Tiny conta como
+  // o SKU certo dos dois lados. Ver SOLADO_PRODUTOS_DUPLICADOS.
   for (const ordem of ordens) {
     if (ordem.situacao === OC_SITUACAO.cancelado) continue;
     for (const item of ordem.itens) {
       if (!item.cor || !item.numeracao) continue;
-      const atual = linhas.get(item.produtoId);
+      const produtoId = produtoCanonico(item.produtoId);
+      const atual = linhas.get(produtoId);
       if (atual) atual.pedido += item.quantidade;
       else
-        linhas.set(item.produtoId, {
-          produtoId: item.produtoId,
+        linhas.set(produtoId, {
+          produtoId,
           cor: item.cor,
           numeracao: item.numeracao,
           pedido: item.quantidade,
@@ -119,7 +123,7 @@ export function consolidarCompras(
     for (const item of nota.itens) {
       // Nota com produto que nenhuma ordem pediu é entrada avulsa: o saldo do
       // Tiny já a registrou e aqui ela não tem o que abater.
-      const linha = linhas.get(item.produtoId);
+      const linha = linhas.get(produtoCanonico(item.produtoId));
       if (linha) linha.recebido += item.quantidade;
     }
   }

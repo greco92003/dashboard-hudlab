@@ -129,8 +129,14 @@ export type SoladoParametros = {
    * quase saiu branco, mudou na última hora.
    */
   tetoInfluenciaPedido: number;
-  /** Consumo médio mensal em pares, do histórico de embarques. */
+  /**
+   * Consumo médio mensal em pares: embarques dos últimos
+   * `diasJanelaConsumo` dias, com o mesmo teto por pedido da curva. Ver
+   * `consumoMensalComTeto`.
+   */
   consumoMensalMedio: number;
+  /** Dias corridos de embarques que formam o consumo médio. */
+  diasJanelaConsumo: number;
 };
 
 export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
@@ -141,7 +147,40 @@ export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
   diasUteisPorMes: 21,
   tetoInfluenciaPedido: 0.1,
   consumoMensalMedio: 0,
+  diasJanelaConsumo: 90,
 };
+
+/** Dias de um mês médio, para converter a janela em média mensal. */
+const DIAS_POR_MES = 365.25 / 12;
+
+/**
+ * Média mensal de pares embarcados numa janela de dias, com teto por pedido.
+ *
+ * Até 12/11/2026 a média vinha dos 6 meses FECHADOS. Ela não acompanhava a
+ * Black: em novembro os últimos 90 dias rodavam a ~2.500 pares/mês e o mínimo
+ * seguia dimensionado por 1.844 — que ainda por cima só estava nesse nível por
+ * causa de um pedido atípico, os 1.990 pares da Larissa em outubro. Sem ela a
+ * média de 6 meses seria 1.513: maio a julho pesavam metade e não representavam
+ * mais o ritmo.
+ *
+ * A janela móvel de 90 dias acompanha a operação para cima e para baixo. O teto
+ * é o da curva (`tetoInfluenciaPedido`): nenhum pedido pesa mais que essa fatia
+ * do total da janela, então um pedido gigante entra amortecido em vez de virar
+ * base por três meses. Com 10%, em 12/11 só a Larissa foi cortada — de 1.990
+ * para 857.
+ */
+export function consumoMensalComTeto(
+  paresPorPedido: number[],
+  diasJanela: number,
+  tetoInfluencia: number,
+): number {
+  if (diasJanela <= 0) return 0;
+  const validos = paresPorPedido.filter((p) => Number.isFinite(p) && p > 0);
+  const total = validos.reduce((a, b) => a + b, 0);
+  const limite = total * tetoInfluencia;
+  const comTeto = validos.reduce((soma, p) => soma + Math.min(p, limite), 0);
+  return Math.round((comTeto * DIAS_POR_MES) / diasJanela);
+}
 
 /**
  * ⚠️  LISTA TEMPORÁRIA — APAGAR QUANDO ESVAZIAR.
@@ -285,6 +324,50 @@ export function parseSoladoDescricao(
     cor: match[1] === "PRETO" ? "Preto" : "Branco",
     numeracao: match[2],
   };
+}
+
+/**
+ * Produtos que o Tiny criou em duplicata de um SKU de solado, apontando para o
+ * SKU certo. Chave: id do duplicado. Valor: id do SKU canônico.
+ *
+ * Nasce na importação do XML do fornecedor: se alguém cria produto novo em vez
+ * de associar ao existente, o Tiny guarda essa associação e repete em TODA nota
+ * seguinte. Foi o que aconteceu com o Branco 44 na nota 017912 (02/10): as notas
+ * 017912, 017914 e 017915 jogaram 160 pares no duplicado. O saldo aparecia -8
+ * no SKU certo, e os 160 pares ficavam como "a caminho" para sempre, porque a
+ * nota não casava com nenhuma ordem.
+ *
+ * Os dois lados são corrigidos aqui — o saldo do duplicado soma no canônico, e
+ * a nota que cita o duplicado abate a ordem do canônico. Assim a tela fica certa
+ * qualquer que seja a arrumação feita no Tiny, e em qualquer ordem: transferir
+ * o estoque, corrigir a associação do fornecedor ou não mexer em nada.
+ */
+export const SOLADO_PRODUTOS_DUPLICADOS: ReadonlyMap<number, number> = new Map([
+  [762198548, 741133306], // "SOLADO MICRO MC180 BRANCO 44" → SOLA SLIDE - BRANCO 44/45
+]);
+
+/** O id do SKU certo para um produto — ele mesmo, se não for duplicado. */
+export function produtoCanonico(produtoId: number): number {
+  return SOLADO_PRODUTOS_DUPLICADOS.get(produtoId) ?? produtoId;
+}
+
+/**
+ * Soma no SKU canônico o saldo que o Tiny guardou no duplicado.
+ *
+ * Duplicado cujo canônico não está na lista é ignorado: sem o SKU certo não há
+ * onde pôr o saldo, e inventar uma linha esconderia o erro de cadastro.
+ */
+export function somarSaldoDosDuplicados(
+  skus: SoladoSkuTiny[],
+  saldoPorDuplicado: ReadonlyMap<number, number>,
+): SoladoSkuTiny[] {
+  return skus.map((sku) => {
+    let extra = 0;
+    for (const [duplicado, saldo] of saldoPorDuplicado) {
+      if (produtoCanonico(duplicado) === sku.produtoId) extra += saldo;
+    }
+    return extra ? { ...sku, saldo: sku.saldo + extra } : sku;
+  });
 }
 
 export function publicoDaNumeracao(numeracao: string): SoladoPublico {

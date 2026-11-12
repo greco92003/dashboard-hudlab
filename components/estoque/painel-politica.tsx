@@ -69,7 +69,7 @@ export function PainelPolitica({ dados }: { dados: SoladoResumo }) {
           <Item
             rotulo="Média mensal"
             valor={`${p.consumoMensalMedio} pares`}
-            nota="Embarques dos últimos 6 meses fechados. O mês corrente fica de fora para não puxar a média para baixo."
+            nota={`Embarques dos últimos ${p.diasJanelaConsumo} dias. Nenhum pedido pesa mais que ${Math.round(p.tetoInfluenciaPedido * 100)}% da janela, para um pedido atípico não virar base.`}
           />
           <Item rotulo="Por dia útil" valor={`${porDiaUtil} pares`} />
 

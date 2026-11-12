@@ -30,10 +30,13 @@ import { paresACaminho } from "./ordem-compra";
 import { lerCompras } from "./ordem-compra-source";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
+  consumoMensalComTeto,
   montarResumo,
   parseSoladoDescricao,
   SOLADO_PARAMETROS_PADRAO,
+  SOLADO_PRODUTOS_DUPLICADOS,
   SOLADO_STAGE_TITLES_ATENDIMENTO,
+  somarSaldoDosDuplicados,
   SOLADO_STAGE_TITLES_REPRESENTANTES,
   type SoladoCor,
   type SoladoItemDemanda,
@@ -352,48 +355,86 @@ async function lerSkusTiny(): Promise<SoladoSkuTiny[]> {
       saldo,
     });
   }
-  return skus;
+
+  // Produto duplicado não aparece na busca por "SOLA SLIDE": o nome dele é o
+  // do fornecedor. O saldo é lido pelo id e somado no SKU certo.
+  const saldoPorDuplicado = new Map<number, number>();
+  for (const duplicado of SOLADO_PRODUTOS_DUPLICADOS.keys()) {
+    try {
+      const estoque = await tinyV3Request<{ saldo?: number | null }>(
+        `/estoque/${duplicado}`,
+      );
+      const saldo = Number(estoque.saldo);
+      if (!Number.isFinite(saldo)) {
+        throw new Error(`O Tiny não devolveu o saldo do produto ${duplicado}.`);
+      }
+      saldoPorDuplicado.set(duplicado, saldo);
+    } catch (error) {
+      // Duplicado apagado no Tiny depois da arrumação: o estoque dele já foi
+      // para o SKU certo, então zero é o valor verdadeiro. Qualquer outra falha
+      // sobe, pela mesma regra de cima.
+      if (/HTTP 404/.test(String(error))) continue;
+      throw error;
+    }
+  }
+  return somarSaldoDosDuplicados(skus, saldoPorDuplicado);
 }
 
+/** Linhas por página na leitura do `deals_cache` — o teto do PostgREST. */
+const PAGINA_DEALS = 1_000;
+
 /**
- * Consumo médio mensal em pares, pelos embarques dos últimos meses fechados.
+ * Consumo médio mensal em pares: embarques dos últimos
+ * `SOLADO_PARAMETROS_PADRAO.diasJanelaConsumo` dias, com teto por pedido.
+ * A regra está em `consumoMensalComTeto`.
+ *
+ * Só embarque que já aconteceu (antes de hoje): data de embarque futura é
+ * pedido agendado, que já entra pela necessidade.
  *
  * Vem do `deals_cache` e não do GHL porque aqui só interessa o VOLUME, que está
  * na tabela e é barato. A quebra por numeração e cor não existe no histórico —
  * os campos de grade entraram em 21/08/2026 — e por isso a curva sai da janela
  * atual, com teto por pedido.
+ *
+ * Pagina porque o PostgREST corta em 1.000 linhas sem avisar, e a janela cresce
+ * justamente no pico de vendas.
  */
-async function lerConsumoMensalMedio(meses = 6): Promise<number> {
+async function lerConsumoMensalMedio(): Promise<number> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const chave = getSupabaseSecretKey();
   if (!supabaseUrl || !chave) return 0;
 
-  const inicio = new Date();
-  inicio.setDate(1);
-  inicio.setMonth(inicio.getMonth() - meses);
+  const { diasJanelaConsumo, tetoInfluenciaPedido } = SOLADO_PARAMETROS_PADRAO;
+  const hoje = new Date();
+  const inicio = new Date(hoje);
+  inicio.setDate(inicio.getDate() - diasJanelaConsumo);
   const desde = inicio.toISOString().slice(0, 10);
-  // O mês corrente fica de fora: ainda não fechou e puxaria a média para baixo.
-  const fim = new Date();
-  fim.setDate(1);
-  const ate = fim.toISOString().slice(0, 10);
+  const ate = hoje.toISOString().slice(0, 10);
 
-  const url =
-    `${supabaseUrl}/rest/v1/deals_cache` +
-    `?select=quantidade-de-pares&status=eq.won` +
-    `&data_embarque_date=gte.${desde}&data_embarque_date=lt.${ate}`;
+  const paresPorPedido: number[] = [];
+  for (let offset = 0; ; offset += PAGINA_DEALS) {
+    const url =
+      `${supabaseUrl}/rest/v1/deals_cache` +
+      `?select=quantidade-de-pares&status=eq.won` +
+      `&data_embarque_date=gte.${desde}&data_embarque_date=lt.${ate}` +
+      `&order=deal_id&limit=${PAGINA_DEALS}&offset=${offset}`;
+    const resposta = await fetch(url, {
+      headers: { apikey: chave, Authorization: `Bearer ${chave}` },
+      cache: "no-store",
+    });
+    if (!resposta.ok) return 0;
+    const linhas = (await resposta.json()) as Array<Record<string, unknown>>;
+    for (const linha of linhas) {
+      paresPorPedido.push(Number(linha["quantidade-de-pares"]));
+    }
+    if (linhas.length < PAGINA_DEALS) break;
+  }
 
-  const resposta = await fetch(url, {
-    headers: { apikey: chave, Authorization: `Bearer ${chave}` },
-    cache: "no-store",
-  });
-  if (!resposta.ok) return 0;
-
-  const linhas = (await resposta.json()) as Array<Record<string, unknown>>;
-  const total = linhas.reduce((soma, linha) => {
-    const bruto = Number(linha["quantidade-de-pares"]);
-    return soma + (Number.isFinite(bruto) && bruto > 0 ? bruto : 0);
-  }, 0);
-  return meses > 0 ? Math.round(total / meses) : 0;
+  return consumoMensalComTeto(
+    paresPorPedido,
+    diasJanelaConsumo,
+    tetoInfluenciaPedido,
+  );
 }
 
 // ── Armazenamento ───────────────────────────────────────────────────────────
