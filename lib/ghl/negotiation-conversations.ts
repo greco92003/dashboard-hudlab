@@ -12,6 +12,11 @@ import {
   extractOpportunityFieldValue,
   fetchCustomFieldDefs,
 } from "@/lib/ghl/api";
+import {
+  aguardarVagaGhl,
+  esperaParaRepetir,
+  TENTATIVAS_LEITURA_GHL,
+} from "@/lib/ghl/rate-limit";
 
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
@@ -45,20 +50,36 @@ async function ghlConversationsFetch<T>(
     }
   }
 
-  // Single retry on rate limit, same policy as lib/ghl/api.ts (PIT burst
-  // limit: 100 requests / 10s).
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Version: CONVERSATIONS_API_VERSION,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+  // Mesma política do lib/ghl/api.ts: fila da instância (limite de rajada do
+  // GHL, 100 req/10 s) e até 5 tentativas em 429/5xx/sem resposta. Com uma
+  // tentativa só (1,5 s), abrir uma conversa na CAMI Intelligence durante o
+  // recálculo dava erro 429 na tela (12/11/2026).
+  for (let attempt = 0; attempt < TENTATIVAS_LEITURA_GHL; attempt++) {
+    const lastAttempt = attempt === TENTATIVAS_LEITURA_GHL - 1;
+    let response: Response;
+    await aguardarVagaGhl();
+    try {
+      response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: CONVERSATIONS_API_VERSION,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (error) {
+      if (lastAttempt) {
+        throw new Error(
+          `GHL Conversations API sem resposta em ${url.pathname}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, esperaParaRepetir(null, attempt)));
+      continue;
+    }
 
-    if (response.status === 429 && attempt === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    if ((response.status === 429 || response.status >= 500) && !lastAttempt) {
+      await new Promise((resolve) => setTimeout(resolve, esperaParaRepetir(response, attempt)));
       continue;
     }
 
