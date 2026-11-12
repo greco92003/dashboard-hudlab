@@ -21,6 +21,11 @@ import {
   type GhlCompleteSnapshot,
 } from "@/lib/ghl/cursor-pagination";
 import { resolveGhlClosingDate } from "@/lib/ghl/closing-date";
+import {
+  aguardarVagaGhl,
+  esperaParaRepetir,
+  TENTATIVAS_LEITURA_GHL,
+} from "@/lib/ghl/rate-limit";
 
 const GHL_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
@@ -33,7 +38,7 @@ const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
 const GHL_REQUEST_TIMEOUT_MS = 20_000;
 // Esperas de 1+2+4+8 s passam da janela de 10 s do limite de rajada do GHL
 // (100 req/10 s); com 3 esperas (7 s) o ERP ainda recebia 429.
-const GHL_READ_ATTEMPTS = 5;
+const GHL_READ_ATTEMPTS = TENTATIVAS_LEITURA_GHL;
 
 // Same flat shape returned by /api/deals-cache (deals_cache table) so the
 // dashboard charts work without changes. `value` is stored multiplied by 100
@@ -192,6 +197,7 @@ async function ghlFetch<T>(
   for (let attempt = 0; attempt < GHL_READ_ATTEMPTS; attempt++) {
     const lastAttempt = attempt === GHL_READ_ATTEMPTS - 1;
     let response: Response;
+    await aguardarVagaGhl();
     try {
       response = await fetch(url.toString(), {
         headers: {
@@ -209,16 +215,12 @@ async function ghlFetch<T>(
           `GHL API sem resposta em ${url.pathname}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
+      await new Promise((resolve) => setTimeout(resolve, esperaParaRepetir(null, attempt)));
       continue;
     }
 
     if ((response.status === 429 || response.status >= 500) && !lastAttempt) {
-      const retryAfterSeconds = Number(response.headers.get("retry-after"));
-      const delayMs = Number.isFinite(retryAfterSeconds)
-        ? Math.max(1_000, retryAfterSeconds * 1_000)
-        : 1_000 * 2 ** attempt;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await new Promise((resolve) => setTimeout(resolve, esperaParaRepetir(response, attempt)));
       continue;
     }
 
@@ -245,6 +247,7 @@ async function ghlV3JsonRequest<T>(
   const maximumAttempts = method === "PUT" ? 3 : 1;
 
   for (let attempt = 0; attempt < maximumAttempts; attempt++) {
+    await aguardarVagaGhl();
     const response = await fetch(url.toString(), {
       method,
       headers: {
@@ -261,11 +264,7 @@ async function ghlV3JsonRequest<T>(
       (response.status === 429 || response.status >= 500) &&
       attempt < maximumAttempts - 1
     ) {
-      const retryAfterSeconds = Number(response.headers.get("retry-after"));
-      const delayMs = Number.isFinite(retryAfterSeconds)
-        ? Math.max(1_000, retryAfterSeconds * 1_000)
-        : 1_000 * 2 ** attempt;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await new Promise((resolve) => setTimeout(resolve, esperaParaRepetir(response, attempt)));
       continue;
     }
 
@@ -475,15 +474,30 @@ export function extractOpportunityFieldValue(
   return null;
 }
 
+/**
+ * As definições dos campos quase nunca mudam, e a fila de não lidas pedia as
+ * mesmas duas vezes por conversa (vendedor e pares). Guardadas por 10 min na
+ * instância; chamadas simultâneas esperam a mesma leitura.
+ */
+const CUSTOM_FIELDS_CACHE_MS = 10 * 60 * 1000;
+const customFieldsCache = new Map<string, { at: number; defs: Promise<GhlCustomFieldDef[]> }>();
+
 export async function fetchCustomFieldDefs(
   model: "opportunity" | "contact",
 ): Promise<GhlCustomFieldDef[]> {
+  const cached = customFieldsCache.get(model);
+  if (cached && Date.now() - cached.at < CUSTOM_FIELDS_CACHE_MS) return [...(await cached.defs)];
   const { locationId } = requireEnv();
-  const data = await ghlFetch<{ customFields: GhlCustomFieldDef[] }>(
+  const defs = ghlFetch<{ customFields: GhlCustomFieldDef[] }>(
     `/locations/${locationId}/customFields`,
     { model },
-  );
-  return data.customFields || [];
+  ).then((data) => data.customFields || []);
+  customFieldsCache.set(model, { at: Date.now(), defs });
+  // Leitura que falhou não fica guardada.
+  defs.catch(() => {
+    if (customFieldsCache.get(model)?.defs === defs) customFieldsCache.delete(model);
+  });
+  return [...(await defs)];
 }
 
 /**
