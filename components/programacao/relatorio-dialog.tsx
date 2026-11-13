@@ -55,6 +55,13 @@ type Props = {
   mostrarValor?: boolean;
   /** Tamanho do botão: a /producao usa botões grandes de tela de toque. */
   grande?: boolean;
+  /**
+   * Abertura controlada por fora (o Painel Produção abre pelo menu "⋯").
+   * Com semBotao, o componente não desenha o próprio botão.
+   */
+  aberto?: boolean;
+  onAbertoChange?: (aberto: boolean) => void;
+  semBotao?: boolean;
 };
 
 type Opcao = { valor: string; quantidade: number };
@@ -136,8 +143,18 @@ function GrupoDeOpcoes({
   );
 }
 
-export function RelatorioDialog({ titulo, endpoint, mostrarValor = false, grande = false }: Props) {
-  const [aberto, setAberto] = useState(false);
+export function RelatorioDialog({
+  titulo,
+  endpoint,
+  mostrarValor = false,
+  grande = false,
+  aberto: abertoDeFora,
+  onAbertoChange,
+  semBotao = false,
+}: Props) {
+  const [abertoAqui, setAbertoAqui] = useState(false);
+  const aberto = abertoDeFora ?? abertoAqui;
+  const setAberto = onAbertoChange ?? setAbertoAqui;
   const [passo, setPasso] = useState<Passo>("filtros");
   const [carregando, setCarregando] = useState(false);
   const [exportando, setExportando] = useState(false);
@@ -249,15 +266,17 @@ export function RelatorioDialog({ titulo, endpoint, mostrarValor = false, grande
 
   return (
     <>
-      <Button
-        variant="outline"
-        size={grande ? "default" : "sm"}
-        className={cn(grande && "h-11 text-base")}
-        onClick={() => setAberto(true)}
-      >
-        <FileText className={cn("mr-2", grande ? "h-5 w-5" : "h-4 w-4")} />
-        Relatórios
-      </Button>
+      {!semBotao && (
+        <Button
+          variant="outline"
+          size={grande ? "default" : "sm"}
+          className={cn(grande && "h-11 text-base")}
+          onClick={() => setAberto(true)}
+        >
+          <FileText className={cn("mr-2", grande ? "h-5 w-5" : "h-4 w-4")} />
+          Relatórios
+        </Button>
+      )}
 
       <Dialog open={aberto} onOpenChange={setAberto}>
         <DialogContent

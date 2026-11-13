@@ -1,44 +1,57 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
-import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   AlertCircle,
   ArrowLeft,
+  CalendarOff,
+  ClipboardList,
   Clock,
   Factory,
+  FileText,
+  MoreHorizontal,
   PackageCheck,
   RefreshCw,
   Search,
   X,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { supabase } from "@/lib/supabase";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { cn } from "@/lib/utils";
-import {
-  ForaDoBoard,
-  type MotivoFora,
-} from "@/components/programacao/fora-do-board";
+import { type MotivoFora } from "@/components/programacao/fora-do-board";
 import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
-import { BoardColumns } from "@/components/programacao/board-columns";
-import { DealCard } from "@/components/programacao/deal-card";
 import { ConcluirDialog } from "@/components/producao/concluir-dialog";
-import { OrderDocumentButtons } from "@/components/erp/order-document-buttons";
 import {
-  TipoPedidoFilter,
-  type TipoFilterValue,
-} from "@/components/programacao/tipo-pedido-filter";
+  AcoesPedido,
+  ColunasPorDia,
+  ListaPorDia,
+  useMidia,
+} from "@/components/producao/painel-pedidos";
+import { type TipoFilterValue } from "@/components/programacao/tipo-pedido-filter";
 import {
   getTipoPedidoRank,
   isDadosEmConferencia,
   isEtapaConcluivel,
+  TIPO_PEDIDO_ORDER,
+  type TipoPedido,
 } from "@/lib/ghl/programacao-stages";
 import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
+import { ehHoje } from "@/lib/producao/dias";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
 
 const SEM_DATA_GROUP_ID = "sem-data";
@@ -46,6 +59,41 @@ const EM_ATRASO_GROUP_ID = "em-atraso";
 const RECEBIDO_GROUP_ID = "recebido";
 
 type Aba = "programacao" | "expedicao";
+
+/** Lista (celular e tablet) ou colunas por dia (computador e TV). */
+type Visao = "auto" | "lista" | "quadro";
+const CHAVE_VISAO = "producao-visao";
+
+const TOM_DO_TIPO: Record<TipoPedido, string> = {
+  Evento: "tone-violet",
+  Amostra: "tone-sky",
+  Pedido: "tone-slate",
+  Reposição: "tone-cyan",
+};
+
+/** O que fica fora das colunas de dia, e por quê (ver ForaDoBoard). */
+const FORA_DO_BOARD: Array<{
+  motivo: MotivoFora;
+  rotulo: string;
+  dica: string;
+  tom: string;
+  icone: typeof CalendarOff;
+}> = [
+  {
+    motivo: "em-conferencia",
+    rotulo: "Em conferência",
+    dica: "Cadastro ainda sendo completado: a data é suposta",
+    tom: "tone-slate",
+    icone: ClipboardList,
+  },
+  {
+    motivo: "sem-data",
+    rotulo: "Sem data",
+    dica: "Pedidos sem data de embarque",
+    tom: "tone-pink",
+    icone: CalendarOff,
+  },
+];
 
 interface BoardResposta {
   groups: BoardGroup[];
@@ -59,6 +107,11 @@ interface BoardResposta {
  * quando embarca. A Programação é operável — o botão Concluir empurra o pedido
  * para a Expedição no GHL. A Expedição é só leitura, para acompanhar o embarque;
  * dali em diante quem movimenta é o escritório, dentro do CRM.
+ *
+ * Layout (13/11/2026): um pedido por linha, que abre no toque. No celular e no
+ * tablet a lista é por dia e rola para baixo; no computador e na TV as mesmas
+ * linhas ficam em colunas por dia. A escolha é pela largura da tela, e o "⋯"
+ * deixa fixar uma das duas neste aparelho.
  */
 export default function ProducaoPage() {
   const [aba, setAba] = useState<Aba>("programacao");
@@ -74,6 +127,29 @@ export default function ProducaoPage() {
   // Só o que está de fato na máquina, escondendo fotolito, serigrafia e cadastro.
   const [soEmProducao, setSoEmProducao] = useState(false);
   const [dealParaConcluir, setDealParaConcluir] = useState<BoardDeal | null>(null);
+  const [relatorioAberto, setRelatorioAberto] = useState(false);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [visao, setVisao] = useState<Visao>("auto");
+  const telaLarga = useMidia("(min-width: 1280px)");
+  const modo = visao === "auto" ? (telaLarga ? "quadro" : "lista") : visao;
+
+  // A escolha de visualização vale para este aparelho (a TV e o celular diferem).
+  useEffect(() => {
+    try {
+      const salva = window.localStorage.getItem(CHAVE_VISAO);
+      if (salva === "lista" || salva === "quadro" || salva === "auto") setVisao(salva);
+    } catch {
+      // sem armazenamento: fica na automática
+    }
+  }, []);
+  const mudarVisao = (nova: Visao) => {
+    setVisao(nova);
+    try {
+      window.localStorage.setItem(CHAVE_VISAO, nova);
+    } catch {
+      // sem armazenamento: vale só nesta visita
+    }
+  };
   const { profile } = useUserProfile();
 
   // A tela não tem menu, de propósito. Quem é do escritório precisa de uma
@@ -253,201 +329,254 @@ export default function ProducaoPage() {
   );
 
   const grupoFora = foraAtivo ? gruposFora[foraAtivo] : undefined;
-  const gruposVisiveis = grupoFora ? [grupoFora] : grupos;
+  const gruposVisiveis = useMemo(() => (grupoFora ? [grupoFora] : grupos), [grupoFora, grupos]);
 
   const totalVisivel = gruposVisiveis.reduce(
     (soma, g) => soma + g.deals.length,
     0,
   );
 
-  const botaoAba = (valor: Aba, rotulo: string, icone: React.ReactNode) => (
-    <button
-      type="button"
-      onClick={() => setAba(valor)}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-4 py-2.5 text-base font-semibold transition-colors",
-        aba === valor
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground hover:bg-muted/70",
+  const trocarAba = (valor: Aba) => {
+    setAba(valor);
+    setForaAtivo(null);
+  };
+  const alternarTipo = (tipo: TipoFilterValue) =>
+    setTipoFiltro((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(tipo)) novo.delete(tipo);
+      else novo.add(tipo);
+      return novo;
+    });
+  const temFiltro = Boolean(busca) || tipoFiltro.size > 0 || soEmProducao || foraAtivo !== null;
+  const limparFiltros = () => {
+    setBusca("");
+    setTipoFiltro(new Set());
+    setSoEmProducao(false);
+    setForaAtivo(null);
+  };
+
+  // Lista: abre de cara só o atraso e o dia de hoje (ou o grupo "fora do board"
+  // escolhido); na Expedição, todas as etapas menos o histórico de recebidos.
+  const abertosIniciais = useMemo(() => {
+    if (grupoFora) return [grupoFora.id];
+    if (aba === "expedicao") {
+      return gruposVisiveis.filter((g) => g.id !== RECEBIDO_GROUP_ID).map((g) => g.id);
+    }
+    const ids = gruposVisiveis
+      .filter((g) => g.id === EM_ATRASO_GROUP_ID || ehHoje(g.title))
+      .map((g) => g.id);
+    return ids.length > 0 ? ids : gruposVisiveis.slice(0, 1).map((g) => g.id);
+  }, [aba, grupoFora, gruposVisiveis]);
+
+  const renderAcoes = (deal: BoardDeal, grande: boolean) =>
+    aba === "programacao" && isEtapaConcluivel(deal.stageTitle) ? (
+      <AcoesPedido deal={deal} grande={grande} onConcluir={setDealParaConcluir} />
+    ) : null;
+
+  const contagemPorTipo = dados[aba]?.summary.porTipo;
+  const campoBusca = (
+    <div className="relative min-w-0 flex-1">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar pedido, vendedor, etapa..."
+        className="h-10 rounded-[10px] bg-muted pl-9 pr-9 text-base"
+        autoFocus={buscaAberta}
+      />
+      {busca && (
+        <button
+          type="button"
+          onClick={() => setBusca("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-accent"
+          title="Limpar busca"
+        >
+          <X className="h-4 w-4" />
+        </button>
       )}
-    >
-      {icone}
-      {rotulo}
-    </button>
+    </div>
   );
 
   return (
-    <div className="flex h-dvh min-w-0 flex-col gap-4 p-4 pt-6 md:gap-6 md:p-6 md:pt-8">
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-        {botaoAba("programacao", "Produção", <Clock className="h-5 w-5" />)}
-        {botaoAba("expedicao", "Expedição", <PackageCheck className="h-5 w-5" />)}
+    <div className={cn("prod-raiz flex min-w-0 flex-col", modo === "quadro" ? "h-dvh" : "min-h-dvh")}>
+      <header
+        className={cn(
+          "z-20 flex flex-shrink-0 flex-col gap-2.5 px-3 pb-2.5 pt-3 md:px-5 md:pt-4",
+          modo === "lista" && "sticky top-0 border-b bg-background/85 backdrop-blur-md",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <div className="hud-group" role="group" aria-label="Quadro">
+            <button type="button" aria-pressed={aba === "programacao"} onClick={() => trocarAba("programacao")}>
+              <Clock />
+              Produção
+            </button>
+            <button type="button" aria-pressed={aba === "expedicao"} onClick={() => trocarAba("expedicao")}>
+              <PackageCheck />
+              Expedição
+            </button>
+          </div>
 
-        <div className="relative ml-auto w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar pedido..."
-            className="h-11 pl-10 pr-10 text-base"
-          />
-          {busca && (
+          <div className="hidden max-w-md flex-1 md:flex">{campoBusca}</div>
+          <div className="flex-1" />
+
+          <span className="hidden md:inline-flex">
+            <span className="hud-chip h-8 px-3 text-sm">
+              {totalVisivel} {totalVisivel === 1 ? "pedido" : "pedidos"}
+            </span>
+          </span>
+
+          <div className="hud-group" role="group" aria-label="Ações">
             <button
               type="button"
-              onClick={() => setBusca("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted"
-              title="Limpar busca"
+              className="hud-so-pequena"
+              aria-label="Buscar"
+              aria-pressed={buscaAberta || Boolean(busca)}
+              onClick={() => setBuscaAberta((v) => !v)}
             >
-              <X className="h-5 w-5" />
+              <Search />
+            </button>
+            <button type="button" onClick={() => carregar()} disabled={carregando} aria-label="Atualizar" title="Atualizar">
+              <RefreshCw className={carregando ? "animate-spin" : undefined} />
+            </button>
+            <span className="hud-group-sep hidden md:block" aria-hidden />
+            <button type="button" className="hud-so-grande" onClick={() => setRelatorioAberto(true)}>
+              <FileText />
+              Relatórios
+            </button>
+            <span className="hud-group-sep hidden md:block" aria-hidden />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Mais opções" title="Mais opções">
+                  <MoreHorizontal />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem className="md:hidden" onSelect={() => setRelatorioAberto(true)}>
+                  <FileText />
+                  Relatórios
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="md:hidden" />
+                <DropdownMenuLabel>Visualização</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={visao} onValueChange={(v) => mudarVisao(v as Visao)}>
+                  <DropdownMenuRadioItem value="auto">Automática (pelo tamanho da tela)</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="quadro">Colunas por dia</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="lista">Lista</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                {mostrarVolta && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/programacao">
+                        <ArrowLeft />
+                        Voltar ao Dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {(buscaAberta || busca) && <div className="flex md:hidden">{campoBusca}</div>}
+
+        <div className="hud-chips-linha" role="group" aria-label="Filtros">
+          {aba === "programacao" && (
+            <button
+              type="button"
+              className="hud-chip-filtro"
+              aria-pressed={soEmProducao}
+              onClick={() => setSoEmProducao((v) => !v)}
+              title="Mostrar só o que está na máquina agora"
+            >
+              <Factory className="h-4 w-4" />
+              Na máquina <span className="hud-n">{emProducaoCount}</span>
+            </button>
+          )}
+          {TIPO_PEDIDO_ORDER.map((tipo) => (
+            <button
+              key={tipo}
+              type="button"
+              className={cn("hud-chip-filtro", TOM_DO_TIPO[tipo])}
+              aria-pressed={tipoFiltro.has(tipo)}
+              onClick={() => alternarTipo(tipo)}
+            >
+              {tipo} <span className="hud-n">{contagemPorTipo?.[tipo] ?? 0}</span>
+            </button>
+          ))}
+          {aba === "programacao" &&
+            FORA_DO_BOARD.filter((f) => (gruposFora[f.motivo]?.dealsCount ?? 0) > 0).map((f) => (
+              <button
+                key={f.motivo}
+                type="button"
+                className={cn("hud-chip-filtro", f.tom)}
+                aria-pressed={foraAtivo === f.motivo}
+                onClick={() => setForaAtivo((atual) => (atual === f.motivo ? null : f.motivo))}
+                title={foraAtivo === f.motivo ? "Toque de novo para voltar ao quadro" : f.dica}
+              >
+                <f.icone className="h-4 w-4" />
+                {f.rotulo} <span className="hud-n">{gruposFora[f.motivo]?.dealsCount}</span>
+              </button>
+            ))}
+          {temFiltro && (
+            <button type="button" className="hud-chip-filtro" onClick={limparFiltros}>
+              <X className="h-4 w-4" />
+              Limpar
             </button>
           )}
         </div>
 
-        <Badge variant="outline" className="h-11 px-3 text-base">
-          {totalVisivel}
-        </Badge>
-
-        <Button
-          variant="outline"
-          onClick={() => carregar()}
-          disabled={carregando}
-          className="h-11"
-          title="Atualizar"
-        >
-          <RefreshCw className={cn("h-5 w-5", carregando && "animate-spin")} />
-        </Button>
-
-        {/* A produção não vê valores; o relatório segue a aba aberta. */}
-        <RelatorioDialog
-          key={aba}
-          titulo={aba === "programacao" ? "Produção" : "Expedição"}
-          endpoint={aba === "programacao" ? "/api/programacao" : "/api/expedicao?recebidosDias=0"}
-          grande
-        />
-
-        {mostrarVolta && (
-          <Button asChild variant="ghost" className="h-11">
-            <Link href="/programacao">
-              <ArrowLeft className="mr-2 h-5 w-5" />
-              Dashboard
-            </Link>
-          </Button>
+        {aba === "expedicao" && (
+          <p className="text-xs text-muted-foreground">
+            Só acompanhamento: daqui em diante quem movimenta é o escritório.
+          </p>
         )}
-      </div>
+      </header>
 
-      <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-        {aba === "programacao" && (
-          <>
-            <Button
-              type="button"
-              variant={soEmProducao ? "default" : "outline"}
-              onClick={() => setSoEmProducao((v) => !v)}
-              className="h-11 gap-2 text-base font-semibold"
-              title="Mostrar só o que está na máquina agora"
-            >
-              <Factory className="h-5 w-5" />
-              Em produção
-              <span className="opacity-70">{emProducaoCount}</span>
-            </Button>
-            <div className="h-7 w-px bg-border" aria-hidden="true" />
-          </>
+      <main className={cn("min-w-0 px-3 pb-4 pt-3 md:px-5", modo === "quadro" && "flex min-h-0 flex-1 flex-col")}>
+        {erro && (
+          <Alert variant="destructive" className="mb-3 flex-shrink-0">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{erro}</AlertDescription>
+          </Alert>
         )}
 
-        <TipoPedidoFilter
-          selected={tipoFiltro}
-          onChange={setTipoFiltro}
-          counts={dados[aba]?.summary.porTipo}
-          tamanho="grande"
-        />
-      </div>
-
-      <ForaDoBoard
-        buckets={[
-          {
-            motivo: "em-conferencia",
-            quantidade: gruposFora["em-conferencia"]?.dealsCount ?? 0,
-          },
-          {
-            motivo: "sem-data",
-            quantidade: gruposFora["sem-data"]?.dealsCount ?? 0,
-          },
-        ]}
-        ativo={foraAtivo}
-        onToggle={(motivo) =>
-          setForaAtivo((atual) => (atual === motivo ? null : motivo))
-        }
-        tamanho="grande"
-      />
-
-      {erro && (
-        <Alert variant="destructive" className="flex-shrink-0">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{erro}</AlertDescription>
-        </Alert>
-      )}
-
-      {aba === "expedicao" && (
-        <p className="flex-shrink-0 text-sm text-muted-foreground">
-          Acompanhamento apenas — daqui em diante quem movimenta é o escritório.
-        </p>
-      )}
-
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border">
-        {carregando ? (
-          <Skeleton className="h-full w-full" />
+        {carregando && !dados[aba] ? (
+          <Skeleton className={modo === "quadro" ? "h-full w-full" : "h-96 w-full"} />
         ) : gruposVisiveis.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+          <div className="hud-panel flex flex-col items-center justify-center gap-3 p-10 text-center text-muted-foreground">
             <Search className="h-8 w-8 opacity-50" />
             <p className="text-lg">Nada por aqui.</p>
-            {(busca || tipoFiltro.size > 0 || soEmProducao) && (
-              <Button
-                variant="outline"
-                className="h-11"
-                onClick={() => {
-                  setBusca("");
-                  setTipoFiltro(new Set());
-                  setSoEmProducao(false);
-                }}
-              >
+            {temFiltro && (
+              <Button variant="outline" className="h-11" onClick={limparFiltros}>
                 Limpar filtros
               </Button>
             )}
           </div>
+        ) : modo === "quadro" ? (
+          <ColunasPorDia grupos={gruposVisiveis} grupoConcluidoId={RECEBIDO_GROUP_ID} renderAcoes={renderAcoes} />
         ) : (
-          <BoardColumns
-            groups={gruposVisiveis}
-            cardWidth={340}
-            emptyLabel="Nada nesta etapa"
-            renderCard={(deal, grupo) => (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                showValue={false}
-                concluido={grupo.id === RECEBIDO_GROUP_ID}
-                footer={
-                  aba === "programacao" && isEtapaConcluivel(deal.stageTitle) ? (
-                    <div className="space-y-2">
-                      <OrderDocumentButtons
-                        baseHref={`/api/producao/documentos/${encodeURIComponent(deal.id)}`}
-                        talaoLabel="Talão"
-                        size="default"
-                        className="grid grid-cols-2"
-                        buttonClassName="h-11 w-full text-base"
-                      />
-                      <Button
-                        className="h-12 w-full text-base font-semibold"
-                        onClick={() => setDealParaConcluir(deal)}
-                      >
-                        <PackageCheck className="mr-2 h-5 w-5" />
-                        Concluir
-                      </Button>
-                    </div>
-                  ) : undefined
-                }
-              />
-            )}
+          <ListaPorDia
+            key={`${aba}-${foraAtivo ?? ""}`}
+            grupos={gruposVisiveis}
+            grupoConcluidoId={RECEBIDO_GROUP_ID}
+            abertosIniciais={abertosIniciais}
+            renderAcoes={renderAcoes}
           />
         )}
-      </div>
+      </main>
+
+      {/* A produção não vê valores; o relatório segue a aba aberta. */}
+      <RelatorioDialog
+        key={aba}
+        titulo={aba === "programacao" ? "Produção" : "Expedição"}
+        endpoint={aba === "programacao" ? "/api/programacao" : "/api/expedicao?recebidosDias=0"}
+        grande
+        semBotao
+        aberto={relatorioAberto}
+        onAbertoChange={setRelatorioAberto}
+      />
 
       <ConcluirDialog
         deal={dealParaConcluir}
