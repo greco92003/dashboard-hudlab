@@ -70,16 +70,16 @@ export function DealDialog({
             )}
 
             {showValue ? (
-              <div className="flex items-center gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/20">
-                <DollarSign className="h-8 w-8 text-green-600" />
+              <div className="tone-green hud-tone-card flex items-center gap-3 rounded-lg border p-4">
+                <DollarSign className="tone-green hud-tone-text h-8 w-8" />
                 <div>
                   <p className="text-sm text-muted-foreground">Valor do Deal</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="tone-green hud-tone-text text-2xl font-bold">
                     {formatCurrency(deal.value / 100, deal.currency)}
                   </p>
                   {deal.stageTitle && (
-                    <p className="mt-1 flex items-center gap-1 text-sm font-medium text-blue-600">
-                      <span className="h-2 w-2 rounded-full bg-blue-600" />
+                    <p className="tone-sky hud-tone-text mt-1 flex items-center gap-1 text-sm font-medium">
+                      <span className="tone-sky hud-tone-dot h-2 w-2 rounded-full" />
                       {deal.stageTitle}
                     </p>
                   )}
@@ -87,11 +87,11 @@ export function DealDialog({
               </div>
             ) : (
               deal.stageTitle && (
-                <div className="flex items-center gap-3 rounded-lg bg-blue-50 p-4 dark:bg-blue-950/20">
-                  <span className="h-3 w-3 rounded-full bg-blue-600" />
+                <div className="tone-sky hud-tone-card flex items-center gap-3 rounded-lg border p-4">
+                  <span className="tone-sky hud-tone-dot h-3 w-3 rounded-full" />
                   <div>
                     <p className="text-sm text-muted-foreground">Etapa</p>
-                    <p className="text-lg font-semibold text-blue-600">
+                    <p className="tone-sky hud-tone-text text-lg font-semibold">
                       {deal.stageTitle}
                     </p>
                   </div>

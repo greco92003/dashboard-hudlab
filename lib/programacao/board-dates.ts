@@ -84,25 +84,25 @@ export function getShippingStatus(
     const atraso = Math.abs(days);
     return {
       message: `⚠ Atrasado ${atraso} ${atraso === 1 ? "dia" : "dias"}`,
-      colorClass: "text-red-700 dark:text-red-400 font-semibold",
+      colorClass: "tone-rose hud-tone-text font-semibold",
     };
   }
   if (days === 0) {
     return {
       message: "🚨 Embarque HOJE",
-      colorClass: "text-yellow-700 dark:text-yellow-400 font-bold",
+      colorClass: "tone-pink hud-tone-text font-bold",
     };
   }
   if (days <= 3) {
     return {
       message: `⏰ Faltam ${days} ${days === 1 ? "dia" : "dias"}`,
-      colorClass: "text-yellow-700 dark:text-yellow-400 font-semibold",
+      colorClass: "tone-pink hud-tone-text font-semibold",
     };
   }
   if (days <= 7) {
     return {
       message: `📅 Faltam ${days} dias`,
-      colorClass: "text-orange-700 dark:text-orange-400 font-medium",
+      colorClass: "tone-violet hud-tone-text font-medium",
     };
   }
   return {
@@ -111,20 +111,23 @@ export function getShippingStatus(
   };
 }
 
-/** Fundo do card por urgência do embarque. */
+/**
+ * Fundo do card por urgência do embarque, nos tons translúcidos do tema
+ * (app/hud-dashboard.css): rosa atrasado, magenta até 3 dias, violeta até 7.
+ */
 export function getUrgencyBackgroundClass(
   dataEmbarque: string | null | undefined,
 ): string {
   const days = getDaysUntilShipping(dataEmbarque);
   if (days === null) return "";
   if (days < 0) {
-    return "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800";
+    return "tone-rose hud-tone-card";
   }
   if (days <= 3) {
-    return "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800";
+    return "tone-pink hud-tone-card";
   }
   if (days <= 7) {
-    return "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800";
+    return "tone-violet hud-tone-card";
   }
   return "";
 }

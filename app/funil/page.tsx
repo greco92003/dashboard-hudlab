@@ -22,13 +22,20 @@ import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
 import { periodoParaDatas } from "@/lib/periodo";
 import { storage } from "@/lib/storage";
 
-const HEATMAP_COLORS = [
-  "#0066FF",
-  "#00CFFF",
-  "#00E676",
-  "#FFE600",
-  "#FF8A00",
-  "#FF1F1F",
+/**
+ * Degradê do tema HUD: do verde da marca a ciano, azul e violeta conforme o
+ * funil afunila (antes eram seis cores sólidas de mapa de calor, com amarelo e
+ * laranja). Cada etapa vai da cor dela à da próxima, então o funil corre num
+ * degradê contínuo; as camadas de halo do gráfico já dão a transparência.
+ */
+const FUNIL_CORES = [
+  "#00ff91",
+  "#1ce6b2",
+  "#2ccbd2",
+  "#3aaee8",
+  "#5b8ff3",
+  "#7d75f6",
+  "#9a62f2",
 ] as const;
 
 interface ApiFunnelStage {
@@ -120,7 +127,11 @@ function toChartData(stages: ApiFunnelStage[]): {
       // Keep the component visible before the first webhook while displaying 0.
       value: isEmpty ? stages.length - index : stage.value,
       displayValue: formatNumber(stage.value),
-      color: HEATMAP_COLORS[index] ?? HEATMAP_COLORS.at(-1),
+      color: FUNIL_CORES[Math.min(index, FUNIL_CORES.length - 1)],
+      gradient: [
+        { offset: "0%", color: FUNIL_CORES[Math.min(index, FUNIL_CORES.length - 1)] },
+        { offset: "100%", color: FUNIL_CORES[Math.min(index + 1, FUNIL_CORES.length - 1)] },
+      ],
       labelStyle: LABEL_STYLE,
     })),
   };
@@ -299,7 +310,7 @@ function FunilContent() {
 
   return (
     <main className="relative flex flex-1 overflow-hidden px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,102,255,0.08),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(255,31,31,0.06),transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,255,145,0.09),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(125,117,246,0.08),transparent_32%)]" />
 
       <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-8">
         <header className="relative flex flex-col items-center justify-center text-center">

@@ -295,12 +295,12 @@ export function RelatorioDialog({ titulo, endpoint, mostrarValor = false, grande
                     "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                     soAtrasados
-                      ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200"
+                      ? "tone-rose hud-tone-chip"
                       : "hover:bg-muted/60",
                   )}
                 >
                   <AlertTriangle
-                    className={cn("h-5 w-5 shrink-0", soAtrasados ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}
+                    className={cn("h-5 w-5 shrink-0", soAtrasados ? "tone-rose hud-tone-text" : "text-muted-foreground")}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold">Só pedidos em atraso</span>
@@ -470,7 +470,7 @@ function PreviaDoRelatorio({
                         // linhas lia como dois valores.
                         ["embarque", "atraso", "pares", "valor"].includes(colunas[indice].chave) && "whitespace-nowrap",
                         colunas[indice].direita && "text-right tabular-nums",
-                        colunas[indice].chave === "atraso" && celula !== "—" && "font-semibold text-red-700 dark:text-red-400",
+                        colunas[indice].chave === "atraso" && celula !== "—" && "tone-rose hud-tone-text font-semibold",
                       )}
                     >
                       {celula}

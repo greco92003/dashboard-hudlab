@@ -57,7 +57,7 @@ export function TipoPedidoFilter({
               grande ? "h-11 px-3.5 text-sm" : "h-8 px-2 text-xs",
               option === "Evento" &&
                 isOn &&
-                "bg-violet-600 hover:bg-violet-700 dark:bg-violet-500",
+                "tone-violet hud-tone-chip",
             )}
           >
             {option}

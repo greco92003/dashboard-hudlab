@@ -653,3 +653,111 @@
     grid-template-columns: repeat(9, minmax(0, 1fr));
   }
 }
+
+/*
+ * Tons translúcidos (13/11/2026): uma paleta só para status em todo o app, no
+ * lugar de amarelo, laranja e vermelho sólidos. Escala de quente para frio:
+ * rosa, magenta, violeta, verde da marca, ardósia; azul-céu para informação.
+ * Uso: classe do tom (tone-rose…) + o formato (hud-tone-chip, -card, -text…).
+ * Só vale onde a classe é posta, então não muda nada sem querer.
+ */
+:root {
+  --tone-rose: #d22f58;
+  --tone-pink: #b8329f;
+  --tone-violet: #6a4fd6;
+  --tone-cyan: #0b8aa3;
+  --tone-green: #087e58;
+  --tone-slate: #5a6a76;
+  --tone-sky: #2a78bb;
+}
+
+.dark {
+  --tone-rose: #ff6f8e;
+  --tone-pink: #f283db;
+  --tone-violet: #ab95ff;
+  --tone-cyan: #56d8ed;
+  --tone-green: #3ef5a6;
+  --tone-slate: #9cadb8;
+  --tone-sky: #72bcf6;
+}
+
+.tone-rose { --tone: var(--tone-rose); }
+.tone-pink { --tone: var(--tone-pink); }
+.tone-violet { --tone: var(--tone-violet); }
+.tone-cyan { --tone: var(--tone-cyan); }
+.tone-green { --tone: var(--tone-green); }
+.tone-slate { --tone: var(--tone-slate); }
+.tone-sky { --tone: var(--tone-sky); }
+
+.hud-tone-text {
+  color: var(--tone);
+}
+
+.hud-tone-chip {
+  border: 1px solid color-mix(in srgb, var(--tone) 28%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+  backdrop-filter: blur(6px);
+}
+
+.hud-tone-dot {
+  background: var(--tone);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 65%, transparent);
+}
+
+.hud-tone-card {
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone) 10%, transparent), transparent 55%),
+    var(--card);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--tone) 10%, transparent),
+    0 12px 28px -16px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+
+.hud-tone-bar {
+  background: linear-gradient(180deg, var(--tone), color-mix(in srgb, var(--tone) 25%, transparent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 55%, transparent);
+}
+
+/* Pulso suave no lugar do contorno grosso: o card "respira" em volta. */
+@keyframes hud-tone-pulso {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent),
+      0 12px 28px -16px color-mix(in srgb, var(--tone) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--tone) 55%, transparent),
+      0 0 26px 2px color-mix(in srgb, var(--tone) 30%, transparent);
+  }
+}
+
+.hud-tone-pulse {
+  animation: hud-tone-pulso 2.4s ease-in-out infinite;
+}
+
+@keyframes hud-tone-piscar {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.hud-tone-blink {
+  animation: hud-tone-piscar 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-tone-pulse,
+  .hud-tone-blink {
+    animation: none;
+  }
+}
+
+/* Destaque de evento no quadro: faixa lateral violeta, por cima da borda do tom. */
+.hud-accent-evento {
+  border-left-width: 4px;
+  border-left-color: var(--tone-violet);
+}

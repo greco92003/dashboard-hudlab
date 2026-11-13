@@ -21,8 +21,7 @@ import {
   TipoPedidoBadge,
 } from "@/components/programacao/tipo-pedido-badge";
 
-const CONCLUIDO_CLASSES =
-  "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800";
+const CONCLUIDO_CLASSES = "tone-green hud-tone-card";
 const DESLIGADO_CLASSES =
   "opacity-40 grayscale bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700";
 
@@ -56,7 +55,7 @@ export function DealCard({
   onClick?: (deal: BoardDeal) => void;
 }) {
   const status = concluido
-    ? { message: "✓ Recebido", colorClass: "text-green-700 dark:text-green-400 font-semibold" }
+    ? { message: "✓ Recebido", colorClass: "tone-green hud-tone-text font-semibold" }
     : getShippingStatus(deal.dataEmbarque);
 
   const background = concluido
@@ -78,9 +77,7 @@ export function DealCard({
           onClick={(event) => onToggle(deal.id, event)}
           className={cn(
             "absolute right-2 top-2 rounded-full p-1 transition-all hover:scale-110",
-            isActive
-              ? "bg-green-500 text-white hover:bg-green-600"
-              : "bg-gray-400 text-white hover:bg-gray-500",
+            isActive ? "tone-green hud-tone-chip" : "tone-slate hud-tone-chip",
           )}
           title={isActive ? "Desativar card" : "Ativar card"}
         >
@@ -107,22 +104,22 @@ export function DealCard({
           </div>
         ) : (
           // Ocupa o mesmo lugar da data, para a falta nunca parecer normal.
-          <div className="flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-sm font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          <div className="tone-pink hud-tone-chip flex items-center gap-1 rounded-md px-2 py-1 text-sm font-bold">
             <CalendarOff className="h-4 w-4" />
             Sem data de embarque
           </div>
         )}
 
         {showValue && (
-          <div className="flex items-center gap-1 text-sm font-medium text-green-600">
+          <div className="tone-green hud-tone-text flex items-center gap-1 text-sm font-medium">
             <TrendingUp className="h-3 w-3" />
             {formatCurrency(deal.value / 100, deal.currency)}
           </div>
         )}
 
         {deal.stageTitle && (
-          <div className="flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-600 dark:bg-blue-950/20">
-            <span className="h-2 w-2 rounded-full bg-blue-600" />
+          <div className="tone-sky hud-tone-chip flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium">
+            <span className="tone-sky hud-tone-dot h-2 w-2 rounded-full" />
             {deal.stageTitle}
           </div>
         )}

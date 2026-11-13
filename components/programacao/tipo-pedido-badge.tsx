@@ -6,19 +6,14 @@ import type { TipoPedido } from "@/lib/ghl/programacao-stages";
 /**
  * Selo do campo "Tipo do Pedido" do GHL.
  *
- * Evento é o mais gritante de propósito: é o pedido com data imóvel, que não
- * pode escorregar. As cores são frias/roxas para não competir com o vermelho,
- * laranja e amarelo, que no board significam atraso e proximidade do embarque.
+ * Evento é o mais forte de propósito (data imóvel, não pode escorregar): violeta
+ * com brilho. Os tons translúcidos vêm do tema (app/hud-dashboard.css).
  */
 const TIPO_STYLES: Record<TipoPedido, string> = {
-  Evento:
-    "bg-violet-600 text-white border-violet-700 shadow-sm dark:bg-violet-500 dark:border-violet-400",
-  Amostra:
-    "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
-  Pedido:
-    "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600",
-  Reposição:
-    "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800",
+  Evento: "tone-violet hud-tone-chip shadow-[0_0_12px_color-mix(in_srgb,var(--tone-violet)_35%,transparent)]",
+  Amostra: "tone-sky hud-tone-chip",
+  Pedido: "tone-slate hud-tone-chip",
+  Reposição: "tone-cyan hud-tone-chip",
 };
 
 const SEM_TIPO_STYLE =
@@ -51,7 +46,5 @@ export function TipoPedidoBadge({
 
 /** Destaque extra no card de evento: faixa lateral. */
 export function getTipoAccentClass(tipo: TipoPedido | null): string {
-  return tipo === "Evento"
-    ? "border-l-4 border-l-violet-600 dark:border-l-violet-400"
-    : "";
+  return tipo === "Evento" ? "hud-accent-evento" : "";
 }

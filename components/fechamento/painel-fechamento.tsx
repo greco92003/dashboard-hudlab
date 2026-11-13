@@ -68,46 +68,66 @@ interface Painel {
 const MOTIVOS = ["Preço", "Frete", "Prazo", "Sumiu", "Comprou de outro", "Só pesquisando"] as const;
 const POLL_MS = 60_000;
 
-const COR: Record<Cor, { faixa: string; texto: string; chip: string; nome: string }> = {
+/**
+ * Tons translúcidos do tema (app/hud-dashboard.css), de quente para frio:
+ * rosa, magenta, violeta, verde da marca, ardósia; azul-céu para a Cami.
+ */
+const COR: Record<Cor, { tom: string; faixa: string; texto: string; chip: string; card: string; nome: string }> = {
   vermelho: {
-    faixa: "bg-red-500",
-    texto: "text-red-700 dark:text-red-300",
-    chip: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+    tom: "tone-rose",
+    faixa: "tone-rose hud-tone-bar",
+    texto: "tone-rose hud-tone-text",
+    chip: "tone-rose hud-tone-chip",
+    card: "tone-rose hud-tone-card",
     nome: "esperando resposta",
   },
   laranja: {
-    faixa: "bg-orange-500",
-    texto: "text-orange-700 dark:text-orange-300",
-    chip: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+    tom: "tone-pink",
+    faixa: "tone-pink hud-tone-bar",
+    texto: "tone-pink hud-tone-text",
+    chip: "tone-pink hud-tone-chip",
+    card: "tone-pink hud-tone-card",
     nome: "hoje, grátis",
   },
   amarelo: {
-    faixa: "bg-amber-400",
-    texto: "text-amber-700 dark:text-amber-300",
-    chip: "bg-amber-400/20 text-amber-800 dark:text-amber-200 border-amber-500/30",
+    tom: "tone-violet",
+    faixa: "tone-violet hud-tone-bar",
+    texto: "tone-violet hud-tone-text",
+    chip: "tone-violet hud-tone-chip",
+    card: "tone-violet hud-tone-card",
     nome: "hoje, por modelo",
   },
   verde: {
-    faixa: "bg-emerald-500",
-    texto: "text-emerald-700 dark:text-emerald-300",
-    chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    tom: "tone-green",
+    faixa: "tone-green hud-tone-bar",
+    texto: "tone-green hud-tone-text",
+    chip: "tone-green hud-tone-chip",
+    card: "tone-green hud-tone-card",
     nome: "em dia",
   },
   cinza: {
-    faixa: "bg-zinc-400",
-    texto: "text-zinc-600 dark:text-zinc-400",
-    chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30",
+    tom: "tone-slate",
+    faixa: "tone-slate hud-tone-bar",
+    texto: "tone-slate hud-tone-text",
+    chip: "tone-slate hud-tone-chip",
+    card: "tone-slate hud-tone-card",
     nome: "parados",
   },
   cami: {
-    faixa: "bg-sky-400",
-    texto: "text-sky-700 dark:text-sky-300",
-    chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+    tom: "tone-sky",
+    faixa: "tone-sky hud-tone-bar",
+    texto: "tone-sky hud-tone-text",
+    chip: "tone-sky hud-tone-chip",
+    card: "tone-sky hud-tone-card",
     nome: "com a Cami",
   },
 };
 const ORDEM_CORES: Cor[] = ["vermelho", "laranja", "amarelo", "verde", "cinza", "cami"];
-const SINAL: Record<string, string> = { quente: "Quente", esfriando: "Esfriando", perdendo: "Perdendo" };
+const SINAL: Record<string, { nome: string; tom: string }> = {
+  quente: { nome: "Quente", tom: "tone-green" },
+  esfriando: { nome: "Esfriando", tom: "tone-sky" },
+  perdendo: { nome: "Perdendo", tom: "tone-rose" },
+};
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const hora = (iso: string | null) =>
@@ -429,7 +449,7 @@ function CopiarLink({ link, compacto = false }: { link: string; compacto?: boole
       <Button
         size="icon"
         variant="outline"
-        className={cn("h-7 w-7", copiado && "border-emerald-500 text-emerald-600 dark:text-emerald-400")}
+        className={cn("h-7 w-7", copiado && "tone-green hud-tone-chip")}
         title={copiado ? "Link copiado" : "Copiar o link da conversa"}
         onClick={(e) => void copiar(e)}
       >
@@ -450,7 +470,7 @@ function Contagem({ contagem }: { contagem: Record<Cor, number> }) {
     <div className="flex flex-wrap gap-2">
       {ORDEM_CORES.filter((c) => contagem[c] > 0 || c === "vermelho").map((c) => (
         <Badge key={c} variant="outline" className={cn("gap-1.5 px-2.5 py-1 text-sm font-medium", COR[c].chip)}>
-          <span className={cn("h-2 w-2 rounded-full", COR[c].faixa, c === "vermelho" && contagem[c] > 0 && "animate-pulse")} />
+          <span className={cn("h-2 w-2 rounded-full hud-tone-dot", COR[c].tom, c === "vermelho" && contagem[c] > 0 && "hud-tone-blink")} />
           {contagem[c]} {COR[c].nome}
         </Badge>
       ))}
@@ -478,8 +498,8 @@ function CardDeFechamento({
   const [data, setData] = useState(amanha());
   const alerta = card.cor === "vermelho" || card.ultimaChance;
   return (
-    <Card className={cn("relative overflow-hidden py-0", alerta && "ring-2 ring-red-500/40")}>
-      <div className={cn("absolute inset-y-0 left-0 w-1.5", COR[card.cor].faixa, alerta && "animate-pulse")} />
+    <Card className={cn("relative overflow-hidden py-0", COR[card.cor].card, alerta && "hud-tone-pulse")}>
+      <div className={cn("absolute inset-y-0 left-0 w-1", COR[card.cor].faixa, alerta && "hud-tone-blink")} />
       <CardContent className="flex flex-col gap-2 py-3 pl-5 pr-3">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-semibold">{card.nome}</span>
@@ -491,17 +511,14 @@ function CardDeFechamento({
           {card.sinal && SINAL[card.sinal] ? (
             <Badge
               variant="outline"
-              className={cn(
-                "font-normal",
-                card.sinal === "quente" ? COR.laranja.chip : card.sinal === "perdendo" ? COR.vermelho.chip : COR.cinza.chip,
-              )}
+              className={cn("font-normal hud-tone-chip", SINAL[card.sinal].tom)}
             >
-              {SINAL[card.sinal]}
+              {SINAL[card.sinal].nome}
             </Badge>
           ) : null}
         </div>
         <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span className={cn("font-medium", COR[card.cor].texto, card.ultimaChance && "animate-pulse")}>{card.rotulo}</span>
+          <span className={cn("font-medium", COR[card.cor].texto, card.ultimaChance && "hud-tone-blink")}>{card.rotulo}</span>
           {card.janelaTexto && <span className="text-xs text-muted-foreground">· {card.janelaTexto}</span>}
         </div>
         {card.ultimaMensagemCliente && (
@@ -566,11 +583,11 @@ function CardDeFechamento({
               </Popover>
             </>
           )}
-          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="text-red-700 dark:text-red-300">
+          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="tone-rose hud-tone-text">
             <ThumbsDown className="h-4 w-4" />
             Perdido
           </Button>
-          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="text-emerald-700 dark:text-emerald-300">
+          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="tone-green hud-tone-text">
             <BellRing className="h-4 w-4" />
             Fechou
           </Button>
@@ -656,12 +673,12 @@ function CardCompacto({
 
   const botao = "h-7 px-2 text-xs";
   return (
-    <div className={cn("relative rounded-md border py-2 pl-3 pr-2", alerta && "ring-2 ring-red-500/40")}>
-      <div className={cn("absolute inset-y-0 left-0 w-1 rounded-l-md", COR[c.cor].faixa, alerta && "animate-pulse")} />
+    <div className={cn("relative overflow-hidden rounded-lg border py-2 pl-3 pr-2", COR[c.cor].card, alerta && "hud-tone-pulse")}>
+      <div className={cn("absolute inset-y-0 left-0 w-1", COR[c.cor].faixa, alerta && "hud-tone-blink")} />
       <div className="flex items-start justify-between gap-2">
         <button type="button" className="min-w-0 text-left" onClick={alternar} title="Mostrar as ações">
           <p className="truncate text-sm font-medium">{c.nome}</p>
-          <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "animate-pulse")}>{c.rotulo}</p>
+          <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "hud-tone-blink")}>{c.rotulo}</p>
           <p className="truncate text-[11px] text-muted-foreground">
             {c.etapa}
             {c.pares ? ` · ${c.pares} pares` : ""}
@@ -720,7 +737,7 @@ function CardCompacto({
               <Button
                 size="sm"
                 variant="outline"
-                className={cn(botao, "text-red-700 dark:text-red-300")}
+                className={cn(botao, "tone-rose hud-tone-text")}
                 disabled={ocupado}
                 onClick={() => setEtapa("perdido")}
               >
@@ -730,7 +747,7 @@ function CardCompacto({
               <Button
                 size="sm"
                 variant="outline"
-                className={cn(botao, "text-emerald-700 dark:text-emerald-300")}
+                className={cn(botao, "tone-green hud-tone-text")}
                 disabled={ocupado}
                 onClick={() => setEtapa("fechou")}
               >
@@ -802,7 +819,7 @@ function CardCompacto({
             </div>
           )}
 
-          {erro && <p className="text-xs text-red-600 dark:text-red-400">{erro}</p>}
+          {erro && <p className="tone-rose hud-tone-text text-xs">{erro}</p>}
         </div>
       )}
     </div>

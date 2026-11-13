@@ -82,7 +82,7 @@ export function ForaDoBoard({
               "gap-1.5 font-medium",
               grande ? "h-10 px-3 text-base" : "h-8 px-2.5 text-sm",
               alerta &&
-                "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-900/40",
+                "tone-pink hud-tone-chip",
               selecionado && "ring-2 ring-offset-1 ring-offset-background",
             )}
           >

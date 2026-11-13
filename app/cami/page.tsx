@@ -103,10 +103,10 @@ export default function CamiIntelligencePage() {
   const paraRevisar = conversations.filter((c) => c.paraRevisar).length;
   const estadoClass =
     settings?.estado === "ligada"
-      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+      ? "tone-green hud-tone-chip"
       : settings?.estado === "desligada"
-        ? "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30"
-        : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+        ? "tone-rose hud-tone-chip"
+        : "tone-pink hud-tone-chip";
 
   return (
     <div className="flex flex-1 flex-col gap-4 sm:gap-6">
@@ -130,7 +130,7 @@ export default function CamiIntelligencePage() {
                 </span>
                 <span>· atualizado {fmtDateTime(overview?.atualizadoEm)}</span>
                 {promoAtiva && (
-                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+                  <Badge variant="outline" className="tone-green hud-tone-chip">
                     {promoAtiva.nome}: {resumoDesconto(promoAtiva)} até {fmtVigencia(promoAtiva.fim)}
                   </Badge>
                 )}
@@ -172,7 +172,7 @@ export default function CamiIntelligencePage() {
             <span className="hidden sm:inline">Conversas</span>
             <span className="sm:hidden">Conv.</span>
             {paraRevisar > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">{paraRevisar}</span>
+              <span className="tone-rose hud-tone-chip rounded-full px-1.5 text-[11px] font-semibold">{paraRevisar}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="anexo" className="flex items-center gap-2">
