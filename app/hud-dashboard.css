@@ -1,5 +1,14 @@
-/* Visual theme for Dashboard, Negócios and Meta Marketing. */
-.hud-dashboard-shell {
+/*
+ * Tema HUD (Hud Lab).
+ * - Cores (:root e .dark): o app inteiro, inclusive popovers, diálogos e avisos,
+ *   que o navegador abre fora da área do menu.
+ * - .hud-theme: menu, cabeçalho, abas, carregamento e gráficos em toda página com menu.
+ * - .hud-dashboard-shell: cards de vidro e faixas de indicadores só no Dashboard,
+ *   em Negócios e no Meta Marketing (redesenhados). Essas regras passam por cima
+ *   das classes da página, por isso não valem nas outras: apagariam destaques
+ *   como o contorno vermelho dos cards urgentes do Fechamento.
+ */
+:root {
   --hud-brand: #00ff91;
   --background: #edf3ef;
   --foreground: #102820;
@@ -40,10 +49,10 @@
   --hud-control-h: 2.25rem;
   background: var(--background);
   color: var(--foreground);
-  font-family: Inter, Arial, sans-serif;
+  font-family: var(--font-inter), Inter, Arial, sans-serif;
 }
 
-.dark .hud-dashboard-shell {
+.dark {
   --background: #07110e;
   --foreground: #eef9f3;
   --card: #101e19;
@@ -74,13 +83,13 @@
   --hud-frame: #305646;
 }
 
-.hud-dashboard-shell [data-slot="sidebar-inset"] {
+.hud-theme [data-slot="sidebar-inset"] {
   background:
     radial-gradient(ellipse 75% 310px at 18% 0%, var(--hud-canvas-glow), transparent 90%),
     var(--background);
 }
 
-.hud-dashboard-shell [data-slot="sidebar-inset"] > header {
+.hud-theme [data-slot="sidebar-inset"] > header {
   height: 3.5rem;
   border-color: var(--hud-frame);
   background: color-mix(in srgb, var(--background) 65%, transparent);
@@ -90,24 +99,24 @@
   padding-top: 1.5rem;
 }
 
-.hud-dashboard-shell [data-sidebar="content"] {
+.hud-theme [data-sidebar="content"] {
   scrollbar-color: var(--hud-frame) transparent;
   scrollbar-width: thin;
 }
 
-.hud-dashboard-shell [data-sidebar="sidebar"] {
+.hud-theme [data-sidebar="sidebar"] {
   background: linear-gradient(155deg, var(--sidebar), var(--background));
 }
 
-.hud-dashboard-shell [data-sidebar="header"] {
+.hud-theme [data-sidebar="header"] {
   gap: 0.65rem;
 }
 
-.hud-dashboard-shell .hud-sidebar-brand {
+.hud-theme .hud-sidebar-brand {
   align-items: center;
 }
 
-.hud-dashboard-shell .hud-sidebar-mark {
+.hud-theme .hud-sidebar-mark {
   display: grid;
   flex: 1;
   min-height: 88px;
@@ -121,27 +130,27 @@
   box-shadow: inset 0 1px var(--hud-edge), var(--hud-panel-shadow);
 }
 
-.hud-dashboard-shell .hud-sidebar-mark svg {
+.hud-theme .hud-sidebar-mark svg {
   height: 46px;
   border-radius: 4px;
 }
 
-.hud-dashboard-shell [data-sidebar="group-label"] {
+.hud-theme [data-sidebar="group-label"] {
   color: var(--muted-foreground);
 }
 
-.hud-dashboard-shell [data-sidebar="menu-button"][data-active="true"] {
+.hud-theme [data-sidebar="menu-button"][data-active="true"] {
   background: linear-gradient(105deg, var(--hud-brand), #6befad);
   color: #04271a;
   font-weight: 650;
   box-shadow: 0 3px 14px #00ff9130;
 }
 
-.hud-dashboard-shell [data-sidebar="menu-button"][data-active="true"] > :is(span, svg) {
+.hud-theme [data-sidebar="menu-button"][data-active="true"] > :is(span, svg) {
   color: inherit;
 }
 
-.hud-dashboard-shell [data-sidebar="menu-button"]:not([data-active="true"]):hover {
+.hud-theme [data-sidebar="menu-button"]:not([data-active="true"]):hover {
   background: var(--accent);
 }
 
@@ -183,7 +192,7 @@
 }
 
 .hud-segments,
-.hud-dashboard-shell [data-slot="tabs-list"] {
+.hud-theme [data-slot="tabs-list"] {
   padding: 3px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -247,7 +256,7 @@
   color: var(--foreground);
 }
 
-.hud-dashboard-shell [data-slot="tabs-trigger"][data-state="active"] {
+.hud-theme [data-slot="tabs-trigger"][data-state="active"] {
   border-color: color-mix(in srgb, var(--hud-chart-current) 25%, var(--border));
   background: color-mix(in srgb, var(--hud-chart-current) 12%, var(--card));
   color: var(--hud-highlight);
@@ -369,7 +378,7 @@
   border-color: var(--border);
 }
 
-.hud-dashboard-shell [data-slot="skeleton"] {
+.hud-theme [data-slot="skeleton"] {
   background-color: color-mix(in srgb, var(--border) 65%, var(--card));
 }
 
@@ -385,11 +394,11 @@
   padding-inline: 0.9rem;
 }
 
-.hud-dashboard-shell .recharts-cartesian-grid line {
+.hud-theme .recharts-cartesian-grid line {
   stroke: var(--chart-grid);
 }
 
-.hud-dashboard-shell .recharts-legend-wrapper {
+.hud-theme .recharts-legend-wrapper {
   color: var(--muted-foreground);
   font-size: 0.75rem;
 }
@@ -398,7 +407,7 @@
   line-height: 1.4;
 }
 
-.hud-dashboard-shell .recharts-sector {
+.hud-theme .recharts-sector {
   stroke: var(--card);
   stroke-width: 1px;
 }

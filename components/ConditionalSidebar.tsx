@@ -31,8 +31,10 @@ export function ConditionalSidebar({
 
   // A barra lembra o último estado (cookie) em todas as telas: o botão de
   // recolher/expandir fica sempre no topo dela, então nunca some de vez.
-  const hasHudDashboardTheme = hudDashboardRoutes.includes(pathname);
-  const shellClassName = hasHudDashboardTheme ? "hud-dashboard-shell" : undefined;
+  // Tema HUD em toda página com menu; os cards de vidro só nas redesenhadas.
+  const shellClassName = hudDashboardRoutes.includes(pathname)
+    ? "hud-theme hud-dashboard-shell"
+    : "hud-theme";
   const isBoardPage = fullHeightBoardRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
 
