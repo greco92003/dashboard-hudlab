@@ -188,7 +188,7 @@ export default function LiveDashboardPage() {
         </div>
       ) : data ? (
         <div className="hud-panel hud-strip grid-cols-2 lg:grid-cols-4">
-          <KPICard icon={TrendingUp} label="Faturamento" value={formatCurrency(data.totalRevenue)} tom="tone-green" destaque />
+          <KPICard icon={TrendingUp} label="Faturamento" value={formatCurrency(data.totalRevenue)} tom="tone-green" />
           <KPICard icon={Target} label="Meta" value={formatCurrency(data.monthlyTarget)} tom="tone-slate" />
           <KPICard icon={BarChart3} label="Pace" value={formatCurrency(currentPace)} tom="tone-sky" />
           <KPICard icon={Zap} label="Forecast" value={formatCurrency(data.totalForecast)} tom="tone-violet" />
@@ -209,27 +209,29 @@ export default function LiveDashboardPage() {
   );
 }
 
-/** Célula da faixa de indicadores, com o tom da linha correspondente no gráfico. */
+/**
+ * Célula da faixa de indicadores, tingida pela cor da linha correspondente no
+ * gráfico (fundo translúcido, brilho no canto e o ícone em marca d'água).
+ */
 function KPICard({
   icon: Icone,
   label,
   value,
   tom,
-  destaque = false,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   tom: string;
-  destaque?: boolean;
 }) {
   return (
-    <div className={tom}>
+    <div className={`${tom} hud-strip-tinto`}>
+      <Icone className="hud-strip-marca" />
       <span className="hud-strip-label">
         <Icone className="hud-tone-text h-4 w-4" />
         {label}
       </span>
-      <span className={destaque ? "hud-strip-value hud-tone-text" : "hud-strip-value"}>{value}</span>
+      <span className="hud-strip-value hud-tone-text">{value}</span>
     </div>
   );
 }
