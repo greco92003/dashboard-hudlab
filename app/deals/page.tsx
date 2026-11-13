@@ -10,7 +10,6 @@ import { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, ArrowUp, ArrowDown, FileDown, Wallet } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
-import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
@@ -904,14 +903,16 @@ export default function DealsPage() {
       </div>
 
       <div className="hud-deals-overview">
+        {/* Filtros em grade: rótulo curto numa coluna e o controle na outra, todos com a mesma altura. */}
         <div className="hud-surface hud-deals-filters">
-          {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
-          <div className="hud-segments">
+          <span className="hud-filter-label" id="deals-filtro-periodo">
+            Período
+          </span>
+          <div className="hud-segments" role="group" aria-labelledby="deals-filtro-periodo">
             <Button
               variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
               aria-pressed={!useCustomPeriod && period === 30}
               onClick={() => handlePeriodChangeLocal(30)}
-              className="w-full sm:w-auto"
             >
               Último mês
             </Button>
@@ -919,7 +920,6 @@ export default function DealsPage() {
               variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
               aria-pressed={!useCustomPeriod && period === 60}
               onClick={() => handlePeriodChangeLocal(60)}
-              className="w-full sm:w-auto"
             >
               Últimos 2 meses
             </Button>
@@ -927,81 +927,49 @@ export default function DealsPage() {
               variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
               aria-pressed={!useCustomPeriod && period === 90}
               onClick={() => handlePeriodChangeLocal(90)}
-              className="w-full sm:w-auto"
             >
               Últimos 3 meses
             </Button>
           </div>
 
-          {/* Calendar Section - Stack on mobile */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap">
-              Selecione o período desejado:
-            </Label>
-            <div className="min-w-0">
-              <Calendar23
-                value={dateRange}
-                onChange={handleDateRangeChangeLocal}
-                hideLabel
-              />
-            </div>
+          <span className="hud-filter-label" id="deals-filtro-datas">
+            Datas
+          </span>
+          <div className="hud-date-field" role="group" aria-labelledby="deals-filtro-datas">
+            <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
           </div>
 
-          {/* Status Filter Buttons */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap self-start sm:self-center">
-              Filtrar por Status:
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={statusFilter === "won" ? "default" : "outline"}
-                aria-pressed={statusFilter === "won"}
-                onClick={() => setStatusFilter("won")}
-                size="sm"
-                className="hud-deal-status"
-                data-status="won"
-              >
-                Ganhos (
-                {
-                  deals.filter(
-                    (d) => d.status?.toLowerCase() === "won" || d.status === "1",
-                  ).length
-                }
-                )
-              </Button>
-              <Button
-                variant={statusFilter === "open" ? "default" : "outline"}
-                aria-pressed={statusFilter === "open"}
-                onClick={() => setStatusFilter("open")}
-                size="sm"
-                className="hud-deal-status"
-                data-status="open"
-              >
-                Em Andamento (
-                {
-                  deals.filter(
-                    (d) => d.status?.toLowerCase() === "open" || d.status === "0",
-                  ).length
-                }
-                )
-              </Button>
-              <Button
-                variant={statusFilter === "lost" ? "default" : "outline"}
-                aria-pressed={statusFilter === "lost"}
-                onClick={() => setStatusFilter("lost")}
-                size="sm"
-                className="hud-deal-status"
-                data-status="lost"
-              >
-                Perdidos (
-                {
-                  deals.filter(
-                    (d) => d.status?.toLowerCase() === "lost" || d.status === "2",
-                  ).length
-                }
-                )
-              </Button>
-            </div>
+          <span className="hud-filter-label" id="deals-filtro-status">
+            Status
+          </span>
+          <div className="hud-segments hud-status-group" role="group" aria-labelledby="deals-filtro-status">
+            <Button
+              variant={statusFilter === "won" ? "default" : "outline"}
+              aria-pressed={statusFilter === "won"}
+              onClick={() => setStatusFilter("won")}
+              className="hud-deal-status"
+              data-status="won"
+            >
+              Ganhos ({deals.filter((d) => d.status?.toLowerCase() === "won" || d.status === "1").length})
+            </Button>
+            <Button
+              variant={statusFilter === "open" ? "default" : "outline"}
+              aria-pressed={statusFilter === "open"}
+              onClick={() => setStatusFilter("open")}
+              className="hud-deal-status"
+              data-status="open"
+            >
+              Em Andamento ({deals.filter((d) => d.status?.toLowerCase() === "open" || d.status === "0").length})
+            </Button>
+            <Button
+              variant={statusFilter === "lost" ? "default" : "outline"}
+              aria-pressed={statusFilter === "lost"}
+              onClick={() => setStatusFilter("lost")}
+              className="hud-deal-status"
+              data-status="lost"
+            >
+              Perdidos ({deals.filter((d) => d.status?.toLowerCase() === "lost" || d.status === "2").length})
+            </Button>
           </div>
         </div>
 
