@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,9 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Columns3,
+  Eye,
+  List,
   RefreshCw,
   PackageCheck,
   Search,
@@ -30,9 +33,8 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
-import { BoardColumns } from "@/components/programacao/board-columns";
+import { ColunasPorDia, ListaPorDia, useMidia } from "@/components/producao/painel-pedidos";
 import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
-import { DealCard } from "@/components/programacao/deal-card";
 import { DealDialog } from "@/components/programacao/deal-dialog";
 import {
   TipoPedidoFilter,
@@ -304,7 +306,30 @@ export default function ExpedicaoPage() {
     0,
   );
   const hasFilters = normalizedSearch.length > 0 || tipoFilter.size > 0;
-  const cardWidth = (320 * zoomLevel) / 100;
+
+  // Colunas no computador, lista no celular e no tablet (como o Painel Produção);
+  // os botões Colunas | Lista fixam a escolha neste aparelho.
+  const [visao, setVisao] = useState<"auto" | "quadro" | "lista">("auto");
+  const telaLarga = useMidia("(min-width: 1280px)");
+  const modoQuadro = visao === "auto" ? telaLarga : visao === "quadro";
+  useEffect(() => {
+    const salva = storage.getItem("expedicao-visao");
+    if (salva === "quadro" || salva === "lista") setVisao(salva);
+  }, []);
+  const mudarVisao = (nova: "quadro" | "lista") => {
+    setVisao(nova);
+    storage.setItem("expedicao-visao", nova);
+  };
+
+  // Lista: todas as etapas abertas, menos o histórico de recebidos.
+  const abertosIniciais = displayGroups.filter((g) => g.id !== RECEBIDO_GROUP_ID).map((g) => g.id);
+
+  const renderAcoes = (deal: BoardDeal) => (
+    <Button variant="outline" className="h-10 w-full" onClick={() => handleDealClick(deal)}>
+      <Eye className="h-4 w-4" />
+      Ver detalhes
+    </Button>
+  );
 
   const handleDealClick = (deal: BoardDeal) => {
     setSelectedDeal(deal);
@@ -312,7 +337,7 @@ export default function ExpedicaoPage() {
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       {!isHeaderCollapsed && (
         <>
           <CabecalhoDaPagina
@@ -448,6 +473,26 @@ export default function ExpedicaoPage() {
               )}
             </div>
 
+              <div className="hud-group" role="group" aria-label="Visualização">
+                <button
+                  type="button"
+                  aria-pressed={modoQuadro}
+                  onClick={() => mudarVisao("quadro")}
+                  title="Colunas lado a lado"
+                  aria-label="Ver em colunas"
+                >
+                  <Columns3 />
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!modoQuadro}
+                  onClick={() => mudarVisao("lista")}
+                  title="Lista que rola para baixo"
+                  aria-label="Ver em lista"
+                >
+                  <List />
+                </button>
+              </div>
               <div className="hud-group" role="group" aria-label="Zoom do quadro">
                 <button
                   type="button"
@@ -472,20 +517,29 @@ export default function ExpedicaoPage() {
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            <BoardColumns
-              groups={displayGroups}
-              cardWidth={cardWidth}
-              emptyLabel="Nada nesta etapa"
-              renderCard={(deal, group) => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
-                  concluido={group.id === RECEBIDO_GROUP_ID}
-                  onClick={handleDealClick}
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden" style={{ fontSize: `${zoomLevel}%` }}>
+            {modoQuadro ? (
+              <div className="h-full p-3">
+                <ColunasPorDia
+                  grupos={displayGroups}
+                  grupoConcluidoId={RECEBIDO_GROUP_ID}
+                  renderAcoes={renderAcoes}
+                  mostrarValor
+                  rotuloVazio="Nada nesta etapa"
                 />
-              )}
-            />
+              </div>
+            ) : (
+              <div className="h-full overflow-y-auto p-3" style={{ "--prod-topo": "0px" } as CSSProperties}>
+                <ListaPorDia
+                  grupos={displayGroups}
+                  grupoConcluidoId={RECEBIDO_GROUP_ID}
+                  abertosIniciais={abertosIniciais}
+                  renderAcoes={renderAcoes}
+                  mostrarValor
+                  rotuloVazio="Nada nesta etapa"
+                />
+              </div>
+            )}
           </div>
         </div>
       ) : (

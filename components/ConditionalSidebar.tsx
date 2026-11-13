@@ -46,6 +46,15 @@ export function ConditionalSidebar({
     : isBoardPage
       ? fullHeightContentClassName
       : standardContentClassName;
+  // Quadros (Programação e Expedição), do tablet para cima, ficam na altura da
+  // tela: as colunas e a lista rolam por dentro, com cabeçalho e filtros fixos.
+  // No celular a página inteira rola (o cabeçalho sobe), senão a lista ficava
+  // com um palmo de altura.
+  const insetClassName = isBoardPage
+    ? "flex min-w-0 flex-col md:h-svh md:overflow-hidden"
+    : isFullHeightPage
+      ? "flex flex-col min-w-0"
+      : "min-w-0";
 
   // Routes that should not have the sidebar
   const routesWithoutSidebar = [
@@ -165,7 +174,7 @@ export function ConditionalSidebar({
             <AppSidebar />
           </div>
           <SidebarInset
-            className={isFullHeightPage ? "flex flex-col min-w-0" : "min-w-0"}
+            className={insetClassName}
             suppressHydrationWarning
           >
             <SiteHeader />
@@ -193,7 +202,7 @@ export function ConditionalSidebar({
     >
       <AppSidebar />
       <SidebarInset
-        className={isFullHeightPage ? "flex flex-col min-w-0" : "min-w-0"}
+        className={insetClassName}
         suppressHydrationWarning
       >
         <SiteHeader />
