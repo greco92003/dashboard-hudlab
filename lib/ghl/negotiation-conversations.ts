@@ -373,6 +373,33 @@ export async function lastInboundWhatsappAt(contactId: string): Promise<number |
   return datas.length ? Math.max(...datas) : null;
 }
 
+export interface PhoneConversationOverview {
+  conversationId: string;
+  /** Última atividade da conversa (ms), de qualquer tipo. */
+  lastMessageDate: number | null;
+  /** Última mensagem de WhatsApp do contato (ms): abre a janela de 24h. */
+  lastInboundWhatsappAt: number | null;
+  tags: string[];
+}
+
+/** A conversa de telefone/WhatsApp do contato, com as datas e as tags que a busca já traz. null se não há conversa. */
+export async function getPhoneConversationOverview(contactId: string): Promise<PhoneConversationOverview | null> {
+  const { locationId } = requireGhlEnv();
+  const result = await ghlConversationsFetch<{ conversations?: Array<GhlConversationListItem & { type?: string }> }>(
+    "/conversations/search",
+    { locationId, contactId, limit: "10" },
+  );
+  const lista = result.conversations ?? [];
+  const c = lista.find((x) => x.type === "TYPE_PHONE") ?? lista[0];
+  if (!c) return null;
+  return {
+    conversationId: c.id,
+    lastMessageDate: c.lastMessageDate ?? null,
+    lastInboundWhatsappAt: c.lastInboundWhatsappMessageDate ?? null,
+    tags: c.tags ?? [],
+  };
+}
+
 export interface ResponseGapStats {
   /** Average minutes between a client message and the seller's next reply. Null if no pairs found. */
   avgSellerResponseMinutes: number | null;
