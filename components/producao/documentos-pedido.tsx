@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Download, FileText, Loader2, Package, Share2 } from "lucide-react";
+import { ChevronDown, Download, Eye, FileText, Loader2, Package, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { BoardDeal } from "@/lib/programacao/board-types";
+import { VisualizadorPdf } from "@/components/producao/visualizador-pdf";
 import { cn } from "@/lib/utils";
 
 type Documento = "talao" | "romaneio" | "romaneio-sku";
@@ -33,8 +34,9 @@ const DOCUMENTOS: Record<Documento, { nome: string; caminho: string }> = {
  * No app instalado (sem barra do navegador) e no celular, abrir o PDF por link
  * levava a uma tela sem volta: o documento (ou a mensagem de erro, em texto puro)
  * tomava a janela do app. Aqui o painel busca o documento primeiro e nunca sai
- * da tela: erro vira aviso, e o PDF pronto abre num diálogo com
- * "Imprimir ou compartilhar" (menu do sistema) e "Baixar".
+ * da tela: erro vira aviso, e o PDF pronto abre num diálogo com "Visualizar"
+ * (o PDF desenhado dentro do app, com Fechar), "Imprimir ou compartilhar"
+ * (menu do sistema) e "Baixar".
  */
 function telaDeToque(): boolean {
   return (
@@ -55,6 +57,8 @@ async function mensagemDeErro(resposta: Response): Promise<string> {
 export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; grande?: boolean }) {
   const [gerando, setGerando] = useState<Documento | null>(null);
   const [pronto, setPronto] = useState<{ nome: string; arquivo: File; url: string } | null>(null);
+  const [vendo, setVendo] = useState(false);
+  const fecharVisualizacao = useCallback(() => setVendo(false), []);
 
   // Solta o PDF da memória quando o diálogo fecha.
   useEffect(() => {
@@ -92,6 +96,7 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
       const arquivo = new File([blob], `${nome} - ${deal.title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), {
         type: "application/pdf",
       });
+      setVendo(false);
       setPronto({ nome, arquivo, url });
     } catch {
       janela?.close();
@@ -167,13 +172,17 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
         </div>
       </div>
 
-      <Dialog open={pronto !== null} onOpenChange={(aberto) => !aberto && setPronto(null)}>
+      <Dialog open={pronto !== null && !vendo} onOpenChange={(aberto) => !aberto && setPronto(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{pronto?.nome} pronto</DialogTitle>
             <DialogDescription>{deal.title}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
+            <Button variant="outline" className="h-12 text-base" onClick={() => setVendo(true)}>
+              <Eye className="h-5 w-5" />
+              Visualizar
+            </Button>
             {podeCompartilhar && (
               <Button className="hud-btn-accent h-12 text-base" onClick={() => void compartilhar()}>
                 <Share2 className="h-5 w-5" />
@@ -196,6 +205,14 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {pronto && vendo && (
+        <VisualizadorPdf
+          arquivo={pronto.arquivo}
+          titulo={`${pronto.nome} · ${deal.title}`}
+          onFechar={fecharVisualizacao}
+        />
+      )}
     </>
   );
 }
