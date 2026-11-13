@@ -61,15 +61,15 @@ function MetaMarketingContent() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="hud-page">
+      <div className="hud-page-header">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Meta Marketing</h1>
+          <h1>Meta Marketing</h1>
           <p className="text-muted-foreground">
             Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hud-toolbar">
           <Button
             variant="outline"
             onClick={handleRefresh}
@@ -84,8 +84,8 @@ function MetaMarketingContent() {
       </div>
 
       <Tabs value={aba} onValueChange={(value) => setParam("aba", value)}>
-        <div className="overflow-x-auto">
-          <TabsList>
+        <div className="overflow-x-auto py-0.5">
+          <TabsList className="hud-marketing-tabs">
             <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
             <TabsTrigger value="anuncios">Anúncios</TabsTrigger>
             <TabsTrigger value="regioes">Regiões</TabsTrigger>
@@ -121,7 +121,7 @@ export default function MetaMarketingPage() {
   return (
     <Suspense
       fallback={
-        <div className="container mx-auto p-6">
+        <div className="hud-page">
           <Skeleton className="h-96" />
         </div>
       }

@@ -1,0 +1,655 @@
+/*
+ * Tema HUD (Hud Lab).
+ * - Cores (:root e .dark): o app inteiro, inclusive popovers, diálogos e avisos,
+ *   que o navegador abre fora da área do menu.
+ * - .hud-theme: menu, cabeçalho, abas, carregamento e gráficos em toda página com menu.
+ * - .hud-dashboard-shell: cards de vidro e faixas de indicadores só no Dashboard,
+ *   em Negócios e no Meta Marketing (redesenhados). Essas regras passam por cima
+ *   das classes da página, por isso não valem nas outras: apagariam destaques
+ *   como o contorno vermelho dos cards urgentes do Fechamento.
+ */
+:root {
+  --hud-brand: #00ff91;
+  --background: #edf3ef;
+  --foreground: #102820;
+  --card: #fcfefc;
+  --card-foreground: #102820;
+  --popover: #fcfefc;
+  --popover-foreground: #102820;
+  --primary: var(--hud-brand);
+  --primary-foreground: #03291b;
+  --muted: #e7f0ea;
+  --muted-foreground: #50695f;
+  --accent: #e1f2e9;
+  --accent-foreground: #134633;
+  --border: #d8e6de;
+  --input: #cfdfd5;
+  --ring: #087e58;
+  --sidebar: #f4f9f5;
+  --sidebar-foreground: #39584b;
+  --sidebar-border: #d8e6de;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-ring: var(--ring);
+  --hud-highlight: #086545;
+  --hud-chart-current: #087e58;
+  --hud-chart-previous: #648078;
+  --hud-chart-target: #976b20;
+  --hud-info: #286e8e;
+  --hud-loss: #a6374d;
+  --chart-1: var(--hud-chart-current);
+  --chart-grid: #deebe4;
+  --hud-surface-top: #fff;
+  --hud-edge: rgb(255 255 255 / 92%);
+  --hud-panel-shadow: 0 3px 8px #173e2510, 0 12px 28px #173e2508;
+  --hud-canvas-glow: #bce9d5;
+  --hud-frame: #c8dfd3;
+  --hud-chart-height: 310px;
+  /* Altura única dos controles de filtro (períodos, datas, status, botões da barra). */
+  --hud-control-h: 2.25rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), Inter, Arial, sans-serif;
+}
+
+.dark {
+  --background: #07110e;
+  --foreground: #eef9f3;
+  --card: #101e19;
+  --card-foreground: #eef9f3;
+  --popover: #15241e;
+  --popover-foreground: #eef9f3;
+  --muted: #15251e;
+  --muted-foreground: #a3b9ae;
+  --accent: #1b3027;
+  --accent-foreground: #e0f6e8;
+  --border: #243b30;
+  --input: #2c4439;
+  --ring: #00ff91;
+  --sidebar: #0a1712;
+  --sidebar-foreground: #bad0c3;
+  --sidebar-border: #20362b;
+  --hud-highlight: #45f8ad;
+  --hud-chart-current: #00ed94;
+  --hud-chart-previous: #8caca2;
+  --hud-chart-target: #efbc68;
+  --hud-info: #82cce8;
+  --hud-loss: #ff9caa;
+  --chart-grid: #253b32;
+  --hud-surface-top: #14261f;
+  --hud-edge: rgb(187 255 214 / 8%);
+  --hud-panel-shadow: 0 4px 9px #01070466, 0 14px 30px #01070442;
+  --hud-canvas-glow: #113c2c;
+  --hud-frame: #305646;
+}
+
+.hud-theme [data-slot="sidebar-inset"] {
+  background:
+    radial-gradient(ellipse 75% 310px at 18% 0%, var(--hud-canvas-glow), transparent 90%),
+    var(--background);
+}
+
+.hud-theme [data-slot="sidebar-inset"] > header {
+  height: 3.5rem;
+  border-color: var(--hud-frame);
+  background: color-mix(in srgb, var(--background) 65%, transparent);
+}
+
+.hud-dashboard-shell [data-slot="sidebar-inset"] > header + div {
+  padding-top: 1.5rem;
+}
+
+.hud-theme [data-sidebar="content"] {
+  scrollbar-color: var(--hud-frame) transparent;
+  scrollbar-width: thin;
+}
+
+.hud-theme [data-sidebar="sidebar"] {
+  background: linear-gradient(155deg, var(--sidebar), var(--background));
+}
+
+.hud-theme [data-sidebar="header"] {
+  gap: 0.65rem;
+}
+
+.hud-theme .hud-sidebar-brand {
+  align-items: center;
+}
+
+.hud-theme .hud-sidebar-mark {
+  display: grid;
+  flex: 1;
+  min-height: 88px;
+  margin-bottom: 0;
+  place-items: center;
+  border: 1px solid var(--hud-frame);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 50% 110%, var(--hud-canvas-glow), transparent 85%),
+    var(--card);
+  box-shadow: inset 0 1px var(--hud-edge), var(--hud-panel-shadow);
+}
+
+.hud-theme .hud-sidebar-mark svg {
+  height: 46px;
+  border-radius: 4px;
+}
+
+.hud-theme [data-sidebar="group-label"] {
+  color: var(--muted-foreground);
+}
+
+.hud-theme [data-sidebar="menu-button"][data-active="true"] {
+  background: linear-gradient(105deg, var(--hud-brand), #6befad);
+  color: #04271a;
+  font-weight: 650;
+  box-shadow: 0 3px 14px #00ff9130;
+}
+
+.hud-theme [data-sidebar="menu-button"][data-active="true"] > :is(span, svg) {
+  color: inherit;
+}
+
+.hud-theme [data-sidebar="menu-button"]:not([data-active="true"]):hover {
+  background: var(--accent);
+}
+
+.hud-page {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  container-type: inline-size;
+}
+
+.hud-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding-bottom: 0.25rem;
+}
+
+.hud-page-header h1 {
+  font-size: clamp(1.65rem, 2.6vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.13;
+  letter-spacing: -0.035em;
+}
+
+.hud-page-header p {
+  margin-top: 0.45rem;
+  font-size: 0.875rem;
+}
+
+.hud-toolbar,
+.hud-segments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.hud-segments,
+.hud-theme [data-slot="tabs-list"] {
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+}
+
+.hud-segments {
+  gap: 2px;
+}
+
+.hud-segments {
+  height: var(--hud-control-h);
+  max-width: 100%;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.hud-segments > button {
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  padding-block: 0;
+  padding-inline: 0.7rem;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+/* Botões soltos da barra (Sincronizar, Atualizar, datas) na mesma altura dos grupos. */
+.hud-toolbar > button,
+.hud-toolbar [data-slot="popover-trigger"],
+.hud-date-field button {
+  height: var(--hud-control-h);
+}
+
+.hud-date-field {
+  min-width: 0;
+}
+
+.hud-date-field > div {
+  gap: 0;
+}
+
+.hud-filter-label {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hud-segments > button[aria-pressed="false"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.hud-segments > button[aria-pressed="false"]:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.hud-theme [data-slot="tabs-trigger"][data-state="active"] {
+  border-color: color-mix(in srgb, var(--hud-chart-current) 25%, var(--border));
+  background: color-mix(in srgb, var(--hud-chart-current) 12%, var(--card));
+  color: var(--hud-highlight);
+}
+
+.hud-dashboard-shell .hud-marketing-tabs {
+  min-height: 42px;
+  gap: 0.2rem;
+}
+
+.hud-marketing-tabs [role="tab"] {
+  padding-inline: 0.75rem;
+}
+
+.hud-dashboard-shell :is([data-slot="card"], [data-slot="widget"], .hud-surface, .hud-kpi-strip) {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: linear-gradient(155deg, var(--hud-surface-top), var(--card) 60%);
+  box-shadow: inset 0 1px var(--hud-edge), var(--hud-panel-shadow);
+}
+
+.hud-dashboard-shell [data-slot="card"] {
+  gap: 1rem;
+  padding-block: 1.125rem;
+}
+
+.hud-dashboard-shell .hud-chart-height [data-slot="card-header"] {
+  padding-block: 0.25rem;
+}
+
+.hud-dashboard-shell :is([data-slot="card-header"], [data-slot="card-content"], [data-slot="card-footer"]) {
+  padding-inline: clamp(0.875rem, 1.4vw, 1.35rem);
+}
+
+.hud-dashboard-shell :is([data-slot="card-title"], [data-slot="widget-title"]) {
+  line-height: 1.25;
+  letter-spacing: -0.014em;
+}
+
+.hud-dashboard-shell .hud-chart-height {
+  height: var(--hud-chart-height);
+}
+
+.hud-dashboard-shell :is(.hud-kpi-strip, .hud-deals-summary) {
+  background:
+    radial-gradient(ellipse at 25% 0%, color-mix(in srgb, var(--hud-chart-current) 12%, transparent), transparent 65%),
+    linear-gradient(155deg, var(--hud-surface-top), var(--card));
+}
+
+.hud-kpi-strip {
+  display: grid;
+}
+
+.hud-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.9rem 1rem;
+}
+
+.hud-kpi + .hud-kpi {
+  border-top: 1px solid var(--border);
+}
+
+.hud-kpi-icon {
+  display: inline-grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--hud-chart-current) 30%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--hud-chart-current) 11%, var(--card));
+  color: var(--hud-highlight);
+}
+
+.hud-kpi-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.hud-kpi dt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.hud-kpi-value {
+  color: var(--hud-highlight);
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hud-kpi-detail {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.hud-revenue-grid,
+.hud-breakdown-grid,
+.hud-deals-overview,
+.hud-marketing-kpis,
+.hud-marketing-charts {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hud-breakdown-grid > div,
+.hud-marketing-charts > div {
+  min-width: 0;
+}
+
+.hud-breakdown-grid :is([data-slot="widget-header"], [data-slot="widget-footer"]) {
+  border-color: var(--border);
+}
+
+.hud-theme [data-slot="skeleton"] {
+  background-color: color-mix(in srgb, var(--border) 65%, var(--card));
+}
+
+.hud-breakdown-grid [data-slot="widget-title"]:first-child {
+  font-size: 0.875rem;
+}
+
+.hud-breakdown-grid [data-slot="widget-title"]:last-child {
+  font-size: 0.6875rem;
+}
+
+.hud-breakdown-grid :is([data-slot="widget-header"], [data-slot="widget-footer"], [data-slot="widget-content"]) {
+  padding-inline: 0.9rem;
+}
+
+.hud-theme .recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+
+.hud-theme .recharts-legend-wrapper {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.hud-dashboard-shell [data-slot="card-description"] {
+  line-height: 1.4;
+}
+
+.hud-theme .recharts-sector {
+  stroke: var(--card);
+  stroke-width: 1px;
+}
+
+.hud-deals-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  align-items: center;
+  justify-items: start;
+  gap: 0.35rem 1rem;
+  padding: 1rem 1.15rem;
+}
+
+/* No celular o rótulo fica em cima do controle; o espaço maior separa as linhas. */
+.hud-deals-filters > .hud-filter-label:not(:first-child) {
+  margin-top: 0.5rem;
+}
+
+
+.hud-dashboard-shell .hud-deals-summary {
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.hud-deals-summary [data-slot="card-header"] {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.hud-deal-status {
+  --status-color: var(--hud-highlight);
+  border: 1px solid color-mix(in srgb, var(--status-color) 25%, var(--border));
+  background: var(--card);
+  color: var(--status-color);
+}
+
+.hud-deal-status[data-status="open"] {
+  --status-color: var(--hud-info);
+}
+
+.hud-deal-status[data-status="lost"] {
+  --status-color: var(--hud-loss);
+}
+
+.hud-deal-status:is(:hover, [aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--status-color) 13%, var(--card));
+  color: var(--status-color);
+}
+
+.hud-deal-status[aria-pressed="true"] {
+  border-color: var(--status-color);
+}
+
+/* Dentro do grupo, o status sem seleção mantém a cor dele (o grupo deixaria cinza). */
+.hud-status-group > .hud-deal-status[aria-pressed="false"] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--status-color);
+}
+
+.hud-status-group > .hud-deal-status[aria-pressed="false"]:hover {
+  background: color-mix(in srgb, var(--status-color) 10%, var(--card));
+  color: var(--status-color);
+}
+
+.hud-deals-table {
+  min-width: 0;
+}
+
+.hud-deals-table [data-slot="data-table-frame"] {
+  border-color: var(--border);
+  border-radius: 15px;
+  background: var(--card);
+  box-shadow: var(--hud-panel-shadow);
+}
+
+.hud-deals-table :is([data-slot="table-row"], [data-slot="data-table-frame"] > div) {
+  border-color: var(--border);
+}
+
+.hud-deals-table [data-slot="table-head"] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.hud-deals-table [data-slot="table-cell"] {
+  padding-block: 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-deals-table [data-slot="table-body"] [data-slot="table-row"]:nth-child(even):not(:hover) {
+  background: color-mix(in srgb, var(--muted) 40%, var(--card));
+}
+
+.hud-deals-table [data-slot="table-cell"].sticky {
+  background: var(--card);
+}
+
+.hud-marketing-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 1.2rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.hud-marketing-status svg {
+  color: var(--hud-highlight);
+  flex: none;
+}
+
+.hud-marketing-status .text-red-600,
+.hud-marketing-status .text-red-600 svg {
+  color: var(--hud-loss);
+}
+
+.hud-marketing-kpis {
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 156px), 1fr));
+}
+
+.hud-dashboard-shell .hud-marketing-kpi {
+  padding-block: 0.85rem;
+}
+
+.hud-dashboard-shell .hud-marketing-kpi [data-slot="card-header"] {
+  padding-inline: 0.75rem;
+  grid-template-rows: auto;
+  gap: 0.4rem;
+}
+
+.hud-dashboard-shell .hud-marketing-kpi-label {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.hud-marketing-kpi .hud-kpi-icon {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 7px;
+}
+
+.hud-marketing-kpi .hud-kpi-icon svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.hud-marketing-variation {
+  color: var(--hud-highlight);
+}
+
+.hud-marketing-variation[data-favorable="false"] {
+  color: var(--hud-loss);
+}
+
+.hud-marketing-kpi [data-slot="card-title"] {
+  color: var(--hud-highlight);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hud-funnel-bar {
+  background: linear-gradient(90deg, var(--hud-chart-current), var(--hud-highlight));
+}
+
+@container (min-width: 550px) {
+  .hud-kpi-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hud-kpi + .hud-kpi {
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  .hud-breakdown-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 700px) {
+  .hud-deals-overview {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+
+  .hud-deals-filters {
+    grid-template-columns: max-content minmax(0, 1fr);
+    row-gap: 0.75rem;
+  }
+
+  .hud-deals-filters > .hud-filter-label:not(:first-child) {
+    margin-top: 0;
+  }
+
+  .hud-revenue-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hud-revenue-grid > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (min-width: 820px) {
+  .hud-marketing-charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1000px) {
+  .hud-revenue-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.13fr) minmax(0, 1fr);
+  }
+
+  .hud-revenue-grid > :first-child {
+    grid-column: auto;
+  }
+
+  .hud-marketing-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .hud-breakdown-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+
+@container (max-width: 380px) {
+  .hud-marketing-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1450px) {
+  .hud-marketing-kpis {
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+  }
+}

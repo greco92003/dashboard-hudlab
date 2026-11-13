@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import "./hud-dashboard.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { OptimizedAuthProvider } from "@/contexts/OptimizedAuthContext";
 import { SyncProvider } from "@/contexts/SyncContext";
@@ -11,6 +13,9 @@ import { CacheRecoveryProvider } from "@/components/CacheRecoveryProvider";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { VersionChecker } from "@/components/VersionChecker";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+
+// Fonte do tema HUD servida pelo próprio app (antes dependia de estar instalada no computador).
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Dashboard Hud Lab",
@@ -55,7 +60,7 @@ export default async function Layout({
     : true;
 
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" className={inter.variable} suppressHydrationWarning>
       <head>
         <script src="http://localhost:8097" async></script>
         <script src="/cache-recovery.js" async></script>

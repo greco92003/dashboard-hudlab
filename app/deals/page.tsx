@@ -7,10 +7,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUp, ArrowDown, FileDown } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, FileDown, Wallet } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
-import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
@@ -889,9 +888,9 @@ export default function DealsPage() {
   }, 0);
 
   return (
-    <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-bold">Negócios</h1>
+    <div className="hud-page">
+      <div className="hud-page-header">
+        <h1>Negócios</h1>
         <Button
           onClick={exportToPDF}
           variant="outline"
@@ -903,135 +902,104 @@ export default function DealsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 mb-4 mt-2">
-        {/* Period Buttons - Stack on mobile, horizontal on larger screens */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-          <Button
-            variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(30)}
-            className="w-full sm:w-auto"
-          >
-            Último mês
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(60)}
-            className="w-full sm:w-auto"
-          >
-            Últimos 2 meses
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(90)}
-            className="w-full sm:w-auto"
-          >
-            Últimos 3 meses
-          </Button>
-        </div>
-
-        {/* Calendar Section - Stack on mobile */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <Label className="text-sm sm:text-base whitespace-nowrap">
-            Selecione o período desejado:
-          </Label>
-          <div className="w-full sm:min-w-[250px] sm:w-auto">
-            <Calendar23
-              value={dateRange}
-              onChange={handleDateRangeChangeLocal}
-              hideLabel
-            />
+      <div className="hud-deals-overview">
+        {/* Filtros em grade: rótulo curto numa coluna e o controle na outra, todos com a mesma altura. */}
+        <div className="hud-surface hud-deals-filters">
+          <span className="hud-filter-label" id="deals-filtro-periodo">
+            Período
+          </span>
+          <div className="hud-segments" role="group" aria-labelledby="deals-filtro-periodo">
+            <Button
+              variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 30}
+              onClick={() => handlePeriodChangeLocal(30)}
+            >
+              Último mês
+            </Button>
+            <Button
+              variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 60}
+              onClick={() => handlePeriodChangeLocal(60)}
+            >
+              Últimos 2 meses
+            </Button>
+            <Button
+              variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 90}
+              onClick={() => handlePeriodChangeLocal(90)}
+            >
+              Últimos 3 meses
+            </Button>
           </div>
-        </div>
 
-        {/* Status Filter Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-          <Label className="text-sm sm:text-base whitespace-nowrap self-start sm:self-center">
-            Filtrar por Status:
-          </Label>
-          <div className="flex flex-wrap gap-2">
+          <span className="hud-filter-label" id="deals-filtro-datas">
+            Datas
+          </span>
+          <div className="hud-date-field" role="group" aria-labelledby="deals-filtro-datas">
+            <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
+          </div>
+
+          <span className="hud-filter-label" id="deals-filtro-status">
+            Status
+          </span>
+          <div className="hud-segments hud-status-group" role="group" aria-labelledby="deals-filtro-status">
             <Button
               variant={statusFilter === "won" ? "default" : "outline"}
+              aria-pressed={statusFilter === "won"}
               onClick={() => setStatusFilter("won")}
-              size="sm"
-              className={
-                statusFilter === "won"
-                  ? ""
-                  : "border-green-500 text-green-700 hover:bg-green-50"
-              }
+              className="hud-deal-status"
+              data-status="won"
             >
-              Ganhos (
-              {
-                deals.filter(
-                  (d) => d.status?.toLowerCase() === "won" || d.status === "1",
-                ).length
-              }
-              )
+              Ganhos ({deals.filter((d) => d.status?.toLowerCase() === "won" || d.status === "1").length})
             </Button>
             <Button
               variant={statusFilter === "open" ? "default" : "outline"}
+              aria-pressed={statusFilter === "open"}
               onClick={() => setStatusFilter("open")}
-              size="sm"
-              className={
-                statusFilter === "open"
-                  ? ""
-                  : "border-blue-500 text-blue-700 hover:bg-blue-50"
-              }
+              className="hud-deal-status"
+              data-status="open"
             >
-              Em Andamento (
-              {
-                deals.filter(
-                  (d) => d.status?.toLowerCase() === "open" || d.status === "0",
-                ).length
-              }
-              )
+              Em Andamento ({deals.filter((d) => d.status?.toLowerCase() === "open" || d.status === "0").length})
             </Button>
             <Button
               variant={statusFilter === "lost" ? "default" : "outline"}
+              aria-pressed={statusFilter === "lost"}
               onClick={() => setStatusFilter("lost")}
-              size="sm"
-              className={
-                statusFilter === "lost"
-                  ? ""
-                  : "border-red-500 text-red-700 hover:bg-red-50"
-              }
+              className="hud-deal-status"
+              data-status="lost"
             >
-              Perdidos (
-              {
-                deals.filter(
-                  (d) => d.status?.toLowerCase() === "lost" || d.status === "2",
-                ).length
-              }
-              )
+              Perdidos ({deals.filter((d) => d.status?.toLowerCase() === "lost" || d.status === "2").length})
             </Button>
           </div>
         </div>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {statusFilter === "won"
-              ? "Faturamento Total (Ganhos)"
-              : statusFilter === "open"
-                ? "Valor Total (Em Andamento)"
-                : "Valor Total (Perdidos)"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-8 w-[200px]" />
-          ) : (
-            <div className="space-y-2">
-              <p className="text-3xl font-bold">
-                {formatCurrency(filteredTotalValue, "BRL")}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {filteredDeals.length} de {deals.length} negócios
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <Card className="hud-deals-summary">
+          <CardHeader>
+            <span className="hud-kpi-icon" aria-hidden="true"><Wallet /></span>
+            <CardTitle>
+              {statusFilter === "won"
+                ? "Faturamento Total (Ganhos)"
+                : statusFilter === "open"
+                  ? "Valor Total (Em Andamento)"
+                  : "Valor Total (Perdidos)"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-[200px]" />
+            ) : (
+              <div className="space-y-2">
+                <p className="hud-kpi-value text-3xl">
+                  {formatCurrency(filteredTotalValue, "BRL")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {filteredDeals.length} de {deals.length} negócios
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {loading ? (
         <div className="space-y-2">
@@ -1043,7 +1011,9 @@ export default function DealsPage() {
           <Skeleton className="h-24 w-full" />
         </div>
       ) : (
-        <DataTable columns={columns} data={filteredDeals} />
+        <div className="hud-deals-table">
+          <DataTable columns={columns} data={filteredDeals} />
+        </div>
       )}
 
       {/* Sync Checker - monitora sincronizações */}

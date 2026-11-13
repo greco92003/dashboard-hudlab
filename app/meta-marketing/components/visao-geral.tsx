@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -18,9 +18,13 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchMarketingReport, fetchMarketingSnapshot } from "../report-client";
-import { ArrowDownRight, ArrowUpRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import {
-  LineChart,
+  ArrowDownRight, ArrowUpRight, Eye, Layers3, MousePointer2, Package,
+  ShieldAlert, ShieldCheck, ShoppingBag, Truck, Users, Wallet, TrendingUp,
+} from "lucide-react";
+import {
+  Area,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
@@ -42,6 +46,17 @@ import {
   type RangeCustom,
   periodoParaDatas,
 } from "../lib";
+
+const kpiIcons = {
+  spend: Wallet,
+  impressoes: Eye,
+  cliques: MousePointer2,
+  leads: Users,
+  mockups: Layers3,
+  faturamento: TrendingUp,
+  vendas: ShoppingBag,
+  pares_vendidos: Package,
+};
 
 interface Kpis {
   spend: number;
@@ -163,9 +178,8 @@ function Variacao({ metrica, pct }: { metrica: string; pct?: number }) {
   const Icone = subiu ? ArrowUpRight : ArrowDownRight;
   return (
     <span
-      className={`inline-flex items-center gap-0.5 text-xs font-medium ${
-        bom ? "text-emerald-600" : "text-red-600"
-      }`}
+      className="hud-marketing-variation inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium"
+      data-favorable={bom}
     >
       <Icone className="h-3 w-3" />
       {Math.abs(pct).toLocaleString("pt-BR")}%
@@ -393,7 +407,7 @@ export function VisaoGeral({
   // Cada métrica secundária (extras) também tem sua própria variação vs
   // período anterior, igual a métrica principal do card.
   const kpis: {
-    key: keyof Kpis;
+    key: keyof typeof kpiIcons;
     label: string;
     valor: string;
     extras?: { key: keyof Kpis; label: string; valor: string }[];
@@ -488,6 +502,9 @@ export function VisaoGeral({
     faturamentoAnterior: Number(serieAnterior[i]?.faturamento) || 0,
   }));
 
+  const revenueGradient = useId();
+  const spendGradient = useId();
+
   const maxFunil = Math.max(1, ...funil.map((f) => f.qtd));
   const maxCusto = Math.max(1, ...funil.map((c) => c.custo_por_oportunidade ?? 0));
   const totalFontes = fontes.reduce(
@@ -502,77 +519,87 @@ export function VisaoGeral({
 
   return (
     <div className="space-y-4">
-      {/* Indicador de saúde da atribuição */}
-      {saudePct != null && (
-        <div
-          className={`flex items-center gap-2 text-sm ${
-            saudePct < 80 ? "text-red-600" : "text-muted-foreground"
-          }`}
-        >
-          {saudePct < 80 ? (
-            <ShieldAlert className="h-4 w-4" />
-          ) : (
-            <ShieldCheck className="h-4 w-4" />
-          )}
-          Atribuição: {saudePct.toLocaleString("pt-BR")}% dos leads da última
-          semana ligados a um anúncio — detalhes na aba Saúde da Atribuição
-        </div>
-      )}
+      <div className="hud-surface hud-marketing-status">
+        {/* Indicador de saúde da atribuição */}
+        {saudePct != null && (
+          <div
+            className={`flex items-center gap-2 text-sm ${
+              saudePct < 80 ? "text-red-600" : "text-muted-foreground"
+            }`}
+          >
+            {saudePct < 80 ? (
+              <ShieldAlert className="h-4 w-4" />
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
+            )}
+            Atribuição: {saudePct.toLocaleString("pt-BR")}% dos leads da última
+            semana ligados a um anúncio — detalhes na aba Saúde da Atribuição
+          </div>
+        )}
 
-      {/* Contra o que a variação % compara (e recorte no início da coleta) */}
-      <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
-      {updatedAt && (
-        <p className="text-xs text-muted-foreground">
-          Atualizado às {new Date(updatedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
-          {stale ? " · atualizando em segundo plano" : ""}
-        </p>
-      )}
+        {/* Contra o que a variação % compara (e recorte no início da coleta) */}
+        <p className="text-xs text-muted-foreground">{textoComparacao(janela)}</p>
+        {updatedAt && (
+          <p className="text-xs text-muted-foreground">
+            Atualizado às {new Date(updatedAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+            {stale ? " · atualizando em segundo plano" : ""}
+          </p>
+        )}
+      </div>
 
       {/* KPIs com variação vs período anterior */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-5 2xl:grid-cols-9">
+      <div className="hud-marketing-kpis">
         {loading && !resumo ? Array.from({ length: 9 }).map((_, i) => (
           <Skeleton key={i} className="h-28" />
         )) : erro && !resumo ? (
           <p className="text-sm text-destructive col-span-full">Erro ao carregar resumo: {erro}</p>
-        ) : kpis.map((k) => (
-          <Card key={k.key}>
-            <CardHeader className="pb-2 px-4 pt-4">
-              <CardDescription className="text-xs">{k.label}</CardDescription>
-              <CardTitle className="text-xl leading-tight">{k.valor}</CardTitle>
-              <div className="min-h-4">
-                <Variacao metrica={k.key} pct={v[k.key]} />
-              </div>
-              {k.extras && (
-                <div className="space-y-0.5">
-                  {k.extras.map((e) => (
-                    <p
-                      key={e.key}
-                      className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1"
-                    >
-                      <span>
-                        {e.label} {e.valor}
-                      </span>
-                      <Variacao metrica={e.key} pct={v[e.key]} />
-                    </p>
-                  ))}
+        ) : kpis.map((k) => {
+          const Icon = kpiIcons[k.key];
+          return (
+            <Card key={k.key} className="hud-marketing-kpi">
+              <CardHeader>
+                <CardDescription className="hud-marketing-kpi-label">
+                  <span className="hud-kpi-icon" aria-hidden="true"><Icon /></span>
+                  {k.label}
+                </CardDescription>
+                <CardTitle className="text-xl leading-tight">{k.valor}</CardTitle>
+                <div className="min-h-4">
+                  <Variacao metrica={k.key} pct={v[k.key]} />
                 </div>
-              )}
-              {k.key === "pares_vendidos" && temVendasSemPares && (
-                <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
-                  {fmtNum(a.vendas_sem_pares)} venda(s) sem qtd. de pares —
-                  custo/ticket por par abaixo não as considera
-                </p>
-              )}
-            </CardHeader>
-          </Card>
-        ))}
+                {k.extras && (
+                  <div className="space-y-0.5">
+                    {k.extras.map((e) => (
+                      <p
+                        key={e.key}
+                        className="text-[11px] text-muted-foreground leading-tight flex items-center gap-1"
+                      >
+                        <span>
+                          {e.label} {e.valor}
+                        </span>
+                        <Variacao metrica={e.key} pct={v[e.key]} />
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {k.key === "pares_vendidos" && temVendasSemPares && (
+                  <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
+                    {fmtNum(a.vendas_sem_pares)} venda(s) sem qtd. de pares —
+                    custo/ticket por par abaixo não as considera
+                  </p>
+                )}
+              </CardHeader>
+            </Card>
+          );
+        })}
         {resumo && (
-          <Card>
+          <Card className="hud-marketing-kpi">
             <CardHeader
-              className="pb-2 px-4 pt-4"
               title="Frete pago pela Hud Lab ÷ pares das vendas com frete informado (inclui as que o cliente pagou)"
             >
-              <CardDescription className="text-xs">Frete por par</CardDescription>
+              <CardDescription className="hud-marketing-kpi-label">
+                <span className="hud-kpi-icon" aria-hidden="true"><Truck /></span>
+                Frete por par
+              </CardDescription>
               <CardTitle className="text-xl leading-tight">
                 {frete ? nd(fretePorPar, fmtBrl) : "…"}
               </CardTitle>
@@ -600,7 +627,7 @@ export function VisaoGeral({
         )}
       </div>
 
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+      <div className="hud-marketing-charts">
         {/* Funil de vendas */}
         <Card>
           <CardHeader>
@@ -640,7 +667,7 @@ export function VisaoGeral({
                           </div>
                           <div className="h-5 rounded bg-muted overflow-hidden">
                             <div
-                              className="h-full rounded bg-emerald-600/80"
+                              className="hud-funnel-bar h-full rounded"
                               style={{ width: `${(100 * f.qtd) / maxFunil}%` }}
                             />
                           </div>
@@ -674,32 +701,48 @@ export function VisaoGeral({
             ) : (
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={serie}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="bucket" tickFormatter={fmtDataCurta} fontSize={11} />
+                  <ComposedChart data={serie}>
+                    <defs>
+                      <linearGradient id={revenueGradient} x1="0" y1="0" x2="0" y2="1">
+                        <stop stopColor="var(--hud-chart-current)" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="var(--hud-chart-current)" stopOpacity={0.02} />
+                      </linearGradient>
+                      <linearGradient id={spendGradient} x1="0" y1="0" x2="0" y2="1">
+                        <stop stopColor="var(--hud-chart-target)" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="var(--hud-chart-target)" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
+                    <XAxis dataKey="bucket" tickFormatter={fmtDataCurta} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
                     <YAxis
                       tickFormatter={(x: number) => fmtBrl(x)}
-                      fontSize={11}
+                      tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
                       width={85}
                     />
                     <Tooltip
+                      contentStyle={{ background: "var(--card)", borderColor: "var(--border)", borderRadius: 10 }}
+                      itemStyle={{ color: "var(--foreground)" }}
                       formatter={(x: number) => fmtBrl(x)}
                       labelFormatter={(bucket: string) => fmtDataCurta(bucket)}
                     />
                     <Legend />
-                    <Line
+                    <Area
                       type="monotone"
                       dataKey="investimento"
+                      fill={`url(#${spendGradient})`}
                       name="Investimento"
-                      stroke="#f59e0b"
+                      stroke="var(--hud-chart-target)"
                       strokeWidth={2}
                       dot={false}
                     />
-                    <Line
+                    <Area
                       type="monotone"
                       dataKey="faturamento"
+                      fill={`url(#${revenueGradient})`}
                       name="Faturamento"
-                      stroke="#10b981"
+                      stroke="var(--hud-chart-current)"
                       strokeWidth={2}
                       dot={false}
                     />
@@ -708,7 +751,7 @@ export function VisaoGeral({
                         type="monotone"
                         dataKey="investimentoAnterior"
                         name="Investimento (período anterior)"
-                        stroke="#f59e0b"
+                        stroke="var(--hud-chart-target)"
                         strokeOpacity={0.45}
                         strokeDasharray="4 4"
                         strokeWidth={2}
@@ -720,14 +763,14 @@ export function VisaoGeral({
                         type="monotone"
                         dataKey="faturamentoAnterior"
                         name="Faturamento (período anterior)"
-                        stroke="#10b981"
+                        stroke="var(--hud-chart-current)"
                         strokeOpacity={0.45}
                         strokeDasharray="4 4"
                         strokeWidth={2}
                         dot={false}
                       />
                     )}
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}

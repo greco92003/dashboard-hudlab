@@ -22,6 +22,7 @@ export function ThemeToggle() {
     <div className="flex items-center gap-2">
       <Sun className="h-4 w-4" />
       <Switch 
+        aria-label="Modo escuro"
         checked={theme === 'dark'} 
         onCheckedChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />

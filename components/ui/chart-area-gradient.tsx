@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Legend } from "recharts";
 
@@ -39,6 +40,8 @@ export function ChartAreaGradient({
   period,
   prevYearData,
 }: ChartProps) {
+  const revenueGradient = useId();
+  const previousGradient = useId();
   // Merge previous year data into current data by index position
   const mergedData =
     prevYearData && prevYearData.length > 0
@@ -105,7 +108,7 @@ export function ChartAreaGradient({
     },
     prevRevenue: {
       label: "Ano Anterior",
-      color: "#9ca3af",
+      color: "var(--hud-chart-previous, #9ca3af)",
     },
   } satisfies ChartConfig;
 
@@ -126,7 +129,7 @@ export function ChartAreaGradient({
   };
 
   return (
-    <Card className="h-[400px] flex flex-col">
+    <Card className="hud-chart-height h-[400px] flex flex-col">
       <CardHeader className="py-3">
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -153,7 +156,8 @@ export function ChartAreaGradient({
               tickFormatter={formatDate}
             />
             <YAxis
-              tickFormatter={(value) => `R$${value}`}
+              tickFormatter={(value) => value >= 1000 ? `R$ ${value / 1000} mil` : `R$ ${value}`}
+              width={72}
               tickLine={false}
               axisLine={false}
               tickMargin={8}
@@ -194,7 +198,7 @@ export function ChartAreaGradient({
               />
             )}
             <defs>
-              <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={revenueGradient} x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
                   stopColor="var(--color-revenue)"
@@ -206,23 +210,27 @@ export function ChartAreaGradient({
                   stopOpacity={0.1}
                 />
               </linearGradient>
+              <linearGradient id={previousGradient} x1="0" y1="0" x2="0" y2="1">
+                <stop stopColor="var(--color-prevRevenue)" stopOpacity={0.22} />
+                <stop offset="100%" stopColor="var(--color-prevRevenue)" stopOpacity={0.02} />
+              </linearGradient>
             </defs>
             {prevYearData && prevYearData.length > 0 && (
               <Area
                 dataKey="prevRevenue"
                 type="monotone"
-                fill="none"
-                stroke="#9ca3af"
+                fill={`url(#${previousGradient})`}
+                stroke="var(--color-prevRevenue)"
                 strokeWidth={1.5}
                 strokeDasharray="5 5"
-                strokeOpacity={0.6}
+                strokeOpacity={0.85}
                 dot={false}
               />
             )}
             <Area
               dataKey="revenue"
               type="monotone"
-              fill="url(#fillRevenue)"
+              fill={`url(#${revenueGradient})`}
               fillOpacity={0.4}
               stroke="var(--color-revenue)"
               strokeWidth={2}
