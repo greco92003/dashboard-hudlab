@@ -1088,13 +1088,48 @@
   background: var(--border);
 }
 
-.hud-strip > div {
+.hud-strip > * {
   display: grid;
   min-width: 0;
   align-content: start;
   gap: 0.4rem;
   padding: 0.875rem 1rem;
   background: linear-gradient(160deg, var(--hud-surface-top), var(--card));
+}
+
+/* Célula que filtra: o mesmo visual, com marca embaixo quando escolhida. */
+.hud-strip > button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud-strip > button:hover {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 8%, var(--hud-surface-top)),
+    var(--card)
+  );
+}
+
+.hud-strip > button[aria-pressed="true"] {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 16%, var(--hud-surface-top)),
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 6%, var(--card))
+  );
+  box-shadow: inset 0 -2px var(--tone, var(--hud-accent-1));
+}
+
+.hud-strip > button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.hud-strip[data-filtrando] > button[aria-pressed="false"] .hud-strip-value {
+  opacity: 0.55;
 }
 
 .hud-strip-label {

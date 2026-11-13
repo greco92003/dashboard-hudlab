@@ -7,6 +7,7 @@ const {
   situacaoDoCard,
   rotuloDaSituacao,
   quandoTexto,
+  compararNaLista,
 } = await import("../lib/fechamento/regras.ts");
 
 // Turno da Schay (08:30-12:00 e 14:00-18:00, segunda a sexta, Brasília).
@@ -140,6 +141,53 @@ test("ordem: vermelho, laranja, amarelo, verde, cinza, Cami", () => {
   ];
   const cores = [...cards].sort((a, b) => a.ordem - b.ordem).map((c) => c.cor);
   assert.deepEqual(cores, ["vermelho", "laranja", "amarelo", "verde", "cinza", "cami"]);
+});
+
+test("dentro da situação: quente antes; esperando resposta por ordem de chegada; última chance na frente", () => {
+  const agora = brt("2026-11-13T09:00");
+  // Janela fechada, follow-up por modelo vencido: "hoje, por modelo" (amarelo).
+  const modelo = (dia) => situacaoDoCard({ ...base, ultimaClienteEm: brt(`${dia}T10:00`), ultimaNossaEm: brt(`${dia}T10:05`) }, agora, TURNOS);
+  const lista = [
+    { id: "perdendo-antigo", situacao: modelo("2026-11-09"), sinal: "perdendo" },
+    { id: "esfriando", situacao: modelo("2026-11-10"), sinal: "esfriando" },
+    { id: "sem-leitura", situacao: modelo("2026-11-09"), sinal: null },
+    { id: "quente-recente", situacao: modelo("2026-11-11"), sinal: "quente" },
+    { id: "quente-antigo", situacao: modelo("2026-11-09"), sinal: "quente" },
+  ];
+  assert.ok(lista.every((c) => c.situacao.cor === "amarelo"));
+  assert.deepEqual(
+    [...lista].sort(compararNaLista).map((c) => c.id),
+    ["quente-antigo", "quente-recente", "sem-leitura", "esfriando", "perdendo-antigo"],
+  );
+
+  // Cliente esperando: quem espera há mais tempo primeiro, mesmo que não seja quente.
+  const esperando = (hora, sinal, id) => ({
+    id,
+    sinal,
+    situacao: situacaoDoCard({ ...base, ultimaClienteEm: brt(`2026-11-13T${hora}`), clienteEsperando: true }, agora, TURNOS),
+  });
+  assert.deepEqual(
+    [esperando("08:50", "quente", "quente-agora"), esperando("07:00", "perdendo", "perdendo-antes")].sort(compararNaLista).map((c) => c.id),
+    ["perdendo-antes", "quente-agora"],
+  );
+
+  // A situação continua mandando: quente em dia fica depois de qualquer "hoje".
+  const emDia = { id: "quente-em-dia", sinal: "quente", situacao: situacaoDoCard({ ...base, ultimaClienteEm: brt("2026-11-12T20:00"), ultimaNossaEm: brt("2026-11-13T15:00") }, agora, TURNOS) };
+  assert.equal(emDia.situacao.cor, "verde");
+  assert.equal([emDia, lista[0]].sort(compararNaLista)[0].id, "perdendo-antigo");
+
+  // Última chance da janela grátis passa na frente do quente no "hoje, grátis".
+  const tarde = brt("2026-11-13T11:30");
+  const janela = (cliente, sinal, id) => ({
+    id,
+    sinal,
+    situacao: situacaoDoCard({ ...base, ultimaClienteEm: brt(cliente), ultimaNossaEm: brt(cliente) + 60_000 }, tarde, TURNOS),
+  });
+  const ultima = janela("2026-11-12T12:20", "esfriando", "ultima-chance");
+  const quente = janela("2026-11-13T08:00", "quente", "quente-com-folga");
+  assert.equal(ultima.situacao.ultimaChance, true);
+  assert.equal(quente.situacao.cor, "laranja");
+  assert.deepEqual([quente, ultima].sort(compararNaLista).map((c) => c.id), ["ultima-chance", "quente-com-folga"]);
 });
 
 test("texto de quando", () => {

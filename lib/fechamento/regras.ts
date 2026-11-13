@@ -108,6 +108,31 @@ export interface Situacao {
 
 const PESO: Record<Cor, number> = { vermelho: 0, laranja: 1, amarelo: 2, verde: 3, cinza: 4, cami: 5 };
 
+/** Temperatura lida pela Cami: perto de fechar primeiro. Sem leitura conta como neutro. */
+const PESO_SINAL: Record<string, number> = { quente: 0, neutro: 1, esfriando: 2, perdendo: 3 };
+const pesoDoSinal = (sinal: string | null) => PESO_SINAL[sinal ?? "neutro"] ?? PESO_SINAL.neutro;
+
+/**
+ * Ordem da lista (combinada em 13/11/2026): a situação do follow-up manda; dentro
+ * dela, a temperatura; por último o prazo mais antigo. Assim um quente com
+ * follow-up atrasado não fica no fim de 40 cards de "hoje, por modelo".
+ * - Cliente esperando resposta: por ordem de chegada, sem olhar temperatura.
+ * - Última chance da janela grátis passa na frente dentro do "hoje, grátis".
+ */
+export function compararNaLista(
+  a: { situacao: Situacao; sinal: string | null },
+  b: { situacao: Situacao; sinal: string | null },
+): number {
+  const porCor = PESO[a.situacao.cor] - PESO[b.situacao.cor];
+  if (porCor !== 0) return porCor;
+  if (a.situacao.cor !== "vermelho") {
+    if (a.situacao.ultimaChance !== b.situacao.ultimaChance) return a.situacao.ultimaChance ? -1 : 1;
+    const porSinal = pesoDoSinal(a.sinal) - pesoDoSinal(b.sinal);
+    if (porSinal !== 0) return porSinal;
+  }
+  return a.situacao.ordem - b.situacao.ordem;
+}
+
 export function situacaoDoCard(e: EstadoDoCard, nowMs: number, turnos: Turnos): Situacao {
   const janelaFechaEm = e.ultimaClienteEm != null ? e.ultimaClienteEm + JANELA_MS : null;
   const janelaAberta = janelaFechaEm != null && nowMs < janelaFechaEm;

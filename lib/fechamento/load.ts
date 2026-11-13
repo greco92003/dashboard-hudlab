@@ -3,7 +3,7 @@ import "server-only";
 import { loadSellerSettings } from "@/lib/ghl/ai-seller/settings";
 import { createSupabaseServerForSync } from "@/lib/supabase/server";
 import { estadoDaLinha, type LinhaDoCard } from "./linha";
-import { quandoTexto, rotuloDaSituacao, situacaoDoCard, type Cor } from "./regras";
+import { compararNaLista, quandoTexto, rotuloDaSituacao, situacaoDoCard, type Cor } from "./regras";
 
 export interface CardDoPainel {
   oportunidadeId: string;
@@ -68,9 +68,9 @@ export async function carregarPainel(): Promise<Painel> {
         ? `https://app.gohighlevel.com/v2/location/${location}/conversations/conversations/${l.conversation_id}`
         : null,
     };
-    return { card, ordem: s.ordem };
+    return { card, situacao: s, sinal: l.sinal };
   });
-  lista.sort((a, b) => a.ordem - b.ordem);
+  lista.sort(compararNaLista);
 
   const contagem: Record<Cor, number> = { vermelho: 0, laranja: 0, amarelo: 0, verde: 0, cinza: 0, cami: 0 };
   let valorEmFechamento = 0;

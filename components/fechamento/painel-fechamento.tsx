@@ -128,6 +128,18 @@ const SINAL: Record<string, { nome: string; tom: string }> = {
   perdendo: { nome: "Perdendo", tom: "tone-rose" },
 };
 
+/** Temperatura lida pela Cami, para o filtro. "sem": a Cami ainda não leu a conversa. */
+type Temperatura = "quente" | "neutro" | "esfriando" | "perdendo" | "sem";
+const TEMPERATURAS: { chave: Temperatura; nome: string; tom: string }[] = [
+  { chave: "quente", nome: "Quente", tom: "tone-green" },
+  { chave: "neutro", nome: "Neutro", tom: "tone-slate" },
+  { chave: "esfriando", nome: "Esfriando", tom: "tone-sky" },
+  { chave: "perdendo", nome: "Perdendo", tom: "tone-rose" },
+  { chave: "sem", nome: "Sem leitura", tom: "tone-slate" },
+];
+const temperaturaDe = (c: CardDoPainel): Temperatura =>
+  c.sinal === "quente" || c.sinal === "neutro" || c.sinal === "esfriando" || c.sinal === "perdendo" ? c.sinal : "sem";
+
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const hora = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "-";
@@ -179,6 +191,8 @@ export function PainelDeFechamento() {
   const [pip, setPip] = useState<Window | null>(null);
   const [confirmar, setConfirmar] = useState<{ card: CardDoPainel; acao: "modelo" | "fechou" } | null>(null);
   const [perder, setPerder] = useState<CardDoPainel | null>(null);
+  const [filtroCor, setFiltroCor] = useState<Cor | null>(null);
+  const [filtroTemp, setFiltroTemp] = useState<Temperatura | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const alertasAntes = useRef<number | null>(null);
 
@@ -303,6 +317,23 @@ export function PainelDeFechamento() {
   };
 
   const cards = painel?.cards ?? [];
+  // Filtro cruzado: os números de cada filtro já respeitam o outro.
+  const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
+  const porSituacao = filtroCor ? cards.filter((c) => c.cor === filtroCor) : cards;
+  const visiveis = filtroCor ? porTemperatura.filter((c) => c.cor === filtroCor) : porTemperatura;
+  const contagemCor: Record<Cor, number> = { vermelho: 0, laranja: 0, amarelo: 0, verde: 0, cinza: 0, cami: 0 };
+  let valorFiltrado = 0;
+  for (const c of porTemperatura) {
+    contagemCor[c.cor]++;
+    valorFiltrado += c.valor ?? 0;
+  }
+  const contagemTemp: Record<Temperatura, number> = { quente: 0, neutro: 0, esfriando: 0, perdendo: 0, sem: 0 };
+  for (const c of porSituacao) contagemTemp[temperaturaDe(c)]++;
+  const filtrando = filtroCor !== null || filtroTemp !== null;
+  const limparFiltros = () => {
+    setFiltroCor(null);
+    setFiltroTemp(null);
+  };
 
   return (
     <div className="flex flex-1 flex-col gap-4 sm:gap-5">
@@ -336,7 +367,25 @@ export function PainelDeFechamento() {
         </div>
       </div>
 
-      {painel && <FaixaDeIndicadores painel={painel} />}
+      {painel && (
+        <>
+          <FaixaDeIndicadores
+            contagem={contagemCor}
+            valor={valorFiltrado}
+            total={porTemperatura.length}
+            filtro={filtroCor}
+            onFiltro={setFiltroCor}
+          />
+          <BarraDeTemperatura
+            contagem={contagemTemp}
+            filtro={filtroTemp}
+            onFiltro={setFiltroTemp}
+            mostrando={visiveis.length}
+            total={cards.length}
+            onLimpar={filtrando ? limparFiltros : null}
+          />
+        </>
+      )}
 
       {carregando ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
@@ -344,9 +393,16 @@ export function PainelDeFechamento() {
         <div className="hud-panel py-10 text-center text-sm text-muted-foreground">
           Nenhum card nas etapas do painel. Toque em Atualizar para ler o GHL.
         </div>
+      ) : visiveis.length === 0 ? (
+        <div className="hud-panel flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+          Nenhum card com esses filtros.
+          <Button variant="outline" size="sm" onClick={limparFiltros}>
+            Limpar filtros
+          </Button>
+        </div>
       ) : (
         <div className="grid gap-3 min-[1400px]:grid-cols-2">
-          {cards.map((card) => (
+          {visiveis.map((card) => (
             <CardDeFechamento
               key={card.oportunidadeId}
               card={card}
@@ -459,9 +515,9 @@ function CopiarLink({ link, compacto = false }: { link: string; compacto?: boole
     );
   }
   return (
-    <Button size="sm" className="hud-btn-accent h-8" onClick={(e) => void copiar(e)}>
+    <Button size="sm" className="hud-btn-accent h-8" title="Copiar o link da conversa" onClick={(e) => void copiar(e)}>
       {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      {copiado ? "Link copiado" : "Copiar link da conversa"}
+      {copiado ? "Link copiado" : "Copiar link"}
     </Button>
   );
 }
@@ -480,31 +536,116 @@ function Contagem({ contagem }: { contagem: Record<Cor, number> }) {
 }
 
 /**
- * Faixa de indicadores do topo: o valor em fechamento e uma célula por cor,
- * sempre todas (zero fica apagado), para a posição de cada número não mudar.
+ * Faixa de indicadores do topo, que também filtra por situação: cada célula é
+ * um botão (de novo para soltar) e a primeira mostra todos. Os números já
+ * respeitam o filtro de temperatura, então dá para ver, por exemplo, quantos
+ * quentes há em cada situação. Sempre todas as células (zero fica apagado),
+ * para a posição de cada número não mudar.
  */
-function FaixaDeIndicadores({ painel }: { painel: Painel }) {
+function FaixaDeIndicadores({
+  contagem,
+  valor,
+  total,
+  filtro,
+  onFiltro,
+}: {
+  contagem: Record<Cor, number>;
+  valor: number;
+  total: number;
+  filtro: Cor | null;
+  onFiltro: (cor: Cor | null) => void;
+}) {
   return (
-    <div className="hud-panel hud-strip grid-cols-2 sm:grid-cols-3 xl:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))]">
-      <div className="col-span-2 sm:col-span-3 xl:col-span-1">
-        <span className="hud-strip-label">Em fechamento</span>
+    <div
+      className="hud-panel hud-strip grid-cols-2 sm:grid-cols-3 xl:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))]"
+      role="group"
+      aria-label="Filtrar por situação"
+      data-filtrando={filtro ? "" : undefined}
+    >
+      <button
+        type="button"
+        className="col-span-2 sm:col-span-3 xl:col-span-1"
+        aria-pressed={filtro === null}
+        onClick={() => onFiltro(null)}
+      >
+        <span className="hud-strip-label">Em fechamento · {total} {total === 1 ? "card" : "cards"}</span>
         <span className="hud-strip-value" style={{ color: "var(--hud-accent-text)" }}>
-          {brl(painel.valorEmFechamento)}
+          {brl(valor)}
         </span>
-      </div>
+      </button>
       {ORDEM_CORES.map((c) => {
-        const n = painel.contagem[c];
+        const n = contagem[c];
         const alerta = c === "vermelho" && n > 0;
         return (
-          <div key={c} className={COR[c].tom}>
+          <button
+            key={c}
+            type="button"
+            className={COR[c].tom}
+            aria-pressed={filtro === c}
+            onClick={() => onFiltro(filtro === c ? null : c)}
+          >
             <span className="hud-strip-label">
               <span className={cn("h-2 w-2 shrink-0 rounded-full hud-tone-dot", alerta && "hud-tone-blink")} />
-              <span className="truncate">{COR[c].nome.charAt(0).toUpperCase() + COR[c].nome.slice(1)}</span>
+              <span className="truncate" title={COR[c].nome}>{COR[c].nome.charAt(0).toUpperCase() + COR[c].nome.slice(1)}</span>
             </span>
             <span className={cn("hud-strip-value", alerta && "hud-tone-text", n === 0 && "text-muted-foreground")}>{n}</span>
-          </div>
+          </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Filtro de temperatura (a leitura da Cami) e o resumo do que está na tela. */
+function BarraDeTemperatura({
+  contagem,
+  filtro,
+  onFiltro,
+  mostrando,
+  total,
+  onLimpar,
+}: {
+  contagem: Record<Temperatura, number>;
+  filtro: Temperatura | null;
+  onFiltro: (t: Temperatura | null) => void;
+  mostrando: number;
+  total: number;
+  onLimpar: (() => void) | null;
+}) {
+  const opcoes = TEMPERATURAS.filter((t) => t.chave !== "sem" || contagem.sem > 0);
+  return (
+    <div className="hud-panel hud-bar">
+      <div className="hud-field">
+        <span className="hud-field-label">Temperatura</span>
+        <div className="hud-group" role="group" aria-label="Filtrar por temperatura">
+          {opcoes.map((t) => (
+            <button
+              key={t.chave}
+              type="button"
+              aria-pressed={filtro === t.chave}
+              className={filtro === t.chave ? undefined : cn(t.tom, "hud-tone-text")}
+              onClick={() => onFiltro(filtro === t.chave ? null : t.chave)}
+            >
+              {t.nome}
+              <span className="hud-n">{contagem[t.chave]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="ml-auto flex h-9 items-center gap-2 text-sm text-muted-foreground">
+        {onLimpar ? (
+          <>
+            <span>
+              Mostrando {mostrando} de {total}
+            </span>
+            <Button variant="ghost" size="sm" className="h-8" onClick={onLimpar}>
+              Limpar filtros
+            </Button>
+          </>
+        ) : (
+          <span>Ordem: situação, depois temperatura, depois o prazo mais antigo</span>
+        )}
+      </div>
     </div>
   );
 }
