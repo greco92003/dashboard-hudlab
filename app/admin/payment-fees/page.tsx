@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Save, Info } from "lucide-react";
+import { CreditCard, Save, Info } from "lucide-react";
 import { DEFAULT_NUVEM_PAGO_FEES, PaymentFeeConfig } from "@/lib/payment-fees";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 export default function PaymentFeesConfigPage() {
   const [config, setConfig] = useState<PaymentFeeConfig>(
@@ -47,21 +48,18 @@ export default function PaymentFeesConfigPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">
-          Configuração de Taxas de Pagamento
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Configure as taxas do Nuvem Pago para cálculo estimado de custos
-        </p>
-      </div>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={CreditCard}
+        titulo="Configuração de Taxas de Pagamento"
+        descricao="Configure as taxas do Nuvem Pago para cálculo estimado de custos"
+      />
 
-      <Card className="border-blue-200 bg-blue-50">
+      <Card className="tone-sky hud-tone-card">
         <CardContent className="pt-6">
           <div className="flex gap-3">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-900">
+            <Info className="tone-sky hud-tone-text h-5 w-5 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
               <p className="font-semibold mb-2">Importante:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>Estas são taxas ESTIMADAS para cálculos internos</li>

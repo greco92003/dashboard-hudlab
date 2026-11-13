@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   Target,
@@ -27,6 +26,7 @@ import {
   formatarData,
   diasRestantes,
 } from "@/lib/ncts";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 export default function NarrativaDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -148,13 +148,18 @@ export default function NarrativaDetalhe() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <Target className="h-6 w-6 text-primary" />
-        <h1 className="text-xl font-bold">Narrativa</h1>
-      </div>
+      <CabecalhoDaPagina
+        icone={Target}
+        titulo="Narrativa"
+        acoes={
+          <GrupoDeAcoes rotulo="Navegação">
+            <button type="button" onClick={() => router.back()}>
+              <ArrowLeft />
+              Voltar
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {/* Cabeçalho */}
       <Card

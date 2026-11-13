@@ -461,7 +461,7 @@ export function MockupInstructionDetail() {
   const stageStyle = deal ? mockupStageStyle(deal.stageName) : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6">
+    <div className="flex flex-1 flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
           <Button variant="ghost" size="sm" className="-ml-3 mb-2" asChild>
