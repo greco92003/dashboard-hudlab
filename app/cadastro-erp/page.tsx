@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileImage,
   Loader2,
+  Database,
   PackagePlus,
   ReceiptText,
   Search,
@@ -69,6 +70,7 @@ import {
 import { ContactImportCard } from "./contact-import-card";
 import { SalesOrderCard } from "./sales-order-card";
 import { artworkEmbedUrl, artworkThumbnailUrl } from "@/lib/erp/artwork-url";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 type ProductMapping = {
   mode: "clone" | "existing";
@@ -621,26 +623,23 @@ export default function CadastroErpPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
-            <PackagePlus className="h-4 w-4" /> ERP · Cadastro de produtos
+    <div className="flex w-full flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Database}
+        titulo="Cadastro ERP"
+        descricao="GHL → Tiny: escolha o contato e o deal, relacione cada modelo da ficha a um cloner e valide os produtos antes do cadastro."
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="hud-chip tone-green hud-tone-chip">Cadastro real habilitado</span>
+            <GrupoDeAcoes rotulo="Ações do cadastro ERP">
+              <Link href="/cadastro-erp/pedidos">
+                <ReceiptText />
+                Pedidos
+              </Link>
+            </GrupoDeAcoes>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">GHL → Tiny</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Escolha o contato e o deal, relacione cada modelo da ficha a um cloner e valide os produtos antes do cadastro.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-            Cadastro real habilitado
-          </Badge>
-          <Button asChild variant="outline">
-            <Link href="/cadastro-erp/pedidos"><ReceiptText /> Pedidos</Link>
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

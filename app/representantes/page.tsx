@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Types from secondary database
 interface Representante {
@@ -196,13 +197,15 @@ export default function RepresentantesPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold mb-6">
-        Representantes e Afiliados
-      </h1>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Users}
+        titulo="Representantes e Afiliados"
+        descricao="Cadastro de representantes e afiliados, com os cupons e as vendas de cada um"
+      />
 
       {error && (
-        <Alert variant="destructive" className="mb-6">
+        <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>

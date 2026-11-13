@@ -12,6 +12,7 @@ import { OTESellerDashboard, OTEConfig } from "@/types/ote";
 import { DollarSign, AlertCircle, Settings, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { usePermissions } from "@/hooks/usePermissions";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const MONTH_NAMES = [
   "Janeiro",
@@ -84,8 +85,8 @@ export default function OTEPage() {
 
   if (loading || permissionsLoading) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Dashboard OTE</h1>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina icone={DollarSign} titulo="Dashboard OTE" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Skeleton className="h-40" />
           <Skeleton className="h-40" />
@@ -100,29 +101,21 @@ export default function OTEPage() {
   // Se for admin/owner e não estiver cadastrado como vendedor, mostrar interface de seleção
   if (isNotRegistered && isOwnerOrAdmin) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
-              <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
-              Dashboard OTE - Administração
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Visualize os resultados de todos os vendedores
-            </p>
-          </div>
-          <Link href="/ote/admin">
-            <Button
-              variant="outline"
-              className="flex items-center gap-2 w-full sm:w-auto text-sm"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Painel Admin</span>
-              <span className="sm:hidden">Admin</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina
+          icone={Settings}
+          titulo="Dashboard OTE · Administração"
+          descricao="Visualize os resultados de todos os vendedores"
+          acoes={
+            <GrupoDeAcoes rotulo="Ações do OTE">
+              <Link href="/ote/admin">
+                <Settings />
+                Painel Admin
+                <ArrowRight />
+              </Link>
+            </GrupoDeAcoes>
+          }
+        />
 
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -160,8 +153,8 @@ export default function OTEPage() {
   // Se não for admin/owner e não estiver cadastrado, mostrar erro
   if (error && isNotRegistered && !isOwnerOrAdmin) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Meu Dashboard OTE</h1>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina icone={DollarSign} titulo="Meu Dashboard OTE" />
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Não Cadastrado</AlertTitle>
@@ -177,8 +170,8 @@ export default function OTEPage() {
   // Outros erros
   if (error && !isNotRegistered) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Meu Dashboard OTE</h1>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina icone={DollarSign} titulo="Meu Dashboard OTE" />
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erro</AlertTitle>
@@ -193,20 +186,12 @@ export default function OTEPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
-            <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="hidden sm:inline">Meu Dashboard OTE</span>
-            <span className="sm:hidden">Dashboard OTE</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            {MONTH_NAMES[currentMonth]} de {currentYear}
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-1 flex-col gap-4 sm:gap-6">
+      <CabecalhoDaPagina
+        icone={DollarSign}
+        titulo="Meu Dashboard OTE"
+        descricao={`${MONTH_NAMES[currentMonth]} de ${currentYear}`}
+      />
 
       {/* Alerta se não houver meta */}
       {!dashboard.monthly_target && (

@@ -67,6 +67,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Money input helpers (same pattern as fixed-costs)
 const formatCurrencyDisplay = (value: number): string =>
@@ -496,22 +497,18 @@ export default function ToolsCostPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Custos de Ferramentas
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Gerencie os custos mensais das ferramentas utilizadas
-            </p>
-          </div>
-          <Button onClick={openCreateDialog} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Ferramenta
-          </Button>
-        </div>
+      <div className="flex flex-col gap-5">
+        <CabecalhoDaPagina
+          icone={Wrench}
+          titulo="Custos de Ferramentas"
+          descricao="Gerencie os custos mensais das ferramentas utilizadas"
+          acoes={
+            <Button onClick={openCreateDialog} className="hud-btn-accent h-9 gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Ferramenta
+            </Button>
+          }
+        />
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

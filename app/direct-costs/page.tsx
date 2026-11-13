@@ -13,6 +13,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  HandCoins,
 } from "lucide-react";
 import {
   Dialog,
@@ -25,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserInfoPopover } from "@/components/user-info-popover";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Define the direct cost type
 interface DirectCost {
@@ -342,10 +344,10 @@ export default function DirectCostsPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Custos Diretos</h1>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina icone={HandCoins} titulo="Custos Diretos" descricao="Custo de produção por par" />
 
-      <Card className="mb-6 mt-4">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base sm:text-lg">
             Custo Total por Par
@@ -358,7 +360,7 @@ export default function DirectCostsPage() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <h2 className="text-lg sm:text-xl font-semibold">
           Lista de Custos Diretos
         </h2>
