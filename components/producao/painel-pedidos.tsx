@@ -9,7 +9,7 @@ import { isEtapaConcluivel } from "@/lib/ghl/programacao-stages";
 import { formatDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
 import { rotuloDoDia, somaDePares, statusCurto, tomDoGrupo } from "@/lib/producao/dias";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 /**
  * Peças do Painel Produção (chão de fábrica). Um pedido é uma linha: tipo, nome,
@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
  * - Celular: lista por dia, a linha abre ali mesmo.
  * - Tablet deitado: lista à esquerda, o pedido tocado abre no painel à direita.
  * - Computador e TV: as mesmas linhas, em colunas por dia.
+ * Também usadas pela Programação e pela Expedição (mesma família de quadros),
+ * que ligam o valor do pedido e o "fora da média de pares/dia".
  * O visual está em app/hud-dashboard.css (classes prod-*).
  */
 
@@ -57,11 +59,17 @@ export function AcoesPedido({
   );
 }
 
-function DadosDoPedido({ deal }: { deal: BoardDeal }) {
+function DadosDoPedido({ deal, mostrarValor = false }: { deal: BoardDeal; mostrarValor?: boolean }) {
   return (
     <dl className="prod-kv">
       <dt>Embarque</dt>
       <dd>{deal.dataEmbarque ? formatDate(deal.dataEmbarque) : "Sem data"}</dd>
+      {mostrarValor && (
+        <>
+          <dt>Valor</dt>
+          <dd>{formatCurrency(deal.value / 100, deal.currency)}</dd>
+        </>
+      )}
       {deal.vendedor && (
         <>
           <dt>Vendedor</dt>
@@ -85,6 +93,8 @@ export function PedidoLinha({
   aberto = false,
   selecionado = false,
   seta = "expandir",
+  mostrarValor = false,
+  desligado = false,
   onToque,
   children,
 }: {
@@ -92,6 +102,10 @@ export function PedidoLinha({
   concluido?: boolean;
   aberto?: boolean;
   selecionado?: boolean;
+  /** Expedição: valor do pedido ao lado dos pares. */
+  mostrarValor?: boolean;
+  /** Programação: pedido fora da média de pares/dia (a linha fica apagada). */
+  desligado?: boolean;
   /** "abrir": o detalhe abre noutro lugar (painel do tablet). */
   seta?: "expandir" | "abrir";
   onToque?: () => void;
@@ -105,6 +119,7 @@ export function PedidoLinha({
       className={cn("prod-linha", status.tom)}
       data-aberto={aberto || undefined}
       data-selecionado={selecionado || undefined}
+      data-desligado={desligado || undefined}
     >
       <button
         type="button"
@@ -118,6 +133,9 @@ export function PedidoLinha({
         </span>
         <span className="prod-linha-meta">
           {deal.quantidadePares && <span>{deal.quantidadePares} pares</span>}
+          {mostrarValor && deal.value > 0 && (
+            <span className="tone-green hud-tone-text font-semibold">{formatCurrency(deal.value / 100, deal.currency)}</span>
+          )}
           {deal.stageTitle && (
             <span className={cn("prod-etapa hud-tone-chip", naMaquina ? "tone-green" : "tone-sky")}>
               {deal.stageTitle}
@@ -172,7 +190,17 @@ export function CabecalhoDoDia({
 }
 
 /** Painel do pedido aberto, à direita da lista no tablet deitado. */
-function PainelDoPedido({ deal, concluido, acoes }: { deal: BoardDeal; concluido: boolean; acoes?: ReactNode }) {
+function PainelDoPedido({
+  deal,
+  concluido,
+  acoes,
+  mostrarValor = false,
+}: {
+  deal: BoardDeal;
+  concluido: boolean;
+  acoes?: ReactNode;
+  mostrarValor?: boolean;
+}) {
   const status = statusCurto(deal.dataEmbarque, concluido);
   return (
     <div className="grid gap-4">
@@ -186,8 +214,11 @@ function PainelDoPedido({ deal, concluido, acoes }: { deal: BoardDeal; concluido
       </div>
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
         <div className="prod-dado">
-          <small>Pares</small>
-          <b>{deal.quantidadePares || "—"}</b>
+          <small>{mostrarValor ? "Pares · valor" : "Pares"}</small>
+          <b>
+            {deal.quantidadePares || "—"}
+            {mostrarValor && deal.value > 0 ? ` · ${formatCurrency(deal.value / 100, deal.currency)}` : ""}
+          </b>
         </div>
         <div className="prod-dado">
           <small>Etapa</small>
@@ -205,6 +236,14 @@ function PainelDoPedido({ deal, concluido, acoes }: { deal: BoardDeal; concluido
 
 type RenderAcoes = (deal: BoardDeal, grande: boolean) => ReactNode;
 
+/** Opções das telas do escritório (Programação e Expedição). */
+type OpcoesDaLinha = {
+  mostrarValor?: boolean;
+  estaDesligado?: (deal: BoardDeal) => boolean;
+  /** Texto do grupo sem pedidos (ex.: "Nada nesta etapa"). */
+  rotuloVazio?: string;
+};
+
 /**
  * Lista por dia (celular e tablet). Abre de cara só os dias de `abertosIniciais`;
  * os demais mostram a contagem e abrem no toque. Para reiniciar o que está aberto
@@ -215,12 +254,15 @@ export function ListaPorDia({
   grupoConcluidoId,
   abertosIniciais,
   renderAcoes,
+  mostrarValor = false,
+  estaDesligado,
+  rotuloVazio = "Nada aqui.",
 }: {
   grupos: BoardGroup[];
   grupoConcluidoId?: string;
   abertosIniciais: string[];
   renderAcoes: RenderAcoes;
-}) {
+} & OpcoesDaLinha) {
   const dividido = useMidia("(min-width: 1024px)");
   const [abertos, setAbertos] = useState(() => new Set(abertosIniciais));
   const [expandido, setExpandido] = useState<string | null>(null);
@@ -254,7 +296,7 @@ export function ListaPorDia({
             <CabecalhoDoDia grupo={g} aberto={aberto} onAlternar={() => alternarDia(g.id)} />
             {aberto &&
               (g.deals.length === 0 ? (
-                <p className="px-3 py-2 text-sm text-muted-foreground">Nada aqui.</p>
+                <p className="px-3 py-2 text-sm text-muted-foreground">{rotuloVazio}</p>
               ) : (
                 g.deals.map((d) => {
                   const concluido = g.id === grupoConcluidoId;
@@ -264,6 +306,8 @@ export function ListaPorDia({
                       deal={d}
                       concluido={concluido}
                       seta={dividido ? "abrir" : "expandir"}
+                      mostrarValor={mostrarValor}
+                      desligado={estaDesligado?.(d) ?? false}
                       aberto={!dividido && expandido === d.id}
                       selecionado={dividido && selecionadoId === d.id}
                       onToque={() =>
@@ -272,7 +316,7 @@ export function ListaPorDia({
                           : setExpandido((atual) => (atual === d.id ? null : d.id))
                       }
                     >
-                      <DadosDoPedido deal={d} />
+                      <DadosDoPedido deal={d} mostrarValor={mostrarValor} />
                       {renderAcoes(d, false)}
                     </PedidoLinha>
                   );
@@ -293,6 +337,7 @@ export function ListaPorDia({
           <PainelDoPedido
             deal={selecionado.deal}
             concluido={selecionado.concluido}
+            mostrarValor={mostrarValor}
             acoes={renderAcoes(selecionado.deal, true)}
           />
         ) : (
@@ -310,11 +355,14 @@ export function ColunasPorDia({
   grupos,
   grupoConcluidoId,
   renderAcoes,
+  mostrarValor = false,
+  estaDesligado,
+  rotuloVazio = "Nada aqui.",
 }: {
   grupos: BoardGroup[];
   grupoConcluidoId?: string;
   renderAcoes: RenderAcoes;
-}) {
+} & OpcoesDaLinha) {
   const [expandido, setExpandido] = useState<string | null>(null);
   return (
     <div className="flex h-full min-h-0 gap-3 overflow-x-auto pb-1">
@@ -323,17 +371,19 @@ export function ColunasPorDia({
           <CabecalhoDoDia grupo={g} />
           <div className="prod-coluna-corpo">
             {g.deals.length === 0 ? (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nada aqui.</p>
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">{rotuloVazio}</p>
             ) : (
               g.deals.map((d) => (
                 <PedidoLinha
                   key={d.id}
                   deal={d}
                   concluido={g.id === grupoConcluidoId}
+                  mostrarValor={mostrarValor}
+                  desligado={estaDesligado?.(d) ?? false}
                   aberto={expandido === d.id}
                   onToque={() => setExpandido((atual) => (atual === d.id ? null : d.id))}
                 >
-                  <DadosDoPedido deal={d} />
+                  <DadosDoPedido deal={d} mostrarValor={mostrarValor} />
                   {renderAcoes(d, false)}
                 </PedidoLinha>
               ))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,10 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Columns3,
+  Eye,
+  List,
+  Power,
   RefreshCw,
   PackageCheck,
   Search,
@@ -36,8 +40,7 @@ import {
   type MotivoFora,
 } from "@/components/programacao/fora-do-board";
 import { RelatorioDialog } from "@/components/programacao/relatorio-dialog";
-import { BoardColumns } from "@/components/programacao/board-columns";
-import { DealCard } from "@/components/programacao/deal-card";
+import { ColunasPorDia, ListaPorDia, useMidia } from "@/components/producao/painel-pedidos";
 import { DealDialog } from "@/components/programacao/deal-dialog";
 import {
   TipoPedidoFilter,
@@ -49,6 +52,8 @@ import {
 } from "@/lib/ghl/programacao-stages";
 import { isOverdue, parseDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
+import { ehHoje } from "@/lib/producao/dias";
+import { cn } from "@/lib/utils";
 
 const SEM_DATA_GROUP_ID = "sem-data";
 // Os ids do `.in()` viajam na querystring; em lotes para não estourar a URL.
@@ -466,15 +471,61 @@ export default function ProgramacaoPage() {
     0,
   );
   const hasFilters = normalizedSearch.length > 0 || tipoFilter.size > 0;
-  const cardWidth = (320 * zoomLevel) / 100;
-
   const handleDealClick = (deal: BoardDeal) => {
     setSelectedDeal(deal);
     setIsDealDialogOpen(true);
   };
 
+  // Colunas no computador, lista no celular e no tablet (como o Painel Produção);
+  // os botões Colunas | Lista fixam a escolha neste aparelho.
+  const [visao, setVisao] = useState<"auto" | "quadro" | "lista">("auto");
+  const telaLarga = useMidia("(min-width: 1280px)");
+  const modoQuadro = visao === "auto" ? telaLarga : visao === "quadro";
+  useEffect(() => {
+    const salva = storage.getItem("programacao-visao");
+    if (salva === "quadro" || salva === "lista") setVisao(salva);
+  }, []);
+  const mudarVisao = (nova: "quadro" | "lista") => {
+    setVisao(nova);
+    storage.setItem("programacao-visao", nova);
+  };
+
+  // Lista: abre de cara o atraso e o dia de hoje (ou o grupo "fora do board").
+  const abertosIniciais = grupoFora
+    ? [grupoFora.id]
+    : (() => {
+        const ids = gruposVisiveis
+          .filter((g) => g.id === EM_ATRASO_GROUP_ID || ehHoje(g.title))
+          .map((g) => g.id);
+        return ids.length > 0 ? ids : gruposVisiveis.slice(0, 1).map((g) => g.id);
+      })();
+
+  // Aberto, o pedido mostra os detalhes completos e o liga/desliga da média de
+  // pares/dia (que antes ficava no canto do card e era desligado sem querer).
+  const renderAcoes = (deal: BoardDeal) => {
+    const naMedia = activeCards.has(deal.id);
+    return (
+      <div className="grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+        <Button variant="outline" className="h-10" onClick={() => handleDealClick(deal)}>
+          <Eye className="h-4 w-4" />
+          Ver detalhes
+        </Button>
+        <Button
+          variant="outline"
+          className={cn("h-10 hud-tone-chip", naMedia ? "tone-green" : "tone-slate")}
+          aria-pressed={naMedia}
+          onClick={(e) => handleCardToggle(deal.id, e)}
+          title={naMedia ? "Tirar da média de pares/dia" : "Voltar para a média de pares/dia"}
+        >
+          <Power className="h-4 w-4" />
+          {naMedia ? "Na média" : "Fora da média"}
+        </Button>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       {!isHeaderCollapsed && (
         <>
           <div className="hud-v2-head flex-shrink-0">
@@ -644,6 +695,26 @@ export default function ProgramacaoPage() {
                 )}
               </div>
 
+              <div className="hud-group" role="group" aria-label="Visualização">
+                <button
+                  type="button"
+                  aria-pressed={modoQuadro}
+                  onClick={() => mudarVisao("quadro")}
+                  title="Colunas lado a lado"
+                  aria-label="Ver em colunas"
+                >
+                  <Columns3 />
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!modoQuadro}
+                  onClick={() => mudarVisao("lista")}
+                  title="Lista que rola para baixo"
+                  aria-label="Ver em lista"
+                >
+                  <List />
+                </button>
+              </div>
               <div className="hud-group" role="group" aria-label="Zoom do quadro">
                 <button
                   type="button"
@@ -670,7 +741,7 @@ export default function ProgramacaoPage() {
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden" style={{ fontSize: `${zoomLevel}%` }}>
             {gruposVisiveis.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <Search className="h-8 w-8 opacity-50" />
@@ -686,21 +757,24 @@ export default function ProgramacaoPage() {
                   Limpar filtros
                 </Button>
               </div>
+            ) : modoQuadro ? (
+              <div className="h-full p-3">
+                <ColunasPorDia
+                  grupos={gruposVisiveis}
+                  renderAcoes={renderAcoes}
+                  estaDesligado={(d) => !activeCards.has(d.id)}
+                />
+              </div>
             ) : (
-              <BoardColumns
-                groups={gruposVisiveis}
-                cardWidth={cardWidth}
-                renderCard={(deal) => (
-                  <DealCard
-                    key={deal.id}
-                    deal={deal}
-                    isActive={activeCards.has(deal.id)}
-                    showValue={false}
-                    onToggle={handleCardToggle}
-                    onClick={handleDealClick}
-                  />
-                )}
-              />
+              <div className="h-full overflow-y-auto p-3" style={{ "--prod-topo": "0px" } as CSSProperties}>
+                <ListaPorDia
+                  key={foraAtivo ?? "board"}
+                  grupos={gruposVisiveis}
+                  abertosIniciais={abertosIniciais}
+                  renderAcoes={renderAcoes}
+                  estaDesligado={(d) => !activeCards.has(d.id)}
+                />
+              </div>
             )}
           </div>
         </div>

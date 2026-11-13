@@ -1308,6 +1308,12 @@
   content: "";
 }
 
+/* Programação: pedido fora da média de pares/dia. */
+.prod-linha[data-desligado] {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+
 .prod-linha[data-selecionado] {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--hud-accent-1) 55%, transparent);
 }
