@@ -993,6 +993,22 @@
   }
 }
 
+/*
+ * Botão da caixa que só aparece numa faixa de largura. O display da caixa passa
+ * por cima de hidden/md:hidden do Tailwind, por isso as classes próprias.
+ */
+@media (min-width: 768px) {
+  .hud-group > .hud-so-pequena {
+    display: none;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .hud-group > .hud-so-grande {
+    display: none;
+  }
+}
+
 .hud-group-val {
   display: grid;
   min-width: 2.9rem;
@@ -1255,4 +1271,262 @@
   border-radius: 14px;
   background: color-mix(in srgb, var(--muted) 72%, transparent);
   box-shadow: none;
+}
+
+/*
+ * Painel Produção (chão de fábrica, /producao): linha do pedido, cabeçalho de
+ * dia, colunas e chips de filtro. Tamanhos em em, para a TV aumentar tudo de
+ * uma vez a partir de .prod-raiz.
+ */
+.prod-raiz {
+  font-size: 1rem;
+}
+
+@media (min-width: 1800px) {
+  .prod-raiz {
+    font-size: 1.15rem;
+  }
+}
+
+.prod-linha {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--border)) 24%, var(--border));
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone, transparent) 9%, transparent), transparent 60%),
+    var(--card);
+}
+
+.prod-linha::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--tone, var(--border));
+  content: "";
+}
+
+.prod-linha[data-selecionado] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hud-accent-1) 55%, transparent);
+}
+
+.prod-linha-topo {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25em 0.6em;
+  padding: 0.65em 0.65em 0.65em 0.95em;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prod-linha-topo:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.prod-linha-nome {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45em;
+  font-size: 0.9em;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.prod-linha-meta {
+  display: flex;
+  grid-column: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25em 0.5em;
+  color: var(--muted-foreground);
+  font-size: 0.78em;
+}
+
+.prod-linha-status {
+  grid-column: 1;
+  font-size: 0.78em;
+  font-weight: 650;
+}
+
+.prod-linha-seta {
+  grid-row: 1 / span 3;
+  grid-column: 2;
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--muted-foreground);
+  transition: transform 0.15s;
+}
+
+/* Aberta, a linha mostra o nome inteiro (fechada, corta com reticências). */
+.prod-linha[data-aberto] .prod-linha-nome > .truncate {
+  overflow: visible;
+  white-space: normal;
+}
+
+.prod-linha[data-aberto] .prod-linha-seta {
+  transform: rotate(180deg);
+}
+
+.prod-etapa {
+  display: inline-flex;
+  height: 1.55em;
+  align-items: center;
+  padding: 0 0.5em;
+  border-radius: 6px;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+.prod-linha-detalhe {
+  display: grid;
+  gap: 0.75em;
+  margin: 0 0.65em 0 0.95em;
+  padding: 0.7em 0 0.8em;
+  border-top: 1px solid var(--border);
+}
+
+.prod-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25em 0.9em;
+  font-size: 0.82em;
+}
+
+.prod-kv dt {
+  color: var(--muted-foreground);
+}
+
+.prod-dado {
+  display: grid;
+  gap: 0.2em;
+  padding: 0.6em 0.75em;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--muted);
+}
+
+.prod-dado small {
+  color: var(--muted-foreground);
+  font-size: 0.68em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prod-dado b {
+  font-size: 1.05em;
+  line-height: 1.2;
+}
+
+.prod-dia {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.6em 0.75em;
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, var(--border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tone) 10%, var(--card));
+  color: inherit;
+  font: inherit;
+  font-size: 0.86em;
+  text-align: left;
+}
+
+button.prod-dia {
+  cursor: pointer;
+}
+
+button.prod-dia:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.prod-coluna {
+  display: flex;
+  width: 21em;
+  min-width: 21em;
+  height: 100%;
+  min-height: 0;
+  flex: none;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.prod-coluna-corpo {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.4em;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+/* Filtros em uma linha só, rolando de lado no celular. */
+.hud-chips-linha {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.hud-chips-linha::-webkit-scrollbar {
+  display: none;
+}
+
+.hud-chip-filtro {
+  display: inline-flex;
+  height: 2.4em;
+  flex: none;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0 0.85em;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--muted-foreground)) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone, var(--muted-foreground)) 10%, transparent);
+  color: var(--tone, var(--foreground));
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hud-chip-filtro .hud-n {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.hud-chip-filtro[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--hud-accent-1) 50%, transparent);
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--hud-accent-1) 24%, transparent),
+    color-mix(in srgb, var(--hud-accent-2) 16%, transparent)
+  );
+  color: var(--hud-accent-text);
+}
+
+.hud-chip-filtro:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
