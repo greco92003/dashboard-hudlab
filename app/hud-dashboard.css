@@ -179,6 +179,15 @@
   border-radius: 4px;
 }
 
+/*
+ * Menu recolhido: o quadro do logo some e fica só o botão de expandir, centrado.
+ * O display: grid acima passava por cima do group-data-[collapsible=icon]:hidden
+ * do componente, e o logo aparecia espremido nos 48px, empurrando o botão para fora.
+ */
+.hud-theme [data-collapsible="icon"] .hud-sidebar-mark {
+  display: none;
+}
+
 .hud-theme [data-sidebar="group-label"] {
   color: var(--muted-foreground);
 }
