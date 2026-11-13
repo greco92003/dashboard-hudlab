@@ -7,7 +7,8 @@ import {
   BellRing,
   CalendarClock,
   CheckCircle2,
-  ExternalLink,
+  Check,
+  Copy,
   Flame,
   Loader2,
   MessageCircle,
@@ -397,6 +398,53 @@ export function PainelDeFechamento() {
   );
 }
 
+/**
+ * A Schay usa usuários diferentes no dashboard e no GHL: abrir o link caía no
+ * navegador sem login. O botão copia o link da conversa para ela colar onde o
+ * GHL está aberto. Usa a área de transferência do documento do clique: na
+ * janela flutuante, a aba de trás não está em foco e o navegador recusaria.
+ */
+function CopiarLink({ link, compacto = false }: { link: string; compacto?: boolean }) {
+  const [copiado, setCopiado] = useState(false);
+  const copiar = async (evento: React.MouseEvent<HTMLButtonElement>) => {
+    const doc = evento.currentTarget.ownerDocument;
+    const janela = doc.defaultView ?? window;
+    try {
+      await janela.navigator.clipboard.writeText(link);
+    } catch {
+      const campo = doc.createElement("textarea");
+      campo.value = link;
+      campo.style.position = "fixed";
+      campo.style.opacity = "0";
+      doc.body.appendChild(campo);
+      campo.select();
+      doc.execCommand("copy");
+      campo.remove();
+    }
+    setCopiado(true);
+    window.setTimeout(() => setCopiado(false), 2000);
+  };
+  if (compacto) {
+    return (
+      <Button
+        size="icon"
+        variant="outline"
+        className={cn("h-7 w-7", copiado && "border-emerald-500 text-emerald-600 dark:text-emerald-400")}
+        title={copiado ? "Link copiado" : "Copiar o link da conversa"}
+        onClick={(e) => void copiar(e)}
+      >
+        {copiado ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </Button>
+    );
+  }
+  return (
+    <Button size="sm" variant="default" onClick={(e) => void copiar(e)}>
+      {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+      {copiado ? "Link copiado" : "Copiar link da conversa"}
+    </Button>
+  );
+}
+
 function Contagem({ contagem }: { contagem: Record<Cor, number> }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -477,14 +525,7 @@ function CardDeFechamento({
           </div>
         )}
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {card.linkConversa && (
-            <Button asChild size="sm" variant="default">
-              <a href={card.linkConversa} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-4 w-4" />
-                Abrir conversa
-              </a>
-            </Button>
-          )}
+          {card.linkConversa && <CopiarLink link={card.linkConversa} />}
           {card.cor !== "cami" && (
             <>
               <Button size="sm" variant="outline" onClick={onContato} disabled={ocupado}>
@@ -628,13 +669,7 @@ function CardCompacto({
           </p>
         </button>
         <div className="flex shrink-0 gap-1">
-          {c.linkConversa && (
-            <Button asChild size="icon" variant="outline" className="h-7 w-7" title="Abrir conversa">
-              <a href={c.linkConversa} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </Button>
-          )}
+          {c.linkConversa && <CopiarLink link={c.linkConversa} compacto />}
           <Button size="sm" variant={etapa === "fechado" ? "outline" : "secondary"} className={botao} onClick={alternar}>
             Ações
           </Button>
