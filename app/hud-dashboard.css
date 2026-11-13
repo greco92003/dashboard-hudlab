@@ -135,6 +135,19 @@
   scrollbar-width: thin;
 }
 
+/*
+ * Menu recolhido (só ícones, 48px): a barra de rolagem comia ~10px da largura e
+ * o botão ficava com 21px dos 32px previstos, com o hover cobrindo só metade.
+ * Ali a rolagem segue pela roda do mouse, sem a barra visível.
+ */
+.hud-theme [data-collapsible="icon"] [data-sidebar="content"] {
+  scrollbar-width: none;
+}
+
+.hud-theme [data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar {
+  display: none;
+}
+
 .hud-theme [data-sidebar="sidebar"] {
   background: linear-gradient(170deg, var(--sidebar), var(--background) 70%);
 }
