@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "./globals.css";
+import "./hud-dashboard.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { OptimizedAuthProvider } from "@/contexts/OptimizedAuthContext";
 import { SyncProvider } from "@/contexts/SyncContext";

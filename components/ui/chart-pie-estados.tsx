@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
+import { HUD_BREAKDOWN_COLORS } from "@/components/ui/hud-breakdown-colors";
 
 // Mapeamento dos estados brasileiros
 const ESTADOS_BRASILEIROS = {
@@ -141,36 +142,6 @@ function normalizeEstado(estado: string | null): string {
 }
 
 // Cores para os estados (usando cores diretas que funcionam com Recharts)
-const CHART_COLORS = [
-  "#2563eb", // Azul
-  "#dc2626", // Vermelho
-  "#16a34a", // Verde
-  "#ca8a04", // Amarelo
-  "#9333ea", // Roxo
-  "#ea580c", // Laranja
-  "#0891b2", // Ciano
-  "#be123c", // Rosa
-  "#65a30d", // Lima
-  "#7c2d12", // Marrom
-  "#1e40af", // Azul escuro
-  "#991b1b", // Vermelho escuro
-  "#166534", // Verde escuro
-  "#a16207", // Amarelo escuro
-  "#7c3aed", // Roxo claro
-  "#c2410c", // Laranja escuro
-  "#0e7490", // Ciano escuro
-  "#be185d", // Rosa escuro
-  "#4d7c0f", // Lima escuro
-  "#92400e", // Marrom claro
-  "#3730a3", // Índigo
-  "#7f1d1d", // Vermelho sangue
-  "#14532d", // Verde floresta
-  "#92400e", // Âmbar
-  "#581c87", // Violeta
-  "#9a3412", // Laranja queimado
-  "#155e75", // Azul petróleo
-  "#831843", // Rosa vinho
-];
 
 interface Deal {
   deal_id: string;
@@ -233,7 +204,7 @@ function processEstadosData(deals: Deal[]) {
       const key = sigla.toLowerCase();
       config[key] = {
         label: sigla, // Usar sigla no tooltip
-        color: CHART_COLORS[index % CHART_COLORS.length],
+        color: HUD_BREAKDOWN_COLORS[index % HUD_BREAKDOWN_COLORS.length],
       };
       return config;
     },
@@ -252,7 +223,7 @@ function processEstadosData(deals: Deal[]) {
       return {
         estado: sigla, // Usar sigla nos dados
         value,
-        fill: CHART_COLORS[index % CHART_COLORS.length], // Cor direta
+        fill: HUD_BREAKDOWN_COLORS[index % HUD_BREAKDOWN_COLORS.length], // Cor direta
       };
     });
 
@@ -323,7 +294,13 @@ export function ChartPieEstados({
                 />
               }
             />
-            <Pie data={activeData.chartData} dataKey="value" nameKey="estado" />
+            <Pie
+              data={activeData.chartData}
+              dataKey="value"
+              nameKey="estado"
+              innerRadius="54%"
+              outerRadius="92%"
+            />
           </PieChart>
         </ChartContainer>
       </WidgetContent>

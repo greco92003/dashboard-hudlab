@@ -12,6 +12,7 @@ interface ConditionalSidebarProps {
   defaultSidebarOpen?: boolean;
 }
 
+const hudDashboardRoutes = ["/dashboard", "/deals", "/meta-marketing"];
 const fullHeightBoardRoutes = ["/programacao", "/expedicao"];
 
 // Keep the same responsive content inset and rhythm used by /dashboard.
@@ -30,6 +31,8 @@ export function ConditionalSidebar({
 
   // A barra lembra o último estado (cookie) em todas as telas: o botão de
   // recolher/expandir fica sempre no topo dela, então nunca some de vez.
+  const hasHudDashboardTheme = hudDashboardRoutes.includes(pathname);
+  const shellClassName = hasHudDashboardTheme ? "hud-dashboard-shell" : undefined;
   const isBoardPage = fullHeightBoardRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
 
@@ -149,6 +152,7 @@ export function ConditionalSidebar({
       <div suppressHydrationWarning>
         <SidebarProvider
           defaultOpen={defaultSidebarOpen}
+          className={shellClassName}
           style={
             {
               "--header-height": "4rem", // 64px = h-16
@@ -178,6 +182,7 @@ export function ConditionalSidebar({
   return (
     <SidebarProvider
       defaultOpen={shouldStartClosed ? false : defaultSidebarOpen}
+      className={shellClassName}
       style={
         {
           "--header-height": "4rem", // 64px = h-16

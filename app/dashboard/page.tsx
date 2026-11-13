@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
@@ -10,9 +9,8 @@ import { ChartBarFaturamento } from "@/components/ui/chart-bar-faturamento";
 import { ChartBarCicloVendas } from "@/components/ui/chart-bar-ciclo-vendas";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
-import { Label } from "@/components/ui/label";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
-import { RefreshCw } from "lucide-react";
+import { Clock3, Package, RefreshCw, Wallet } from "lucide-react";
 import { ChartPieEstados } from "@/components/ui/chart-pie-estados";
 import { ChartPieGeneric } from "@/components/ui/chart-pie-generic";
 import { useManualSync } from "@/hooks/useManualSync";
@@ -618,161 +616,94 @@ export default function DashboardPage() {
   useDataRefresh("dashboard", refreshDashboardData);
 
   return (
-    <div className="flex flex-1 flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl sm:text-2xl font-bold">Dashboard</h1>
-      </div>
+    <div className="hud-page">
+      <div className="hud-page-header">
+        <h1>Dashboard</h1>
 
-      {/* flex-wrap: em linha única a partir de lg, os três botões de período +
-          o seletor + o "Sincronizar Dados" não cabiam e o último furava a
-          viewport, criando rolagem horizontal na página inteira. */}
-      <div className="flex flex-col lg:flex-row lg:flex-wrap gap-2 lg:gap-4 mb-4 mt-2 lg:items-center">
-        {/* 3 botões de período */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-          <Button
-            variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(30)}
-            className="text-xs sm:text-sm"
-          >
-            Últimos 30 dias
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(60)}
-            className="text-xs sm:text-sm"
-          >
-            Últimos 60 dias
-          </Button>
-          <Button
-            variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-            onClick={() => handlePeriodChangeLocal(90)}
-            className="text-xs sm:text-sm"
-          >
-            Últimos 90 dias
-          </Button>
-        </div>
-
-        {/* Seletor de período personalizado */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <Label className="text-sm sm:text-base whitespace-nowrap lg:hidden">
-            Período personalizado:
-          </Label>
-          <div className="w-full sm:min-w-[250px] lg:w-auto">
-            <Calendar23
-              value={dateRange}
-              onChange={handleDateRangeChangeLocal}
-              hideLabel
-            />
+        <div className="hud-toolbar">
+          <div className="hud-segments">
+            <Button
+              variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 30}
+              onClick={() => handlePeriodChangeLocal(30)}
+              className="text-xs"
+            >
+              Últimos 30 dias
+            </Button>
+            <Button
+              variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 60}
+              onClick={() => handlePeriodChangeLocal(60)}
+              className="text-xs"
+            >
+              Últimos 60 dias
+            </Button>
+            <Button
+              variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
+              aria-pressed={!useCustomPeriod && period === 90}
+              onClick={() => handlePeriodChangeLocal(90)}
+              className="text-xs"
+            >
+              Últimos 90 dias
+            </Button>
           </div>
-        </div>
 
-        {/* Botão de sync manual */}
-        <div className="flex">
-          <Button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            variant="outline"
-            className="flex items-center gap-2 text-xs sm:text-sm w-full sm:w-auto"
-          >
-            {isSyncing ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">
-              {isSyncing ? "Sincronizando..." : "Sincronizar Dados"}
-            </span>
-            <span className="sm:hidden">{isSyncing ? "Sync..." : "Sync"}</span>
+          <Calendar23
+            value={dateRange}
+            onChange={handleDateRangeChangeLocal}
+            hideLabel
+          />
+          <Button onClick={handleManualSync} disabled={isSyncing} variant="outline">
+            <RefreshCw className={isSyncing ? "animate-spin" : undefined} />
+            {isSyncing ? "Sincronizando..." : "Sincronizar Dados"}
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
-        {/* Primeira linha: Total de Pares, Faturamento Total e Lead Time */}
-        <Card>
-          {/* Container query, não breakpoint de tela: o que aperta é a largura
-              do CARD (224px em 1024px de viewport, contra 430px em 1640px).
-              Abaixo de ~288px não cabe rótulo + número lado a lado — some
-              seria espremer o rótulo até ele vazar —, então empilha. */}
-          <CardContent className="@container py-3 px-4">
-            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
-              <div className="min-w-0">
-                <CardTitle className="text-sm sm:text-base">
-                  Total de Pares Vendidos
-                </CardTitle>
-              </div>
+      <dl className="hud-kpi-strip" aria-label="Indicadores do Dashboard">
+        {[
+          {
+            label: "Total de Pares Vendidos",
+            value: totalPairsSold.toLocaleString("pt-BR"),
+            previous: prevTotalPairsSold.toLocaleString("pt-BR"),
+            icon: Package,
+          },
+          {
+            label: "Faturamento Total",
+            value: formatCurrency(totalValue, "BRL"),
+            previous: formatCurrency(prevTotalValue, "BRL"),
+            icon: Wallet,
+          },
+          {
+            label: "Lead Time",
+            value: avgLeadTime !== null ? `${avgLeadTime} dias` : "—",
+            previous: avgPrevLeadTime !== null ? `${avgPrevLeadTime} dias` : "—",
+            detail: "Tempo médio de fechamento",
+            icon: Clock3,
+          },
+        ].map(({ label, value, previous, detail, icon: Icon }) => (
+          <div className="hud-kpi" key={label}>
+            <span className="hud-kpi-icon" aria-hidden="true"><Icon /></span>
+            <div className="min-w-0">
+              <dt>{label}</dt>
               {loading ? (
-                <Skeleton className="h-6 sm:h-8 w-[150px]" />
+                <dd><Skeleton className="my-1 h-7 w-24 max-w-full" /></dd>
               ) : (
-                <div className="shrink-0 text-left @2xs:text-right">
-                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
-                    {totalPairsSold}
-                  </p>
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Anterior: {prevTotalPairsSold}
-                  </p>
-                </div>
+                <>
+                  <dd className="hud-kpi-value">{value}</dd>
+                  <dd className="hud-kpi-detail">Anterior: {previous}</dd>
+                </>
               )}
+              {detail && <dd className="hud-kpi-detail">{detail}</dd>}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="@container py-3 px-4">
-            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
-              <div className="min-w-0">
-                <CardTitle className="text-sm sm:text-base">
-                  Faturamento Total
-                </CardTitle>
-              </div>
-              {loading ? (
-                <Skeleton className="h-6 sm:h-8 w-[150px]" />
-              ) : (
-                <div className="shrink-0 text-left @2xs:text-right">
-                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
-                    {formatCurrency(totalValue, "BRL")}
-                  </p>
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Anterior: {formatCurrency(prevTotalValue, "BRL")}
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Lead Time */}
-        <Card>
-          <CardContent className="@container py-3 px-4">
-            <div className="flex flex-col gap-1 @2xs:flex-row @2xs:items-center @2xs:justify-between @2xs:gap-4">
-              <div className="min-w-0">
-                <CardTitle className="text-sm sm:text-base">Lead Time</CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Tempo médio de fechamento
-                </p>
-              </div>
-              {loading ? (
-                <Skeleton className="h-6 sm:h-8 w-[120px]" />
-              ) : (
-                <div className="shrink-0 text-left @2xs:text-right">
-                  <p className="text-xl sm:text-2xl font-bold whitespace-nowrap">
-                    {avgLeadTime !== null ? `${avgLeadTime} dias` : "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Anterior:{" "}
-                    {avgPrevLeadTime !== null ? `${avgPrevLeadTime} dias` : "—"}
-                  </p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        ))}
+      </dl>
 
       {/* Revenue Charts - area + bar + ciclo de vendas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-4">
+      <div className="hud-revenue-grid">
         {loading ? (
-          <Skeleton className="h-[400px] w-full" />
+          <Skeleton className="hud-chart-height w-full" />
         ) : (
           <ChartAreaGradient
             title="Faturamento por Período"
@@ -790,7 +721,7 @@ export default function DashboardPage() {
         )}
 
         {loading ? (
-          <Skeleton className="h-[400px] w-full" />
+          <Skeleton className="hud-chart-height w-full" />
         ) : (
           <ChartBarFaturamento
             deals={deals}
@@ -802,14 +733,14 @@ export default function DashboardPage() {
         )}
 
         {loading ? (
-          <Skeleton className="h-[400px] w-full" />
+          <Skeleton className="hud-chart-height w-full" />
         ) : (
           <ChartBarCicloVendas deals={deals} prevDeals={prevDeals} />
         )}
       </div>
 
       {/* Gráficos de Pizza - 4 em uma linha com tabs para ano atual/anterior */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="hud-breakdown-grid">
         {/* Vendas por Estado */}
         <div>
           {loading ? (

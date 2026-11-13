@@ -417,8 +417,10 @@ export function AppSidebar() {
     // e o botão de expandir continua no mesmo lugar, no topo da barra.
     <Sidebar collapsible="icon">
       <SidebarHeader className="flex flex-col items-start justify-start p-4 gap-3 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
-        <div className="flex w-full items-start justify-between gap-2 group-data-[collapsible=icon]:justify-center">
-          <Logo className="h-14 w-max mb-6 group-data-[collapsible=icon]:hidden" />
+        <div className="hud-sidebar-brand flex w-full items-start justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <span className="hud-sidebar-mark mb-6 group-data-[collapsible=icon]:hidden" role="img" aria-label="Hud Lab">
+            <Logo className="h-14 w-max" />
+          </span>
           <SidebarToggle />
         </div>
         <div className="group-data-[collapsible=icon]:hidden">
@@ -465,6 +467,7 @@ export function AppSidebar() {
                       >
                         <a
                           href={item.url}
+                          aria-current={isActive ? "page" : undefined}
                           onClick={(e) => {
                             if (isActive) {
                               e.preventDefault();

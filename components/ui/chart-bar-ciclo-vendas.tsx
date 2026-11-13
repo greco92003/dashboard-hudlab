@@ -47,7 +47,7 @@ const BUCKETS = [
 
 const chartConfig = {
   anoAtual: { label: "Ano Atual", color: "var(--chart-1)" },
-  anoAnterior: { label: "Ano Anterior", color: "hsl(220 9% 60%)" },
+  anoAnterior: { label: "Ano Anterior", color: "var(--hud-chart-previous)" },
   label: { color: "var(--background)" },
 } satisfies ChartConfig;
 
@@ -114,7 +114,7 @@ export function ChartBarCicloVendas({
   }, [deals, prevDeals]);
 
   return (
-    <Card className="h-[400px] flex flex-col">
+    <Card className="hud-chart-height h-[400px] flex flex-col">
       <CardHeader className="py-3">
         <CardTitle>Ciclo de Vendas</CardTitle>
         <CardDescription>Ano anterior · Ano atual</CardDescription>
@@ -161,6 +161,7 @@ export function ChartBarCicloVendas({
               dataKey="anoAtual"
               layout="vertical"
               fill="var(--color-anoAtual)"
+              maxBarSize={12}
               radius={4}
               isAnimationActive={false}
             >
@@ -170,6 +171,7 @@ export function ChartBarCicloVendas({
               dataKey="anoAnterior"
               layout="vertical"
               fill="var(--color-anoAnterior)"
+              maxBarSize={12}
               radius={4}
               isAnimationActive={false}
             >

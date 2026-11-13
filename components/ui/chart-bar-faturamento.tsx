@@ -59,12 +59,12 @@ const isWonDeal = (d: Deal & { status?: string | null }) => {
 };
 
 const chartConfig = {
-  anoAnterior: { label: "Ano Anterior", color: "hsl(220 9% 60%)" },
-  meta: { label: "Meta", color: "hsl(330 80% 60%)" },
+  anoAnterior: { label: "Ano Anterior", color: "var(--hud-chart-previous)" },
+  meta: { label: "Meta", color: "var(--hud-chart-target)" },
   realizado: { label: "Realizado", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
-// Barra da meta: rosa tracejado (listras diagonais via SVG pattern)
+// As listras da meta ajudam a distingui-la das séries de valores realizados.
 function MetaBarShape(props: {
   x?: number;
   y?: number;
@@ -85,8 +85,8 @@ function MetaBarShape(props: {
           height="6"
           patternTransform="rotate(45)"
         >
-          <rect width="3" height="6" fill="hsl(330 80% 60%)" />
-          <rect x="3" width="3" height="6" fill="hsl(330 80% 90% / 0.35)" />
+          <rect width="3" height="6" fill="var(--color-meta)" />
+          <rect x="3" width="3" height="6" fill="var(--color-meta)" opacity={0.4} />
         </pattern>
       </defs>
       <rect
@@ -339,11 +339,11 @@ export function ChartBarFaturamento({
   const chartData = viewMode === "anual" ? annualChartData : mensalChartData;
 
   return (
-    <Card className="h-[400px] flex flex-col">
+    <Card className="hud-chart-height h-[400px] flex flex-col">
       <CardHeader className="py-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <CardTitle>Comparativo Mensal</CardTitle>
+            <CardTitle>{viewMode === "anual" ? "Comparativo Anual" : "Comparativo Mensal"}</CardTitle>
             <CardDescription>
               {viewMode === "anual"
                 ? `Jan–Dez ${annualYear} · Ano anterior · Meta · Realizado · mês = dia 02 ao dia 01`
@@ -428,17 +428,20 @@ export function ChartBarFaturamento({
               <Bar
                 dataKey="anoAnterior"
                 fill="var(--color-anoAnterior)"
+                maxBarSize={36}
                 radius={4}
               />
               <Bar
                 dataKey="meta"
                 fill="var(--color-meta)"
+                maxBarSize={36}
                 radius={4}
                 shape={<MetaBarShape />}
               />
               <Bar
                 dataKey="realizado"
                 fill="var(--color-realizado)"
+                maxBarSize={36}
                 radius={4}
               />
             </BarChart>

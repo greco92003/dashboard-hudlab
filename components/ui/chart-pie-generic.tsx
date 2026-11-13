@@ -18,29 +18,8 @@ import {
 } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
+import { HUD_BREAKDOWN_COLORS } from "@/components/ui/hud-breakdown-colors";
 
-const CHART_COLORS = [
-  "#2563eb",
-  "#dc2626",
-  "#16a34a",
-  "#ca8a04",
-  "#9333ea",
-  "#ea580c",
-  "#0891b2",
-  "#be123c",
-  "#65a30d",
-  "#7c2d12",
-  "#1e40af",
-  "#991b1b",
-  "#166534",
-  "#a16207",
-  "#7c3aed",
-  "#c2410c",
-  "#0e7490",
-  "#be185d",
-  "#4d7c0f",
-  "#92400e",
-];
 
 interface Deal {
   value: number;
@@ -98,7 +77,7 @@ function processDealsData(
     .map(({ label, value }, index) => ({
       label,
       value,
-      fill: CHART_COLORS[index % CHART_COLORS.length],
+      fill: HUD_BREAKDOWN_COLORS[index % HUD_BREAKDOWN_COLORS.length],
     }));
 
   // Create chart config for all items
@@ -107,7 +86,7 @@ function processDealsData(
       const key = `item_${index}`;
       config[key] = {
         label,
-        color: CHART_COLORS[index % CHART_COLORS.length],
+        color: HUD_BREAKDOWN_COLORS[index % HUD_BREAKDOWN_COLORS.length],
       };
       return config;
     },
@@ -193,7 +172,13 @@ export function ChartPieGeneric({
                 />
               }
             />
-            <Pie data={activeData.chartData} dataKey="value" nameKey="label" />
+            <Pie
+              data={activeData.chartData}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="54%"
+              outerRadius="92%"
+            />
           </PieChart>
         </ChartContainer>
       </WidgetContent>
