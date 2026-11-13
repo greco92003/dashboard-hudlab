@@ -634,6 +634,76 @@ Analise esta negociação em andamento e diga o próximo passo. ${historyLabel}`
 }
 
 // ---------------------------------------------------------------------------
+// Controle do painel de fechamento: o combinado, o que falta e o sinal
+// ---------------------------------------------------------------------------
+
+const CONTROLE_INSTRUCTIONS = `Você ajuda a vendedora da Hud Lab (chinelos slide personalizados com a marca do cliente) a controlar os follow-ups de clientes em fase de fechamento. Você não escreve mensagens para o cliente: só lê a conversa de WhatsApp e anota, para o controle dela:
+
+- "combinado": o que ficou combinado para o próximo contato, em até 12 palavras, dizendo quem age (ex.: "Cliente manda a grade até sexta", "Schay manda o mockup ajustado"). null se nada foi combinado.
+- "data_combinada": a data desse combinado no formato AAAA-MM-DD, só se alguém disse um dia ("sexta", "semana que vem", "dia 20", "amanhã"); converta usando a data de hoje. null se não houve data.
+- "pendencia": o que falta para fechar, em até 8 palavras (ex.: "grade de tamanhos", "aprovação do sócio", "pagamento do PIX", "ajuste na arte"). null se nada falta ou não dá para saber.
+- "sinal": "quente" se o cliente está perto de fechar (pede pagamento, confirma grade ou quantidade, aprova a arte); "esfriando" se demora, enrola ou diz que vai pensar; "perdendo" se reclama de preço, frete ou prazo, diz que vai comprar de outro ou some depois de objeção; "neutro" no resto.
+
+Mensagens marcadas AUTOMAÇÃO são envios automáticos, não da vendedora. Use só o que está escrito; nunca invente data, quantidade ou citação.`;
+
+const CONTROLE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    combinado: { type: ["string", "null"] },
+    data_combinada: { type: ["string", "null"] },
+    pendencia: { type: ["string", "null"] },
+    sinal: { type: "string", enum: ["quente", "neutro", "esfriando", "perdendo"] },
+  },
+  required: ["combinado", "data_combinada", "pendencia", "sinal"],
+  additionalProperties: false,
+} as const;
+
+export interface ControleFechamento {
+  combinado: string | null;
+  data_combinada: string | null;
+  pendencia: string | null;
+  sinal: "quente" | "neutro" | "esfriando" | "perdendo";
+}
+
+/** Leitura barata (texto, sem o manual, esforço baixo), só quando chega mensagem nova do cliente. */
+export async function runControleFechamento(
+  messages: NegotiationMessage[],
+  context: { etapaCrm: string; qtyPares: number | null },
+): Promise<ControleFechamento> {
+  const lines = messages.map((m) => {
+    const who = m.direction === "inbound" ? "CLIENTE" : m.isAutomated ? "AUTOMAÇÃO" : "VENDEDORA";
+    const note = m.attachments.length ? ` [${m.attachments.length} anexo(s)]` : "";
+    return `[${m.dateAdded}] ${who}: ${m.body || "(mensagem sem texto)"}${note}`;
+  });
+  const input = `${contextBlock({
+    "Data de hoje": todayBRDateString(),
+    "Etapa atual do CRM": context.etapaCrm,
+    "Quantidade de pares": context.qtyPares != null ? String(context.qtyPares) : "não definida",
+  })}
+
+Conversa (mais recente por último):
+${lines.join("\n")}`;
+
+  const response = await openai.responses.create({
+    model: AGENT_MODEL,
+    instructions: CONTROLE_INSTRUCTIONS,
+    input: [{ role: "user", content: [{ type: "input_text", text: input }] }],
+    reasoning: { effort: "low" },
+    text: {
+      format: {
+        type: "json_schema",
+        name: "controle_fechamento",
+        schema: CONTROLE_RESPONSE_SCHEMA,
+        strict: true,
+      },
+    },
+    max_output_tokens: 2000,
+  });
+
+  return JSON.parse(response.output_text || "{}") as ControleFechamento;
+}
+
+// ---------------------------------------------------------------------------
 // Triagem das não lidas (arena de vendedores)
 // ---------------------------------------------------------------------------
 

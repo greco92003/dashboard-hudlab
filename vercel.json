@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/nao-lidas",
       "schedule": "7,17,27,37,47,57 * * * *"
+    },
+    {
+      "path": "/api/cron/fechamento",
+      "schedule": "1,11,21,31,41,51 * * * *"
     }
   ],
   "functions": {
@@ -123,6 +127,12 @@
       "maxDuration": 120
     },
     "app/api/cron/nao-lidas/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/fechamento/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/fechamento/atualizar/route.ts": {
       "maxDuration": 300
     }
   },

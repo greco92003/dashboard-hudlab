@@ -35,6 +35,7 @@ import {
   PackageCheck,
   Factory,
   Bot,
+  Flame,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -198,6 +199,11 @@ const menuGroups: MenuGroup[] = [
         title: "CAMI Intelligence",
         url: "/cami",
         icon: Bot,
+      },
+      {
+        title: "Fechamento",
+        url: "/fechamento",
+        icon: Flame,
       },
       {
         title: "Designers",

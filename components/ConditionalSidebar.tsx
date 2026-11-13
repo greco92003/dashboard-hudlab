@@ -70,6 +70,7 @@ export function ConditionalSidebar({
     "/sellers",
     "/sellers_v2",
     "/cami",
+    "/fechamento",
     "/designers",
     "/representantes",
     "/direct-costs",
