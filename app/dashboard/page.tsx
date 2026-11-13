@@ -641,7 +641,7 @@ export default function DashboardPage() {
                 aria-pressed={!useCustomPeriod && period === dias}
                 onClick={() => handlePeriodChangeLocal(dias)}
               >
-                Últimos {dias} dias
+                {dias} dias
               </button>
             ))}
           </GrupoDeAcoes>

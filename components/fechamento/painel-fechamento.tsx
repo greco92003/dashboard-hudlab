@@ -642,7 +642,7 @@ function BarraDeTemperatura({
             </Button>
           </>
         ) : (
-          <span>Ordem: situação, depois temperatura, depois o prazo mais antigo</span>
+          <span className="hidden sm:inline">Ordem: situação, depois temperatura, depois o prazo mais antigo</span>
         )}
       </div>
     </div>
