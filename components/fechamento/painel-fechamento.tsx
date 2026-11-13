@@ -219,7 +219,8 @@ export function PainelDeFechamento() {
     }
   };
 
-  const agir = async (card: CardDoPainel, acao: string, extra: Record<string, string> = {}) => {
+  /** Devolve null se deu certo, ou a mensagem de erro (a janela flutuante mostra no próprio card). */
+  const agir = async (card: CardDoPainel, acao: string, extra: Record<string, string> = {}): Promise<string | null> => {
     setOcupado(card.oportunidadeId);
     try {
       const res = await fetch(`/api/fechamento/${card.oportunidadeId}`, {
@@ -238,8 +239,11 @@ export function PainelDeFechamento() {
       };
       toast.success(`${card.nome}: ${msg[acao] ?? "feito"}`);
       await carregar();
+      return null;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Não deu certo");
+      const erro = err instanceof Error ? err.message : "Não deu certo";
+      toast.error(erro);
+      return erro;
     } finally {
       setOcupado(null);
     }
@@ -386,7 +390,7 @@ export function PainelDeFechamento() {
 
       {pip &&
         createPortal(
-          <JanelaFlutuante painel={painel} ocupado={ocupado} onContato={(c) => void agir(c, "contato")} />,
+          <JanelaFlutuante painel={painel} ocupado={ocupado} onAgir={agir} />,
           pip.document.body,
         )}
     </div>
@@ -535,18 +539,23 @@ function CardDeFechamento({
   );
 }
 
-/** Versão compacta para a janela flutuante: contadores e os cards que pedem ação. */
+/**
+ * Versão compacta para a janela flutuante (sempre por cima do GHL). Tudo é
+ * feito dentro da própria janela: diálogo e popover abririam na aba de trás.
+ */
 function JanelaFlutuante({
   painel,
   ocupado,
-  onContato,
+  onAgir,
 }: {
   painel: Painel | null;
   ocupado: string | null;
-  onContato: (c: CardDoPainel) => void;
+  onAgir: (c: CardDoPainel, acao: string, extra?: Record<string, string>) => Promise<string | null>;
 }) {
+  const [verTodos, setVerTodos] = useState(false);
   if (!painel) return <p className="p-3 text-sm text-muted-foreground">Carregando…</p>;
   const urgentes = painel.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo");
+  const demais = painel.cards.filter((c) => c.cor === "verde" || c.cor === "cinza");
   return (
     <div className="flex h-full flex-col gap-2 p-3">
       <div className="flex items-center justify-between">
@@ -557,47 +566,239 @@ function JanelaFlutuante({
         <span className="text-xs text-muted-foreground">atualizado às {hora(painel.atualizadoEm)}</span>
       </div>
       <Contagem contagem={painel.contagem} />
-      {urgentes.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>
-      ) : (
-        <div className="flex flex-col gap-1.5 overflow-y-auto">
-          {urgentes.map((c) => {
-            const alerta = c.cor === "vermelho" || c.ultimaChance;
-            return (
-              <div key={c.oportunidadeId} className={cn("relative rounded-md border py-2 pl-3 pr-2", alerta && "ring-2 ring-red-500/40")}>
-                <div className={cn("absolute inset-y-0 left-0 w-1 rounded-l-md", COR[c.cor].faixa, alerta && "animate-pulse")} />
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{c.nome}</p>
-                    <p className={cn("text-xs", COR[c.cor].texto)}>{c.rotulo}</p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    {c.linkConversa && (
-                      <Button asChild size="icon" variant="outline" className="h-7 w-7" title="Abrir conversa">
-                        <a href={c.linkConversa} target="_blank" rel="noreferrer">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      </Button>
-                    )}
-                    {c.cor !== "vermelho" && (
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        title="Fiz contato"
-                        disabled={ocupado === c.oportunidadeId}
-                        onClick={() => onContato(c)}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+      <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
+        {urgentes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>}
+        {urgentes.map((c) => (
+          <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+        ))}
+        {demais.length > 0 && (
+          <button
+            type="button"
+            className="mt-1 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground hover:bg-muted"
+            onClick={() => setVerTodos((v) => !v)}
+          >
+            {verTodos ? "Esconder" : "Mostrar"} em dia e parados ({demais.length})
+          </button>
+        )}
+        {verTodos &&
+          demais.map((c) => (
+            <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+          ))}
+      </div>
+    </div>
+  );
+}
+
+type Etapa = "fechado" | "aberto" | "modelo" | "adiar" | "perdido" | "fechou";
+
+function CardCompacto({
+  card: c,
+  ocupado,
+  onAgir,
+}: {
+  card: CardDoPainel;
+  ocupado: boolean;
+  onAgir: (c: CardDoPainel, acao: string, extra?: Record<string, string>) => Promise<string | null>;
+}) {
+  const [etapa, setEtapa] = useState<Etapa>("fechado");
+  const [data, setData] = useState(amanha());
+  const [erro, setErro] = useState<string | null>(null);
+  const alerta = c.cor === "vermelho" || c.ultimaChance;
+  const alternar = () => setEtapa((e) => (e === "fechado" ? "aberto" : "fechado"));
+
+  const fazer = async (acao: string, extra?: Record<string, string>) => {
+    setErro(null);
+    const falha = await onAgir(c, acao, extra);
+    if (falha) setErro(falha);
+    else setEtapa("fechado");
+  };
+
+  const botao = "h-7 px-2 text-xs";
+  return (
+    <div className={cn("relative rounded-md border py-2 pl-3 pr-2", alerta && "ring-2 ring-red-500/40")}>
+      <div className={cn("absolute inset-y-0 left-0 w-1 rounded-l-md", COR[c.cor].faixa, alerta && "animate-pulse")} />
+      <div className="flex items-start justify-between gap-2">
+        <button type="button" className="min-w-0 text-left" onClick={alternar} title="Mostrar as ações">
+          <p className="truncate text-sm font-medium">{c.nome}</p>
+          <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "animate-pulse")}>{c.rotulo}</p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            {c.etapa}
+            {c.pares ? ` · ${c.pares} pares` : ""}
+            {c.janelaTexto ? ` · ${c.janelaTexto}` : ""}
+          </p>
+        </button>
+        <div className="flex shrink-0 gap-1">
+          {c.linkConversa && (
+            <Button asChild size="icon" variant="outline" className="h-7 w-7" title="Abrir conversa">
+              <a href={c.linkConversa} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </Button>
+          )}
+          <Button size="sm" variant={etapa === "fechado" ? "outline" : "secondary"} className={botao} onClick={alternar}>
+            Ações
+          </Button>
+        </div>
+      </div>
+
+      {etapa !== "fechado" && (
+        <div className="mt-2 flex flex-col gap-2 border-t pt-2">
+          {(c.combinado || c.pendencia || c.ultimaMensagemCliente) && (
+            <div className="flex flex-col gap-0.5 text-[11px]">
+              {c.ultimaMensagemCliente && (
+                <p className="line-clamp-2 text-muted-foreground">
+                  <MessageCircle className="mr-1 inline h-3 w-3" />
+                  {c.ultimaMensagemCliente}
+                </p>
+              )}
+              {c.combinado && (
+                <p>
+                  <span className="text-muted-foreground">Combinado:</span> {c.combinado}
+                </p>
+              )}
+              {c.pendencia && (
+                <p>
+                  <span className="text-muted-foreground">Falta:</span> {c.pendencia}
+                </p>
+              )}
+            </div>
+          )}
+
+          {etapa === "aberto" && (
+            <div className="flex flex-wrap gap-1">
+              {c.cor !== "vermelho" && (
+                <Button size="sm" variant="outline" className={botao} disabled={ocupado} onClick={() => void fazer("contato")}>
+                  {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Fiz contato
+                </Button>
+              )}
+              {!c.janelaAberta && (
+                <Button size="sm" variant="outline" className={botao} disabled={ocupado} onClick={() => setEtapa("modelo")}>
+                  <Send className="h-3.5 w-3.5" />
+                  Mandar modelo
+                </Button>
+              )}
+              <Button size="sm" variant="outline" className={botao} disabled={ocupado} onClick={() => setEtapa("adiar")}>
+                <CalendarClock className="h-3.5 w-3.5" />
+                Adiar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(botao, "text-red-700 dark:text-red-300")}
+                disabled={ocupado}
+                onClick={() => setEtapa("perdido")}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+                Perdido
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(botao, "text-emerald-700 dark:text-emerald-300")}
+                disabled={ocupado}
+                onClick={() => setEtapa("fechou")}
+              >
+                <BellRing className="h-3.5 w-3.5" />
+                Fechou
+              </Button>
+            </div>
+          )}
+
+          {etapa === "modelo" && (
+            <Confirmacao
+              texto={`Mandar para ${c.nome} o modelo de follow-up da Black? A janela está fechada, então tem custo de modelo.`}
+              acao="Mandar modelo"
+              ocupado={ocupado}
+              onSim={() => void fazer("modelo")}
+              onNao={() => setEtapa("aberto")}
+            />
+          )}
+
+          {etapa === "fechou" && (
+            <Confirmacao
+              texto={`Mover ${c.nome} para Pagamento Confirmado/Completar Dados? O card sai do painel.`}
+              acao="Fechou"
+              ocupado={ocupado}
+              onSim={() => void fazer("fechou")}
+              onNao={() => setEtapa("aberto")}
+            />
+          )}
+
+          {etapa === "adiar" && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs">Retomar em</span>
+              <input
+                type="date"
+                value={data}
+                min={amanha()}
+                onChange={(e) => setData(e.target.value)}
+                className="h-7 rounded-md border bg-background px-1.5 text-xs"
+              />
+              <Button size="sm" className={botao} disabled={ocupado || !data} onClick={() => void fazer("adiar", { ate: data })}>
+                Adiar
+              </Button>
+              <Button size="sm" variant="ghost" className={botao} onClick={() => setEtapa("aberto")}>
+                Voltar
+              </Button>
+            </div>
+          )}
+
+          {etapa === "perdido" && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs">Por que perdemos?</span>
+              <div className="grid grid-cols-2 gap-1">
+                {MOTIVOS.map((motivo) => (
+                  <Button
+                    key={motivo}
+                    size="sm"
+                    variant="outline"
+                    className={botao}
+                    disabled={ocupado}
+                    onClick={() => void fazer("perdido", { motivo })}
+                  >
+                    {motivo}
+                  </Button>
+                ))}
               </div>
-            );
-          })}
+              <Button size="sm" variant="ghost" className={cn(botao, "self-start")} onClick={() => setEtapa("aberto")}>
+                Voltar
+              </Button>
+            </div>
+          )}
+
+          {erro && <p className="text-xs text-red-600 dark:text-red-400">{erro}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+function Confirmacao({
+  texto,
+  acao,
+  ocupado,
+  onSim,
+  onNao,
+}: {
+  texto: string;
+  acao: string;
+  ocupado: boolean;
+  onSim: () => void;
+  onNao: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-xs">{texto}</p>
+      <div className="flex gap-1">
+        <Button size="sm" className="h-7 px-2 text-xs" disabled={ocupado} onClick={onSim}>
+          {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {acao}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onNao}>
+          Cancelar
+        </Button>
+      </div>
     </div>
   );
 }
