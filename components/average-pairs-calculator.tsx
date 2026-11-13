@@ -452,40 +452,18 @@ export function AveragePairsCalculator({
   };
 
   // Determinar a cor do indicador baseado na média e no limite
+  // Tons translúcidos do tema (app/hud-dashboard.css): verde dentro da
+  // capacidade, magenta perto do limite, rosa acima.
   const getStatusColor = (): { bg: string; text: string; border: string } => {
     if (averagePairsPerDay === null || !dailyLimit) {
-      return {
-        bg: "bg-gray-50 dark:bg-gray-900/20",
-        text: "text-gray-700 dark:text-gray-300",
-        border: "border-gray-200 dark:border-gray-800",
-      };
+      return { bg: "", text: "", border: "" };
     }
 
     const limit = parseFloat(dailyLimit);
     const percentage = (averagePairsPerDay / limit) * 100;
-
-    if (percentage > 100) {
-      // Vermelho - acima do limite
-      return {
-        bg: "bg-red-50 dark:bg-red-900/20",
-        text: "text-red-700 dark:text-red-300",
-        border: "border-red-200 dark:border-red-800",
-      };
-    } else if (percentage >= 90) {
-      // Amarelo - perto do limite (90% ou mais)
-      return {
-        bg: "bg-yellow-50 dark:bg-yellow-900/20",
-        text: "text-yellow-700 dark:text-yellow-300",
-        border: "border-yellow-200 dark:border-yellow-800",
-      };
-    } else {
-      // Verde - abaixo do limite
-      return {
-        bg: "bg-green-50 dark:bg-green-900/20",
-        text: "text-green-700 dark:text-green-300",
-        border: "border-green-200 dark:border-green-800",
-      };
-    }
+    const tom =
+      percentage > 100 ? "tone-rose" : percentage >= 90 ? "tone-pink" : "tone-green";
+    return { bg: `${tom} hud-tone-card`, text: `${tom} hud-tone-text`, border: "" };
   };
 
   const statusColor = getStatusColor();
@@ -493,28 +471,14 @@ export function AveragePairsCalculator({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <div
-          className={cn(
-            "p-3 rounded-lg border w-fit cursor-pointer hover:opacity-80 transition-colors",
-            statusColor.bg,
-            statusColor.border
-          )}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setIsOpen(true);
-            }
-          }}
+        <button
+          type="button"
+          className={statusColor.text || undefined}
+          title="Média de pares por dia útil no período"
         >
-          <div className="flex items-center gap-2">
-            <TrendingUp className={cn("h-6 w-6", statusColor.text)} />
-            <span className={cn("font-semibold text-sm", statusColor.text)}>
-              Média de Pares/dia
-            </span>
-          </div>
-        </div>
+          <TrendingUp />
+          Média de pares/dia
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
@@ -695,15 +659,15 @@ export function AveragePairsCalculator({
             </p>
             <p>• Feriados nacionais são excluídos do cálculo</p>
             <p>
-              • <span className="text-green-600 font-semibold">Verde</span>:
+              • <span className="tone-green hud-tone-text font-semibold">Verde</span>:
               Abaixo de 90% da capacidade
             </p>
             <p>
-              • <span className="text-yellow-600 font-semibold">Amarelo</span>:
+              • <span className="tone-pink hud-tone-text font-semibold">Magenta</span>:
               Entre 90% e 100% da capacidade
             </p>
             <p>
-              • <span className="text-red-600 font-semibold">Vermelho</span>:
+              • <span className="tone-rose hud-tone-text font-semibold">Rosa</span>:
               Acima da capacidade diária
             </p>
           </div>

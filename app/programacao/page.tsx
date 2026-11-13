@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -478,52 +477,18 @@ export default function ProgramacaoPage() {
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       {!isHeaderCollapsed && (
         <>
-          <div className="flex flex-shrink-0 items-center gap-3">
-            <Clock className="h-6 w-6" />
-            <h1 className="text-xl font-bold sm:text-2xl">Programação</h1>
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              Pedidos ganhos até a produção
-            </span>
-          </div>
-
-          <div className="flex flex-shrink-0 flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-                  }
-                  className="h-8 w-8"
-                  title={
-                    sortDirection === "asc"
-                      ? "Ordem crescente"
-                      : "Ordem decrescente"
-                  }
-                >
-                  {sortDirection === "asc" ? (
-                    <ArrowUp className="h-4 w-4" />
-                  ) : (
-                    <ArrowDown className="h-4 w-4" />
-                  )}
-                </Button>
-                <Select
-                  value={sortBy}
-                  onValueChange={(value) =>
-                    setSortBy(value as "value" | "title")
-                  }
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Ordenar por" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="value">Valor</SelectItem>
-                    <SelectItem value="title">Título</SelectItem>
-                  </SelectContent>
-                </Select>
+          <div className="hud-v2-head flex-shrink-0">
+            <div className="hud-v2-title">
+              <div className="hud-v2-tile">
+                <Clock />
               </div>
+              <div>
+                <h1>Programação</h1>
+                <p className="hud-v2-sub">Pedidos ganhos até a produção</p>
+              </div>
+            </div>
 
+            <div className="hud-group" role="group" aria-label="Ações da programação">
               <AveragePairsCalculator
                 deals={
                   data?.groups
@@ -532,53 +497,93 @@ export default function ProgramacaoPage() {
                 }
                 activeCards={activeCards}
               />
-            </div>
-
-            <div className="flex w-full gap-2 sm:w-auto">
+              <span className="hud-group-sep" aria-hidden />
               <RelatorioDialog titulo="Programação" endpoint="/api/programacao" />
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/expedicao">
-                  <PackageCheck className="mr-2 h-4 w-4" />
-                  Expedição
-                </Link>
-              </Button>
-              <Button
+              <span className="hud-group-sep" aria-hidden />
+              <Link href="/expedicao">
+                <PackageCheck />
+                Expedição
+              </Link>
+              <span className="hud-group-sep" aria-hidden />
+              <button
+                type="button"
                 onClick={handleRefresh}
                 disabled={refreshing || loading}
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
               >
-                <RefreshCw
-                  className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-                />
+                <RefreshCw className={refreshing ? "animate-spin" : undefined} />
                 {refreshing ? "Atualizando..." : "Atualizar"}
-              </Button>
+              </button>
             </div>
           </div>
 
-          <TipoPedidoFilter
-            selected={tipoFilter}
-            onChange={setTipoFilter}
-            counts={data?.summary.porTipo}
-          />
+          <div className="hud-panel hud-bar flex-shrink-0">
+            <div className="hud-field">
+              <span className="hud-field-label">Ordenar</span>
+              <div className="hud-group">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+                  }
+                  title={
+                    sortDirection === "asc"
+                      ? "Ordem crescente"
+                      : "Ordem decrescente"
+                  }
+                  aria-label={
+                    sortDirection === "asc"
+                      ? "Ordem crescente"
+                      : "Ordem decrescente"
+                  }
+                >
+                  {sortDirection === "asc" ? <ArrowUp /> : <ArrowDown />}
+                </button>
+                <span className="hud-group-sep" aria-hidden />
+                <Select
+                  value={sortBy}
+                  onValueChange={(value) =>
+                    setSortBy(value as "value" | "title")
+                  }
+                >
+                  <SelectTrigger aria-label="Ordenar por">
+                    <SelectValue placeholder="Ordenar por" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="value">Valor</SelectItem>
+                    <SelectItem value="title">Título</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <ForaDoBoard
-            buckets={[
-              {
-                motivo: "em-conferencia",
-                quantidade: gruposFora["em-conferencia"]?.dealsCount ?? 0,
-              },
-              {
-                motivo: "sem-data",
-                quantidade: gruposFora["sem-data"]?.dealsCount ?? 0,
-              },
-            ]}
-            ativo={foraAtivo}
-            onToggle={(motivo) =>
-              setForaAtivo((atual) => (atual === motivo ? null : motivo))
-            }
-          />
+            <div className="hud-field">
+              <span className="hud-field-label">Tipo do pedido</span>
+              <TipoPedidoFilter
+                variante="grupo"
+                selected={tipoFilter}
+                onChange={setTipoFilter}
+                counts={data?.summary.porTipo}
+              />
+            </div>
+
+            <ForaDoBoard
+              variante="grupo"
+              buckets={[
+                {
+                  motivo: "em-conferencia",
+                  quantidade: gruposFora["em-conferencia"]?.dealsCount ?? 0,
+                },
+                {
+                  motivo: "sem-data",
+                  quantidade: gruposFora["sem-data"]?.dealsCount ?? 0,
+                },
+              ]}
+              ativo={foraAtivo}
+              onToggle={(motivo) =>
+                setForaAtivo((atual) => (atual === motivo ? null : motivo))
+              }
+            />
+          </div>
 
           {error && (
             <Alert variant="destructive" className="flex-shrink-0">
@@ -594,84 +599,78 @@ export default function ProgramacaoPage() {
           <Skeleton className="h-full w-full" />
         </div>
       ) : data && data.groups.length > 0 ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-                className="h-8 w-8"
-                title={
-                  isHeaderCollapsed ? "Expandir cabeçalho" : "Recolher cabeçalho"
-                }
-              >
-                {isHeaderCollapsed ? (
-                  <ChevronDown className="h-5 w-5" />
-                ) : (
-                  <ChevronUp className="h-5 w-5" />
-                )}
-              </Button>
-              <h2 className="text-xl font-bold">Data de Embarque</h2>
-            </div>
+        <div className="hud-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="hud-panel-head flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+              className="h-8 w-8"
+              title={
+                isHeaderCollapsed ? "Expandir cabeçalho" : "Recolher cabeçalho"
+              }
+            >
+              {isHeaderCollapsed ? (
+                <ChevronDown className="h-5 w-5" />
+              ) : (
+                <ChevronUp className="h-5 w-5" />
+              )}
+            </Button>
+            <h2 className="text-lg font-bold tracking-tight">Data de embarque</h2>
+            <span className="hud-chip">
+              {displayTotalDeals} {displayTotalDeals === 1 ? "pedido" : "pedidos"}
+              {hasFilters ? ` de ${data.summary.totalDeals}` : ""}
+            </span>
 
-            <div className="relative order-last w-full sm:order-none sm:w-auto sm:max-w-xs sm:flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Buscar deal, vendedor, designer..."
-                className="h-9 pl-8 pr-8"
-              />
-              {searchTerm && (
+            <div className="order-last flex w-full items-center gap-2 sm:order-none sm:ml-auto sm:w-auto">
+              <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar pedido, vendedor, designer..."
+                  className="h-9 rounded-[10px] bg-muted pl-8 pr-8"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    title="Limpar busca"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="hud-group" role="group" aria-label="Zoom do quadro">
                 <button
                   type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  title="Limpar busca"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-md border p-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
                   onClick={() => setZoomLevel((prev) => Math.max(prev - 10, 50))}
                   disabled={zoomLevel <= 50}
-                  className="h-7 w-7"
                   title="Diminuir zoom (mostrar mais cards)"
+                  aria-label="Diminuir zoom"
                 >
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-                <span className="min-w-[3rem] px-2 text-center text-xs font-medium">
-                  {zoomLevel}%
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
+                  <ZoomOut />
+                </button>
+                <span className="hud-group-val">{zoomLevel}%</span>
+                <button
+                  type="button"
                   onClick={() =>
                     setZoomLevel((prev) => Math.min(prev + 10, 100))
                   }
                   disabled={zoomLevel >= 100}
-                  className="h-7 w-7"
                   title="Aumentar zoom"
+                  aria-label="Aumentar zoom"
                 >
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
+                  <ZoomIn />
+                </button>
               </div>
-              <Badge variant="outline">
-                {displayTotalDeals} {displayTotalDeals === 1 ? "deal" : "deals"}
-                {hasFilters ? ` de ${data.summary.totalDeals}` : ""}
-              </Badge>
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white bg-transparent">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             {gruposVisiveis.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <Search className="h-8 w-8 opacity-50" />

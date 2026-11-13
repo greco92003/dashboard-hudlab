@@ -15,7 +15,6 @@ import {
   type FunnelStage as ChartStage,
 } from "@/components/charts/funnel-chart";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
@@ -30,12 +29,12 @@ import { storage } from "@/lib/storage";
  */
 const FUNIL_CORES = [
   "#00ff91",
-  "#1ce6b2",
-  "#2ccbd2",
-  "#3aaee8",
-  "#5b8ff3",
-  "#7d75f6",
-  "#9a62f2",
+  "#16dfa9",
+  "#22bfcc",
+  "#2f9fe6",
+  "#4d83f2",
+  "#6a6ff2",
+  "#8a62f0",
 ] as const;
 
 interface ApiFunnelStage {
@@ -146,34 +145,30 @@ function FunnelPanel({ funnel }: { funnel: ApiFunnel }) {
   const lastEventLabel = formatWebhookDate(funnel.lastEventAt);
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-border/60 bg-card/60 shadow-sm backdrop-blur-sm">
-      <div className="border-b border-border/50 px-6 py-5 sm:px-8">
+    <section className="hud-panel overflow-hidden">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 border-b px-5 py-4 sm:px-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-            Teste A/B
-          </p>
-          <div className="flex items-center gap-3">
-            <h2 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+          <p className="hud-field-label">Teste A/B</p>
+          <div className="mt-1 flex items-center gap-2.5">
+            <h2 className="text-lg font-bold tracking-tight sm:text-xl">
               {funnel.title}
             </h2>
             {funnel.active ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
-                Ativo
-              </span>
+              <span className="hud-chip tone-green hud-tone-chip">Ativo</span>
             ) : (
-              <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              <span className="hud-chip">
                 {funnel.retiredAt
                   ? `Aposentado em ${formatDiaCurto(funnel.retiredAt)}`
                   : "Desativado"}
               </span>
             )}
           </div>
-          {lastEventLabel && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              último webhook: {lastEventLabel}
-            </p>
-          )}
         </div>
+        {lastEventLabel && (
+          <p className="text-xs text-muted-foreground">
+            último webhook: {lastEventLabel}
+          </p>
+        )}
       </div>
 
       <div
@@ -214,7 +209,7 @@ function FunnelPanel({ funnel }: { funnel: ApiFunnel }) {
 
 function FunnelSkeleton() {
   return (
-    <div className="space-y-5 rounded-3xl border border-border/60 bg-card/60 p-6 sm:p-8">
+    <div className="hud-panel space-y-5 p-6 sm:p-8">
       <div className="space-y-2">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-7 w-56" />
@@ -309,109 +304,113 @@ function FunilContent() {
       : null;
 
   return (
-    <main className="relative flex flex-1 overflow-hidden px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,255,145,0.09),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(125,117,246,0.08),transparent_32%)]" />
-
-      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-8">
-        <header className="relative flex flex-col items-center justify-center text-center">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/15 bg-primary/5 text-primary">
-            <Split className="h-5 w-5" />
+    <div className="flex flex-1 flex-col gap-5">
+      <div className="hud-v2-head">
+        <div className="hud-v2-title">
+          <div className="hud-v2-tile">
+            <Split />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Funil de Conversão
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Progressão dos contatos em cada braço do teste A/B, atualizada
-            automaticamente pelos webhooks do GHL. Braço aposentado continua
-            aqui pelo histórico, com a data em que saiu.
-          </p>
-
-          <div className="mt-5 flex flex-wrap justify-center gap-2 sm:absolute sm:right-0 sm:top-0 sm:mt-0">
-            <Button asChild size="sm" variant="outline">
-              <Link className="gap-2" href="/funil/followup">
-                <ListChecks className="h-4 w-4" />
-                Follow-Up
-              </Link>
-            </Button>
-            <Button
-              aria-label="Atualizar funis"
-              className="gap-2"
-              disabled={loading || refreshing}
-              onClick={() => loadFunnels(true)}
-              size="sm"
-              variant="outline"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              Atualizar
-            </Button>
+          <div>
+            <h1>Funil de Conversão</h1>
+            <p className="hud-v2-sub">
+              Progressão dos contatos em cada braço do teste A/B, pelos webhooks
+              do GHL. Braço aposentado continua aqui pelo histórico, com a data
+              em que saiu.
+            </p>
           </div>
-        </header>
+        </div>
+        <div className="hud-group" role="group" aria-label="Ações do funil">
+          <Link href="/funil/followup">
+            <ListChecks />
+            Follow-Up
+          </Link>
+          <span className="hud-group-sep" aria-hidden />
+          <button
+            type="button"
+            aria-label="Atualizar funis"
+            disabled={loading || refreshing}
+            onClick={() => loadFunnels(true)}
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+            Atualizar
+          </button>
+        </div>
+      </div>
 
-        <div className="flex flex-col items-center gap-3 lg:flex-row lg:justify-center">
-          <SeletorPeriodo className="justify-center" />
+      <div className="hud-panel hud-bar">
+        <div className="hud-field">
+          <span className="hud-field-label">Período</span>
+          <SeletorPeriodo />
+        </div>
 
-          <div className="flex gap-2">
-            <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
-              size="sm"
+        <div className="hud-field">
+          <span className="hud-field-label">Braços</span>
+          <div className="hud-group" role="group" aria-label="Braços do teste">
+            <button
+              type="button"
+              aria-pressed={statusFilter === "all"}
               onClick={() => handleStatusFilterChange("all")}
             >
               Todos os funis
-            </Button>
-            <Button
-              variant={statusFilter === "active" ? "default" : "outline"}
-              size="sm"
+            </button>
+            <button
+              type="button"
+              aria-pressed={statusFilter === "active"}
               onClick={() => handleStatusFilterChange("active")}
             >
               Somente ativos
-            </Button>
+            </button>
           </div>
         </div>
 
-        {avisoInicio && (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>{avisoInicio}</AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {loading ? (
-          <div className="grid gap-8">
-            <FunnelSkeleton />
-            <FunnelSkeleton />
-          </div>
-        ) : data ? (
-          <div className="grid gap-8 lg:gap-10">
-            {visibleFunnels.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground">
-                Nenhum funil ativo no momento.
-              </p>
-            ) : (
-              visibleFunnels.map((f) => <FunnelPanel key={f.id} funnel={f} />)
-            )}
-          </div>
-        ) : null}
-
         {!loading && data && (
-          <p className="text-center text-xs text-muted-foreground">
-            {formatNumber(data.meta.totalEvents)}{" "}
-            {data.meta.range
-              ? "webhooks no período selecionado"
-              : "webhooks recebidos"}{" "}
-            • último evento: {lastEventLabel}
-          </p>
+          <div className="hud-field ml-auto justify-items-end text-right">
+            <span className="hud-field-label">
+              {data.meta.range ? "Webhooks no período" : "Webhooks recebidos"}
+            </span>
+            <div className="flex h-9 items-center gap-1.5 text-sm">
+              <span className="text-base font-bold tabular-nums">
+                {formatNumber(data.meta.totalEvents)}
+              </span>
+              <span className="text-muted-foreground">
+                · {data.meta.lastEventAt ? `último evento ${lastEventLabel}` : lastEventLabel}
+              </span>
+            </div>
+          </div>
         )}
       </div>
-    </main>
+
+      {avisoInicio && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>{avisoInicio}</AlertDescription>
+        </Alert>
+      )}
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {loading ? (
+        <div className="grid gap-5">
+          <FunnelSkeleton />
+          <FunnelSkeleton />
+        </div>
+      ) : data ? (
+        <div className="grid gap-5">
+          {visibleFunnels.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground">
+              Nenhum funil ativo no momento.
+            </p>
+          ) : (
+            visibleFunnels.map((f) => <FunnelPanel key={f.id} funnel={f} />)
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -419,10 +418,10 @@ export default function FunilPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex flex-1 flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="flex flex-1 flex-col gap-5">
           <FunnelSkeleton />
           <FunnelSkeleton />
-        </main>
+        </div>
       }
     >
       <FunilContent />

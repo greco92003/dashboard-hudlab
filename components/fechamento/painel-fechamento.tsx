@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -296,7 +295,8 @@ export function PainelDeFechamento() {
       }
     }
     w.document.documentElement.className = document.documentElement.className;
-    w.document.body.className = "bg-background text-foreground antialiased";
+    // hud-v2 leva as cores do piloto (paleta B) para a janela.
+    w.document.body.className = "hud-v2 bg-background text-foreground antialiased";
     w.document.title = "Fechamento";
     w.addEventListener("pagehide", () => setPip(null));
     setPip(w);
@@ -305,46 +305,47 @@ export function PainelDeFechamento() {
   const cards = painel?.cards ?? [];
 
   return (
-    <div className="flex flex-1 flex-col gap-4 sm:gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-lg font-bold sm:text-xl md:text-2xl">
-            <Flame className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
-            Fechamento
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            Quero aproveitar, Prioridade de Fechamento e Finalizando Venda · atualizado às {hora(painel?.atualizadoEm ?? null)}
-            {painel ? ` · ${brl(painel.valorEmFechamento)} em fechamento` : ""}
-          </p>
+    <div className="flex flex-1 flex-col gap-4 sm:gap-5">
+      <div className="hud-v2-head">
+        <div className="hud-v2-title">
+          <div className="hud-v2-tile">
+            <Flame />
+          </div>
+          <div>
+            <h1>Fechamento</h1>
+            <p className="hud-v2-sub">
+              Quero aproveitar, Prioridade de Fechamento e Finalizando Venda · atualizado às {hora(painel?.atualizadoEm ?? null)}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={alternarSom} aria-pressed={som}>
-            {som ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+        <div className="hud-group" role="group" aria-label="Ações do painel">
+          <button type="button" onClick={alternarSom} aria-pressed={som}>
+            {som ? <Volume2 /> : <VolumeX />}
             {som ? "Som ligado" : "Ligar som"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void abrirJanela()}>
-            <PictureInPicture2 className="h-4 w-4" />
+          </button>
+          <span className="hud-group-sep" aria-hidden />
+          <button type="button" onClick={() => void abrirJanela()}>
+            <PictureInPicture2 />
             Janela flutuante
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void atualizar()} disabled={atualizando}>
-            {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </button>
+          <span className="hud-group-sep" aria-hidden />
+          <button type="button" onClick={() => void atualizar()} disabled={atualizando}>
+            {atualizando ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Atualizar
-          </Button>
+          </button>
         </div>
       </div>
 
-      {painel && <Contagem contagem={painel.contagem} />}
+      {painel && <FaixaDeIndicadores painel={painel} />}
 
       {carregando ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : cards.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum card nas etapas do painel. Toque em Atualizar para ler o GHL.
-          </CardContent>
-        </Card>
+        <div className="hud-panel py-10 text-center text-sm text-muted-foreground">
+          Nenhum card nas etapas do painel. Toque em Atualizar para ler o GHL.
+        </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3 min-[1400px]:grid-cols-2">
           {cards.map((card) => (
             <CardDeFechamento
               key={card.oportunidadeId}
@@ -458,7 +459,7 @@ function CopiarLink({ link, compacto = false }: { link: string; compacto?: boole
     );
   }
   return (
-    <Button size="sm" variant="default" onClick={(e) => void copiar(e)}>
+    <Button size="sm" className="hud-btn-accent h-8" onClick={(e) => void copiar(e)}>
       {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
       {copiado ? "Link copiado" : "Copiar link da conversa"}
     </Button>
@@ -474,6 +475,36 @@ function Contagem({ contagem }: { contagem: Record<Cor, number> }) {
           {contagem[c]} {COR[c].nome}
         </Badge>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Faixa de indicadores do topo: o valor em fechamento e uma célula por cor,
+ * sempre todas (zero fica apagado), para a posição de cada número não mudar.
+ */
+function FaixaDeIndicadores({ painel }: { painel: Painel }) {
+  return (
+    <div className="hud-panel hud-strip grid-cols-2 sm:grid-cols-3 xl:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))]">
+      <div className="col-span-2 sm:col-span-3 xl:col-span-1">
+        <span className="hud-strip-label">Em fechamento</span>
+        <span className="hud-strip-value" style={{ color: "var(--hud-accent-text)" }}>
+          {brl(painel.valorEmFechamento)}
+        </span>
+      </div>
+      {ORDEM_CORES.map((c) => {
+        const n = painel.contagem[c];
+        const alerta = c === "vermelho" && n > 0;
+        return (
+          <div key={c} className={COR[c].tom}>
+            <span className="hud-strip-label">
+              <span className={cn("h-2 w-2 shrink-0 rounded-full hud-tone-dot", alerta && "hud-tone-blink")} />
+              <span className="truncate">{COR[c].nome.charAt(0).toUpperCase() + COR[c].nome.slice(1)}</span>
+            </span>
+            <span className={cn("hud-strip-value", alerta && "hud-tone-text", n === 0 && "text-muted-foreground")}>{n}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -497,103 +528,105 @@ function CardDeFechamento({
 }) {
   const [data, setData] = useState(amanha());
   const alerta = card.cor === "vermelho" || card.ultimaChance;
+  const detalhes = [
+    card.pares ? `${card.pares} pares` : null,
+    card.valor ? brl(card.valor) : null,
+    card.janelaTexto,
+  ].filter(Boolean);
   return (
-    <Card className={cn("relative overflow-hidden py-0", COR[card.cor].card, alerta && "hud-tone-pulse")}>
+    <div className={cn("hud-fcard", COR[card.cor].tom, alerta && "hud-tone-pulse")}>
       <div className={cn("absolute inset-y-0 left-0 w-1", COR[card.cor].faixa, alerta && "hud-tone-blink")} />
-      <CardContent className="flex flex-col gap-2 py-3 pl-5 pr-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-semibold">{card.nome}</span>
-          <Badge variant="secondary" className="font-normal">
-            {card.etapa}
-          </Badge>
-          {card.pares ? <span className="text-sm text-muted-foreground">{card.pares} pares</span> : null}
-          {card.valor ? <span className="text-sm text-muted-foreground">· {brl(card.valor)}</span> : null}
-          {card.sinal && SINAL[card.sinal] ? (
-            <Badge
-              variant="outline"
-              className={cn("font-normal hud-tone-chip", SINAL[card.sinal].tom)}
-            >
-              {SINAL[card.sinal].nome}
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span className={cn("font-medium", COR[card.cor].texto, card.ultimaChance && "hud-tone-blink")}>{card.rotulo}</span>
-          {card.janelaTexto && <span className="text-xs text-muted-foreground">· {card.janelaTexto}</span>}
-        </div>
-        {card.ultimaMensagemCliente && (
-          <p className="line-clamp-2 text-xs text-muted-foreground">
-            <MessageCircle className="mr-1 inline h-3 w-3" />
-            {card.ultimaMensagemCliente}
-          </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">{card.nome}</span>
+        <span className="hud-chip">{card.etapa}</span>
+        {card.sinal && SINAL[card.sinal] ? (
+          <span className={cn("hud-chip hud-tone-chip", SINAL[card.sinal].tom)}>{SINAL[card.sinal].nome}</span>
+        ) : null}
+        {card.linkConversa && (
+          <span className="ml-auto">
+            <CopiarLink link={card.linkConversa} />
+          </span>
         )}
-        {(card.combinado || card.pendencia) && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            {card.combinado && (
-              <span>
-                <span className="text-muted-foreground">Combinado:</span> {card.combinado}
-              </span>
-            )}
-            {card.pendencia && (
-              <span>
-                <span className="text-muted-foreground">Falta:</span> {card.pendencia}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {card.linkConversa && <CopiarLink link={card.linkConversa} />}
-          {card.cor !== "cami" && (
-            <>
-              <Button size="sm" variant="outline" onClick={onContato} disabled={ocupado}>
-                {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Fiz contato
-              </Button>
-              {!card.janelaAberta && (
-                <Button size="sm" variant="outline" onClick={onModelo} disabled={ocupado}>
-                  <Send className="h-4 w-4" />
+      </div>
+      <p className={cn("text-sm font-semibold", COR[card.cor].texto, card.ultimaChance && "hud-tone-blink")}>{card.rotulo}</p>
+      {detalhes.length > 0 && <p className="-mt-1 text-xs text-muted-foreground">{detalhes.join(" · ")}</p>}
+      {card.ultimaMensagemCliente && (
+        <p className="line-clamp-2 text-xs text-muted-foreground">
+          <MessageCircle className="mr-1 inline h-3 w-3" />
+          {card.ultimaMensagemCliente}
+        </p>
+      )}
+      {(card.combinado || card.pendencia) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          {card.combinado && (
+            <span>
+              <span className="text-muted-foreground">Combinado:</span> {card.combinado}
+            </span>
+          )}
+          {card.pendencia && (
+            <span>
+              <span className="text-muted-foreground">Falta:</span> {card.pendencia}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="hud-fcard-actions">
+        {card.cor !== "cami" && (
+          <div className="hud-group" role="group" aria-label={`Ações de ${card.nome}`}>
+            <button type="button" onClick={onContato} disabled={ocupado}>
+              {ocupado ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+              Fiz contato
+            </button>
+            {!card.janelaAberta && (
+              <>
+                <span className="hud-group-sep" aria-hidden />
+                <button type="button" onClick={onModelo} disabled={ocupado}>
+                  <Send />
                   Mandar modelo
-                </Button>
-              )}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={ocupado}>
-                    <CalendarClock className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            <span className="hud-group-sep" aria-hidden />
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" disabled={ocupado}>
+                  <CalendarClock />
+                  Adiar
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium" htmlFor={`adiar-${card.oportunidadeId}`}>
+                    Retomar o contato em
+                  </label>
+                  <input
+                    id={`adiar-${card.oportunidadeId}`}
+                    type="date"
+                    value={data}
+                    min={amanha()}
+                    onChange={(e) => setData(e.target.value)}
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  />
+                  <Button size="sm" onClick={() => onAdiar(data)} disabled={!data}>
                     Adiar
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium" htmlFor={`adiar-${card.oportunidadeId}`}>
-                      Retomar o contato em
-                    </label>
-                    <input
-                      id={`adiar-${card.oportunidadeId}`}
-                      type="date"
-                      value={data}
-                      min={amanha()}
-                      onChange={(e) => setData(e.target.value)}
-                      className="rounded-md border bg-background px-2 py-1.5 text-sm"
-                    />
-                    <Button size="sm" onClick={() => onAdiar(data)} disabled={!data}>
-                      Adiar
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </>
-          )}
-          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="tone-rose hud-tone-text">
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+        <div className="hud-fcard-end">
+          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="tone-rose hud-tone-text h-8 px-2.5">
             <ThumbsDown className="h-4 w-4" />
             Perdido
           </Button>
-          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="tone-green hud-tone-text">
+          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="tone-green hud-tone-text h-8 px-2.5">
             <BellRing className="h-4 w-4" />
             Fechou
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

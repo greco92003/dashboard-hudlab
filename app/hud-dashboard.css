@@ -761,3 +761,409 @@
   border-left-width: 4px;
   border-left-color: var(--tone-violet);
 }
+
+/*
+ * Layout v2, piloto (13/11/2026): Fechamento, Funil e Programação.
+ * Paleta B: grafite neutro, com o verde da marca só nos destaques. As três
+ * páginas seguem a mesma organização:
+ * - cabeçalho com ícone, título e uma caixa única de ações (.hud-group);
+ * - filtros num painel só (.hud-bar), com rótulo em cima de cada grupo;
+ * - quadros e cards em painéis de vidro (.hud-panel).
+ * Vale onde o ConditionalSidebar põe .hud-v2. As cores ficam em :root:has()
+ * para valer também nos diálogos e popovers, que abrem fora da área do menu,
+ * e na janela flutuante do Fechamento. Aprovado, sai do piloto para o resto.
+ */
+:root:has(.hud-v2) {
+  --background: #f3f5f7;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #00d283;
+  --primary-foreground: #04170f;
+  --muted: #f6f7f9;
+  --muted-foreground: #5f6b7a;
+  --accent: #eceff3;
+  --accent-foreground: #111827;
+  --border: #e1e5ea;
+  --input: #d9dee5;
+  --ring: #00a870;
+  --sidebar: #fafbfc;
+  --sidebar-foreground: #4b5563;
+  --sidebar-border: #e1e5ea;
+  --hud-highlight: #047857;
+  --hud-surface-top: #ffffff;
+  --hud-edge: #ffffff;
+  --hud-panel-shadow: 0 1px 2px #0f172a0d, 0 10px 30px -18px #0f172a33;
+  --hud-canvas-glow: #d8f7e8aa;
+  --hud-canvas-glow-2: #dde8f8aa;
+  --hud-frame: #e1e5ea;
+  --chart-grid: #e7eaee;
+  --hud-accent-1: #00d283;
+  --hud-accent-2: #00b3a4;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #047857;
+}
+
+:root.dark:has(.hud-v2) {
+  --background: #0a0c0f;
+  --foreground: #eef1f4;
+  --card: #121519;
+  --card-foreground: #eef1f4;
+  --popover: #15181d;
+  --popover-foreground: #eef1f4;
+  --primary: #00e68a;
+  --primary-foreground: #04170f;
+  --muted: #15181d;
+  --muted-foreground: #9aa3ad;
+  --accent: #1e2229;
+  --accent-foreground: #eef1f4;
+  --border: #262b33;
+  --input: #2c323b;
+  --ring: #00e68a;
+  --sidebar: #0e1014;
+  --sidebar-foreground: #b4bcc6;
+  --sidebar-border: #20242b;
+  --hud-highlight: #3ef5a6;
+  --hud-surface-top: #181b21;
+  --hud-edge: rgb(255 255 255 / 4%);
+  --hud-panel-shadow: 0 18px 40px -22px #000c;
+  --hud-canvas-glow: #00ff9112;
+  --hud-canvas-glow-2: #3b8cf010;
+  --hud-frame: #262b33;
+  --chart-grid: #22262d;
+  --hud-accent-1: #00e68a;
+  --hud-accent-2: #00c2b0;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #3ef5a6;
+}
+
+.hud-v2 [data-slot="sidebar-inset"] {
+  background:
+    radial-gradient(900px 460px at 18% -6%, var(--hud-canvas-glow), transparent 70%),
+    radial-gradient(900px 600px at 105% 105%, var(--hud-canvas-glow-2), transparent 70%),
+    var(--background);
+}
+
+.hud-v2 [data-sidebar="sidebar"] {
+  background: linear-gradient(170deg, var(--sidebar), var(--background) 70%);
+}
+
+.hud-v2 [data-sidebar="menu-button"][data-active="true"] {
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  color: var(--hud-accent-fg);
+  box-shadow: 0 8px 20px -10px var(--hud-accent-1);
+}
+
+/* Cabeçalho da página */
+.hud-v2-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem 1.25rem;
+}
+
+.hud-v2-title {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.hud-v2-tile {
+  display: grid;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--hud-accent-1) 38%, var(--border));
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--hud-accent-1) 22%, transparent),
+    color-mix(in srgb, var(--hud-accent-2) 14%, transparent)
+  );
+  box-shadow: 0 0 24px -8px color-mix(in srgb, var(--hud-accent-1) 60%, transparent);
+  color: var(--hud-accent-text);
+}
+
+.hud-v2-tile svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.hud-v2-title h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.hud-v2-sub {
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* Caixa de botões: um contorno só, botões separados por fio */
+.hud-group {
+  display: inline-flex;
+  max-width: 100%;
+  height: var(--hud-control-h);
+  flex: none;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+  color: var(--foreground);
+  scrollbar-width: none;
+}
+
+.hud-group > :is(button, a, [role="button"]) {
+  display: inline-flex;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hud-group > :is(button, a, [role="button"]):hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.hud-group > :disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hud-group > :is(button, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.hud-group > :is(button, a, [role="button"]) svg {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.hud-group > [aria-pressed="true"] {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--hud-accent-1) 24%, transparent),
+    color-mix(in srgb, var(--hud-accent-2) 16%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hud-accent-1) 42%, transparent);
+  color: var(--hud-accent-text);
+  font-weight: 600;
+}
+
+.hud-group > [data-slot="select-trigger"] {
+  min-width: 7.5rem;
+  justify-content: space-between;
+}
+
+.hud-group-sep {
+  width: 1px;
+  flex: none;
+  margin: 0.375rem 1px;
+  background: var(--border);
+}
+
+.hud-group-val {
+  display: grid;
+  min-width: 2.9rem;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-n {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:is([aria-pressed="true"], .hud-tone-text) > .hud-n {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* Botão de destaque (degradê verde da marca) */
+.hud-btn-accent {
+  border: 0;
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  box-shadow: 0 8px 20px -12px var(--hud-accent-1);
+  color: var(--hud-accent-fg);
+  font-weight: 600;
+}
+
+.hud-btn-accent:hover:not(:disabled) {
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  filter: brightness(1.07);
+}
+
+/* Painel de vidro, barra de filtros e campo com rótulo */
+.hud-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--hud-surface-top), var(--card) 62%);
+  box-shadow: inset 0 1px var(--hud-edge), var(--hud-panel-shadow);
+}
+
+.hud-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 0.875rem;
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.hud-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.875rem 1.6rem;
+  padding: 0.875rem 1.1rem;
+}
+
+.hud-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.hud-field-label {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hud-chip {
+  display: inline-flex;
+  height: 1.375rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Cor neutra sem peso: com hud-tone-chip junto, vale o tom. */
+:where(.hud-chip) {
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+  color: var(--muted-foreground);
+}
+
+/* Faixa de indicadores (Fechamento): células separadas por fio */
+.hud-strip {
+  display: grid;
+  overflow: hidden;
+  gap: 1px;
+  background: var(--border);
+}
+
+.hud-strip > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.4rem;
+  padding: 0.875rem 1rem;
+  background: linear-gradient(160deg, var(--hud-surface-top), var(--card));
+}
+
+.hud-strip-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hud-strip-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card do Fechamento: tingido pelo tom, ações numa barra no rodapé */
+.hud-fcard {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  align-content: start;
+  gap: 0.5rem;
+  padding: 0.875rem 0.875rem 0 1.125rem;
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, var(--border));
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone) 11%, transparent), transparent 55%),
+    linear-gradient(160deg, var(--hud-surface-top), var(--card) 62%);
+  box-shadow:
+    inset 0 1px var(--hud-edge),
+    0 16px 34px -22px color-mix(in srgb, var(--tone) 55%, transparent);
+}
+
+.hud-fcard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem -0.875rem 0 -1.125rem;
+  padding: 0.625rem 0.875rem 0.75rem 1.125rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.hud-fcard-actions .hud-group {
+  --hud-control-h: 2rem;
+}
+
+.hud-fcard-actions .hud-group > :is(button, a, [role="button"]) {
+  padding: 0 0.55rem;
+  font-size: 0.78rem;
+}
+
+.hud-fcard-end {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Colunas do quadro da Programação: superfície rebaixada dentro do painel */
+.hud-v2 .hud-board-col {
+  border-color: var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  box-shadow: none;
+}
