@@ -13,8 +13,6 @@ interface ConditionalSidebarProps {
 }
 
 const hudDashboardRoutes = ["/dashboard", "/deals", "/meta-marketing"];
-// Piloto do layout v2 (paleta B, botões em caixas, filtros num painel só).
-const hudV2Routes = ["/fechamento", "/funil", "/programacao"];
 const fullHeightBoardRoutes = ["/programacao", "/expedicao"];
 
 // Keep the same responsive content inset and rhythm used by /dashboard.
@@ -36,9 +34,7 @@ export function ConditionalSidebar({
   // Tema HUD em toda página com menu; os cards de vidro só nas redesenhadas.
   const shellClassName = hudDashboardRoutes.includes(pathname)
     ? "hud-theme hud-dashboard-shell"
-    : hudV2Routes.includes(pathname)
-      ? "hud-theme hud-v2"
-      : "hud-theme";
+    : "hud-theme";
   const isBoardPage = fullHeightBoardRoutes.includes(pathname);
   const isNctsPage = pathname.startsWith("/ncts");
 

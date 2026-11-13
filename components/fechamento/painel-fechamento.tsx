@@ -309,8 +309,7 @@ export function PainelDeFechamento() {
       }
     }
     w.document.documentElement.className = document.documentElement.className;
-    // hud-v2 leva as cores do piloto (paleta B) para a janela.
-    w.document.body.className = "hud-v2 bg-background text-foreground antialiased";
+    w.document.body.className = "bg-background text-foreground antialiased";
     w.document.title = "Fechamento";
     w.addEventListener("pagehide", () => setPip(null));
     setPip(w);

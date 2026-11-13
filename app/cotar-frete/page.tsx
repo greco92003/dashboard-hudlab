@@ -8,6 +8,7 @@ import QuoteTab from "./_components/quote-tab";
 import TablesTab from "./_components/tables-tab";
 import VolumesTab from "./_components/volumes-tab";
 import { FreightVolume, FreightCarrier } from "./_components/types";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 export default function CotarFretePage() {
   const [volumes, setVolumes] = useState<FreightVolume[]>([]);
@@ -36,15 +37,11 @@ export default function CotarFretePage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Truck className="h-6 w-6 text-primary" /> Cotar Frete
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Cotação de frete fracionado — importe as tabelas das transportadoras (rotas, faixas de
-          peso e taxas) e cote por destino, volumes e valor da NF.
-        </p>
-      </div>
+      <CabecalhoDaPagina
+        icone={Truck}
+        titulo="Cotar Frete"
+        descricao="Cotação de frete fracionado: importe as tabelas das transportadoras (rotas, faixas de peso e taxas) e cote por destino, volumes e valor da NF."
+      />
 
       <Tabs defaultValue="quotation" className="w-full">
         <TabsList className="mb-4">

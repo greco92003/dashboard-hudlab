@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { AlertCircle, Info, ListChecks, RefreshCw, Split } from "lucide-react";
+import { AlertCircle, Filter, Info, ListChecks, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import {
   FunnelChart,
@@ -308,7 +308,7 @@ function FunilContent() {
       <div className="hud-v2-head">
         <div className="hud-v2-title">
           <div className="hud-v2-tile">
-            <Split />
+            <Filter />
           </div>
           <div>
             <h1>Funil de Conversão</h1>

@@ -18,7 +18,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -34,6 +33,7 @@ import type {
 } from "@/lib/ghl/order-registration-shared";
 import { orderRegistrationDraftSchema } from "@/lib/ghl/order-registration-shared";
 import { OrderRegistrationCard } from "./order-registration-card";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const ORDER_REGISTRATION_TABS = ["oportunidades", "editar"] as const;
 
@@ -270,40 +270,20 @@ export default function OrderRegistrationWorkspace() {
       : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
-            <ClipboardCheck className="h-4 w-4" />
-            Cadastros · GHL
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Cadastro de pedidos
-          </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Selecione uma oportunidade e revise o pedido em uma área dedicada.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">
-            Atendimento · Pagamento Confirmado/Completar Dados · Abertos e ganhos
-          </Badge>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={refreshing}
-            onClick={() => void load(true)}
-          >
-            {refreshing ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <RefreshCw />
-            )}
-            Atualizar
-          </Button>
-        </div>
-      </div>
+    <div className="flex w-full flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={ClipboardCheck}
+        titulo="Cadastro de pedidos"
+        descricao="Atendimento · Pagamento Confirmado/Completar Dados · abertos e ganhos. Selecione uma oportunidade e revise o pedido."
+        acoes={
+          <GrupoDeAcoes rotulo="Ações do cadastro">
+            <button type="button" disabled={refreshing} onClick={() => void load(true)}>
+              {refreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              Atualizar
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">

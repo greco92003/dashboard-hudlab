@@ -9,7 +9,7 @@ import {
   ChartTooltip,
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/utils";
-import { RefreshCw, TrendingUp, Target, Zap, BarChart3 } from "lucide-react";
+import { Activity, RefreshCw, TrendingUp, Target, Zap, BarChart3 } from "lucide-react";
 
 function LiveDot() {
   return (
@@ -21,6 +21,7 @@ function LiveDot() {
 }
 import { Skeleton } from "@/components/ui/skeleton";
 import { IntegrationHealthNotice } from "@/components/integration-health-notice";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 interface ChartDataPoint {
   date: string;
@@ -64,10 +65,10 @@ const MONTH_NAMES = [
 ];
 
 const chartConfig = {
-  revenue: { label: "Faturamento", color: "#22c55e" },
-  meta: { label: "Meta", color: "#9ca3af" },
-  forecast: { label: "Forecast", color: "#a855f7" },
-  pace: { label: "Pace", color: "#f97316" },
+  revenue: { label: "Faturamento", color: "var(--tone-green)" },
+  meta: { label: "Meta", color: "var(--tone-slate)" },
+  forecast: { label: "Forecast", color: "var(--tone-violet)" },
+  pace: { label: "Pace", color: "var(--tone-sky)" },
 } satisfies ChartConfig;
 
 function useUTC3Clock() {
@@ -154,31 +155,29 @@ export default function LiveDashboardPage() {
     : 0;
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <LiveDot />
-          <h1 className="text-xl sm:text-2xl font-bold">Live Dashboard</h1>
-          <IntegrationHealthNotice />
-          {loading && (
-            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-          )}
-        </div>
-        <div className="text-right">
-          <div className="text-2xl sm:text-3xl font-mono font-bold tabular-nums">
-            {time}
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina
+        icone={Activity}
+        titulo={
+          <span className="flex items-center gap-2.5">
+            Live Dashboard
+            <LiveDot />
+            <IntegrationHealthNotice />
+            {loading && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </span>
+        }
+        descricao={
+          data
+            ? `${MONTH_NAMES[data.month - 1]} ${data.year} · ciclo de ${data.startDate.slice(8, 10)}/${data.startDate.slice(5, 7)} a ${data.endDate.slice(8, 10)}/${data.endDate.slice(5, 7)}`
+            : "Faturamento do ciclo em tempo real"
+        }
+        acoes={
+          <div className="hud-panel px-4 py-2 text-right">
+            <div className="font-mono text-2xl font-bold tabular-nums sm:text-3xl">{time}</div>
+            <div className="text-xs text-muted-foreground sm:text-sm">{dateStr}</div>
           </div>
-          <div className="text-xs sm:text-sm text-muted-foreground">
-            {dateStr}
-          </div>
-          {data && (
-            <div className="text-sm font-medium text-muted-foreground">
-              {MONTH_NAMES[data.month - 1]} {data.year}
-            </div>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* KPI Cards */}
       {loading ? (
@@ -188,31 +187,11 @@ export default function LiveDashboardPage() {
           ))}
         </div>
       ) : data ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard
-            icon={<TrendingUp className="h-4 w-4 text-green-500" />}
-            label="Faturamento"
-            value={formatCurrency(data.totalRevenue)}
-            color="green"
-          />
-          <KPICard
-            icon={<Target className="h-4 w-4 text-gray-500" />}
-            label="Meta"
-            value={formatCurrency(data.monthlyTarget)}
-            color="gray"
-          />
-          <KPICard
-            icon={<BarChart3 className="h-4 w-4 text-orange-500" />}
-            label="Pace"
-            value={formatCurrency(currentPace)}
-            color="orange"
-          />
-          <KPICard
-            icon={<Zap className="h-4 w-4 text-purple-500" />}
-            label="Forecast"
-            value={formatCurrency(data.totalForecast)}
-            color="purple"
-          />
+        <div className="hud-panel hud-strip grid-cols-2 lg:grid-cols-4">
+          <KPICard icon={TrendingUp} label="Faturamento" value={formatCurrency(data.totalRevenue)} tom="tone-green" destaque />
+          <KPICard icon={Target} label="Meta" value={formatCurrency(data.monthlyTarget)} tom="tone-slate" />
+          <KPICard icon={BarChart3} label="Pace" value={formatCurrency(currentPace)} tom="tone-sky" />
+          <KPICard icon={Zap} label="Forecast" value={formatCurrency(data.totalForecast)} tom="tone-violet" />
         </div>
       ) : null}
 
@@ -230,36 +209,28 @@ export default function LiveDashboardPage() {
   );
 }
 
+/** Célula da faixa de indicadores, com o tom da linha correspondente no gráfico. */
 function KPICard({
-  icon,
+  icon: Icone,
   label,
   value,
-  color,
+  tom,
+  destaque = false,
 }: {
-  icon: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  color: string;
+  tom: string;
+  destaque?: boolean;
 }) {
-  const borderColors: Record<string, string> = {
-    green: "border-l-green-500",
-    gray: "border-l-gray-400",
-    orange: "border-l-orange-500",
-    purple: "border-l-purple-500",
-  };
-
   return (
-    <Card className={`border-l-4 ${borderColors[color] || ""}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-2 mb-1">
-          {icon}
-          <span className="text-xs sm:text-sm text-muted-foreground font-medium">
-            {label}
-          </span>
-        </div>
-        <div className="text-lg sm:text-xl font-bold">{value}</div>
-      </CardContent>
-    </Card>
+    <div className={tom}>
+      <span className="hud-strip-label">
+        <Icone className="hud-tone-text h-4 w-4" />
+        {label}
+      </span>
+      <span className={destaque ? "hud-strip-value hud-tone-text" : "hud-strip-value"}>{value}</span>
+    </div>
   );
 }
 
@@ -301,8 +272,8 @@ function LiveChart({
           </CardTitle>
           {/* Forecast overflow badge — only shown when forecast exceeds chart scale */}
           {forecastOverflow && (
-            <div className="flex items-center gap-1.5 rounded-md border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-sm font-semibold text-purple-400 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-purple-500 inline-block" />
+            <div className="tone-violet hud-tone-chip flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold">
+              <span className="hud-tone-dot inline-block h-2 w-2 rounded-full" />
               Forecast&nbsp;
               <span className="font-mono">{formatCurrency(forecastValue)}</span>
             </div>
@@ -341,26 +312,26 @@ function LiveChart({
                         {d.date.slice(8, 10)}/{d.date.slice(5, 7)}
                       </p>
                       {d.revenue !== null && (
-                        <p className="text-green-500">
+                        <p className="tone-green hud-tone-text">
                           Faturamento: {formatCurrency(d.revenue)}
                         </p>
                       )}
-                      <p className="text-gray-500">
+                      <p className="tone-slate hud-tone-text">
                         Meta: {formatCurrency(d.meta)}
                       </p>
                       {d.forecastOriginal !== null &&
                         d.forecastOriginal !== undefined && (
-                          <p className="text-purple-500">
+                          <p className="tone-violet hud-tone-text">
                             Forecast: {formatCurrency(d.forecastOriginal)}
                             {d.forecastOriginal > yAxisMax && (
-                              <span className="ml-1 text-purple-400 text-xs">
+                              <span className="ml-1 text-xs">
                                 ↑
                               </span>
                             )}
                           </p>
                         )}
                       {d.pace !== null && (
-                        <p className="text-orange-500">
+                        <p className="tone-sky hud-tone-text">
                           Pace: {formatCurrency(d.pace)}
                         </p>
                       )}
@@ -372,8 +343,8 @@ function LiveChart({
             />
             <defs>
               <linearGradient id="fillRevenueLive" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
+                <stop offset="5%" stopColor="var(--tone-green)" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="var(--tone-green)" stopOpacity={0.03} />
               </linearGradient>
             </defs>
 
@@ -382,31 +353,31 @@ function LiveChart({
               dataKey="meta"
               type="monotone"
               fill="none"
-              stroke="#9ca3af"
+              stroke="var(--tone-slate)"
               strokeWidth={2}
               strokeDasharray="8 4"
               dot={false}
               connectNulls
             />
 
-            {/* Forecast - purple dashed */}
+            {/* Forecast - violeta tracejado */}
             <Area
               dataKey="forecast"
               type="monotone"
               fill="none"
-              stroke="#a855f7"
+              stroke="var(--tone-violet)"
               strokeWidth={2}
               strokeDasharray="6 3"
               dot={false}
               connectNulls
             />
 
-            {/* Pace - orange dashed */}
+            {/* Pace - azul-céu tracejado */}
             <Area
               dataKey="pace"
               type="monotone"
               fill="none"
-              stroke="#f97316"
+              stroke="var(--tone-sky)"
               strokeWidth={2}
               strokeDasharray="6 3"
               dot={false}
@@ -419,7 +390,7 @@ function LiveChart({
               type="monotone"
               fill="url(#fillRevenueLive)"
               fillOpacity={1}
-              stroke="#22c55e"
+              stroke="var(--tone-green)"
               strokeWidth={2.5}
               dot={false}
               connectNulls

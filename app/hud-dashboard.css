@@ -1,7 +1,11 @@
 /*
- * Tema HUD (Hud Lab).
+ * Tema HUD (Hud Lab), paleta B (aprovada em 13/11/2026): grafite neutro, com o
+ * verde da marca só nos destaques.
  * - Cores (:root e .dark): o app inteiro, inclusive popovers, diálogos e avisos,
  *   que o navegador abre fora da área do menu.
+ * - Padrão das telas (mais abaixo, "Layout v2"): cabeçalho com uma caixa única
+ *   de ações, filtros num painel só, painéis de vidro. Componentes prontos em
+ *   components/hud/pagina.tsx.
  * - .hud-theme: menu, cabeçalho, abas, carregamento e gráficos em toda página com menu.
  * - .hud-dashboard-shell: cards de vidro e faixas de indicadores só no Dashboard,
  *   em Negócios e no Meta Marketing (redesenhados). Essas regras passam por cima
@@ -10,42 +14,48 @@
  */
 :root {
   --hud-brand: #00ff91;
-  --background: #edf3ef;
-  --foreground: #102820;
-  --card: #fcfefc;
-  --card-foreground: #102820;
-  --popover: #fcfefc;
-  --popover-foreground: #102820;
-  --primary: var(--hud-brand);
-  --primary-foreground: #03291b;
-  --muted: #e7f0ea;
-  --muted-foreground: #50695f;
-  --accent: #e1f2e9;
-  --accent-foreground: #134633;
-  --border: #d8e6de;
-  --input: #cfdfd5;
-  --ring: #087e58;
-  --sidebar: #f4f9f5;
-  --sidebar-foreground: #39584b;
-  --sidebar-border: #d8e6de;
+  --background: #f3f5f7;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #00d283;
+  --primary-foreground: #04170f;
+  --muted: #f6f7f9;
+  --muted-foreground: #5f6b7a;
+  --accent: #eceff3;
+  --accent-foreground: #111827;
+  --border: #e1e5ea;
+  --input: #d9dee5;
+  --ring: #00a870;
+  --sidebar: #fafbfc;
+  --sidebar-foreground: #4b5563;
+  --sidebar-border: #e1e5ea;
   --sidebar-accent: var(--accent);
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-ring: var(--ring);
-  --hud-highlight: #086545;
+  --hud-highlight: #047857;
   --hud-chart-current: #087e58;
-  --hud-chart-previous: #648078;
-  --hud-chart-target: #976b20;
-  --hud-info: #286e8e;
-  --hud-loss: #a6374d;
+  --hud-chart-previous: #8a94a3;
+  --hud-chart-target: #6a4fd6;
+  --hud-info: #2a78bb;
+  --hud-loss: #d22f58;
   --chart-1: var(--hud-chart-current);
-  --chart-grid: #deebe4;
-  --hud-surface-top: #fff;
-  --hud-edge: rgb(255 255 255 / 92%);
-  --hud-panel-shadow: 0 3px 8px #173e2510, 0 12px 28px #173e2508;
-  --hud-canvas-glow: #bce9d5;
-  --hud-frame: #c8dfd3;
+  --chart-grid: #e7eaee;
+  --hud-surface-top: #ffffff;
+  --hud-edge: #ffffff;
+  --hud-panel-shadow: 0 1px 2px #0f172a0d, 0 10px 30px -18px #0f172a33;
+  --hud-canvas-glow: #d8f7e8aa;
+  --hud-canvas-glow-2: #dde8f8aa;
+  --hud-frame: #e1e5ea;
+  /* Destaque: degradê do verde da marca (botão principal, item ativo, ícone do título). */
+  --hud-accent-1: #00d283;
+  --hud-accent-2: #00b3a4;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #047857;
   --hud-chart-height: 310px;
-  /* Altura única dos controles de filtro (períodos, datas, status, botões da barra). */
+  /* Altura única dos controles (botões, grupos, seletores, campos de data). */
   --hud-control-h: 2.25rem;
   background: var(--background);
   color: var(--foreground);
@@ -53,39 +63,60 @@
 }
 
 .dark {
-  --background: #07110e;
-  --foreground: #eef9f3;
-  --card: #101e19;
-  --card-foreground: #eef9f3;
-  --popover: #15241e;
-  --popover-foreground: #eef9f3;
-  --muted: #15251e;
-  --muted-foreground: #a3b9ae;
-  --accent: #1b3027;
-  --accent-foreground: #e0f6e8;
-  --border: #243b30;
-  --input: #2c4439;
-  --ring: #00ff91;
-  --sidebar: #0a1712;
-  --sidebar-foreground: #bad0c3;
-  --sidebar-border: #20362b;
-  --hud-highlight: #45f8ad;
+  --background: #0a0c0f;
+  --foreground: #eef1f4;
+  --card: #121519;
+  --card-foreground: #eef1f4;
+  --popover: #15181d;
+  --popover-foreground: #eef1f4;
+  --primary: #00e68a;
+  --primary-foreground: #04170f;
+  --muted: #15181d;
+  --muted-foreground: #9aa3ad;
+  --accent: #1e2229;
+  --accent-foreground: #eef1f4;
+  --border: #262b33;
+  --input: #2c323b;
+  --ring: #00e68a;
+  --sidebar: #0e1014;
+  --sidebar-foreground: #b4bcc6;
+  --sidebar-border: #20242b;
+  --hud-highlight: #3ef5a6;
   --hud-chart-current: #00ed94;
-  --hud-chart-previous: #8caca2;
-  --hud-chart-target: #efbc68;
-  --hud-info: #82cce8;
-  --hud-loss: #ff9caa;
-  --chart-grid: #253b32;
-  --hud-surface-top: #14261f;
-  --hud-edge: rgb(187 255 214 / 8%);
-  --hud-panel-shadow: 0 4px 9px #01070466, 0 14px 30px #01070442;
-  --hud-canvas-glow: #113c2c;
-  --hud-frame: #305646;
+  --hud-chart-previous: #8b95a1;
+  --hud-chart-target: #ab95ff;
+  --hud-info: #72bcf6;
+  --hud-loss: #ff6f8e;
+  --chart-grid: #22262d;
+  --hud-surface-top: #181b21;
+  --hud-edge: rgb(255 255 255 / 4%);
+  --hud-panel-shadow: 0 18px 40px -22px #000c;
+  --hud-canvas-glow: #00ff9112;
+  --hud-canvas-glow-2: #3b8cf010;
+  --hud-frame: #262b33;
+  --hud-accent-1: #00e68a;
+  --hud-accent-2: #00c2b0;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #3ef5a6;
+}
+
+/*
+ * Borda na cor do tema. A primeira linha do globals.css importa o preflight do
+ * Tailwind fora de camada, e o "border: 0 solid" dele (cor = currentColor)
+ * passava por cima do border-border do shadcn: toda borda sem cor própria saía
+ * da cor do texto, branca no modo escuro. As classes de cor de borda continuam
+ * valendo, porque classe pesa mais que o seletor universal.
+ */
+*,
+::after,
+::before {
+  border-color: var(--border);
 }
 
 .hud-theme [data-slot="sidebar-inset"] {
   background:
-    radial-gradient(ellipse 75% 310px at 18% 0%, var(--hud-canvas-glow), transparent 90%),
+    radial-gradient(900px 460px at 18% -6%, var(--hud-canvas-glow), transparent 70%),
+    radial-gradient(900px 600px at 105% 105%, var(--hud-canvas-glow-2), transparent 70%),
     var(--background);
 }
 
@@ -105,7 +136,7 @@
 }
 
 .hud-theme [data-sidebar="sidebar"] {
-  background: linear-gradient(155deg, var(--sidebar), var(--background));
+  background: linear-gradient(170deg, var(--sidebar), var(--background) 70%);
 }
 
 .hud-theme [data-sidebar="header"] {
@@ -140,10 +171,10 @@
 }
 
 .hud-theme [data-sidebar="menu-button"][data-active="true"] {
-  background: linear-gradient(105deg, var(--hud-brand), #6befad);
-  color: #04271a;
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  color: var(--hud-accent-fg);
   font-weight: 650;
-  box-shadow: 0 3px 14px #00ff9130;
+  box-shadow: 0 8px 20px -10px var(--hud-accent-1);
 }
 
 .hud-theme [data-sidebar="menu-button"][data-active="true"] > :is(span, svg) {
@@ -763,98 +794,18 @@
 }
 
 /*
- * Layout v2, piloto (13/11/2026): Fechamento, Funil e Programação.
- * Paleta B: grafite neutro, com o verde da marca só nos destaques. As três
- * páginas seguem a mesma organização:
+ * Layout v2 (13/11/2026): testado em Fechamento, Funil e Programação e levado
+ * para todas as telas. Organização:
  * - cabeçalho com ícone, título e uma caixa única de ações (.hud-group);
  * - filtros num painel só (.hud-bar), com rótulo em cima de cada grupo;
  * - quadros e cards em painéis de vidro (.hud-panel).
- * Vale onde o ConditionalSidebar põe .hud-v2. As cores ficam em :root:has()
- * para valer também nos diálogos e popovers, que abrem fora da área do menu,
- * e na janela flutuante do Fechamento. Aprovado, sai do piloto para o resto.
+ * As classes só valem onde são postas; os componentes de components/hud/pagina.tsx
+ * já as aplicam.
  */
-:root:has(.hud-v2) {
-  --background: #f3f5f7;
-  --foreground: #111827;
-  --card: #ffffff;
-  --card-foreground: #111827;
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  --primary: #00d283;
-  --primary-foreground: #04170f;
-  --muted: #f6f7f9;
-  --muted-foreground: #5f6b7a;
-  --accent: #eceff3;
-  --accent-foreground: #111827;
-  --border: #e1e5ea;
-  --input: #d9dee5;
-  --ring: #00a870;
-  --sidebar: #fafbfc;
-  --sidebar-foreground: #4b5563;
-  --sidebar-border: #e1e5ea;
-  --hud-highlight: #047857;
-  --hud-surface-top: #ffffff;
-  --hud-edge: #ffffff;
-  --hud-panel-shadow: 0 1px 2px #0f172a0d, 0 10px 30px -18px #0f172a33;
-  --hud-canvas-glow: #d8f7e8aa;
-  --hud-canvas-glow-2: #dde8f8aa;
-  --hud-frame: #e1e5ea;
-  --chart-grid: #e7eaee;
-  --hud-accent-1: #00d283;
-  --hud-accent-2: #00b3a4;
-  --hud-accent-fg: #04170f;
-  --hud-accent-text: #047857;
-}
 
-:root.dark:has(.hud-v2) {
-  --background: #0a0c0f;
-  --foreground: #eef1f4;
-  --card: #121519;
-  --card-foreground: #eef1f4;
-  --popover: #15181d;
-  --popover-foreground: #eef1f4;
-  --primary: #00e68a;
-  --primary-foreground: #04170f;
-  --muted: #15181d;
-  --muted-foreground: #9aa3ad;
-  --accent: #1e2229;
-  --accent-foreground: #eef1f4;
-  --border: #262b33;
-  --input: #2c323b;
-  --ring: #00e68a;
-  --sidebar: #0e1014;
-  --sidebar-foreground: #b4bcc6;
-  --sidebar-border: #20242b;
-  --hud-highlight: #3ef5a6;
-  --hud-surface-top: #181b21;
-  --hud-edge: rgb(255 255 255 / 4%);
-  --hud-panel-shadow: 0 18px 40px -22px #000c;
-  --hud-canvas-glow: #00ff9112;
-  --hud-canvas-glow-2: #3b8cf010;
-  --hud-frame: #262b33;
-  --chart-grid: #22262d;
-  --hud-accent-1: #00e68a;
-  --hud-accent-2: #00c2b0;
-  --hud-accent-fg: #04170f;
-  --hud-accent-text: #3ef5a6;
-}
 
-.hud-v2 [data-slot="sidebar-inset"] {
-  background:
-    radial-gradient(900px 460px at 18% -6%, var(--hud-canvas-glow), transparent 70%),
-    radial-gradient(900px 600px at 105% 105%, var(--hud-canvas-glow-2), transparent 70%),
-    var(--background);
-}
 
-.hud-v2 [data-sidebar="sidebar"] {
-  background: linear-gradient(170deg, var(--sidebar), var(--background) 70%);
-}
 
-.hud-v2 [data-sidebar="menu-button"][data-active="true"] {
-  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
-  color: var(--hud-accent-fg);
-  box-shadow: 0 8px 20px -10px var(--hud-accent-1);
-}
 
 /* Cabeçalho da página */
 .hud-v2-head {
@@ -978,6 +929,13 @@
 .hud-group > [data-slot="select-trigger"] {
   min-width: 7.5rem;
   justify-content: space-between;
+}
+
+/* Situação dos negócios: escolhida fica na cor dela (ganho, andamento, perdido). */
+.hud-group > .hud-deal-status[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--status-color) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-color) 45%, transparent);
+  color: var(--status-color);
 }
 
 .hud-group-sep {
@@ -1196,7 +1154,7 @@
 }
 
 /* Colunas do quadro da Programação: superfície rebaixada dentro do painel */
-.hud-v2 .hud-board-col {
+.hud-theme .hud-board-col {
   border-color: var(--border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--muted) 72%, transparent);

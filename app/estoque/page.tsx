@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Package, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PainelPolitica } from "@/components/estoque/painel-politica";
 import { TabelaSolados } from "@/components/estoque/tabela-solados";
 import type { SoladoResumo } from "@/lib/estoque/solados";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 type Resposta = SoladoResumo & { lidoEm: string; atualizando: boolean };
 
@@ -99,41 +99,29 @@ export default function EstoquePage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Package className="h-5 w-5" />
-        <h1 className="text-xl font-semibold">Estoque de Solados</h1>
-        <div className="ml-auto flex items-center gap-1">
-          {dados && (
-            <span className="mr-2 text-xs tabular-nums text-muted-foreground">
-              {formatarHora(dados.lidoEm)}
-              {dados.atualizando && " · atualizando…"}
-            </span>
-          )}
-          {dados && <PainelPolitica dados={dados} />}
-          <Button variant="ghost" size="sm" asChild>
+      <CabecalhoDaPagina
+        icone={Package}
+        titulo="Estoque de Solados"
+        descricao={
+          dados
+            ? `Lido ${formatarHora(dados.lidoEm)}${dados.atualizando ? " · atualizando…" : ""}`
+            : "Saldo, consumo médio e mínimo por solado"
+        }
+        acoes={
+          <GrupoDeAcoes rotulo="Ações do estoque">
+            {dados && <PainelPolitica dados={dados} />}
             <Link href="/estoque/ordens">
-              <Truck className="h-4 w-4" />
+              <Truck />
               Ordens
-              {dados && dados.totalACaminho > 0 && (
-                <span className="ml-1 tabular-nums text-muted-foreground">
-                  {dados.totalACaminho}
-                </span>
-              )}
+              {dados && dados.totalACaminho > 0 && <span className="hud-n">{dados.totalACaminho}</span>}
             </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void carregar(true)}
-            disabled={carregando}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${carregando ? "animate-spin" : ""}`}
-            />
-            Atualizar
-          </Button>
-        </div>
-      </div>
+            <button type="button" onClick={() => void carregar(true)} disabled={carregando}>
+              <RefreshCw className={carregando ? "animate-spin" : undefined} />
+              Atualizar
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {erro && (
         <Alert variant="destructive">

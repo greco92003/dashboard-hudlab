@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUp, ArrowDown, FileDown, Wallet } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, DollarSign, FileDown, Wallet } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/ghl/deal-fields";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo, GrupoDeAcoes } from "@/components/hud/pagina";
 
 // Define the deal type based on the new API response structure
 interface Deal {
@@ -889,89 +890,77 @@ export default function DealsPage() {
 
   return (
     <div className="hud-page">
-      <div className="hud-page-header">
-        <h1>Negócios</h1>
-        <Button
-          onClick={exportToPDF}
-          variant="outline"
-          size="sm"
-          className="gap-2"
-        >
-          <FileDown className="h-4 w-4" />
-          Exportar PDF
-        </Button>
-      </div>
+      <CabecalhoDaPagina
+        icone={DollarSign}
+        titulo="Negócios"
+        descricao="Negócios do GHL por período e situação"
+        acoes={
+          <GrupoDeAcoes rotulo="Ações de negócios">
+            <button type="button" onClick={exportToPDF}>
+              <FileDown />
+              Exportar PDF
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       <div className="hud-deals-overview">
-        {/* Filtros em grade: rótulo curto numa coluna e o controle na outra, todos com a mesma altura. */}
-        <div className="hud-surface hud-deals-filters">
-          <span className="hud-filter-label" id="deals-filtro-periodo">
-            Período
-          </span>
-          <div className="hud-segments" role="group" aria-labelledby="deals-filtro-periodo">
-            <Button
-              variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 30}
-              onClick={() => handlePeriodChangeLocal(30)}
-            >
-              Último mês
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 60}
-              onClick={() => handlePeriodChangeLocal(60)}
-            >
-              Últimos 2 meses
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 90}
-              onClick={() => handlePeriodChangeLocal(90)}
-            >
-              Últimos 3 meses
-            </Button>
-          </div>
-
-          <span className="hud-filter-label" id="deals-filtro-datas">
-            Datas
-          </span>
-          <div className="hud-date-field" role="group" aria-labelledby="deals-filtro-datas">
-            <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
-          </div>
-
-          <span className="hud-filter-label" id="deals-filtro-status">
-            Status
-          </span>
-          <div className="hud-segments hud-status-group" role="group" aria-labelledby="deals-filtro-status">
-            <Button
-              variant={statusFilter === "won" ? "default" : "outline"}
-              aria-pressed={statusFilter === "won"}
-              onClick={() => setStatusFilter("won")}
-              className="hud-deal-status"
-              data-status="won"
-            >
-              Ganhos ({deals.filter((d) => d.status?.toLowerCase() === "won" || d.status === "1").length})
-            </Button>
-            <Button
-              variant={statusFilter === "open" ? "default" : "outline"}
-              aria-pressed={statusFilter === "open"}
-              onClick={() => setStatusFilter("open")}
-              className="hud-deal-status"
-              data-status="open"
-            >
-              Em Andamento ({deals.filter((d) => d.status?.toLowerCase() === "open" || d.status === "0").length})
-            </Button>
-            <Button
-              variant={statusFilter === "lost" ? "default" : "outline"}
-              aria-pressed={statusFilter === "lost"}
-              onClick={() => setStatusFilter("lost")}
-              className="hud-deal-status"
-              data-status="lost"
-            >
-              Perdidos ({deals.filter((d) => d.status?.toLowerCase() === "lost" || d.status === "2").length})
-            </Button>
-          </div>
-        </div>
+        <BarraDeFiltros className="content-center">
+          <Campo rotulo="Período">
+            <GrupoDeAcoes rotulo="Período" separar={false}>
+              {([
+                [30, "Último mês"],
+                [60, "Últimos 2 meses"],
+                [90, "Últimos 3 meses"],
+              ] as const).map(([dias, rotulo]) => (
+                <button
+                  key={dias}
+                  type="button"
+                  aria-pressed={!useCustomPeriod && period === dias}
+                  onClick={() => handlePeriodChangeLocal(dias)}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </GrupoDeAcoes>
+          </Campo>
+          <Campo rotulo="Datas">
+            <div className="hud-date-field">
+              <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
+            </div>
+          </Campo>
+          <Campo rotulo="Situação">
+            <GrupoDeAcoes rotulo="Situação" separar={false} className="hud-status-group">
+              <button
+                type="button"
+                aria-pressed={statusFilter === "won"}
+                onClick={() => setStatusFilter("won")}
+                className="hud-deal-status"
+                data-status="won"
+              >
+                Ganhos <span className="hud-n">{deals.filter((d) => d.status?.toLowerCase() === "won" || d.status === "1").length}</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={statusFilter === "open"}
+                onClick={() => setStatusFilter("open")}
+                className="hud-deal-status"
+                data-status="open"
+              >
+                Em andamento <span className="hud-n">{deals.filter((d) => d.status?.toLowerCase() === "open" || d.status === "0").length}</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={statusFilter === "lost"}
+                onClick={() => setStatusFilter("lost")}
+                className="hud-deal-status"
+                data-status="lost"
+              >
+                Perdidos <span className="hud-n">{deals.filter((d) => d.status?.toLowerCase() === "lost" || d.status === "2").length}</span>
+              </button>
+            </GrupoDeAcoes>
+          </Campo>
+        </BarraDeFiltros>
 
         <Card className="hud-deals-summary">
           <CardHeader>
