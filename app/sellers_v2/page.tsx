@@ -13,6 +13,7 @@ import { TrainingPanel, type TrainingSessionSnapshot } from "@/components/seller
 import { VsCami } from "@/components/sellers-v2/vs-cami";
 import { usePermissions } from "@/hooks/usePermissions";
 import { createClient } from "@/utils/supabase/client";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const VIEWS = ["arena", "treino", "gestor"] as const;
 const CONFETTI_COLORS = ["var(--primary)", "#f59e0b", "#6ee7b7", "#fcd34d", "#a3e635"];
@@ -147,45 +148,45 @@ export default function SellersV2Page() {
     <div className="flex flex-1 flex-col gap-4 sm:gap-6">
       {celebrate && <Confetti />}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/20">
-            <Trophy className="h-6 w-6 text-amber-950" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Arena de Vendedores</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              {data
-                ? `Temporada ${data.temporada.numero} · ${data.temporada.mes} · termina em ${data.temporada.diasRestantes} ${data.temporada.diasRestantes === 1 ? "dia" : "dias"}`
-                : "Treino com IA, XP e ranking da temporada"}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {isOwner && view !== "gestor" && !inTraining && (
-            <Button variant="outline" onClick={() => void setRoute({ view: "gestor" })} className="gap-2">
-              <BarChart3 className="h-4 w-4" /> Visão do gestor
-            </Button>
-          )}
-          {(inTraining || view === "gestor") && (
-            <Button variant="outline" onClick={goArena} className="gap-2">
-              <ArrowLeft className="h-4 w-4" /> Voltar à Arena
-            </Button>
-          )}
-        </div>
-      </div>
+      <CabecalhoDaPagina
+        icone={Trophy}
+        titulo="Arena de Vendedores"
+        descricao={
+          data
+            ? `Temporada ${data.temporada.numero} · ${data.temporada.mes} · termina em ${data.temporada.diasRestantes} ${data.temporada.diasRestantes === 1 ? "dia" : "dias"}`
+            : "Treino com IA, XP e ranking da temporada"
+        }
+        acoes={
+          (isOwner && view !== "gestor" && !inTraining) || inTraining || view === "gestor" ? (
+            <GrupoDeAcoes rotulo="Ações da Arena">
+              {isOwner && view !== "gestor" && !inTraining && (
+                <button type="button" onClick={() => void setRoute({ view: "gestor" })}>
+                  <BarChart3 />
+                  Visão do gestor
+                </button>
+              )}
+              {(inTraining || view === "gestor") && (
+                <button type="button" onClick={goArena}>
+                  <ArrowLeft />
+                  Voltar à Arena
+                </button>
+              )}
+            </GrupoDeAcoes>
+          ) : null
+        }
+      />
 
       {view === "gestor" && isOwner ? (
         <GestorView />
       ) : inTraining ? (
         <div className="space-y-4">
           {mission && (
-            <Card className={mission.desafio ? "border-amber-500/40" : "border-primary/30"}>
+            <Card className={mission.desafio ? "tone-violet hud-tone-card" : "tone-green hud-tone-card"}>
               <CardContent className="flex flex-wrap items-start gap-x-6 gap-y-2 p-3 sm:p-4">
                 <div className="min-w-0 flex-1 sm:min-w-56">
                   <p className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground">
                     {mission.desafio ? "Desafio da semana · " : ""}Missão {String(mission.ordem).padStart(2, "0")}{" "}
-                    <span className="text-amber-500">{"★".repeat(mission.dificuldade)}</span>
+                    <span className="tone-violet hud-tone-text">{"★".repeat(mission.dificuldade)}</span>
                   </p>
                   <h2 className="text-lg font-extrabold">{mission.titulo}</h2>
                   <p className="hidden text-sm text-muted-foreground sm:block">{mission.resumo}</p>

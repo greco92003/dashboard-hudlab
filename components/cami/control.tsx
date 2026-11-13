@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const VIGENCIA: Record<Vigencia, { label: (fim: string, inicio: string) => string; cls: string }> = {
-  agendada: { label: (_f, i) => `Agendada · começa ${fmtVigencia(i)}`, cls: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200" },
+  agendada: { label: (_f, i) => `Agendada · começa ${fmtVigencia(i)}`, cls: "tone-pink hud-tone-chip" },
   ativa: { label: (f) => `Ativa até ${fmtVigencia(f)}`, cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
   encerrada: { label: (f) => `Encerrada em ${fmtVigencia(f)}`, cls: "text-muted-foreground" },
 };

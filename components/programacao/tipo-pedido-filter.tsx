@@ -22,12 +22,15 @@ export function TipoPedidoFilter({
   onChange,
   counts,
   tamanho = "normal",
+  variante = "botoes",
 }: {
   selected: Set<TipoFilterValue>;
   onChange: (next: Set<TipoFilterValue>) => void;
   counts?: Record<string, number>;
   /** "grande" para o chão de fábrica, onde tudo é operado no toque. */
   tamanho?: "normal" | "grande";
+  /** "grupo": caixa única de botões do layout v2 (Programação). */
+  variante?: "botoes" | "grupo";
 }) {
   const options: TipoFilterValue[] = [...TIPO_PEDIDO_ORDER];
 
@@ -39,6 +42,39 @@ export function TipoPedidoFilter({
   };
 
   const grande = tamanho === "grande";
+
+  if (variante === "grupo") {
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        <div className="hud-group" role="group" aria-label="Tipo do pedido">
+          {options.map((option) => {
+            const count = counts?.[option];
+            return (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={selected.has(option)}
+                onClick={() => toggle(option)}
+              >
+                {option}
+                {count !== undefined && <span className="hud-n">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={selected.size === 0}
+          className="h-9 px-2.5 text-muted-foreground"
+          onClick={() => onChange(new Set())}
+        >
+          Limpar
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex flex-wrap items-center", grande ? "gap-2" : "gap-1")}>
@@ -57,7 +93,7 @@ export function TipoPedidoFilter({
               grande ? "h-11 px-3.5 text-sm" : "h-8 px-2 text-xs",
               option === "Evento" &&
                 isOn &&
-                "bg-violet-600 hover:bg-violet-700 dark:bg-violet-500",
+                "tone-violet hud-tone-chip",
             )}
           >
             {option}

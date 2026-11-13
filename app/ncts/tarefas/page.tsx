@@ -44,6 +44,7 @@ import {
   type StatusTarefa,
   type PrioridadeTarefa,
 } from "@/lib/ncts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 const COLUNAS: StatusTarefa[] = [
   "nao_iniciada",
@@ -281,17 +282,9 @@ export default function NctsTarefasPage() {
     tarefasFiltradas.filter((t) => t.status === col);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <ListTodo className="h-7 w-7 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Tarefas</h1>
-            <p className="text-sm text-muted-foreground">
-              O operacional que faz os compromissos avançarem.
-            </p>
-          </div>
-        </div>
+        <CabecalhoDaPagina icone={ListTodo} titulo="Tarefas" descricao="O operacional que faz os compromissos avançarem." />
         {canCreate && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -350,7 +343,7 @@ export default function NctsTarefasPage() {
                     {form.compromisso_id &&
                       participantes.length === 0 &&
                       !loadingParticipantes && (
-                        <span className="ml-2 text-xs font-normal text-amber-500">
+                        <span className="ml-2 text-xs font-normal tone-violet hud-tone-text">
                           Nenhum usuário com setor vinculado encontrado
                         </span>
                       )}
@@ -549,14 +542,14 @@ export default function NctsTarefasPage() {
                             >
                               {prio.label}
                             </span>
-                            <span className="flex items-center gap-0.5 text-xs text-amber-500">
+                            <span className="flex items-center gap-0.5 text-xs tone-violet hud-tone-text">
                               <Zap className="h-3 w-3" />
                               {t.xp_reward}
                             </span>
                           </div>
                           {t.prazo_fim && (
                             <div
-                              className={`flex items-center gap-1 text-xs ${dias < 0 ? "text-red-500" : dias < 3 ? "text-amber-500" : "text-muted-foreground"}`}
+                              className={`flex items-center gap-1 text-xs ${dias < 0 ? "tone-rose hud-tone-text" : dias < 3 ? "tone-pink hud-tone-text" : "text-muted-foreground"}`}
                             >
                               <Calendar className="h-3 w-3" />
                               {formatarData(t.prazo_fim)}

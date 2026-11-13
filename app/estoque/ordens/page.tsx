@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import type { ConsolidadoCompra, OrdemCompra } from "@/lib/estoque/ordem-compra";
 import { OC_SITUACAO } from "@/lib/estoque/ordem-compra";
 import { NovaOrdemDialog } from "@/components/estoque/nova-ordem-dialog";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const data = (iso: string | null) =>
   iso ? new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR") : "—";
@@ -218,25 +219,28 @@ export default function OrdensPage() {
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Truck className="h-5 w-5" />
-        <h1 className="text-xl font-semibold">Ordens de Compra</h1>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/estoque">
-              <ArrowLeft className="h-4 w-4" />
-              Estoque
-            </Link>
-          </Button>
-          <NovaOrdemDialog onCriada={carregar}>
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              Nova ordem
-            </Button>
-          </NovaOrdemDialog>
-        </div>
-      </div>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Truck}
+        titulo="Ordens de Compra"
+        descricao="Solados pedidos ao fornecedor, a caminho e recebidos"
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+            <GrupoDeAcoes rotulo="Ações das ordens">
+              <Link href="/estoque">
+                <ArrowLeft />
+                Estoque
+              </Link>
+            </GrupoDeAcoes>
+            <NovaOrdemDialog onCriada={carregar}>
+              <Button size="sm" className="hud-btn-accent h-9">
+                <Plus className="h-4 w-4" />
+                Nova ordem
+              </Button>
+            </NovaOrdemDialog>
+          </div>
+        }
+      />
 
       <p className="text-sm text-muted-foreground">
         As ordens ficam no Tiny, e o recebimento vem das notas de entrada do

@@ -44,6 +44,7 @@ import {
   diasRestantes,
   SETORES,
 } from "@/lib/ncts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 type Compromisso = {
   id: string;
@@ -181,17 +182,9 @@ export default function NctsCompromissosPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <CheckSquare className="h-7 w-7 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Compromissos</h1>
-            <p className="text-sm text-muted-foreground">
-              Os marcos que fazem as narrativas avançarem.
-            </p>
-          </div>
-        </div>
+        <CabecalhoDaPagina icone={CheckSquare} titulo="Compromissos" descricao="Os marcos que fazem as narrativas avançarem." />
         {canCreate && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -403,13 +396,13 @@ export default function NctsCompromissosPage() {
                     <span className="font-medium">Peso: {c.peso}%</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1 text-amber-500">
+                    <span className="flex items-center gap-1 tone-violet hud-tone-text">
                       <Zap className="h-3 w-3" />
                       {c.xp_total} XP
                     </span>
                     {c.prazo_fim && (
                       <span
-                        className={`flex items-center gap-1 ${dias < 0 ? "text-red-500" : dias < 7 ? "text-amber-500" : "text-muted-foreground"}`}
+                        className={`flex items-center gap-1 ${dias < 0 ? "tone-rose hud-tone-text" : dias < 7 ? "tone-pink hud-tone-text" : "text-muted-foreground"}`}
                       >
                         <Calendar className="h-3 w-3" />
                         {formatarData(c.prazo_fim)}

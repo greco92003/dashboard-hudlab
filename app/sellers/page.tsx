@@ -7,8 +7,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { Label } from "@/components/ui/label";
+import { ArrowUpDown, ArrowUp, ArrowDown, Rocket } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -27,6 +26,7 @@ import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { normalizeSellerName } from "@/lib/utils/normalize-names";
 import { BusinessDaysCalculator } from "@/components/business-days-calculator";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo } from "@/components/hud/pagina";
 
 interface Deal {
   deal_id: string;
@@ -361,18 +361,19 @@ export default function SellersPage() {
   useDataRefresh("sellers", refreshSellersData);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Vendedores</h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina
+        icone={Rocket}
+        titulo="Vendedores"
+        descricao={`Total de vendas: ${formatCurrency(totalValue, "BRL")} · ${deals.length} negócios`}
+      />
 
       {/* Card da Calculadora de Dias Úteis */}
       <BusinessDaysCalculator />
 
-      <div className="flex flex-col gap-4 mb-4 mt-2">
-        {/* Mês de fechamento (dia 02 ao dia 01) -- base da comissão */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-          <Label className="text-sm sm:text-base whitespace-nowrap">
-            Mês de fechamento:
-          </Label>
+      {/* Mês de fechamento (dia 02 ao dia 01) -- base da comissão */}
+      <BarraDeFiltros>
+        <Campo rotulo="Mês de fechamento">
           <Select
             value={`${mes.year}-${mes.month}`}
             onValueChange={(v) => {
@@ -391,15 +392,8 @@ export default function SellersPage() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          Total de vendas: {formatCurrency(totalValue, "BRL")} | {deals.length}{" "}
-          negócios
-        </p>
-      </div>
+        </Campo>
+      </BarraDeFiltros>
 
       {/* Top Sellers Cards */}
       {loading ? (

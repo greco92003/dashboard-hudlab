@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { Bot, Gauge, Inbox, ListChecks, Loader2, MessagesSquare, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CamiControl } from "@/components/cami/control";
 import { CamiConversations } from "@/components/cami/conversations";
@@ -17,6 +15,7 @@ import type { ConversationItem, OverviewPayload } from "@/lib/ghl/ai-seller/inte
 import type { Periodo } from "@/lib/ghl/ai-seller/intel";
 import { fmtVigencia, promocaoAtiva, resumoDesconto } from "@/lib/ghl/ai-seller/vigentes";
 import { cn } from "@/lib/utils";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const TABS = ["visao", "conversas", "anexo", "nao-lidas", "controle"] as const;
 const PERIODOS: Array<{ id: Periodo; label: string }> = [
@@ -103,62 +102,60 @@ export default function CamiIntelligencePage() {
   const paraRevisar = conversations.filter((c) => c.paraRevisar).length;
   const estadoClass =
     settings?.estado === "ligada"
-      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+      ? "tone-green hud-tone-chip"
       : settings?.estado === "desligada"
-        ? "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30"
-        : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+        ? "tone-rose hud-tone-chip"
+        : "tone-pink hud-tone-chip";
 
   return (
     <div className="flex flex-1 flex-col gap-4 sm:gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
-            <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            CAMI Intelligence
-          </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm text-muted-foreground">
-            {settings ? (
-              <>
-                <Badge variant="outline" className={cn("font-medium", estadoClass)}>
-                  {ESTADO_LABEL[settings.estado]}
-                </Badge>
-                <span>
-                  {settings.minPares === settings.maxPares
-                    ? `${settings.minPares} pares`
-                    : `${settings.minPares} a ${settings.maxPares} pares`}{" "}
-                  · passa para {settings.escalationName}
+      <CabecalhoDaPagina
+        icone={Bot}
+        titulo="CAMI Intelligence"
+        descricao={
+          settings ? (
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className={cn("hud-chip", estadoClass)}>{ESTADO_LABEL[settings.estado]}</span>
+              <span>
+                {settings.minPares === settings.maxPares
+                  ? `${settings.minPares} pares`
+                  : `${settings.minPares} a ${settings.maxPares} pares`}{" "}
+                · passa para {settings.escalationName}
+              </span>
+              <span>· atualizado {fmtDateTime(overview?.atualizadoEm)}</span>
+              {promoAtiva && (
+                <span className="hud-chip tone-green hud-tone-chip">
+                  {promoAtiva.nome}: {resumoDesconto(promoAtiva)} até {fmtVigencia(promoAtiva.fim)}
                 </span>
-                <span>· atualizado {fmtDateTime(overview?.atualizadoEm)}</span>
-                {promoAtiva && (
-                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200">
-                    {promoAtiva.nome}: {resumoDesconto(promoAtiva)} até {fmtVigencia(promoAtiva.fim)}
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <span>Carregando…</span>
-            )}
+              )}
+            </span>
+          ) : (
+            "Carregando…"
+          )
+        }
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+            <GrupoDeAcoes rotulo="Período" separar={false}>
+              {PERIODOS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={periodo === p.id}
+                  onClick={() => void setRoute({ periodo: p.id })}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </GrupoDeAcoes>
+            <GrupoDeAcoes rotulo="Ações da Cami">
+              <button type="button" onClick={refresh} disabled={refreshing}>
+                {refreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Atualizar
+              </button>
+            </GrupoDeAcoes>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-md border p-0.5" role="group" aria-label="Período">
-            {PERIODOS.map((p) => (
-              <Button
-                key={p.id}
-                size="sm"
-                variant={periodo === p.id ? "default" : "ghost"}
-                onClick={() => void setRoute({ periodo: p.id })}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Atualizar
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => void setRoute({ tab: v as (typeof TABS)[number] })} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
@@ -172,7 +169,7 @@ export default function CamiIntelligencePage() {
             <span className="hidden sm:inline">Conversas</span>
             <span className="sm:hidden">Conv.</span>
             {paraRevisar > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">{paraRevisar}</span>
+              <span className="tone-rose hud-tone-chip rounded-full px-1.5 text-[11px] font-semibold">{paraRevisar}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="anexo" className="flex items-center gap-2">

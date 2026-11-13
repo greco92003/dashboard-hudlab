@@ -72,7 +72,7 @@ export function TrafficDistributionCard({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Falta</div>
-              <div className="font-semibold text-orange-600">
+              <div className="font-semibold tone-pink hud-tone-text">
                 {formatCurrency(paidTrafficRemaining, "BRL")}
               </div>
             </div>
@@ -116,7 +116,7 @@ export function TrafficDistributionCard({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Falta</div>
-              <div className="font-semibold text-orange-600">
+              <div className="font-semibold tone-pink hud-tone-text">
                 {formatCurrency(organicRemaining, "BRL")}
               </div>
             </div>

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +41,7 @@ import {
 import { getTipoPedidoRank } from "@/lib/ghl/programacao-stages";
 import { parseDate } from "@/lib/programacao/board-dates";
 import type { BoardDeal, BoardGroup } from "@/lib/programacao/board-types";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const RECEBIDO_GROUP_ID = "recebido";
 
@@ -315,43 +315,41 @@ export default function ExpedicaoPage() {
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       {!isHeaderCollapsed && (
         <>
-          <div className="flex flex-shrink-0 items-center gap-3">
-            <PackageCheck className="h-6 w-6" />
-            <h1 className="text-xl font-bold sm:text-2xl">Expedição</h1>
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              Depois da produção, até o cliente receber
-            </span>
-          </div>
+          <CabecalhoDaPagina
+            className="flex-shrink-0"
+            icone={PackageCheck}
+            titulo="Expedição"
+            descricao="Depois da produção, até o cliente receber"
+            acoes={
+              <GrupoDeAcoes rotulo="Ações da expedição">
+                {/* recebidosDias=0: o período do relatório pode ir além da janela da tela. */}
+                <RelatorioDialog titulo="Expedição" endpoint="/api/expedicao?recebidosDias=0" mostrarValor />
+                <Link href="/programacao">
+                  <Clock />
+                  Programação
+                </Link>
+                <button type="button" onClick={handleRefresh} disabled={refreshing || loading}>
+                  <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+                  {refreshing ? "Atualizando..." : "Atualizar"}
+                </button>
+              </GrupoDeAcoes>
+            }
+          />
 
-          <div className="flex flex-shrink-0 flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-                  }
-                  className="h-8 w-8"
-                  title={
-                    sortDirection === "asc"
-                      ? "Ordem crescente"
-                      : "Ordem decrescente"
-                  }
+          <BarraDeFiltros className="flex-shrink-0">
+            <Campo rotulo="Ordenar">
+              <div className="hud-group">
+                <button
+                  type="button"
+                  onClick={() => setSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+                  title={sortDirection === "asc" ? "Ordem crescente" : "Ordem decrescente"}
+                  aria-label={sortDirection === "asc" ? "Ordem crescente" : "Ordem decrescente"}
                 >
-                  {sortDirection === "asc" ? (
-                    <ArrowUp className="h-4 w-4" />
-                  ) : (
-                    <ArrowDown className="h-4 w-4" />
-                  )}
-                </Button>
-                <Select
-                  value={sortBy}
-                  onValueChange={(value) =>
-                    setSortBy(value as "date" | "value" | "title")
-                  }
-                >
-                  <SelectTrigger className="w-[180px]">
+                  {sortDirection === "asc" ? <ArrowUp /> : <ArrowDown />}
+                </button>
+                <span className="hud-group-sep" aria-hidden />
+                <Select value={sortBy} onValueChange={(value) => setSortBy(value as "date" | "value" | "title")}>
+                  <SelectTrigger aria-label="Ordenar por">
                     <SelectValue placeholder="Ordenar por" />
                   </SelectTrigger>
                   <SelectContent>
@@ -361,16 +359,11 @@ export default function ExpedicaoPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className="whitespace-nowrap text-sm text-muted-foreground"
-                  title="Recorta a coluna Recebido pela data de embarque"
-                >
-                  Recebidos:
-                </span>
+            </Campo>
+            <Campo rotulo="Recebidos">
+              <div className="hud-group" title="Recorta a coluna Recebido pela data de embarque">
                 <Select value={recebidosDias} onValueChange={setRecebidosDias}>
-                  <SelectTrigger className="w-[130px]">
+                  <SelectTrigger aria-label="Janela dos recebidos">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -382,37 +375,16 @@ export default function ExpedicaoPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="flex w-full gap-2 sm:w-auto">
-              {/* recebidosDias=0: o período do relatório pode ir além da janela da tela. */}
-              <RelatorioDialog titulo="Expedição" endpoint="/api/expedicao?recebidosDias=0" mostrarValor />
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/programacao">
-                  <Clock className="mr-2 h-4 w-4" />
-                  Programação
-                </Link>
-              </Button>
-              <Button
-                onClick={handleRefresh}
-                disabled={refreshing || loading}
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-              >
-                <RefreshCw
-                  className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-                />
-                {refreshing ? "Atualizando..." : "Atualizar"}
-              </Button>
-            </div>
-          </div>
-
-          <TipoPedidoFilter
-            selected={tipoFilter}
-            onChange={setTipoFilter}
-            counts={data?.summary.porTipo}
-          />
+            </Campo>
+            <Campo rotulo="Tipo do pedido">
+              <TipoPedidoFilter
+                variante="grupo"
+                selected={tipoFilter}
+                onChange={setTipoFilter}
+                counts={data?.summary.porTipo}
+              />
+            </Campo>
+          </BarraDeFiltros>
 
           {error && (
             <Alert variant="destructive" className="flex-shrink-0">
@@ -428,8 +400,8 @@ export default function ExpedicaoPage() {
           <Skeleton className="h-full w-full" />
         </div>
       ) : data ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2">
+        <div className="hud-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="hud-panel-head flex-shrink-0">
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
@@ -446,17 +418,23 @@ export default function ExpedicaoPage() {
                   <ChevronUp className="h-5 w-5" />
                 )}
               </Button>
-              <h2 className="text-xl font-bold">Etapa</h2>
+              <h2 className="text-lg font-bold tracking-tight">Etapa</h2>
+              <span className="hud-chip">{data.summary.emAndamento} em andamento</span>
+              <span className="hud-chip">
+                {displayTotalDeals} {displayTotalDeals === 1 ? "pedido" : "pedidos"}
+                {hasFilters ? ` de ${data.summary.totalDeals}` : ""}
+              </span>
             </div>
 
-            <div className="relative order-last w-full sm:order-none sm:w-auto sm:max-w-xs sm:flex-1">
+            <div className="order-last flex w-full items-center gap-2 sm:order-none sm:ml-auto sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Buscar deal, vendedor, designer..."
-                className="h-9 pl-8 pr-8"
+                placeholder="Buscar pedido, vendedor, designer..."
+                className="h-9 rounded-[10px] bg-muted pl-8 pr-8"
               />
               {searchTerm && (
                 <button
@@ -470,45 +448,31 @@ export default function ExpedicaoPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-md border p-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
+              <div className="hud-group" role="group" aria-label="Zoom do quadro">
+                <button
+                  type="button"
                   onClick={() => setZoomLevel((prev) => Math.max(prev - 10, 50))}
                   disabled={zoomLevel <= 50}
-                  className="h-7 w-7"
                   title="Diminuir zoom (mostrar mais cards)"
+                  aria-label="Diminuir zoom"
                 >
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-                <span className="min-w-[3rem] px-2 text-center text-xs font-medium">
-                  {zoomLevel}%
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setZoomLevel((prev) => Math.min(prev + 10, 100))
-                  }
+                  <ZoomOut />
+                </button>
+                <span className="hud-group-val">{zoomLevel}%</span>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((prev) => Math.min(prev + 10, 100))}
                   disabled={zoomLevel >= 100}
-                  className="h-7 w-7"
                   title="Aumentar zoom"
+                  aria-label="Aumentar zoom"
                 >
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
+                  <ZoomIn />
+                </button>
               </div>
-              <Badge variant="outline">
-                {data.summary.emAndamento} em andamento
-              </Badge>
-              <Badge variant="outline">
-                {displayTotalDeals} {displayTotalDeals === 1 ? "deal" : "deals"}
-                {hasFilters ? ` de ${data.summary.totalDeals}` : ""}
-              </Badge>
             </div>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white bg-transparent">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <BoardColumns
               groups={displayGroups}
               cardWidth={cardWidth}

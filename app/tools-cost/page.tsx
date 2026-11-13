@@ -67,6 +67,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Money input helpers (same pattern as fixed-costs)
 const formatCurrencyDisplay = (value: number): string =>
@@ -496,22 +497,18 @@ export default function ToolsCostPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Custos de Ferramentas
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Gerencie os custos mensais das ferramentas utilizadas
-            </p>
-          </div>
-          <Button onClick={openCreateDialog} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Ferramenta
-          </Button>
-        </div>
+      <div className="flex flex-col gap-5">
+        <CabecalhoDaPagina
+          icone={Wrench}
+          titulo="Custos de Ferramentas"
+          descricao="Gerencie os custos mensais das ferramentas utilizadas"
+          acoes={
+            <Button onClick={openCreateDialog} className="hud-btn-accent h-9 gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Ferramenta
+            </Button>
+          }
+        />
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -600,7 +597,7 @@ export default function ToolsCostPage() {
                 <Skeleton className="h-7 w-16" />
               ) : monthDiff !== null ? (
                 <div
-                  className={`text-2xl font-bold ${monthDiff >= 0 ? "text-red-500" : "text-green-500"}`}
+                  className={`text-2xl font-bold ${monthDiff >= 0 ? "tone-rose hud-tone-text" : "text-green-500"}`}
                 >
                   {monthDiff >= 0 ? "+" : ""}
                   {monthDiff.toFixed(1)}%
@@ -699,7 +696,7 @@ export default function ToolsCostPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-orange-500 hover:text-orange-600"
+                            className="h-7 w-7 tone-pink hud-tone-text"
                             title="Cancelar ferramenta"
                             onClick={() => {
                               setCancellingTool(tool);
@@ -1490,7 +1487,7 @@ export default function ToolsCostPage() {
                 cancellingTool && handleToggleActive(cancellingTool, false)
               }
               disabled={togglingActive}
-              className="bg-orange-500 text-white hover:bg-orange-600"
+              className="tone-pink hud-tone-chip"
             >
               {togglingActive ? "Cancelando..." : "Cancelar Ferramenta"}
             </AlertDialogAction>

@@ -689,7 +689,7 @@ export function TrainingPanel({
                                     value / max >= 0.8
                                       ? "bg-primary"
                                       : value / max >= 0.5
-                                        ? "bg-yellow-500"
+                                        ? "bg-[var(--tone-violet)]"
                                         : "bg-destructive",
                                   )}
                                   style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
@@ -733,15 +733,15 @@ export function TrainingPanel({
                           </ul>
                         </section>
     
-                        <section className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 sm:p-5">
+                        <section className="rounded-2xl border tone-pink hud-tone-card p-4 sm:p-5">
                           <div className="mb-3 flex items-center gap-2">
-                            <Lightbulb className="size-4 text-yellow-600 dark:text-yellow-400" />
+                            <Lightbulb className="size-4 tone-pink hud-tone-text" />
                             <h3 className="text-sm font-semibold">Onde melhorar</h3>
                           </div>
                           <ul className="space-y-2.5 text-sm leading-6 text-foreground/75">
                             {evaluation.report.falhas.map((item, index) => (
                               <li key={index} className="flex gap-2.5">
-                                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-yellow-500" />
+                                <span className="mt-2 size-1.5 shrink-0 rounded-full tone-pink hud-tone-chip" />
                                 <span>{item}</span>
                               </li>
                             ))}

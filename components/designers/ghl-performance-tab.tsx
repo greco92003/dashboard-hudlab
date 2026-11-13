@@ -124,7 +124,7 @@ export function DesignersPerformanceTab() {
               row.original.actionType === "mockup"
                 ? "font-medium text-green-600"
                 : row.original.actionType === "alteration"
-                  ? "font-medium text-orange-600"
+                  ? "font-medium tone-pink hud-tone-text"
                   : "font-medium"
             }
           >
@@ -369,9 +369,9 @@ export function DesignersPerformanceTab() {
               <CardTitle className="text-sm text-muted-foreground">
                 Alterações prontas
               </CardTitle>
-              <FileText className="h-5 w-5 text-orange-600" />
+              <FileText className="h-5 w-5 tone-pink hud-tone-text" />
             </CardHeader>
-            <CardContent className="text-3xl font-bold text-orange-600">
+            <CardContent className="text-3xl font-bold tone-pink hud-tone-text">
               {totals.alterations}
             </CardContent>
           </Card>
@@ -413,7 +413,7 @@ export function DesignersPerformanceTab() {
                     <span className="text-muted-foreground">
                       Alterações prontas
                     </span>
-                    <span className="font-semibold text-orange-600">
+                    <span className="font-semibold tone-pink hud-tone-text">
                       {designer.alterations}
                     </span>
                   </div>

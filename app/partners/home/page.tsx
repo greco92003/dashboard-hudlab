@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import { QRCodeModal } from "@/components/QRCodeModal";
 import { storage } from "@/lib/storage";
 import type { NuvemshopCouponPayload } from "@/lib/nuvemshop/api";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 interface AffiliateLink {
   id: string;
@@ -1215,7 +1216,7 @@ export default function PartnersHomePage() {
       <div className="flex flex-1 flex-col gap-4">
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600">Acesso Negado</h1>
+            <h1 className="tone-rose hud-tone-text text-2xl font-bold">Acesso Negado</h1>
             <p className="text-muted-foreground mt-2">
               Você não tem permissão para acessar esta página.
             </p>
@@ -1227,17 +1228,14 @@ export default function PartnersHomePage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-        <Home className="h-6 w-6 sm:h-8 sm:w-8" />
-        Início - Parceiros
-      </h1>
+      <CabecalhoDaPagina icone={Home} titulo="Início · Parceiros" descricao="Resumo da marca: vendas, produtos e cupons" />
 
       {/* Controls Section */}
-      <div className="flex flex-col gap-4 mb-4">
+      <div className="hud-panel flex flex-col gap-4 p-4">
         {/* Brand Selection for Owners/Admins */}
         {canUseBrandFilter && isHydrated && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Label className="text-sm sm:text-base whitespace-nowrap">
+            <Label className="hud-field-label whitespace-nowrap sm:w-44">
               Selecione uma marca:
             </Label>
             <div className="flex items-center gap-2 w-full sm:max-w-xs">
@@ -1432,17 +1430,17 @@ export default function PartnersHomePage() {
                       </p>
                     </div>
 
-                    <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800 text-center">
+                    <div className="tone-pink hud-tone-card rounded-lg border p-4 text-center">
                       <div className="flex items-center justify-center gap-2 mb-2">
-                        <Wallet className="h-5 w-5 text-yellow-600" />
-                        <span className="font-semibold text-yellow-800 dark:text-yellow-200">
+                        <Wallet className="h-5 w-5 tone-violet hud-tone-text" />
+                        <span className="tone-pink hud-tone-text font-semibold">
                           Total Pago
                         </span>
                       </div>
-                      <p className="text-2xl font-bold text-yellow-600">
+                      <p className="text-2xl font-bold tone-violet hud-tone-text">
                         {formatCurrency(commissionSummary.total_paid)}
                       </p>
-                      <p className="text-sm text-yellow-600">
+                      <p className="text-sm tone-violet hud-tone-text">
                         {commissionPayments.length} pagamento(s)
                       </p>
                     </div>

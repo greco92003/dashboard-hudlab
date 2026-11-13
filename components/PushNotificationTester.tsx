@@ -113,7 +113,7 @@ export function PushNotificationTester() {
     if (permission === "denied") {
       return <XCircle className="h-4 w-4 text-red-500" />;
     }
-    return <Bell className="h-4 w-4 text-yellow-500" />;
+    return <Bell className="h-4 w-4 tone-violet hud-tone-text" />;
   };
 
   return (

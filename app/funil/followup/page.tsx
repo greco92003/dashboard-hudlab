@@ -10,7 +10,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -27,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 interface FollowUpDegrau {
   rotulo: string;
@@ -415,48 +415,38 @@ export default function FollowUpPage() {
     : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={ListChecks}
+        titulo="Follow-Up Automatizado"
+        descricao={
+          <>
+            Quanto cada mensagem da régua destrava, para decidir qual abordagem manter
+            {lendoGhl
+              ? " · lendo as tags no GHL… cerca de 1 min"
+              : tagsLidasEm
+                ? ` · GHL lido às ${horaLeitura.format(tagsLidasEm)} de ${diaLeitura.format(tagsLidasEm)}`
+                : null}
+          </>
+        }
+        acoes={
+          <GrupoDeAcoes rotulo="Ações do follow-up">
             <Link href="/funil">
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft />
               Funil
             </Link>
-          </Button>
-          <div className="h-6 w-px bg-border" />
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-              <ListChecks className="h-6 w-6 text-primary" />
-              Follow-Up Automatizado
-            </h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Quanto cada mensagem da régua destrava — para decidir qual
-              abordagem manter
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <p className="text-right text-xs text-muted-foreground">
-            {lendoGhl
-              ? "Lendo as tags no GHL… cerca de 1 min"
-              : tagsLidasEm
-                ? `GHL lido às ${horaLeitura.format(tagsLidasEm)} de ${diaLeitura.format(tagsLidasEm)}`
-                : null}
-          </p>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={atualizar}
-            disabled={loading || lendoGhl}
-            title="Ler o GHL de novo e atualizar"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${loading || lendoGhl ? "animate-spin" : ""}`}
-            />
-          </Button>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={atualizar}
+              disabled={loading || lendoGhl}
+              title="Ler o GHL de novo e atualizar"
+            >
+              <RefreshCw className={loading || lendoGhl ? "animate-spin" : undefined} />
+              Atualizar
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {aviso && (
         <Alert>

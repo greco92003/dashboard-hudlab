@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { CalendarOff, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,16 +26,24 @@ export interface BucketFora {
  */
 const ESTILO: Record<
   MotivoFora,
-  { rotulo: (n: number) => string; icone: typeof CalendarOff; alerta: boolean }
+  {
+    rotulo: (n: number) => string;
+    /** Nome curto da caixa de botões do layout v2; a quantidade vem ao lado. */
+    curto: string;
+    icone: typeof CalendarOff;
+    alerta: boolean;
+  }
 > = {
   "em-conferencia": {
     // Estar nessa etapa é normal; o anormal é ficar. Daí o tom neutro.
     rotulo: (n) => `${n} em conferência`,
+    curto: "Em conferência",
     icone: ClipboardList,
     alerta: false,
   },
   "sem-data": {
     rotulo: (n) => `${n} sem data de embarque`,
+    curto: "Sem data",
     icone: CalendarOff,
     alerta: true,
   },
@@ -45,17 +54,50 @@ export function ForaDoBoard({
   ativo,
   onToggle,
   tamanho = "normal",
+  variante = "botoes",
 }: {
   buckets: BucketFora[];
   /** Motivo cujo grupo está ocupando o board sozinho, se algum. */
   ativo: MotivoFora | null;
   onToggle: (motivo: MotivoFora) => void;
   tamanho?: "normal" | "grande";
+  /** "grupo": campo com rótulo e caixa única de botões (layout v2). */
+  variante?: "botoes" | "grupo";
 }) {
   const visiveis = buckets.filter((b) => b.quantidade > 0);
   if (visiveis.length === 0) return null;
 
   const grande = tamanho === "grande";
+
+  if (variante === "grupo") {
+    return (
+      <div className="hud-field" role="status">
+        <span className="hud-field-label">Fora do board</span>
+        <div className="hud-group" role="group" aria-label="Fora do board">
+          {visiveis.map(({ motivo, quantidade }, i) => {
+            const { curto, icone: Icone, alerta } = ESTILO[motivo];
+            const selecionado = ativo === motivo;
+            return (
+              <Fragment key={motivo}>
+                {i > 0 && <span className="hud-group-sep" aria-hidden />}
+                <button
+                  type="button"
+                  aria-pressed={selecionado}
+                  onClick={() => onToggle(motivo)}
+                  title={selecionado ? "Clique de novo para voltar ao board" : "Mostrar só estes pedidos"}
+                  className={alerta && !selecionado ? "tone-pink hud-tone-text" : undefined}
+                >
+                  <Icone />
+                  {curto}
+                  <span className="hud-n">{quantidade}</span>
+                </button>
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -82,7 +124,7 @@ export function ForaDoBoard({
               "gap-1.5 font-medium",
               grande ? "h-10 px-3 text-base" : "h-8 px-2.5 text-sm",
               alerta &&
-                "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-900/40",
+                "tone-pink hud-tone-chip",
               selecionado && "ring-2 ring-offset-1 ring-offset-background",
             )}
           >

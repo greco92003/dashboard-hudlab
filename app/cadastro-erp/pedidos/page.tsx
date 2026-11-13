@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { TinyOrderSummary } from "@/lib/erp/tiny-order-documents";
 import { OrderDocumentButtons } from "@/components/erp/order-document-buttons";
 import { ProductionLabelsButton } from "@/components/erp/production-labels-button";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 type OrdersResponse = { orders: TinyOrderSummary[]; page: number; pageSize: number; total: number };
 
@@ -50,19 +51,20 @@ export default function PedidosErpPage() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
-            <ReceiptText className="h-4 w-4" /> ERP · Pedidos do Tiny
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Gere o talão de produção, o romaneio de despacho e as etiquetas de cada pedido.</p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/cadastro-erp"><ArrowLeft /> Voltar ao cadastro</Link>
-        </Button>
-      </div>
+    <div className="flex w-full flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={ReceiptText}
+        titulo="Pedidos do Tiny"
+        descricao="Gere o talão de produção, o romaneio de despacho e as etiquetas de cada pedido."
+        acoes={
+          <GrupoDeAcoes rotulo="Ações dos pedidos">
+            <Link href="/cadastro-erp">
+              <ArrowLeft />
+              Voltar ao cadastro
+            </Link>
+          </GrupoDeAcoes>
+        }
+      />
 
       <form onSubmit={submitSearch} className="flex flex-col gap-2 sm:flex-row">
         <Input

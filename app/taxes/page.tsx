@@ -13,6 +13,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  Percent,
 } from "lucide-react";
 import {
   Dialog,
@@ -25,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserInfoPopover } from "@/components/user-info-popover";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Define the tax type
 interface Tax {
@@ -351,8 +353,8 @@ export default function TaxesPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Impostos</h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina icone={Percent} titulo="Impostos" descricao="Impostos sobre o faturamento e o percentual total" />
 
       <Card>
         <CardHeader>

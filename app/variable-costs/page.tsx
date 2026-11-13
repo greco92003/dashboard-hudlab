@@ -13,6 +13,7 @@ import {
   Plus,
   Trash2,
   Edit,
+  Shuffle,
 } from "lucide-react";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
@@ -43,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserInfoPopover } from "@/components/user-info-popover";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 // Define the variable cost type
 interface VariableCost {
@@ -612,7 +614,7 @@ export default function VariableCostsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <h1 className="text-xl sm:text-2xl font-bold">Custos Variáveis</h1>
+      <CabecalhoDaPagina icone={Shuffle} titulo="Custos Variáveis" descricao="Custos variáveis do período, por categoria e tag" />
 
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
         <Card className="w-full sm:w-1/2">

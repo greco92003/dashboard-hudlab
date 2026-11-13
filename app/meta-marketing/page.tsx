@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeletorPeriodo, usePeriodoParams } from "@/components/seletor-periodo";
 import { VisaoGeral } from "./components/visao-geral";
@@ -14,6 +13,9 @@ import { Regioes } from "./components/regioes";
 import { Saude } from "./components/saude";
 import { Insights } from "./components/insights";
 import { Criativos } from "./components/criativos";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo, GrupoDeAcoes } from "@/components/hud/pagina";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMeta } from "@fortawesome/free-brands-svg-icons";
 
 const ABAS = ["visao-geral", "anuncios", "regioes", "saude", "insights", "criativos"] as const;
 
@@ -62,26 +64,27 @@ function MetaMarketingContent() {
 
   return (
     <div className="hud-page">
-      <div className="hud-page-header">
-        <div>
-          <h1>Meta Marketing</h1>
-          <p className="text-muted-foreground">
-            Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel
-          </p>
-        </div>
-        <div className="hud-toolbar">
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-            {isRefreshing ? "Atualizando..." : "Atualizar"}
-          </Button>
-          {(aba === "visao-geral" || aba === "anuncios" || aba === "regioes") && <SeletorPeriodo />}
-        </div>
-      </div>
+      <CabecalhoDaPagina
+        icone={MetaIcon}
+        titulo="Meta Marketing"
+        descricao="Cruzamento de anúncios do Meta Ads com leads e vendas do GoHighLevel"
+        acoes={
+          <GrupoDeAcoes rotulo="Ações do Meta Marketing">
+            <button type="button" onClick={handleRefresh} disabled={isRefreshing}>
+              <RefreshCw className={isRefreshing ? "animate-spin" : undefined} />
+              {isRefreshing ? "Atualizando..." : "Atualizar"}
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
+
+      {(aba === "visao-geral" || aba === "anuncios" || aba === "regioes") && (
+        <BarraDeFiltros>
+          <Campo rotulo="Período">
+            <SeletorPeriodo />
+          </Campo>
+        </BarraDeFiltros>
+      )}
 
       <Tabs value={aba} onValueChange={(value) => setParam("aba", value)}>
         <div className="overflow-x-auto py-0.5">
@@ -116,6 +119,10 @@ function MetaMarketingContent() {
     </div>
   );
 }
+
+const MetaIcon = ({ className }: { className?: string }) => (
+  <FontAwesomeIcon icon={faMeta} className={className} />
+);
 
 export default function MetaMarketingPage() {
   return (

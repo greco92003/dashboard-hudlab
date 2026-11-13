@@ -86,7 +86,7 @@ export function CartoesFluxo({
         valor={resumo ? formatCurrency(resumo.atrasadasReceber.valor) : "—"}
         detalhe={resumo ? `${resumo.atrasadasReceber.quantidade} contas` : undefined}
         carregando={carregandoSemDados}
-        className="text-amber-600"
+        className="tone-violet hud-tone-text"
       />
     </div>
   );

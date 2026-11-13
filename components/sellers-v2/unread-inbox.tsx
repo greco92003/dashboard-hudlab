@@ -39,10 +39,10 @@ interface CopilotoReport {
 }
 
 const CATEGORY_META: Record<TriageCategory, { label: string; emoji: string; className: string }> = {
-  quente: { label: "Quente", emoji: "🔥", className: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30" },
-  morno: { label: "Morno", emoji: "🌤️", className: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30" },
-  frio: { label: "Frio", emoji: "❄️", className: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30" },
-  pos_venda: { label: "Pós-venda", emoji: "📦", className: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30" },
+  quente: { label: "Quente", emoji: "🔥", className: "tone-rose hud-tone-chip" },
+  morno: { label: "Morno", emoji: "🌤️", className: "tone-pink hud-tone-chip" },
+  frio: { label: "Frio", emoji: "❄️", className: "tone-sky hud-tone-chip" },
+  pos_venda: { label: "Pós-venda", emoji: "📦", className: "tone-violet hud-tone-chip" },
 };
 
 const FILTERS: Array<{ value: "todas" | TriageCategory; label: string }> = [
@@ -263,7 +263,7 @@ export function UnreadInbox() {
                         variant="outline"
                         className={cn(
                           item.windowRemainingMs < 3 * 60 * 60 * 1000
-                            ? "text-red-700 dark:text-red-300 border-red-500/40"
+                            ? "tone-rose hud-tone-chip"
                             : "text-muted-foreground",
                         )}
                       >
@@ -272,14 +272,14 @@ export function UnreadInbox() {
                       {item.withAi && (
                         <Badge
                           variant="outline"
-                          className="font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                          className="tone-green hud-tone-chip font-medium"
                         >
                           🤖 Cami atendendo
                         </Badge>
                       )}
                     </div>
                     {item.withAi && (
-                      <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                      <p className="tone-green hud-tone-text text-xs">
                         A Cami está respondendo este cliente. Não responda: se alguém do time escrever, ela sai da conversa.
                       </p>
                     )}
@@ -335,7 +335,7 @@ export function UnreadInbox() {
                 {insight && (
                   <div className="rounded-md bg-muted/50 p-3 text-sm space-y-2">
                     {item.insightOutdated && (
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                      <p className="tone-pink hud-tone-text text-xs">
                         O cliente mandou mensagem depois deste insight.
                       </p>
                     )}

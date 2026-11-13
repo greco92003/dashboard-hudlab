@@ -17,7 +17,7 @@ type Payload = AnnexPage & { podeAprovar: boolean; proximaRevisao: string };
 
 const ESTADO: Record<AnnexItem["estado"], { label: string; cls: string }> = {
   novo: { label: "Novo", cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  ajustado: { label: "Ajustado", cls: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200" },
+  ajustado: { label: "Ajustado", cls: "tone-pink hud-tone-chip" },
   mantido: { label: "Mantido", cls: "text-muted-foreground" },
   removido: { label: "Removido", cls: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300" },
 };
@@ -54,7 +54,7 @@ function ItemCard({
       className={cn(
         "space-y-2 rounded-xl border p-3",
         item.estado === "novo" && "border-emerald-500/40",
-        item.estado === "ajustado" && "border-amber-500/40",
+        item.estado === "ajustado" && "tone-pink hud-tone-card",
         removido && "border-dashed",
       )}
     >
@@ -235,8 +235,8 @@ export function CamiAnnex() {
             </ul>
 
             {rascunho.paraOManual.length > 0 && (
-              <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                <p className="font-semibold text-amber-800 dark:text-amber-200">Para o manual (política comercial, não entra no anexo)</p>
+              <div className="space-y-1 rounded-lg border tone-pink hud-tone-card p-3 text-sm">
+                <p className="font-semibold tone-pink hud-tone-text">Para o manual (política comercial, não entra no anexo)</p>
                 <ul className="list-disc space-y-0.5 pl-5">
                   {rascunho.paraOManual.map((p, i) => (
                     <li key={i}>{p}</li>

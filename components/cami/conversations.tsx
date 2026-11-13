@@ -105,7 +105,7 @@ function Bubble({
     m.quem === "cami" && "border border-emerald-500/40 bg-emerald-500/10",
     m.quem === "time" && "border bg-background",
     m.quem === "robo" && "border border-dashed text-muted-foreground",
-    marcada && "ring-2 ring-amber-500",
+    marcada && "ring-2 ring-[color:var(--tone-pink)]",
   );
   // No modo feedback, as mensagens da Cami viram botões para marcar o trecho.
   if (marcando && m.quem === "cami") {
@@ -252,10 +252,10 @@ function FeedbackForm({
             : "Opcional: toque nas mensagens da Cami acima para marcar o trecho."}
         </p>
       </div>
-      <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+      <div className="flex items-start gap-3 rounded-lg border tone-pink hud-tone-card p-3">
         <Checkbox id="feedback-urgente" checked={urgente} onCheckedChange={(v) => setUrgente(v === true)} className="mt-0.5" />
         <Label htmlFor="feedback-urgente" className="flex flex-col items-start gap-0.5 font-normal">
-          <span className="font-semibold text-amber-800 dark:text-amber-200">Urgente: corrigir agora</span>
+          <span className="font-semibold tone-pink hud-tone-text">Urgente: corrigir agora</span>
           <span className="text-xs text-muted-foreground">Preço, política ou informação errada. Vai direto para o dono, sem esperar segunda.</span>
         </Label>
       </div>

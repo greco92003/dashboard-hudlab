@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
 import { storage } from "@/lib/storage";
 import { getEffectiveOrderFees } from "@/lib/payment-fees";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 interface OrderProduct {
   name: string;
@@ -520,8 +521,8 @@ export default function PartnersOrdersPage() {
       credit_card: "bg-blue-100 text-blue-800",
       debit_card: "bg-green-100 text-green-800",
       pix: "bg-purple-100 text-purple-800",
-      bank_slip: "bg-orange-100 text-orange-800",
-      paypal: "bg-yellow-100 text-yellow-800",
+      bank_slip: "tone-pink hud-tone-chip",
+      paypal: "tone-pink hud-tone-chip",
       cash: "bg-green-100 text-green-800",
       wire_transfer: "bg-purple-100 text-purple-800",
     };
@@ -626,18 +627,15 @@ export default function PartnersOrdersPage() {
   const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-        <ShoppingCart className="h-6 w-6 sm:h-8 sm:w-8" />
-        Vendas dos Parceiros
-      </h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina icone={ShoppingCart} titulo="Vendas dos Parceiros" descricao="Pedidos das marcas parceiras na Nuvemshop" />
 
       {/* Controls Section */}
-      <div className="flex flex-col gap-4 mb-4">
+      <div className="hud-panel flex flex-col gap-4 p-4">
         {/* Brand Selection for Owners/Admins */}
         {canUseBrandFilter && isBrandHydrated && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Label className="text-sm sm:text-base whitespace-nowrap">
+            <Label className="hud-field-label whitespace-nowrap sm:w-44">
               Selecione uma marca:
             </Label>
             <div className="flex items-center gap-2 w-full sm:max-w-xs">
@@ -808,7 +806,7 @@ export default function PartnersOrdersPage() {
 
               {/* Calendar Section - Stack on mobile */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                <Label className="text-sm sm:text-base whitespace-nowrap">
+                <Label className="hud-field-label whitespace-nowrap sm:w-44">
                   Selecione o período desejado:
                 </Label>
                 <div className="w-full sm:min-w-[250px] sm:w-auto">
@@ -1041,7 +1039,7 @@ export default function PartnersOrdersPage() {
                                 order.shipping_discount !== "null" &&
                                 order.shipping_discount !== "undefined" &&
                                 parseFloat(order.shipping_discount) > 0 && (
-                                  <div className="flex justify-between text-orange-600">
+                                  <div className="flex justify-between tone-pink hud-tone-text">
                                     <span>Desconto frete grátis:</span>
                                     <span>
                                       -{formatCurrency(order.shipping_discount)}

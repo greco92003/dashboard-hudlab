@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 const WEEK = ["Seg", "Ter", "Qua", "Qui", "Sex"];
 const tone = (pct: number | null) =>
-  pct == null ? "text-muted-foreground" : pct >= 80 ? "text-primary" : pct >= 70 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
-const bar = (pct: number | null) => (pct == null ? "bg-muted" : pct >= 80 ? "bg-primary" : pct >= 70 ? "bg-amber-500" : "bg-red-500");
+  pct == null ? "text-muted-foreground" : pct >= 80 ? "text-primary" : pct >= 70 ? "tone-pink hud-tone-text" : "text-red-600 dark:text-red-400";
+const bar = (pct: number | null) => (pct == null ? "bg-muted" : pct >= 80 ? "bg-primary" : pct >= 70 ? "bg-[var(--tone-pink)]" : "bg-[var(--tone-rose)]");
 
 /** Visão do gestor (owner): quem treinou na semana, evolução e pontos fracos do time. */
 export function GestorView() {
@@ -187,7 +187,7 @@ export function GestorView() {
               <ul className="space-y-2">
                 {data.missoesDificeis.map((m) => (
                   <li key={m.titulo} className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm">
-                    <span className="w-12 text-amber-500">{"★".repeat(m.dificuldade)}</span>
+                    <span className="w-12 tone-violet hud-tone-text">{"★".repeat(m.dificuldade)}</span>
                     <span className="flex-1 font-medium">{m.titulo}</span>
                     <span className="text-xs text-muted-foreground">{m.treinos} treinos</span>
                     <strong className={tone(m.media)}>{m.media}</strong>

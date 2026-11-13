@@ -86,7 +86,7 @@ export function CommissionCard({ data }: CommissionCardProps) {
     data.achievement_percentage >= 100
       ? "text-green-600"
       : data.achievement_percentage >= 85
-      ? "text-yellow-600"
+      ? "tone-violet hud-tone-text"
       : "text-red-600";
 
   const multiplierColor =
@@ -95,7 +95,7 @@ export function CommissionCard({ data }: CommissionCardProps) {
       : data.multiplier >= 1
       ? "text-blue-600"
       : data.multiplier >= 0.5
-      ? "text-yellow-600"
+      ? "tone-violet hud-tone-text"
       : "text-gray-600";
 
   return (
@@ -124,10 +124,10 @@ export function CommissionCard({ data }: CommissionCardProps) {
               <div
                 className={`h-3 rounded-full transition-all ${
                   data.achievement_percentage >= 100
-                    ? "bg-green-600"
+                    ? "bg-[var(--tone-green)]"
                     : data.achievement_percentage >= 85
-                    ? "bg-yellow-600"
-                    : "bg-red-600"
+                    ? "bg-[var(--tone-violet)]"
+                    : "bg-[var(--tone-rose)]"
                 }`}
                 style={{
                   width: `${Math.min(data.achievement_percentage, 100)}%`,
@@ -176,10 +176,10 @@ export function CommissionCard({ data }: CommissionCardProps) {
                 <div
                   className={`h-3 rounded-full transition-all ${
                     data.achievement_percentage >= 100
-                      ? "bg-green-600"
+                      ? "bg-[var(--tone-green)]"
                       : data.achievement_percentage >= 85
-                      ? "bg-yellow-600"
-                      : "bg-red-600"
+                      ? "bg-[var(--tone-violet)]"
+                      : "bg-[var(--tone-rose)]"
                   }`}
                   style={{
                     width: `${Math.min(data.achievement_percentage, 100)}%`,
@@ -235,7 +235,7 @@ export function CommissionCard({ data }: CommissionCardProps) {
                     <div className="text-xs text-muted-foreground uppercase tracking-wide">
                       Falta
                     </div>
-                    <div className="text-lg sm:text-xl font-bold text-orange-600 break-words">
+                    <div className="text-lg sm:text-xl font-bold tone-pink hud-tone-text break-words">
                       {formatCurrency(currentSellerInfo.remaining, "BRL")}
                     </div>
                   </div>
@@ -246,10 +246,10 @@ export function CommissionCard({ data }: CommissionCardProps) {
                   <div
                     className={`h-3 rounded-full transition-all ${
                       currentSellerInfo.progress_percentage >= 100
-                        ? "bg-green-600"
+                        ? "bg-[var(--tone-green)]"
                         : currentSellerInfo.progress_percentage >= 70
-                        ? "bg-blue-600"
-                        : "bg-orange-600"
+                        ? "bg-[var(--tone-sky)]"
+                        : "bg-[var(--tone-pink)]"
                     }`}
                     style={{
                       width: `${Math.min(

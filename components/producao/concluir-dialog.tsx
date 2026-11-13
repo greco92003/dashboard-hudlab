@@ -184,7 +184,7 @@ export function ConcluirDialog({
         )}
 
         {deal && modo === "confirmar" && !deal.dataEmbarque && (
-          <Alert className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <Alert className="tone-pink hud-tone-card hud-tone-text">
             <CalendarOff className="h-4 w-4" />
             <AlertDescription>
               Este pedido está <strong>sem data de embarque</strong> — ele nunca

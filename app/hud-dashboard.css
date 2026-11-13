@@ -1,7 +1,11 @@
 /*
- * Tema HUD (Hud Lab).
+ * Tema HUD (Hud Lab), paleta B (aprovada em 13/11/2026): grafite neutro, com o
+ * verde da marca só nos destaques.
  * - Cores (:root e .dark): o app inteiro, inclusive popovers, diálogos e avisos,
  *   que o navegador abre fora da área do menu.
+ * - Padrão das telas (mais abaixo, "Layout v2"): cabeçalho com uma caixa única
+ *   de ações, filtros num painel só, painéis de vidro. Componentes prontos em
+ *   components/hud/pagina.tsx.
  * - .hud-theme: menu, cabeçalho, abas, carregamento e gráficos em toda página com menu.
  * - .hud-dashboard-shell: cards de vidro e faixas de indicadores só no Dashboard,
  *   em Negócios e no Meta Marketing (redesenhados). Essas regras passam por cima
@@ -10,42 +14,48 @@
  */
 :root {
   --hud-brand: #00ff91;
-  --background: #edf3ef;
-  --foreground: #102820;
-  --card: #fcfefc;
-  --card-foreground: #102820;
-  --popover: #fcfefc;
-  --popover-foreground: #102820;
-  --primary: var(--hud-brand);
-  --primary-foreground: #03291b;
-  --muted: #e7f0ea;
-  --muted-foreground: #50695f;
-  --accent: #e1f2e9;
-  --accent-foreground: #134633;
-  --border: #d8e6de;
-  --input: #cfdfd5;
-  --ring: #087e58;
-  --sidebar: #f4f9f5;
-  --sidebar-foreground: #39584b;
-  --sidebar-border: #d8e6de;
+  --background: #f3f5f7;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #00d283;
+  --primary-foreground: #04170f;
+  --muted: #f6f7f9;
+  --muted-foreground: #5f6b7a;
+  --accent: #eceff3;
+  --accent-foreground: #111827;
+  --border: #e1e5ea;
+  --input: #d9dee5;
+  --ring: #00a870;
+  --sidebar: #fafbfc;
+  --sidebar-foreground: #4b5563;
+  --sidebar-border: #e1e5ea;
   --sidebar-accent: var(--accent);
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-ring: var(--ring);
-  --hud-highlight: #086545;
+  --hud-highlight: #047857;
   --hud-chart-current: #087e58;
-  --hud-chart-previous: #648078;
-  --hud-chart-target: #976b20;
-  --hud-info: #286e8e;
-  --hud-loss: #a6374d;
+  --hud-chart-previous: #8a94a3;
+  --hud-chart-target: #6a4fd6;
+  --hud-info: #2a78bb;
+  --hud-loss: #d22f58;
   --chart-1: var(--hud-chart-current);
-  --chart-grid: #deebe4;
-  --hud-surface-top: #fff;
-  --hud-edge: rgb(255 255 255 / 92%);
-  --hud-panel-shadow: 0 3px 8px #173e2510, 0 12px 28px #173e2508;
-  --hud-canvas-glow: #bce9d5;
-  --hud-frame: #c8dfd3;
+  --chart-grid: #e7eaee;
+  --hud-surface-top: #ffffff;
+  --hud-edge: #ffffff;
+  --hud-panel-shadow: 0 1px 2px #0f172a0d, 0 10px 30px -18px #0f172a33;
+  --hud-canvas-glow: #d8f7e8aa;
+  --hud-canvas-glow-2: #dde8f8aa;
+  --hud-frame: #e1e5ea;
+  /* Destaque: degradê do verde da marca (botão principal, item ativo, ícone do título). */
+  --hud-accent-1: #00d283;
+  --hud-accent-2: #00b3a4;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #047857;
   --hud-chart-height: 310px;
-  /* Altura única dos controles de filtro (períodos, datas, status, botões da barra). */
+  /* Altura única dos controles (botões, grupos, seletores, campos de data). */
   --hud-control-h: 2.25rem;
   background: var(--background);
   color: var(--foreground);
@@ -53,39 +63,60 @@
 }
 
 .dark {
-  --background: #07110e;
-  --foreground: #eef9f3;
-  --card: #101e19;
-  --card-foreground: #eef9f3;
-  --popover: #15241e;
-  --popover-foreground: #eef9f3;
-  --muted: #15251e;
-  --muted-foreground: #a3b9ae;
-  --accent: #1b3027;
-  --accent-foreground: #e0f6e8;
-  --border: #243b30;
-  --input: #2c4439;
-  --ring: #00ff91;
-  --sidebar: #0a1712;
-  --sidebar-foreground: #bad0c3;
-  --sidebar-border: #20362b;
-  --hud-highlight: #45f8ad;
+  --background: #0a0c0f;
+  --foreground: #eef1f4;
+  --card: #121519;
+  --card-foreground: #eef1f4;
+  --popover: #15181d;
+  --popover-foreground: #eef1f4;
+  --primary: #00e68a;
+  --primary-foreground: #04170f;
+  --muted: #15181d;
+  --muted-foreground: #9aa3ad;
+  --accent: #1e2229;
+  --accent-foreground: #eef1f4;
+  --border: #262b33;
+  --input: #2c323b;
+  --ring: #00e68a;
+  --sidebar: #0e1014;
+  --sidebar-foreground: #b4bcc6;
+  --sidebar-border: #20242b;
+  --hud-highlight: #3ef5a6;
   --hud-chart-current: #00ed94;
-  --hud-chart-previous: #8caca2;
-  --hud-chart-target: #efbc68;
-  --hud-info: #82cce8;
-  --hud-loss: #ff9caa;
-  --chart-grid: #253b32;
-  --hud-surface-top: #14261f;
-  --hud-edge: rgb(187 255 214 / 8%);
-  --hud-panel-shadow: 0 4px 9px #01070466, 0 14px 30px #01070442;
-  --hud-canvas-glow: #113c2c;
-  --hud-frame: #305646;
+  --hud-chart-previous: #8b95a1;
+  --hud-chart-target: #ab95ff;
+  --hud-info: #72bcf6;
+  --hud-loss: #ff6f8e;
+  --chart-grid: #22262d;
+  --hud-surface-top: #181b21;
+  --hud-edge: rgb(255 255 255 / 4%);
+  --hud-panel-shadow: 0 18px 40px -22px #000c;
+  --hud-canvas-glow: #00ff9112;
+  --hud-canvas-glow-2: #3b8cf010;
+  --hud-frame: #262b33;
+  --hud-accent-1: #00e68a;
+  --hud-accent-2: #00c2b0;
+  --hud-accent-fg: #04170f;
+  --hud-accent-text: #3ef5a6;
+}
+
+/*
+ * Borda na cor do tema. A primeira linha do globals.css importa o preflight do
+ * Tailwind fora de camada, e o "border: 0 solid" dele (cor = currentColor)
+ * passava por cima do border-border do shadcn: toda borda sem cor própria saía
+ * da cor do texto, branca no modo escuro. As classes de cor de borda continuam
+ * valendo, porque classe pesa mais que o seletor universal.
+ */
+*,
+::after,
+::before {
+  border-color: var(--border);
 }
 
 .hud-theme [data-slot="sidebar-inset"] {
   background:
-    radial-gradient(ellipse 75% 310px at 18% 0%, var(--hud-canvas-glow), transparent 90%),
+    radial-gradient(900px 460px at 18% -6%, var(--hud-canvas-glow), transparent 70%),
+    radial-gradient(900px 600px at 105% 105%, var(--hud-canvas-glow-2), transparent 70%),
     var(--background);
 }
 
@@ -104,8 +135,21 @@
   scrollbar-width: thin;
 }
 
+/*
+ * Menu recolhido (só ícones, 48px): a barra de rolagem comia ~10px da largura e
+ * o botão ficava com 21px dos 32px previstos, com o hover cobrindo só metade.
+ * Ali a rolagem segue pela roda do mouse, sem a barra visível.
+ */
+.hud-theme [data-collapsible="icon"] [data-sidebar="content"] {
+  scrollbar-width: none;
+}
+
+.hud-theme [data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar {
+  display: none;
+}
+
 .hud-theme [data-sidebar="sidebar"] {
-  background: linear-gradient(155deg, var(--sidebar), var(--background));
+  background: linear-gradient(170deg, var(--sidebar), var(--background) 70%);
 }
 
 .hud-theme [data-sidebar="header"] {
@@ -135,15 +179,24 @@
   border-radius: 4px;
 }
 
+/*
+ * Menu recolhido: o quadro do logo some e fica só o botão de expandir, centrado.
+ * O display: grid acima passava por cima do group-data-[collapsible=icon]:hidden
+ * do componente, e o logo aparecia espremido nos 48px, empurrando o botão para fora.
+ */
+.hud-theme [data-collapsible="icon"] .hud-sidebar-mark {
+  display: none;
+}
+
 .hud-theme [data-sidebar="group-label"] {
   color: var(--muted-foreground);
 }
 
 .hud-theme [data-sidebar="menu-button"][data-active="true"] {
-  background: linear-gradient(105deg, var(--hud-brand), #6befad);
-  color: #04271a;
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  color: var(--hud-accent-fg);
   font-weight: 650;
-  box-shadow: 0 3px 14px #00ff9130;
+  box-shadow: 0 8px 20px -10px var(--hud-accent-1);
 }
 
 .hud-theme [data-sidebar="menu-button"][data-active="true"] > :is(span, svg) {
@@ -312,6 +365,7 @@
 }
 
 .hud-kpi {
+  container-type: inline-size;
   display: flex;
   align-items: flex-start;
   gap: 0.7rem;
@@ -347,11 +401,11 @@
 
 .hud-kpi-value {
   color: var(--hud-highlight);
-  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  font-size: clamp(1.15rem, calc((100cqi - 5rem) / 7.4), 2rem);
   font-weight: 700;
   letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .hud-kpi-detail {
@@ -579,7 +633,8 @@
   background: linear-gradient(90deg, var(--hud-chart-current), var(--hud-highlight));
 }
 
-@container (min-width: 550px) {
+/* Faixa do Dashboard em 3 colunas só quando cabe o valor (R$ 237.719,36) inteiro. */
+@container (min-width: 820px) {
   .hud-kpi-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -588,7 +643,9 @@
     border-top: 0;
     border-left: 1px solid var(--border);
   }
+}
 
+@container (min-width: 550px) {
   .hud-breakdown-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -652,4 +709,550 @@
   .hud-marketing-kpis {
     grid-template-columns: repeat(9, minmax(0, 1fr));
   }
+}
+
+/*
+ * Tons translúcidos (13/11/2026): uma paleta só para status em todo o app, no
+ * lugar de amarelo, laranja e vermelho sólidos. Escala de quente para frio:
+ * rosa, magenta, violeta, verde da marca, ardósia; azul-céu para informação.
+ * Uso: classe do tom (tone-rose…) + o formato (hud-tone-chip, -card, -text…).
+ * Só vale onde a classe é posta, então não muda nada sem querer.
+ */
+:root {
+  --tone-rose: #d22f58;
+  --tone-pink: #b8329f;
+  --tone-violet: #6a4fd6;
+  --tone-cyan: #0b8aa3;
+  --tone-green: #087e58;
+  --tone-slate: #5a6a76;
+  --tone-sky: #2a78bb;
+}
+
+.dark {
+  --tone-rose: #ff6f8e;
+  --tone-pink: #f283db;
+  --tone-violet: #ab95ff;
+  --tone-cyan: #56d8ed;
+  --tone-green: #3ef5a6;
+  --tone-slate: #9cadb8;
+  --tone-sky: #72bcf6;
+}
+
+.tone-rose { --tone: var(--tone-rose); }
+.tone-pink { --tone: var(--tone-pink); }
+.tone-violet { --tone: var(--tone-violet); }
+.tone-cyan { --tone: var(--tone-cyan); }
+.tone-green { --tone: var(--tone-green); }
+.tone-slate { --tone: var(--tone-slate); }
+.tone-sky { --tone: var(--tone-sky); }
+
+.hud-tone-text {
+  color: var(--tone);
+}
+
+.hud-tone-chip {
+  border: 1px solid color-mix(in srgb, var(--tone) 28%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--tone);
+  backdrop-filter: blur(6px);
+}
+
+.hud-tone-dot {
+  background: var(--tone);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 65%, transparent);
+}
+
+.hud-tone-card {
+  border-color: color-mix(in srgb, var(--tone) 30%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone) 10%, transparent), transparent 55%),
+    var(--card);
+  box-shadow:
+    inset 0 1px color-mix(in srgb, var(--tone) 10%, transparent),
+    0 12px 28px -16px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+
+.hud-tone-bar {
+  background: linear-gradient(180deg, var(--tone), color-mix(in srgb, var(--tone) 25%, transparent));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 55%, transparent);
+}
+
+/* Pulso suave no lugar do contorno grosso: o card "respira" em volta. */
+@keyframes hud-tone-pulso {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent),
+      0 12px 28px -16px color-mix(in srgb, var(--tone) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--tone) 55%, transparent),
+      0 0 26px 2px color-mix(in srgb, var(--tone) 30%, transparent);
+  }
+}
+
+.hud-tone-pulse {
+  animation: hud-tone-pulso 2.4s ease-in-out infinite;
+}
+
+@keyframes hud-tone-piscar {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.hud-tone-blink {
+  animation: hud-tone-piscar 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-tone-pulse,
+  .hud-tone-blink {
+    animation: none;
+  }
+}
+
+/* Destaque de evento no quadro: faixa lateral violeta, por cima da borda do tom. */
+.hud-accent-evento {
+  border-left-width: 4px;
+  border-left-color: var(--tone-violet);
+}
+
+/*
+ * Layout v2 (13/11/2026): testado em Fechamento, Funil e Programação e levado
+ * para todas as telas. Organização:
+ * - cabeçalho com ícone, título e uma caixa única de ações (.hud-group);
+ * - filtros num painel só (.hud-bar), com rótulo em cima de cada grupo;
+ * - quadros e cards em painéis de vidro (.hud-panel).
+ * As classes só valem onde são postas; os componentes de components/hud/pagina.tsx
+ * já as aplicam.
+ */
+
+
+
+
+
+/* Cabeçalho da página */
+.hud-v2-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem 1.25rem;
+}
+
+.hud-v2-title {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.hud-v2-tile {
+  display: grid;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--hud-accent-1) 38%, var(--border));
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--hud-accent-1) 22%, transparent),
+    color-mix(in srgb, var(--hud-accent-2) 14%, transparent)
+  );
+  box-shadow: 0 0 24px -8px color-mix(in srgb, var(--hud-accent-1) 60%, transparent);
+  color: var(--hud-accent-text);
+}
+
+.hud-v2-tile svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.hud-v2-title h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.hud-v2-sub {
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* Caixa de botões: um contorno só, botões separados por fio */
+.hud-group {
+  display: inline-flex;
+  max-width: 100%;
+  height: var(--hud-control-h);
+  flex: none;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+  color: var(--foreground);
+  scrollbar-width: none;
+}
+
+.hud-group > :is(button, a, [role="button"]) {
+  display: inline-flex;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hud-group > :is(button, a, [role="button"]):hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.hud-group > :disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hud-group > :is(button, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.hud-group > :is(button, a, [role="button"]) svg {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.hud-group > [aria-pressed="true"] {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--hud-accent-1) 24%, transparent),
+    color-mix(in srgb, var(--hud-accent-2) 16%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hud-accent-1) 42%, transparent);
+  color: var(--hud-accent-text);
+  font-weight: 600;
+}
+
+.hud-group > [data-slot="select-trigger"] {
+  min-width: 7.5rem;
+  justify-content: space-between;
+}
+
+/* Situação dos negócios: escolhida fica na cor dela (ganho, andamento, perdido). */
+.hud-group > .hud-deal-status[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--status-color) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-color) 45%, transparent);
+  color: var(--status-color);
+}
+
+.hud-group-sep {
+  width: 1px;
+  flex: none;
+  margin: 0.375rem 1px;
+  background: var(--border);
+}
+
+/*
+ * Celular: a caixa quebra em linhas em vez de esconder botões numa rolagem
+ * lateral. Os fios somem (no fim de linha ficariam soltos) e cada botão tem a
+ * altura de uma linha da caixa.
+ */
+@media (max-width: 640px) {
+  .hud-group {
+    height: auto;
+    min-height: var(--hud-control-h);
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .hud-group > :is(button, a, [role="button"]) {
+    height: calc(var(--hud-control-h) - 8px);
+  }
+
+  .hud-group > .hud-group-sep {
+    display: none;
+  }
+}
+
+.hud-group-val {
+  display: grid;
+  min-width: 2.9rem;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-n {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:is([aria-pressed="true"], .hud-tone-text) > .hud-n {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* Botão de destaque (degradê verde da marca) */
+.hud-btn-accent {
+  border: 0;
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  box-shadow: 0 8px 20px -12px var(--hud-accent-1);
+  color: var(--hud-accent-fg);
+  font-weight: 600;
+}
+
+.hud-btn-accent:hover:not(:disabled) {
+  background: linear-gradient(105deg, var(--hud-accent-1), var(--hud-accent-2));
+  filter: brightness(1.07);
+}
+
+/* Painel de vidro, barra de filtros e campo com rótulo */
+.hud-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--hud-surface-top), var(--card) 62%);
+  box-shadow: inset 0 1px var(--hud-edge), var(--hud-panel-shadow);
+}
+
+.hud-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 0.875rem;
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.hud-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.875rem 1.6rem;
+  padding: 0.875rem 1.1rem;
+}
+
+.hud-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.hud-field-label {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hud-chip {
+  display: inline-flex;
+  height: 1.375rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Cor neutra sem peso: com hud-tone-chip junto, vale o tom. */
+:where(.hud-chip) {
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+  background: color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+  color: var(--muted-foreground);
+}
+
+/* Faixa de indicadores (Fechamento): células separadas por fio */
+.hud-strip {
+  display: grid;
+  overflow: hidden;
+  gap: 1px;
+  background: var(--border);
+}
+
+.hud-strip > * {
+  container-type: inline-size;
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.4rem;
+  padding: 0.875rem 1rem;
+  background: linear-gradient(160deg, var(--hud-surface-top), var(--card));
+}
+
+/* Célula que filtra: o mesmo visual, com marca embaixo quando escolhida. */
+.hud-strip > button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hud-strip > button:hover {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 8%, var(--hud-surface-top)),
+    var(--card)
+  );
+}
+
+.hud-strip > button[aria-pressed="true"] {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 16%, var(--hud-surface-top)),
+    color-mix(in srgb, var(--tone, var(--hud-accent-1)) 6%, var(--card))
+  );
+  box-shadow: inset 0 -2px var(--tone, var(--hud-accent-1));
+}
+
+.hud-strip > button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.hud-strip[data-filtrando] > button[aria-pressed="false"] .hud-strip-value {
+  opacity: 0.55;
+}
+
+/*
+ * Célula tingida (Live Dashboard): fundo translúcido na cor da linha do gráfico,
+ * um brilho redondo saindo do canto e o ícone grande em marca d'água, por trás
+ * do texto. Usa o --tone da classe tone-* posta na célula.
+ */
+.hud-strip > .hud-strip-tinto {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--tone) 24%, transparent), transparent 62%),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--tone) 9%, var(--hud-surface-top)),
+      color-mix(in srgb, var(--tone) 3%, var(--card))
+    );
+  box-shadow: inset 0 1px color-mix(in srgb, var(--tone) 30%, transparent);
+}
+
+.hud-strip > .hud-strip-tinto::after {
+  position: absolute;
+  z-index: -1;
+  right: -2.5rem;
+  bottom: -3.5rem;
+  width: 10rem;
+  height: 10rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--tone) 30%, transparent), transparent 68%);
+  content: "";
+  pointer-events: none;
+}
+
+.hud-strip-marca {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  right: 1rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  color: var(--tone);
+  opacity: 0.16;
+  pointer-events: none;
+  translate: 0 -50%;
+}
+
+.hud-strip-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hud-strip-value {
+  /* Numa linha só, diminuindo com a célula: R$ 1.152.058,62 cabe até no celular. */
+  font-size: clamp(1rem, calc((100cqi - 2rem) / 8.6), 1.5rem);
+  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card do Fechamento: tingido pelo tom, ações numa barra no rodapé */
+.hud-fcard {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  align-content: start;
+  gap: 0.5rem;
+  padding: 0.875rem 0.875rem 0 1.125rem;
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, var(--border));
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--tone) 11%, transparent), transparent 55%),
+    linear-gradient(160deg, var(--hud-surface-top), var(--card) 62%);
+  box-shadow:
+    inset 0 1px var(--hud-edge),
+    0 16px 34px -22px color-mix(in srgb, var(--tone) 55%, transparent);
+}
+
+.hud-fcard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem -0.875rem 0 -1.125rem;
+  padding: 0.625rem 0.875rem 0.75rem 1.125rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.hud-fcard-actions .hud-group {
+  --hud-control-h: 2rem;
+}
+
+.hud-fcard-actions .hud-group > :is(button, a, [role="button"]) {
+  padding: 0 0.55rem;
+  font-size: 0.78rem;
+}
+
+.hud-fcard-end {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Colunas do quadro da Programação: superfície rebaixada dentro do painel */
+.hud-theme .hud-board-col {
+  border-color: var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  box-shadow: none;
 }

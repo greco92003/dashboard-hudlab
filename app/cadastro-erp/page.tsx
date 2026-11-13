@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileImage,
   Loader2,
+  Database,
   PackagePlus,
   ReceiptText,
   Search,
@@ -69,6 +70,7 @@ import {
 import { ContactImportCard } from "./contact-import-card";
 import { SalesOrderCard } from "./sales-order-card";
 import { artworkEmbedUrl, artworkThumbnailUrl } from "@/lib/erp/artwork-url";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 type ProductMapping = {
   mode: "clone" | "existing";
@@ -621,26 +623,23 @@ export default function CadastroErpPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
-            <PackagePlus className="h-4 w-4" /> ERP · Cadastro de produtos
+    <div className="flex w-full flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Database}
+        titulo="Cadastro ERP"
+        descricao="GHL → Tiny: escolha o contato e o deal, relacione cada modelo da ficha a um cloner e valide os produtos antes do cadastro."
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="hud-chip tone-green hud-tone-chip">Cadastro real habilitado</span>
+            <GrupoDeAcoes rotulo="Ações do cadastro ERP">
+              <Link href="/cadastro-erp/pedidos">
+                <ReceiptText />
+                Pedidos
+              </Link>
+            </GrupoDeAcoes>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">GHL → Tiny</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Escolha o contato e o deal, relacione cada modelo da ficha a um cloner e valide os produtos antes do cadastro.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-            Cadastro real habilitado
-          </Badge>
-          <Button asChild variant="outline">
-            <Link href="/cadastro-erp/pedidos"><ReceiptText /> Pedidos</Link>
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
@@ -859,7 +858,7 @@ export default function CadastroErpPage() {
                               <p>SKU {cloner.sku} · {cloner.variationSizes.join(", ") || "grade não identificada"}</p>
                               <p>Combinação usada no produto: {mapping?.soleColor || "solado não identificado"} - {mapping?.color || "gáspea não identificada"}</p>
                               {model.soleColor && mapping?.soleColor && model.soleColor !== mapping.soleColor ? (
-                                <p className="font-medium text-amber-600 dark:text-amber-400">Atenção: o solado do cloner é diferente do solado salvo no pedido.</p>
+                                <p className="font-medium tone-pink hud-tone-text">Atenção: o solado do cloner é diferente do solado salvo no pedido.</p>
                               ) : null}
                             </div>
                           )}
@@ -922,7 +921,7 @@ export default function CadastroErpPage() {
 
                 <div className="flex flex-col justify-between gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center">
                   <div className="flex items-start gap-3">
-                    {validations.length === 0 ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" /> : <TriangleAlert className="mt-0.5 h-5 w-5 text-amber-500" />}
+                    {validations.length === 0 ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" /> : <TriangleAlert className="mt-0.5 h-5 w-5 tone-violet hud-tone-text" />}
                     <div>
                       <p className="text-sm font-medium">{validations.length === 0 ? "Prévia pronta para o próximo teste" : `${validations.length} pendência(s) na prévia`}</p>
                       {validations.length > 0 && <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">{validations.slice(0, 5).map((problem) => <li key={problem}>{problem}</li>)}</ul>}

@@ -582,7 +582,7 @@ export function VisaoGeral({
                   </div>
                 )}
                 {k.key === "pares_vendidos" && temVendasSemPares && (
-                  <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
+                  <p className="text-[11px] tone-violet hud-tone-text leading-tight pt-0.5">
                     {fmtNum(a.vendas_sem_pares)} venda(s) sem qtd. de pares —
                     custo/ticket por par abaixo não as considera
                   </p>
@@ -618,7 +618,7 @@ export function VisaoGeral({
                 </div>
               )}
               {vendasSemFrete > 0 && (
-                <p className="text-[11px] text-amber-600 leading-tight pt-0.5">
+                <p className="text-[11px] tone-violet hud-tone-text leading-tight pt-0.5">
                   {fmtNum(vendasSemFrete)} venda(s) sem frete informado ficaram fora
                 </p>
               )}
@@ -968,7 +968,7 @@ export function VisaoGeral({
                     </div>
                     <div className="h-5 rounded bg-muted overflow-hidden">
                       <div
-                        className="h-full rounded bg-amber-500/80"
+                        className="h-full rounded bg-[var(--tone-pink)]"
                         style={{
                           width: `${(100 * (c.custo_por_oportunidade ?? 0)) / maxCusto}%`,
                         }}

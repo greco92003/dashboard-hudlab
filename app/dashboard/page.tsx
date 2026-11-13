@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/utils";
 import { ChartAreaGradient } from "@/components/ui/chart-area-gradient";
@@ -10,13 +9,14 @@ import { ChartBarCicloVendas } from "@/components/ui/chart-bar-ciclo-vendas";
 import Calendar23 from "@/components/calendar-23";
 import { DateRange } from "react-day-picker";
 import { useGlobalDateRange } from "@/hooks/useGlobalDateRange";
-import { Clock3, Package, RefreshCw, Wallet } from "lucide-react";
+import { Clock3, LayoutDashboard, Package, RefreshCw, Wallet } from "lucide-react";
 import { ChartPieEstados } from "@/components/ui/chart-pie-estados";
 import { ChartPieGeneric } from "@/components/ui/chart-pie-generic";
 import { useManualSync } from "@/hooks/useManualSync";
 import { SyncChecker } from "@/components/ui/sync-checker";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { ultimosDias } from "@/lib/periodo";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo, GrupoDeAcoes } from "@/components/hud/pagina";
 
 // Define the deal type based on the new flat API response
 interface Deal {
@@ -617,48 +617,41 @@ export default function DashboardPage() {
 
   return (
     <div className="hud-page">
-      <div className="hud-page-header">
-        <h1>Dashboard</h1>
+      <CabecalhoDaPagina
+        icone={LayoutDashboard}
+        titulo="Dashboard"
+        descricao="Pares, faturamento e ticket médio do período, comparados ao ano anterior"
+        acoes={
+          <GrupoDeAcoes rotulo="Ações do dashboard">
+            <button type="button" onClick={handleManualSync} disabled={isSyncing}>
+              <RefreshCw className={isSyncing ? "animate-spin" : undefined} />
+              {isSyncing ? "Sincronizando..." : "Sincronizar dados"}
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
-        <div className="hud-toolbar">
-          <div className="hud-segments">
-            <Button
-              variant={!useCustomPeriod && period === 30 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 30}
-              onClick={() => handlePeriodChangeLocal(30)}
-              className="text-xs"
-            >
-              Últimos 30 dias
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 60 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 60}
-              onClick={() => handlePeriodChangeLocal(60)}
-              className="text-xs"
-            >
-              Últimos 60 dias
-            </Button>
-            <Button
-              variant={!useCustomPeriod && period === 90 ? "default" : "outline"}
-              aria-pressed={!useCustomPeriod && period === 90}
-              onClick={() => handlePeriodChangeLocal(90)}
-              className="text-xs"
-            >
-              Últimos 90 dias
-            </Button>
+      <BarraDeFiltros>
+        <Campo rotulo="Período">
+          <GrupoDeAcoes rotulo="Período" separar={false}>
+            {([30, 60, 90] as const).map((dias) => (
+              <button
+                key={dias}
+                type="button"
+                aria-pressed={!useCustomPeriod && period === dias}
+                onClick={() => handlePeriodChangeLocal(dias)}
+              >
+                {dias} dias
+              </button>
+            ))}
+          </GrupoDeAcoes>
+        </Campo>
+        <Campo rotulo="Datas">
+          <div className="hud-date-field">
+            <Calendar23 value={dateRange} onChange={handleDateRangeChangeLocal} hideLabel />
           </div>
-
-          <Calendar23
-            value={dateRange}
-            onChange={handleDateRangeChangeLocal}
-            hideLabel
-          />
-          <Button onClick={handleManualSync} disabled={isSyncing} variant="outline">
-            <RefreshCw className={isSyncing ? "animate-spin" : undefined} />
-            {isSyncing ? "Sincronizando..." : "Sincronizar Dados"}
-          </Button>
-        </div>
-      </div>
+        </Campo>
+      </BarraDeFiltros>
 
       <dl className="hud-kpi-strip" aria-label="Indicadores do Dashboard">
         {[

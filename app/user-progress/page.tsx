@@ -183,7 +183,7 @@ function TarefaItem({ tarefa }: { tarefa: Tarefa }) {
           atrasada
             ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
             : expirando
-              ? "border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
+              ? "tone-violet hud-tone-card"
               : "border-border"
         }`}
       >
@@ -191,7 +191,7 @@ function TarefaItem({ tarefa }: { tarefa: Tarefa }) {
           {atrasada ? (
             <AlertTriangle className="h-4 w-4 text-red-500" />
           ) : expirando ? (
-            <Clock className="h-4 w-4 text-amber-500" />
+            <Clock className="h-4 w-4 tone-violet hud-tone-text" />
           ) : (
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           )}
@@ -218,7 +218,7 @@ function TarefaItem({ tarefa }: { tarefa: Tarefa }) {
                 atrasada
                   ? "text-red-600 font-semibold"
                   : expirando
-                    ? "text-amber-600 font-semibold"
+                    ? "tone-violet hud-tone-text font-semibold"
                     : "text-muted-foreground"
               }`}
             >
@@ -821,7 +821,7 @@ export default function UserProgressPage() {
             icon={<Zap className="h-5 w-5" />}
             label="XP Total"
             value={xpTotal.toLocaleString()}
-            color="text-amber-500"
+            color="tone-violet hud-tone-text"
             loading={loading}
           />
           <QuickStatCard
@@ -842,7 +842,7 @@ export default function UserProgressPage() {
             icon={<AlertTriangle className="h-5 w-5" />}
             label="Tarefas Atrasadas"
             value={tarefasAtrasadas.length}
-            color="text-red-500"
+            color="tone-rose hud-tone-text"
             loading={loading}
           />
           <QuickStatCard
@@ -865,7 +865,7 @@ export default function UserProgressPage() {
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Flame className="h-4 w-4 text-orange-500" />
+              <Flame className="h-4 w-4 tone-pink hud-tone-text" />
               Resumo de Progresso
             </CardTitle>
           </CardHeader>
@@ -901,7 +901,7 @@ export default function UserProgressPage() {
                     label: "Conquistas",
                     value: badges.length,
                     icon: Star,
-                    color: "text-amber-500",
+                    color: "tone-violet hud-tone-text",
                   },
                 ].map(({ label, value, icon: Icon, color }) => (
                   <div key={label} className="flex flex-col items-center gap-1">
@@ -956,7 +956,7 @@ export default function UserProgressPage() {
                     )}
                     {tarefasExpirando.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-amber-600 mb-1 flex items-center gap-1">
+                        <p className="text-xs font-semibold tone-violet hud-tone-text mb-1 flex items-center gap-1">
                           <Clock className="h-3 w-3" /> Expirando em breve (
                           {tarefasExpirando.length})
                         </p>
@@ -1009,8 +1009,8 @@ export default function UserProgressPage() {
                       key={a.id}
                       className="flex items-center gap-3 py-1.5 border-b border-border last:border-0"
                     >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 shrink-0">
-                        <Zap className="h-3.5 w-3.5 text-amber-600" />
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full tone-violet hud-tone-chip shrink-0">
+                        <Zap className="h-3.5 w-3.5 tone-violet hud-tone-text" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm truncate">{a.motivo}</p>
@@ -1105,7 +1105,7 @@ export default function UserProgressPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Star className="h-4 w-4 text-amber-500" />
+                  <Star className="h-4 w-4 tone-violet hud-tone-text" />
                   Conquistas
                   {!loading && (
                     <Badge variant="secondary">{badges.length}</Badge>
@@ -1180,13 +1180,13 @@ export default function UserProgressPage() {
                     {
                       label: "Tarefas atrasadas",
                       value: setorTarefasAtrasadas,
-                      color: "text-red-500",
+                      color: "tone-rose hud-tone-text",
                       icon: AlertTriangle,
                     },
                     {
                       label: "Expirando em 3 dias",
                       value: setorTarefasExpirando,
-                      color: "text-amber-500",
+                      color: "tone-violet hud-tone-text",
                       icon: Clock,
                     },
                     {
@@ -1239,12 +1239,12 @@ export default function UserProgressPage() {
                     {
                       label: "Mockups feitos",
                       value: designerStats.mockupsFeitos,
-                      color: "text-red-500",
+                      color: "tone-rose hud-tone-text",
                     },
                     {
                       label: "Alterações",
                       value: designerStats.alteracoesFeitas,
-                      color: "text-orange-500",
+                      color: "tone-pink hud-tone-text",
                     },
                     {
                       label: "Arquivos de serigrafia",
@@ -1281,7 +1281,7 @@ export default function UserProgressPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-lg bg-muted/40 flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-amber-500" />
+                    <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                     <span className="text-sm font-semibold">
                       Ranking de Vendas
                     </span>
@@ -1337,13 +1337,13 @@ export default function UserProgressPage() {
                 {
                   label: "Tarefas Atrasadas",
                   value: teamTarefasAtrasadas.length,
-                  color: "text-red-500",
+                  color: "tone-rose hud-tone-text",
                   icon: AlertTriangle,
                 },
                 {
                   label: "Expirando (7 dias)",
                   value: teamTarefasExpirando7d.length,
-                  color: "text-amber-500",
+                  color: "tone-violet hud-tone-text",
                   icon: Clock,
                 },
                 {
@@ -1395,10 +1395,10 @@ export default function UserProgressPage() {
                   )}
                 </CardContent>
               </Card>
-              <Card className="border-amber-200 dark:border-amber-900/40">
+              <Card className="tone-violet hud-tone-card">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-500" />
+                    <Clock className="h-4 w-4 tone-violet hud-tone-text" />
                     Expirando em 7 dias
                     <Badge variant="secondary">
                       {teamTarefasExpirando7d.length}

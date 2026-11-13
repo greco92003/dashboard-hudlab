@@ -19,6 +19,7 @@ import {
   type Periodo,
 } from "@/components/fluxo-caixa/periodo-fluxo";
 import { agrupamentoAutomatico, type Agrupamento, type ContaComStatus, type RespostaFluxo } from "@/lib/fluxo-caixa/regras";
+import { BarraDeFiltros, CabecalhoDaPagina, Campo, GrupoDeAcoes } from "@/components/hud/pagina";
 
 const REGEX_OAUTH = /oauth não configurado|token expirado|conectar tiny/i;
 
@@ -117,40 +118,46 @@ export default function FinancialDashboardPage() {
     : "Ainda não sincronizado";
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Fluxo de caixa</h1>
-          <p className="text-sm text-muted-foreground">{subtitulo}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Wallet}
+        titulo="Fluxo de caixa"
+        descricao={subtitulo}
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+            <GrupoDeAcoes rotulo="Ações do fluxo de caixa">
+              <button type="button" onClick={sincronizar} disabled={sincronizando}>
+                <RefreshCw className={sincronizando ? "animate-spin" : undefined} />
+                Atualizar
+              </button>
+              <button type="button" onClick={() => setSaldoAberto(true)}>
+                Saldo inicial
+              </button>
+            </GrupoDeAcoes>
+            <Button
+              className="hud-btn-accent h-9"
+              onClick={() => {
+                garantirOpcoes();
+                setNovaSaidaAberta(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Nova saída
+            </Button>
+          </div>
+        }
+      />
+
+      <BarraDeFiltros>
+        <Campo rotulo="Período">
           <PeriodoFluxo
             periodo={periodo}
             agrupamento={agrupamento}
             onPeriodo={handlePeriodo}
             onAgrupamento={setAgrupamento}
           />
-          <Button variant="outline" onClick={sincronizar} disabled={sincronizando}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${sincronizando ? "animate-spin" : ""}`} />
-            Atualizar
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setSaldoAberto(true)}
-          >
-            Saldo inicial
-          </Button>
-          <Button
-            onClick={() => {
-              garantirOpcoes();
-              setNovaSaidaAberta(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nova saída
-          </Button>
-        </div>
-      </div>
+        </Campo>
+      </BarraDeFiltros>
 
       {erro && REGEX_OAUTH.test(erro) && (
         <div className="rounded-xl border bg-muted/50 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -183,7 +190,7 @@ export default function FinancialDashboardPage() {
       )}
 
       {dados?.ultimaSync?.status === "erro" && (
-        <div className="rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <div className="rounded-md border tone-pink hud-tone-card px-4 py-3 text-sm hud-tone-text">
           Última sincronização falhou: {dados.ultimaSync.erro}
         </div>
       )}

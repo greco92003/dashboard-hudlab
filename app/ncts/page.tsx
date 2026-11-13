@@ -26,6 +26,7 @@ import {
   STATUS_TAREFA,
   PRIORIDADE_TAREFA,
 } from "@/lib/ncts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 export default function NctsOverviewPage() {
   const { user } = useAuth();
@@ -117,18 +118,8 @@ export default function NctsOverviewPage() {
   const nivel = calcularNivel(xpTotal);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Map className="h-7 w-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-bold">
-            NCT — Narrativas, Compromissos & Tarefas
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Acompanhe seu progresso, XP e impacto na equipe.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-5">
+      <CabecalhoDaPagina icone={Map} titulo="NCT: Narrativas, Compromissos & Tarefas" descricao="Acompanhe seu progresso, XP e impacto na equipe." />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -137,7 +128,7 @@ export default function NctsOverviewPage() {
             icon: Zap,
             label: "XP Total",
             value: loading ? null : xpTotal.toLocaleString() + " XP",
-            color: "text-amber-500",
+            color: "tone-violet hud-tone-text",
           },
           {
             icon: TrendingUp,
@@ -282,7 +273,7 @@ export default function NctsOverviewPage() {
                       <span className="font-medium text-sm">{c.titulo}</span>
                       {c.prazo_fim && (
                         <span
-                          className={`text-xs ${dias < 3 ? "text-red-500" : "text-muted-foreground"}`}
+                          className={`text-xs ${dias < 3 ? "tone-rose hud-tone-text" : "text-muted-foreground"}`}
                         >
                           {dias < 0 ? "Atrasado" : `${dias}d`}
                         </span>

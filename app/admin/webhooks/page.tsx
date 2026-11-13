@@ -60,6 +60,8 @@ import {
 import { useWebhookManager } from "@/hooks/useWebhookManager";
 import { NuvemshopWebhookEvent, ALL_WEBHOOK_EVENTS } from "@/types/webhooks";
 import { toast } from "sonner";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
+import { Webhook } from "lucide-react";
 
 export default function WebhooksAdminPage() {
   const {
@@ -164,28 +166,24 @@ export default function WebhooksAdminPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Administração de Webhooks</h1>
-          <p className="text-muted-foreground">
-            Gerencie webhooks do Nuvemshop para sincronização em tempo real
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={refreshData} disabled={loading}>
-            <RefreshCw
-              className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
-            />
-            Atualizar
-          </Button>
-          <Button onClick={handleHealthCheck} variant="outline">
-            <Activity className="w-4 h-4 mr-2" />
-            Verificar Saúde
-          </Button>
-        </div>
-      </div>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Webhook}
+        titulo="Administração de Webhooks"
+        descricao="Gerencie webhooks do Nuvemshop para sincronização em tempo real"
+        acoes={
+          <GrupoDeAcoes rotulo="Ações dos webhooks">
+            <button type="button" onClick={refreshData} disabled={loading}>
+              <RefreshCw className={loading ? "animate-spin" : undefined} />
+              Atualizar
+            </button>
+            <button type="button" onClick={handleHealthCheck}>
+              <Activity />
+              Verificar saúde
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {/* Error Alert */}
       {error && (

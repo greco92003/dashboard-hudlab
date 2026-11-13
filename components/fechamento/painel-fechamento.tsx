@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,46 +67,78 @@ interface Painel {
 const MOTIVOS = ["Preço", "Frete", "Prazo", "Sumiu", "Comprou de outro", "Só pesquisando"] as const;
 const POLL_MS = 60_000;
 
-const COR: Record<Cor, { faixa: string; texto: string; chip: string; nome: string }> = {
+/**
+ * Tons translúcidos do tema (app/hud-dashboard.css), de quente para frio:
+ * rosa, magenta, violeta, verde da marca, ardósia; azul-céu para a Cami.
+ */
+const COR: Record<Cor, { tom: string; faixa: string; texto: string; chip: string; card: string; nome: string }> = {
   vermelho: {
-    faixa: "bg-red-500",
-    texto: "text-red-700 dark:text-red-300",
-    chip: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+    tom: "tone-rose",
+    faixa: "tone-rose hud-tone-bar",
+    texto: "tone-rose hud-tone-text",
+    chip: "tone-rose hud-tone-chip",
+    card: "tone-rose hud-tone-card",
     nome: "esperando resposta",
   },
   laranja: {
-    faixa: "bg-orange-500",
-    texto: "text-orange-700 dark:text-orange-300",
-    chip: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+    tom: "tone-pink",
+    faixa: "tone-pink hud-tone-bar",
+    texto: "tone-pink hud-tone-text",
+    chip: "tone-pink hud-tone-chip",
+    card: "tone-pink hud-tone-card",
     nome: "hoje, grátis",
   },
   amarelo: {
-    faixa: "bg-amber-400",
-    texto: "text-amber-700 dark:text-amber-300",
-    chip: "bg-amber-400/20 text-amber-800 dark:text-amber-200 border-amber-500/30",
+    tom: "tone-violet",
+    faixa: "tone-violet hud-tone-bar",
+    texto: "tone-violet hud-tone-text",
+    chip: "tone-violet hud-tone-chip",
+    card: "tone-violet hud-tone-card",
     nome: "hoje, por modelo",
   },
   verde: {
-    faixa: "bg-emerald-500",
-    texto: "text-emerald-700 dark:text-emerald-300",
-    chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    tom: "tone-green",
+    faixa: "tone-green hud-tone-bar",
+    texto: "tone-green hud-tone-text",
+    chip: "tone-green hud-tone-chip",
+    card: "tone-green hud-tone-card",
     nome: "em dia",
   },
   cinza: {
-    faixa: "bg-zinc-400",
-    texto: "text-zinc-600 dark:text-zinc-400",
-    chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30",
+    tom: "tone-slate",
+    faixa: "tone-slate hud-tone-bar",
+    texto: "tone-slate hud-tone-text",
+    chip: "tone-slate hud-tone-chip",
+    card: "tone-slate hud-tone-card",
     nome: "parados",
   },
   cami: {
-    faixa: "bg-sky-400",
-    texto: "text-sky-700 dark:text-sky-300",
-    chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
+    tom: "tone-sky",
+    faixa: "tone-sky hud-tone-bar",
+    texto: "tone-sky hud-tone-text",
+    chip: "tone-sky hud-tone-chip",
+    card: "tone-sky hud-tone-card",
     nome: "com a Cami",
   },
 };
 const ORDEM_CORES: Cor[] = ["vermelho", "laranja", "amarelo", "verde", "cinza", "cami"];
-const SINAL: Record<string, string> = { quente: "Quente", esfriando: "Esfriando", perdendo: "Perdendo" };
+const SINAL: Record<string, { nome: string; tom: string }> = {
+  quente: { nome: "Quente", tom: "tone-green" },
+  esfriando: { nome: "Esfriando", tom: "tone-sky" },
+  perdendo: { nome: "Perdendo", tom: "tone-rose" },
+};
+
+/** Temperatura lida pela Cami, para o filtro. "sem": a Cami ainda não leu a conversa. */
+type Temperatura = "quente" | "neutro" | "esfriando" | "perdendo" | "sem";
+const TEMPERATURAS: { chave: Temperatura; nome: string; tom: string }[] = [
+  { chave: "quente", nome: "Quente", tom: "tone-green" },
+  { chave: "neutro", nome: "Neutro", tom: "tone-slate" },
+  { chave: "esfriando", nome: "Esfriando", tom: "tone-sky" },
+  { chave: "perdendo", nome: "Perdendo", tom: "tone-rose" },
+  { chave: "sem", nome: "Sem leitura", tom: "tone-slate" },
+];
+const temperaturaDe = (c: CardDoPainel): Temperatura =>
+  c.sinal === "quente" || c.sinal === "neutro" || c.sinal === "esfriando" || c.sinal === "perdendo" ? c.sinal : "sem";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const hora = (iso: string | null) =>
@@ -160,6 +191,8 @@ export function PainelDeFechamento() {
   const [pip, setPip] = useState<Window | null>(null);
   const [confirmar, setConfirmar] = useState<{ card: CardDoPainel; acao: "modelo" | "fechou" } | null>(null);
   const [perder, setPerder] = useState<CardDoPainel | null>(null);
+  const [filtroCor, setFiltroCor] = useState<Cor | null>(null);
+  const [filtroTemp, setFiltroTemp] = useState<Temperatura | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const alertasAntes = useRef<number | null>(null);
 
@@ -283,49 +316,92 @@ export function PainelDeFechamento() {
   };
 
   const cards = painel?.cards ?? [];
+  // Filtro cruzado: os números de cada filtro já respeitam o outro.
+  const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
+  const porSituacao = filtroCor ? cards.filter((c) => c.cor === filtroCor) : cards;
+  const visiveis = filtroCor ? porTemperatura.filter((c) => c.cor === filtroCor) : porTemperatura;
+  const contagemCor: Record<Cor, number> = { vermelho: 0, laranja: 0, amarelo: 0, verde: 0, cinza: 0, cami: 0 };
+  let valorFiltrado = 0;
+  for (const c of porTemperatura) {
+    contagemCor[c.cor]++;
+    valorFiltrado += c.valor ?? 0;
+  }
+  const contagemTemp: Record<Temperatura, number> = { quente: 0, neutro: 0, esfriando: 0, perdendo: 0, sem: 0 };
+  for (const c of porSituacao) contagemTemp[temperaturaDe(c)]++;
+  const filtrando = filtroCor !== null || filtroTemp !== null;
+  const limparFiltros = () => {
+    setFiltroCor(null);
+    setFiltroTemp(null);
+  };
 
   return (
-    <div className="flex flex-1 flex-col gap-4 sm:gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-lg font-bold sm:text-xl md:text-2xl">
-            <Flame className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
-            Fechamento
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            Quero aproveitar, Prioridade de Fechamento e Finalizando Venda · atualizado às {hora(painel?.atualizadoEm ?? null)}
-            {painel ? ` · ${brl(painel.valorEmFechamento)} em fechamento` : ""}
-          </p>
+    <div className="flex flex-1 flex-col gap-4 sm:gap-5">
+      <div className="hud-v2-head">
+        <div className="hud-v2-title">
+          <div className="hud-v2-tile">
+            <Flame />
+          </div>
+          <div>
+            <h1>Fechamento</h1>
+            <p className="hud-v2-sub">
+              Quero aproveitar, Prioridade de Fechamento e Finalizando Venda · atualizado às {hora(painel?.atualizadoEm ?? null)}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={alternarSom} aria-pressed={som}>
-            {som ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+        <div className="hud-group" role="group" aria-label="Ações do painel">
+          <button type="button" onClick={alternarSom} aria-pressed={som}>
+            {som ? <Volume2 /> : <VolumeX />}
             {som ? "Som ligado" : "Ligar som"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void abrirJanela()}>
-            <PictureInPicture2 className="h-4 w-4" />
+          </button>
+          <span className="hud-group-sep" aria-hidden />
+          <button type="button" onClick={() => void abrirJanela()}>
+            <PictureInPicture2 />
             Janela flutuante
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void atualizar()} disabled={atualizando}>
-            {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </button>
+          <span className="hud-group-sep" aria-hidden />
+          <button type="button" onClick={() => void atualizar()} disabled={atualizando}>
+            {atualizando ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Atualizar
-          </Button>
+          </button>
         </div>
       </div>
 
-      {painel && <Contagem contagem={painel.contagem} />}
+      {painel && (
+        <>
+          <FaixaDeIndicadores
+            contagem={contagemCor}
+            valor={valorFiltrado}
+            total={porTemperatura.length}
+            filtro={filtroCor}
+            onFiltro={setFiltroCor}
+          />
+          <BarraDeTemperatura
+            contagem={contagemTemp}
+            filtro={filtroTemp}
+            onFiltro={setFiltroTemp}
+            mostrando={visiveis.length}
+            total={cards.length}
+            onLimpar={filtrando ? limparFiltros : null}
+          />
+        </>
+      )}
 
       {carregando ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : cards.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum card nas etapas do painel. Toque em Atualizar para ler o GHL.
-          </CardContent>
-        </Card>
+        <div className="hud-panel py-10 text-center text-sm text-muted-foreground">
+          Nenhum card nas etapas do painel. Toque em Atualizar para ler o GHL.
+        </div>
+      ) : visiveis.length === 0 ? (
+        <div className="hud-panel flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+          Nenhum card com esses filtros.
+          <Button variant="outline" size="sm" onClick={limparFiltros}>
+            Limpar filtros
+          </Button>
+        </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {cards.map((card) => (
+        <div className="grid gap-3 min-[1400px]:grid-cols-2">
+          {visiveis.map((card) => (
             <CardDeFechamento
               key={card.oportunidadeId}
               card={card}
@@ -429,7 +505,7 @@ function CopiarLink({ link, compacto = false }: { link: string; compacto?: boole
       <Button
         size="icon"
         variant="outline"
-        className={cn("h-7 w-7", copiado && "border-emerald-500 text-emerald-600 dark:text-emerald-400")}
+        className={cn("h-7 w-7", copiado && "tone-green hud-tone-chip")}
         title={copiado ? "Link copiado" : "Copiar o link da conversa"}
         onClick={(e) => void copiar(e)}
       >
@@ -438,9 +514,9 @@ function CopiarLink({ link, compacto = false }: { link: string; compacto?: boole
     );
   }
   return (
-    <Button size="sm" variant="default" onClick={(e) => void copiar(e)}>
+    <Button size="sm" className="hud-btn-accent h-8" title="Copiar o link da conversa" onClick={(e) => void copiar(e)}>
       {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      {copiado ? "Link copiado" : "Copiar link da conversa"}
+      {copiado ? "Link copiado" : "Copiar link"}
     </Button>
   );
 }
@@ -450,10 +526,125 @@ function Contagem({ contagem }: { contagem: Record<Cor, number> }) {
     <div className="flex flex-wrap gap-2">
       {ORDEM_CORES.filter((c) => contagem[c] > 0 || c === "vermelho").map((c) => (
         <Badge key={c} variant="outline" className={cn("gap-1.5 px-2.5 py-1 text-sm font-medium", COR[c].chip)}>
-          <span className={cn("h-2 w-2 rounded-full", COR[c].faixa, c === "vermelho" && contagem[c] > 0 && "animate-pulse")} />
+          <span className={cn("h-2 w-2 rounded-full hud-tone-dot", COR[c].tom, c === "vermelho" && contagem[c] > 0 && "hud-tone-blink")} />
           {contagem[c]} {COR[c].nome}
         </Badge>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Faixa de indicadores do topo, que também filtra por situação: cada célula é
+ * um botão (de novo para soltar) e a primeira mostra todos. Os números já
+ * respeitam o filtro de temperatura, então dá para ver, por exemplo, quantos
+ * quentes há em cada situação. Sempre todas as células (zero fica apagado),
+ * para a posição de cada número não mudar.
+ */
+function FaixaDeIndicadores({
+  contagem,
+  valor,
+  total,
+  filtro,
+  onFiltro,
+}: {
+  contagem: Record<Cor, number>;
+  valor: number;
+  total: number;
+  filtro: Cor | null;
+  onFiltro: (cor: Cor | null) => void;
+}) {
+  return (
+    <div
+      className="hud-panel hud-strip grid-cols-2 sm:grid-cols-3 xl:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))]"
+      role="group"
+      aria-label="Filtrar por situação"
+      data-filtrando={filtro ? "" : undefined}
+    >
+      <button
+        type="button"
+        className="col-span-2 sm:col-span-3 xl:col-span-1"
+        aria-pressed={filtro === null}
+        onClick={() => onFiltro(null)}
+      >
+        <span className="hud-strip-label">Em fechamento · {total} {total === 1 ? "card" : "cards"}</span>
+        <span className="hud-strip-value" style={{ color: "var(--hud-accent-text)" }}>
+          {brl(valor)}
+        </span>
+      </button>
+      {ORDEM_CORES.map((c) => {
+        const n = contagem[c];
+        const alerta = c === "vermelho" && n > 0;
+        return (
+          <button
+            key={c}
+            type="button"
+            className={COR[c].tom}
+            aria-pressed={filtro === c}
+            onClick={() => onFiltro(filtro === c ? null : c)}
+          >
+            <span className="hud-strip-label">
+              <span className={cn("h-2 w-2 shrink-0 rounded-full hud-tone-dot", alerta && "hud-tone-blink")} />
+              <span className="truncate" title={COR[c].nome}>{COR[c].nome.charAt(0).toUpperCase() + COR[c].nome.slice(1)}</span>
+            </span>
+            <span className={cn("hud-strip-value", alerta && "hud-tone-text", n === 0 && "text-muted-foreground")}>{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Filtro de temperatura (a leitura da Cami) e o resumo do que está na tela. */
+function BarraDeTemperatura({
+  contagem,
+  filtro,
+  onFiltro,
+  mostrando,
+  total,
+  onLimpar,
+}: {
+  contagem: Record<Temperatura, number>;
+  filtro: Temperatura | null;
+  onFiltro: (t: Temperatura | null) => void;
+  mostrando: number;
+  total: number;
+  onLimpar: (() => void) | null;
+}) {
+  const opcoes = TEMPERATURAS.filter((t) => t.chave !== "sem" || contagem.sem > 0);
+  return (
+    <div className="hud-panel hud-bar">
+      <div className="hud-field">
+        <span className="hud-field-label">Temperatura</span>
+        <div className="hud-group" role="group" aria-label="Filtrar por temperatura">
+          {opcoes.map((t) => (
+            <button
+              key={t.chave}
+              type="button"
+              aria-pressed={filtro === t.chave}
+              className={filtro === t.chave ? undefined : cn(t.tom, "hud-tone-text")}
+              onClick={() => onFiltro(filtro === t.chave ? null : t.chave)}
+            >
+              {t.nome}
+              <span className="hud-n">{contagem[t.chave]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="ml-auto flex h-9 items-center gap-2 text-sm text-muted-foreground">
+        {onLimpar ? (
+          <>
+            <span>
+              Mostrando {mostrando} de {total}
+            </span>
+            <Button variant="ghost" size="sm" className="h-8" onClick={onLimpar}>
+              Limpar filtros
+            </Button>
+          </>
+        ) : (
+          <span className="hidden sm:inline">Ordem: situação, depois temperatura, depois o prazo mais antigo</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -477,106 +668,105 @@ function CardDeFechamento({
 }) {
   const [data, setData] = useState(amanha());
   const alerta = card.cor === "vermelho" || card.ultimaChance;
+  const detalhes = [
+    card.pares ? `${card.pares} pares` : null,
+    card.valor ? brl(card.valor) : null,
+    card.janelaTexto,
+  ].filter(Boolean);
   return (
-    <Card className={cn("relative overflow-hidden py-0", alerta && "ring-2 ring-red-500/40")}>
-      <div className={cn("absolute inset-y-0 left-0 w-1.5", COR[card.cor].faixa, alerta && "animate-pulse")} />
-      <CardContent className="flex flex-col gap-2 py-3 pl-5 pr-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-semibold">{card.nome}</span>
-          <Badge variant="secondary" className="font-normal">
-            {card.etapa}
-          </Badge>
-          {card.pares ? <span className="text-sm text-muted-foreground">{card.pares} pares</span> : null}
-          {card.valor ? <span className="text-sm text-muted-foreground">· {brl(card.valor)}</span> : null}
-          {card.sinal && SINAL[card.sinal] ? (
-            <Badge
-              variant="outline"
-              className={cn(
-                "font-normal",
-                card.sinal === "quente" ? COR.laranja.chip : card.sinal === "perdendo" ? COR.vermelho.chip : COR.cinza.chip,
-              )}
-            >
-              {SINAL[card.sinal]}
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span className={cn("font-medium", COR[card.cor].texto, card.ultimaChance && "animate-pulse")}>{card.rotulo}</span>
-          {card.janelaTexto && <span className="text-xs text-muted-foreground">· {card.janelaTexto}</span>}
-        </div>
-        {card.ultimaMensagemCliente && (
-          <p className="line-clamp-2 text-xs text-muted-foreground">
-            <MessageCircle className="mr-1 inline h-3 w-3" />
-            {card.ultimaMensagemCliente}
-          </p>
+    <div className={cn("hud-fcard", COR[card.cor].tom, alerta && "hud-tone-pulse")}>
+      <div className={cn("absolute inset-y-0 left-0 w-1", COR[card.cor].faixa, alerta && "hud-tone-blink")} />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">{card.nome}</span>
+        <span className="hud-chip">{card.etapa}</span>
+        {card.sinal && SINAL[card.sinal] ? (
+          <span className={cn("hud-chip hud-tone-chip", SINAL[card.sinal].tom)}>{SINAL[card.sinal].nome}</span>
+        ) : null}
+        {card.linkConversa && (
+          <span className="ml-auto">
+            <CopiarLink link={card.linkConversa} />
+          </span>
         )}
-        {(card.combinado || card.pendencia) && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            {card.combinado && (
-              <span>
-                <span className="text-muted-foreground">Combinado:</span> {card.combinado}
-              </span>
-            )}
-            {card.pendencia && (
-              <span>
-                <span className="text-muted-foreground">Falta:</span> {card.pendencia}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {card.linkConversa && <CopiarLink link={card.linkConversa} />}
-          {card.cor !== "cami" && (
-            <>
-              <Button size="sm" variant="outline" onClick={onContato} disabled={ocupado}>
-                {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Fiz contato
-              </Button>
-              {!card.janelaAberta && (
-                <Button size="sm" variant="outline" onClick={onModelo} disabled={ocupado}>
-                  <Send className="h-4 w-4" />
+      </div>
+      <p className={cn("text-sm font-semibold", COR[card.cor].texto, card.ultimaChance && "hud-tone-blink")}>{card.rotulo}</p>
+      {detalhes.length > 0 && <p className="-mt-1 text-xs text-muted-foreground">{detalhes.join(" · ")}</p>}
+      {card.ultimaMensagemCliente && (
+        <p className="line-clamp-2 text-xs text-muted-foreground">
+          <MessageCircle className="mr-1 inline h-3 w-3" />
+          {card.ultimaMensagemCliente}
+        </p>
+      )}
+      {(card.combinado || card.pendencia) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          {card.combinado && (
+            <span>
+              <span className="text-muted-foreground">Combinado:</span> {card.combinado}
+            </span>
+          )}
+          {card.pendencia && (
+            <span>
+              <span className="text-muted-foreground">Falta:</span> {card.pendencia}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="hud-fcard-actions">
+        {card.cor !== "cami" && (
+          <div className="hud-group" role="group" aria-label={`Ações de ${card.nome}`}>
+            <button type="button" onClick={onContato} disabled={ocupado}>
+              {ocupado ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+              Fiz contato
+            </button>
+            {!card.janelaAberta && (
+              <>
+                <span className="hud-group-sep" aria-hidden />
+                <button type="button" onClick={onModelo} disabled={ocupado}>
+                  <Send />
                   Mandar modelo
-                </Button>
-              )}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={ocupado}>
-                    <CalendarClock className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            <span className="hud-group-sep" aria-hidden />
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" disabled={ocupado}>
+                  <CalendarClock />
+                  Adiar
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium" htmlFor={`adiar-${card.oportunidadeId}`}>
+                    Retomar o contato em
+                  </label>
+                  <input
+                    id={`adiar-${card.oportunidadeId}`}
+                    type="date"
+                    value={data}
+                    min={amanha()}
+                    onChange={(e) => setData(e.target.value)}
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                  />
+                  <Button size="sm" onClick={() => onAdiar(data)} disabled={!data}>
                     Adiar
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium" htmlFor={`adiar-${card.oportunidadeId}`}>
-                      Retomar o contato em
-                    </label>
-                    <input
-                      id={`adiar-${card.oportunidadeId}`}
-                      type="date"
-                      value={data}
-                      min={amanha()}
-                      onChange={(e) => setData(e.target.value)}
-                      className="rounded-md border bg-background px-2 py-1.5 text-sm"
-                    />
-                    <Button size="sm" onClick={() => onAdiar(data)} disabled={!data}>
-                      Adiar
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </>
-          )}
-          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="text-red-700 dark:text-red-300">
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
+        <div className="hud-fcard-end">
+          <Button size="sm" variant="ghost" onClick={onPerdido} disabled={ocupado} className="tone-rose hud-tone-text h-8 px-2.5">
             <ThumbsDown className="h-4 w-4" />
             Perdido
           </Button>
-          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="text-emerald-700 dark:text-emerald-300">
+          <Button size="sm" variant="ghost" onClick={onFechou} disabled={ocupado} className="tone-green hud-tone-text h-8 px-2.5">
             <BellRing className="h-4 w-4" />
             Fechou
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -656,12 +846,12 @@ function CardCompacto({
 
   const botao = "h-7 px-2 text-xs";
   return (
-    <div className={cn("relative rounded-md border py-2 pl-3 pr-2", alerta && "ring-2 ring-red-500/40")}>
-      <div className={cn("absolute inset-y-0 left-0 w-1 rounded-l-md", COR[c.cor].faixa, alerta && "animate-pulse")} />
+    <div className={cn("relative overflow-hidden rounded-lg border py-2 pl-3 pr-2", COR[c.cor].card, alerta && "hud-tone-pulse")}>
+      <div className={cn("absolute inset-y-0 left-0 w-1", COR[c.cor].faixa, alerta && "hud-tone-blink")} />
       <div className="flex items-start justify-between gap-2">
         <button type="button" className="min-w-0 text-left" onClick={alternar} title="Mostrar as ações">
           <p className="truncate text-sm font-medium">{c.nome}</p>
-          <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "animate-pulse")}>{c.rotulo}</p>
+          <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "hud-tone-blink")}>{c.rotulo}</p>
           <p className="truncate text-[11px] text-muted-foreground">
             {c.etapa}
             {c.pares ? ` · ${c.pares} pares` : ""}
@@ -720,7 +910,7 @@ function CardCompacto({
               <Button
                 size="sm"
                 variant="outline"
-                className={cn(botao, "text-red-700 dark:text-red-300")}
+                className={cn(botao, "tone-rose hud-tone-text")}
                 disabled={ocupado}
                 onClick={() => setEtapa("perdido")}
               >
@@ -730,7 +920,7 @@ function CardCompacto({
               <Button
                 size="sm"
                 variant="outline"
-                className={cn(botao, "text-emerald-700 dark:text-emerald-300")}
+                className={cn(botao, "tone-green hud-tone-text")}
                 disabled={ocupado}
                 onClick={() => setEtapa("fechou")}
               >
@@ -802,7 +992,7 @@ function CardCompacto({
             </div>
           )}
 
-          {erro && <p className="text-xs text-red-600 dark:text-red-400">{erro}</p>}
+          {erro && <p className="tone-rose hud-tone-text text-xs">{erro}</p>}
         </div>
       )}
     </div>

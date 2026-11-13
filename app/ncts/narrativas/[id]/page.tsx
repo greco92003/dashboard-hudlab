@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   Target,
@@ -27,6 +26,7 @@ import {
   formatarData,
   diasRestantes,
 } from "@/lib/ncts";
+import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 export default function NarrativaDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -148,13 +148,18 @@ export default function NarrativaDetalhe() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <Target className="h-6 w-6 text-primary" />
-        <h1 className="text-xl font-bold">Narrativa</h1>
-      </div>
+      <CabecalhoDaPagina
+        icone={Target}
+        titulo="Narrativa"
+        acoes={
+          <GrupoDeAcoes rotulo="Navegação">
+            <button type="button" onClick={() => router.back()}>
+              <ArrowLeft />
+              Voltar
+            </button>
+          </GrupoDeAcoes>
+        }
+      />
 
       {/* Cabeçalho */}
       <Card
@@ -217,13 +222,13 @@ export default function NarrativaDetalhe() {
                 </div>
               </div>
               <div className="text-right space-y-1">
-                <div className="flex items-center gap-1.5 text-amber-500 font-semibold">
+                <div className="flex items-center gap-1.5 tone-violet hud-tone-text font-semibold">
                   <Zap className="h-4 w-4" />
                   {narrativa.xp_total} XP
                 </div>
                 {narrativa.prazo_fim && (
                   <p
-                    className={`text-sm ${dias < 0 ? "text-red-500" : dias < 7 ? "text-amber-500" : "text-muted-foreground"}`}
+                    className={`text-sm ${dias < 0 ? "tone-rose hud-tone-text" : dias < 7 ? "tone-pink hud-tone-text" : "text-muted-foreground"}`}
                   >
                     <Calendar className="h-3 w-3 inline mr-1" />
                     {formatarData(narrativa.prazo_fim)}
@@ -301,9 +306,9 @@ export default function NarrativaDetalhe() {
                         <span
                           className={
                             dias < 0
-                              ? "text-red-500"
+                              ? "tone-rose hud-tone-text"
                               : dias < 7
-                                ? "text-amber-500"
+                                ? "tone-violet hud-tone-text"
                                 : ""
                           }
                         >
@@ -341,7 +346,7 @@ export default function NarrativaDetalhe() {
                       {p.usuario?.first_name} {p.usuario?.last_name}
                     </span>
                   </div>
-                  <span className="text-sm font-medium text-amber-500 flex items-center gap-1">
+                  <span className="text-sm font-medium tone-violet hud-tone-text flex items-center gap-1">
                     <Zap className="h-3.5 w-3.5" />
                     {p.xp_nessa_narrativa} XP
                   </span>
@@ -360,7 +365,7 @@ export default function NarrativaDetalhe() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-500" />
+                <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                 Ranking da Narrativa
               </CardTitle>
             </CardHeader>
@@ -371,7 +376,7 @@ export default function NarrativaDetalhe() {
                   className="flex items-center gap-3 py-2 border-b last:border-0"
                 >
                   <span
-                    className={`text-lg font-bold w-8 text-center ${i === 0 ? "text-amber-500" : i === 1 ? "text-slate-400" : i === 2 ? "text-amber-700" : "text-muted-foreground"}`}
+                    className={`text-lg font-bold w-8 text-center ${i === 0 ? "tone-violet hud-tone-text" : i === 1 ? "text-slate-400" : i === 2 ? "tone-pink hud-tone-text" : "text-muted-foreground"}`}
                   >
                     {i === 0
                       ? "🥇"
@@ -387,7 +392,7 @@ export default function NarrativaDetalhe() {
                   <span className="flex-1 text-sm">
                     {p.usuario?.first_name} {p.usuario?.last_name}
                   </span>
-                  <span className="text-sm font-bold text-amber-500">
+                  <span className="text-sm font-bold tone-violet hud-tone-text">
                     {p.xp_nessa_narrativa} XP
                   </span>
                 </div>

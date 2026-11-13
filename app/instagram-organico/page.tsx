@@ -10,6 +10,8 @@ import { Posts } from "./components/posts";
 import { Stories } from "./components/stories";
 import { Insights } from "./components/insights";
 import { Estrategia } from "./components/estrategia";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
+import { Instagram } from "lucide-react";
 
 const ABAS = ["visao-geral", "reels", "posts", "stories", "insights", "estrategia"] as const;
 
@@ -30,13 +32,12 @@ function InstagramOrganicoContent() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Instagram Orgânico</h1>
-        <p className="text-muted-foreground">
-          Avaliador de criativos: o que performa bem e o que não performa, com base em dados reais
-        </p>
-      </div>
+    <div className="flex flex-1 flex-col gap-5">
+      <CabecalhoDaPagina
+        icone={Instagram}
+        titulo="Instagram Orgânico"
+        descricao="Avaliador de criativos: o que performa bem e o que não performa, com base em dados reais"
+      />
 
       <Tabs value={aba} onValueChange={setAba}>
         <TabsList>

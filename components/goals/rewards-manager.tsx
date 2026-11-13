@@ -196,7 +196,7 @@ export function RewardsManager({
       </div>
 
       {localRewards.length > 0 && hasEmptyReward && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs tone-violet hud-tone-text">
           Preencha todas as premiações antes de adicionar uma nova.
         </p>
       )}

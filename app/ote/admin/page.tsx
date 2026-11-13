@@ -28,6 +28,7 @@ import { MultiplierConfigForm } from "@/components/ote/multiplier-config-form";
 import { TrafficConfigForm } from "@/components/ote/traffic-config-form";
 import { SellerDashboardView } from "@/components/ote/seller-dashboard-view";
 import { usePermissions } from "@/hooks/usePermissions";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 export default function OTEAdminPage() {
   const router = useRouter();
@@ -117,8 +118,8 @@ export default function OTEAdminPage() {
   // Mostrar loading enquanto verifica permissões
   if (permissionsLoading || loading) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Administração OTE</h1>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina icone={Settings} titulo="Administração OTE" />
         <Skeleton className="h-96" />
       </div>
     );
@@ -127,7 +128,7 @@ export default function OTEAdminPage() {
   // Verificar permissões
   if (!isOwnerOrAdmin) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
         <Alert variant="destructive">
           <ShieldAlert className="h-4 w-4" />
           <AlertTitle>Acesso Negado</AlertTitle>
@@ -142,8 +143,8 @@ export default function OTEAdminPage() {
 
   if (error) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-        <h1 className="text-xl sm:text-2xl font-bold">Administração OTE</h1>
+      <div className="flex flex-1 flex-col gap-4 md:gap-5">
+        <CabecalhoDaPagina icone={Settings} titulo="Administração OTE" />
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Erro</AlertTitle>
@@ -155,19 +156,11 @@ export default function OTEAdminPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 sm:gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg sm:text-xl md:text-2xl font-bold flex items-center gap-2">
-            <Settings className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="hidden sm:inline">Administração OTE</span>
-            <span className="sm:hidden">Admin OTE</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Gerencie vendedores, metas e configurações
-          </p>
-        </div>
-      </div>
+      <CabecalhoDaPagina
+        icone={Settings}
+        titulo="Administração OTE"
+        descricao="Gerencie vendedores, metas e configurações"
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="sellers" className="w-full">

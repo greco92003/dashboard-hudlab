@@ -39,7 +39,7 @@ export function BoardColumns({
             className="h-full flex-shrink-0 transition-all duration-200"
             style={{ width: `${cardWidth}px`, minWidth: `${cardWidth}px` }}
           >
-            <Card className="flex h-full flex-col">
+            <Card className="hud-board-col flex h-full flex-col">
               <CardHeader className="flex-shrink-0 pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">
