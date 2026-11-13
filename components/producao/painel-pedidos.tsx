@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { OrderDocumentButtons } from "@/components/erp/order-document-buttons";
+import { DocumentosPedido } from "@/components/producao/documentos-pedido";
 import { TipoPedidoBadge } from "@/components/programacao/tipo-pedido-badge";
 import { isEtapaConcluivel } from "@/lib/ghl/programacao-stages";
 import { formatDate } from "@/lib/programacao/board-dates";
@@ -45,14 +45,7 @@ export function AcoesPedido({
 }) {
   return (
     <div className="grid gap-2" onClick={(e) => e.stopPropagation()}>
-      <OrderDocumentButtons
-        baseHref={`/api/producao/documentos/${encodeURIComponent(deal.id)}`}
-        talaoLabel="Talão"
-        size="default"
-        rotulos="sempre"
-        className="grid grid-cols-2"
-        buttonClassName={cn("w-full", grande ? "h-12 text-base" : "h-11 text-sm")}
-      />
+      <DocumentosPedido deal={deal} grande={grande} />
       <Button
         className={cn("hud-btn-accent w-full font-semibold", grande ? "h-14 text-lg" : "h-12 text-base")}
         onClick={() => onConcluir(deal)}
