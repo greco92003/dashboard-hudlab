@@ -25,6 +25,7 @@ import Image from "next/image";
 import { PartnersGlobalHeader } from "@/components/PartnersGlobalHeader";
 import { FranchiseSelector } from "@/components/FranchiseSelector";
 import { storage } from "@/lib/storage";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 interface ProductVariant {
   id: string;
@@ -396,7 +397,7 @@ export default function PartnersProductsPage() {
       <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600">Acesso Negado</h1>
+            <h1 className="tone-rose hud-tone-text text-2xl font-bold">Acesso Negado</h1>
             <p className="text-muted-foreground mt-2">
               Você não tem permissão para acessar esta página.
             </p>
@@ -409,18 +410,15 @@ export default function PartnersProductsPage() {
   const totalPages = Math.ceil(totalProducts / itemsPerPage);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-        <Package className="h-6 w-6 sm:h-8 sm:w-8" />
-        Produtos dos Parceiros
-      </h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina icone={Package} titulo="Produtos dos Parceiros" descricao="Catálogo das marcas parceiras na Nuvemshop" />
 
       {/* Controls Section */}
-      <div className="flex flex-col gap-4 mb-4">
+      <div className="hud-panel flex flex-col gap-4 p-4">
         {/* Brand Selection for Owners/Admins */}
         {canUseBrandFilter && isHydrated && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <Label className="text-sm sm:text-base whitespace-nowrap">
+            <Label className="hud-field-label whitespace-nowrap sm:w-44">
               Selecione uma marca:
             </Label>
             <div className="flex items-center gap-2 w-full sm:max-w-xs">

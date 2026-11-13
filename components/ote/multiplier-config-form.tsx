@@ -254,7 +254,7 @@ export function MultiplierConfigForm({
               .map((m, index) => {
                 const getColor = (mult: number) => {
                   if (mult === 0) return "text-red-600";
-                  if (mult < 1) return "text-orange-600";
+                  if (mult < 1) return "tone-pink hud-tone-text";
                   if (mult === 1) return "text-blue-600";
                   if (mult < 2) return "text-green-600";
                   return "text-purple-600";

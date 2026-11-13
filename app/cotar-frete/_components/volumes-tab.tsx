@@ -117,7 +117,7 @@ export default function VolumesTab({
                       {vol.weight_kg ? (
                         <p>Peso: {vol.weight_kg} kg</p>
                       ) : (
-                        <p className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <p className="tone-pink hud-tone-text flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" /> sem peso
                         </p>
                       )}

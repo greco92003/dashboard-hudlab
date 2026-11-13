@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Medal, Zap, Trophy } from "lucide-react";
 import { SETORES, getSetor, calcularNivel } from "@/lib/ncts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 type RankEntry = {
   usuario_id: string;
@@ -55,7 +56,7 @@ function PodiumRow({ entry, isMe }: { entry: RankEntry; isMe: boolean }) {
         </p>
         <p className="text-xs text-muted-foreground">Nível {entry.nivel}</p>
       </div>
-      <div className="flex items-center gap-1 text-amber-500 font-bold text-sm shrink-0">
+      <div className="flex items-center gap-1 tone-violet hud-tone-text font-bold text-sm shrink-0">
         <Zap className="h-4 w-4" />
         {entry.xp.toLocaleString()}
       </div>
@@ -135,16 +136,8 @@ export default function NctsRankingPage() {
   const setor = getSetor(setorSel);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Medal className="h-7 w-7 text-amber-500" />
-        <div>
-          <h1 className="text-2xl font-bold">Ranking NCT</h1>
-          <p className="text-sm text-muted-foreground">
-            Os maiores contribuidores da plataforma.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-5">
+      <CabecalhoDaPagina icone={Medal} titulo="Ranking NCT" descricao="Os maiores contribuidores da plataforma." />
 
       <Tabs defaultValue="geral">
         <TabsList className="grid grid-cols-2 w-full max-w-xs">
@@ -156,7 +149,7 @@ export default function NctsRankingPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-500" />
+                <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                 Top 20 — Ranking Geral
               </CardTitle>
             </CardHeader>
@@ -215,7 +208,7 @@ export default function NctsRankingPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-500" />
+                <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                 Top 20 — {setor?.nome ?? "Setor"}
               </CardTitle>
             </CardHeader>

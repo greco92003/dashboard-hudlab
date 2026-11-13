@@ -194,7 +194,7 @@ export function WebhookStatusIndicator() {
           <div className="flex items-center space-x-2">
             {overallStatus.status === "healthy" && <CheckCircle className="w-5 h-5 text-green-500" />}
             {overallStatus.status === "error" && <AlertCircle className="w-5 h-5 text-red-500" />}
-            {overallStatus.status === "partial" && <Clock className="w-5 h-5 text-yellow-500" />}
+            {overallStatus.status === "partial" && <Clock className="w-5 h-5 tone-violet hud-tone-text" />}
             {overallStatus.status === "inactive" && <Clock className="w-5 h-5 text-gray-500" />}
             {overallStatus.status === "unknown" && <RefreshCw className="w-5 h-5 text-gray-500 animate-spin" />}
             <span className="font-medium">Status Geral:</span>
@@ -204,7 +204,7 @@ export function WebhookStatusIndicator() {
             className={
               overallStatus.status === "healthy" ? "bg-green-500" :
               overallStatus.status === "error" ? "bg-red-500" :
-              overallStatus.status === "partial" ? "bg-yellow-500" :
+              overallStatus.status === "partial" ? "bg-[var(--tone-pink)]" :
               "bg-gray-500"
             }
           >

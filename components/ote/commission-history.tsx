@@ -90,7 +90,7 @@ export function CommissionHistoryComponent({
                   record.achievement_percentage >= 100
                     ? "text-green-600"
                     : record.achievement_percentage >= 85
-                    ? "text-yellow-600"
+                    ? "tone-violet hud-tone-text"
                     : "text-red-600";
 
                 const multiplierColor =
@@ -99,7 +99,7 @@ export function CommissionHistoryComponent({
                     : record.multiplier >= 1
                     ? "text-blue-600"
                     : record.multiplier >= 0.5
-                    ? "text-yellow-600"
+                    ? "tone-violet hud-tone-text"
                     : "text-gray-600";
 
                 return (
@@ -151,7 +151,7 @@ export function CommissionHistoryComponent({
               record.achievement_percentage >= 100
                 ? "text-green-600"
                 : record.achievement_percentage >= 85
-                ? "text-yellow-600"
+                ? "tone-violet hud-tone-text"
                 : "text-red-600";
 
             const multiplierColor =
@@ -160,7 +160,7 @@ export function CommissionHistoryComponent({
                 : record.multiplier >= 1
                 ? "text-blue-600"
                 : record.multiplier >= 0.5
-                ? "text-yellow-600"
+                ? "tone-violet hud-tone-text"
                 : "text-gray-600";
 
             return (

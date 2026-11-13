@@ -288,7 +288,7 @@ export default function QuoteTab({ volumes }: { volumes: FreightVolume[] }) {
                 <span>{preview.taxavel.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg</span>
               </div>
               {preview.missing && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 pt-1">
+                <p className="text-xs tone-pink hud-tone-text flex items-center gap-1 pt-1">
                   <AlertCircle className="h-3 w-3" /> Há volume sem peso cadastrado.
                 </p>
               )}
@@ -333,7 +333,7 @@ export default function QuoteTab({ volumes }: { volumes: FreightVolume[] }) {
             )}
 
             {resp.warnings.length > 0 && (
-              <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+              <div className="rounded-md border tone-pink hud-tone-card p-3 text-xs hud-tone-text space-y-1">
                 {resp.warnings.map((w, i) => (
                   <p key={i} className="flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {w}
@@ -416,7 +416,7 @@ function ResultCard({
                 </Badge>
               )}
               {r.match_confidence === "nearest" && (
-                <Badge className="text-xs bg-amber-500 hover:bg-amber-500 text-white">
+                <Badge className="text-xs tone-pink hud-tone-chip">
                   praça estimada
                 </Badge>
               )}
@@ -446,7 +446,7 @@ function ResultCard({
                 {q.avisos.map((a, j) => (
                   <p
                     key={j}
-                    className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1"
+                    className="text-xs tone-pink hud-tone-text flex items-start gap-1"
                   >
                     <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /> {a}
                   </p>

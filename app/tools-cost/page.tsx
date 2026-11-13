@@ -597,7 +597,7 @@ export default function ToolsCostPage() {
                 <Skeleton className="h-7 w-16" />
               ) : monthDiff !== null ? (
                 <div
-                  className={`text-2xl font-bold ${monthDiff >= 0 ? "text-red-500" : "text-green-500"}`}
+                  className={`text-2xl font-bold ${monthDiff >= 0 ? "tone-rose hud-tone-text" : "text-green-500"}`}
                 >
                   {monthDiff >= 0 ? "+" : ""}
                   {monthDiff.toFixed(1)}%
@@ -696,7 +696,7 @@ export default function ToolsCostPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-orange-500 hover:text-orange-600"
+                            className="h-7 w-7 tone-pink hud-tone-text"
                             title="Cancelar ferramenta"
                             onClick={() => {
                               setCancellingTool(tool);
@@ -1487,7 +1487,7 @@ export default function ToolsCostPage() {
                 cancellingTool && handleToggleActive(cancellingTool, false)
               }
               disabled={togglingActive}
-              className="bg-orange-500 text-white hover:bg-orange-600"
+              className="tone-pink hud-tone-chip"
             >
               {togglingActive ? "Cancelando..." : "Cancelar Ferramenta"}
             </AlertDialogAction>

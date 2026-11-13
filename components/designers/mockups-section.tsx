@@ -266,7 +266,7 @@ export function MockupsSection({
                           <span className="text-xs sm:text-sm text-muted-foreground">
                             Alterações:
                           </span>
-                          <span className="font-semibold text-orange-600 text-xs sm:text-sm">
+                          <span className="font-semibold tone-pink hud-tone-text text-xs sm:text-sm">
                             {stats.alteracoesFeitas}
                           </span>
                         </div>

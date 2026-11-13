@@ -49,7 +49,7 @@ function VereditoBadge({ veredito }: { veredito: string }) {
   }
   if (veredito === "REVISAR") {
     return (
-      <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+      <Badge className="tone-pink hud-tone-chip">
         REVISAR
       </Badge>
     );

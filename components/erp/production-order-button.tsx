@@ -113,7 +113,7 @@ export function ProductionOrderButton({ orderId, size = "sm", className }: Props
         className={cn(
           record && !record.ok
             ? "border-red-600/60 text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-300 dark:hover:bg-red-500/10"
-            : "border-amber-600/60 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-500/10",
+            : "tone-pink hud-tone-chip",
           className,
         )}
       >
@@ -140,7 +140,7 @@ export function ProductionOrderButton({ orderId, size = "sm", className }: Props
             <ResultPanel record={preview.record} orderNumber={preview.orderNumber} tinyUrl={preview.tinyUrl} />
           )}
           {saveFailed && (
-            <p className="rounded-lg bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+            <p className="rounded-lg bg-[color-mix(in_srgb,var(--tone-pink)_10%,transparent)] p-3 text-xs tone-pink hud-tone-text">
               A OP foi gerada no Tiny, mas o registro no dashboard falhou. Não gere de novo: confira no Tiny.
             </p>
           )}
@@ -158,7 +158,7 @@ export function ProductionOrderButton({ orderId, size = "sm", className }: Props
                   </TableHeader>
                   <TableBody>
                     {preview.items.map((item, index) => (
-                      <TableRow key={`${item.sku}-${index}`} className={(item.available ?? 0) > 0 ? "bg-amber-500/10" : undefined}>
+                      <TableRow key={`${item.sku}-${index}`} className={(item.available ?? 0) > 0 ? "bg-[color-mix(in_srgb,var(--tone-pink)_10%,transparent)]" : undefined}>
                         <TableCell className="whitespace-normal text-xs">{item.description}</TableCell>
                         <TableCell className="text-right font-medium">{formatQuantity(item.quantity)}</TableCell>
                         <TableCell className="text-right">{formatQuantity(item.available)}</TableCell>
@@ -171,7 +171,7 @@ export function ProductionOrderButton({ orderId, size = "sm", className }: Props
                 </Table>
               </div>
               {hasStock && (
-                <p className="flex gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                <p className="flex gap-2 rounded-lg bg-[color-mix(in_srgb,var(--tone-pink)_10%,transparent)] p-3 text-xs tone-pink hud-tone-text">
                   <TriangleAlert className="h-4 w-4 shrink-0" />
                   Há produto com estoque disponível. O Tiny pode gerar a OP com menos pares que o vendido. A conferência depois da geração vai mostrar.
                 </p>

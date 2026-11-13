@@ -115,7 +115,7 @@ export function GoalProgress({
     return (
       <Card>
         <CardContent className="p-6">
-          <p className="text-red-500">{error || "Erro ao carregar dados"}</p>
+          <p className="tone-rose hud-tone-text">{error || "Erro ao carregar dados"}</p>
         </CardContent>
       </Card>
     );
@@ -132,17 +132,17 @@ export function GoalProgress({
   };
 
   const getProgressColor = (progress: number) => {
-    if (progress >= 100) return "bg-green-500";
-    if (progress >= 90) return "bg-blue-500";
-    if (progress >= 75) return "bg-yellow-500";
-    if (progress >= 50) return "bg-orange-500";
-    return "bg-red-500";
+    if (progress >= 100) return "bg-[var(--tone-green)]";
+    if (progress >= 90) return "bg-[var(--tone-sky)]";
+    if (progress >= 75) return "bg-[var(--tone-violet)]";
+    if (progress >= 50) return "bg-[var(--tone-pink)]";
+    return "bg-[var(--tone-rose)]";
   };
 
   const getProgressIcon = (progress: number) => {
     if (progress >= 100) return <Trophy className="h-4 w-4 text-green-600" />;
     if (progress >= 90) return <TrendingUp className="h-4 w-4 text-blue-600" />;
-    return <AlertTriangle className="h-4 w-4 text-orange-600" />;
+    return <AlertTriangle className="h-4 w-4 tone-pink hud-tone-text" />;
   };
 
   const isExpired = new Date(goal.end_date) < new Date();
@@ -189,7 +189,7 @@ export function GoalProgress({
         <p className="text-sm text-muted-foreground">{goal.description}</p>
         <div className="text-xs text-muted-foreground">
           {isExpired ? (
-            <span className="text-red-500">
+            <span className="tone-rose hud-tone-text">
               Expirou em {new Date(goal.end_date).toLocaleDateString("pt-BR")}
             </span>
           ) : (
@@ -212,7 +212,7 @@ export function GoalProgress({
                 <TrendingUp className="h-4 w-4" />
                 <span className="font-medium">Meta Geral</span>
                 {generalProgress.progress >= 90 && (
-                  <Trophy className="h-4 w-4 text-yellow-500" />
+                  <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                 )}
               </div>
               <span className="text-sm text-muted-foreground">

@@ -42,6 +42,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
+import { UserCog } from "lucide-react";
 
 const SETORES = [
   { id: "design", nome: "Design", cor: "#EF4444" },
@@ -340,8 +342,8 @@ export default function ProfileSettingsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold">Configurações de Perfil</h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina icone={UserCog} titulo="Configurações de Perfil" descricao="Seus dados, foto, senha e notificações" />
 
       {message && (
         <Alert

@@ -44,6 +44,7 @@ import { toast } from "sonner";
 import { ChartPieEstadosNuvemshop } from "@/components/ui/chart-pie-estados-nuvemshop";
 import { TopProductCard } from "@/components/ui/top-product-card";
 import { storage } from "@/lib/storage";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 interface NuvemshopOrder extends FranchiseNuvemshopOrder {
   id: string;
@@ -836,22 +837,25 @@ function PartnersDashboardPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-        <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8" />
-        Dashboard de Parceiros
-        {loading && (
-          <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-        )}
-      </h1>
+    <div className="flex flex-1 flex-col gap-4 md:gap-5">
+      <CabecalhoDaPagina
+        icone={BarChart3}
+        titulo={
+          <span className="flex items-center gap-2">
+            Dashboard de Parceiros
+            {loading && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </span>
+        }
+        descricao="Vendas e desempenho das marcas parceiras no período"
+      />
 
       {/* Controls Section */}
       {!isInitialLoading && (
-        <div className="flex flex-col gap-4 mb-4">
+        <div className="hud-panel flex flex-col gap-4 p-4">
           {/* Brand Selection for Owners/Admins */}
           {canUseBrandFilter && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <Label className="text-sm sm:text-base whitespace-nowrap">
+              <Label className="hud-field-label whitespace-nowrap sm:w-44">
                 Selecione uma marca:
               </Label>
               <div className="flex items-center gap-2 w-full sm:max-w-xs">
@@ -955,7 +959,7 @@ function PartnersDashboardPage() {
 
             {/* Calendar and Sync Button */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <Label className="text-sm sm:text-base whitespace-nowrap">
+              <Label className="hud-field-label whitespace-nowrap sm:w-44">
                 Período personalizado:
               </Label>
               <div className="flex items-center gap-2">

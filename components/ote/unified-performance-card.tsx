@@ -83,7 +83,7 @@ export function UnifiedPerformanceCard({
     data.achievement_percentage >= 100
       ? "text-green-600"
       : data.achievement_percentage >= 85
-      ? "text-yellow-600"
+      ? "tone-violet hud-tone-text"
       : "text-red-600";
 
   return (
@@ -137,10 +137,10 @@ export function UnifiedPerformanceCard({
             <div
               className={`h-2 rounded-full transition-all ${
                 data.achievement_percentage >= 100
-                  ? "bg-green-600"
+                  ? "bg-[var(--tone-green)]"
                   : data.achievement_percentage >= 85
-                  ? "bg-yellow-600"
-                  : "bg-red-600"
+                  ? "bg-[var(--tone-violet)]"
+                  : "bg-[var(--tone-rose)]"
               }`}
               style={{
                 width: `${Math.min(data.achievement_percentage, 100)}%`,
@@ -185,7 +185,7 @@ export function UnifiedPerformanceCard({
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">
                   Falta
                 </div>
-                <div className="text-base sm:text-lg font-bold text-orange-600 break-words">
+                <div className="text-base sm:text-lg font-bold tone-pink hud-tone-text break-words">
                   {formatCurrency(currentSellerInfo.remaining, "BRL")}
                 </div>
               </div>
@@ -194,10 +194,10 @@ export function UnifiedPerformanceCard({
               <div
                 className={`h-2 rounded-full transition-all ${
                   currentSellerInfo.progress_percentage >= 100
-                    ? "bg-green-600"
+                    ? "bg-[var(--tone-green)]"
                     : currentSellerInfo.progress_percentage >= 70
-                    ? "bg-blue-600"
-                    : "bg-orange-600"
+                    ? "bg-[var(--tone-sky)]"
+                    : "bg-[var(--tone-pink)]"
                 }`}
                 style={{
                   width: `${Math.min(
@@ -254,7 +254,7 @@ export function UnifiedPerformanceCard({
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Falta</div>
-                  <div className="font-semibold text-orange-600 break-words">
+                  <div className="font-semibold tone-pink hud-tone-text break-words">
                     {formatCurrency(paidTrafficRemaining, "BRL")}
                   </div>
                 </div>
@@ -302,7 +302,7 @@ export function UnifiedPerformanceCard({
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Falta</div>
-                  <div className="font-semibold text-orange-600 break-words">
+                  <div className="font-semibold tone-pink hud-tone-text break-words">
                     {formatCurrency(organicRemaining, "BRL")}
                   </div>
                 </div>

@@ -61,7 +61,7 @@ export function NotificationCenter({ className }: NotificationCenterProps) {
       case "success":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case "warning":
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+        return <AlertTriangle className="h-4 w-4 tone-violet hud-tone-text" />;
       case "error":
         return <AlertCircle className="h-4 w-4 text-red-500" />;
       default:
@@ -77,7 +77,7 @@ export function NotificationCenter({ className }: NotificationCenterProps) {
       case "success":
         return "border-l-green-500 bg-green-50 dark:bg-green-950/20";
       case "warning":
-        return "border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20";
+        return "border-l-[var(--tone-pink)] tone-pink hud-tone-card";
       case "error":
         return "border-l-red-500 bg-red-50 dark:bg-red-950/20";
       default:

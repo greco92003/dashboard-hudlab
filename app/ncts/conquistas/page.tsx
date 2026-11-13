@@ -17,6 +17,7 @@ import {
   Flame,
 } from "lucide-react";
 import { calcularNivel, formatarData } from "@/lib/ncts";
+import { CabecalhoDaPagina } from "@/components/hud/pagina";
 
 const BADGES_SISTEMA = [
   {
@@ -139,16 +140,8 @@ export default function NctsConquistasPage() {
   const badgesGanhos = new Set(badges.map((b) => b.badge_id));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Star className="h-7 w-7 text-amber-500" />
-        <div>
-          <h1 className="text-2xl font-bold">Conquistas</h1>
-          <p className="text-sm text-muted-foreground">
-            Insígnias e badges conquistados na jornada.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-5">
+      <CabecalhoDaPagina icone={Star} titulo="Conquistas" descricao="Insígnias e badges conquistados na jornada." />
 
       {/* Cartão de perfil de jogo */}
       <Card className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/20">
@@ -210,7 +203,7 @@ export default function NctsConquistasPage() {
                     icon: Star,
                     label: "Badges",
                     value: badges.length,
-                    color: "text-amber-500",
+                    color: "tone-violet hud-tone-text",
                   },
                 ].map(({ icon: Icon, label, value, color }) => (
                   <div key={label}>
@@ -228,7 +221,7 @@ export default function NctsConquistasPage() {
       {/* Insígnias de Narrativas */}
       <div>
         <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-amber-500" />
+          <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
           Insígnias de Narrativas
         </h2>
         {loading ? (
@@ -252,7 +245,7 @@ export default function NctsConquistasPage() {
             {badges.map((b) => (
               <Card
                 key={b.id}
-                className="text-center hover:shadow-md transition-shadow border-amber-200 dark:border-amber-900/50"
+                className="text-center hover:shadow-md transition-shadow tone-violet hud-tone-card"
               >
                 <CardContent className="pt-5 pb-4">
                   <div className="text-4xl mb-2">
@@ -279,7 +272,7 @@ export default function NctsConquistasPage() {
       {/* Conquistas do Sistema */}
       <div>
         <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <Flame className="h-4 w-4 text-orange-500" />
+          <Flame className="h-4 w-4 tone-pink hud-tone-text" />
           Conquistas
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -290,7 +283,7 @@ export default function NctsConquistasPage() {
             return (
               <Card
                 key={b.id}
-                className={`transition-all ${ganho ? "border-amber-400 dark:border-amber-600 shadow-sm" : "opacity-60"}`}
+                className={`transition-all ${ganho ? "tone-violet hud-tone-card" : "opacity-60"}`}
               >
                 <CardContent className="pt-4 pb-4 flex items-start gap-3">
                   <div
@@ -302,7 +295,7 @@ export default function NctsConquistasPage() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold">{b.nome}</p>
                       {ganho && (
-                        <Badge className="text-xs bg-amber-500 border-0 text-white h-4 px-1.5">
+                        <Badge className="text-xs tone-violet hud-tone-chip h-4 px-1.5">
                           ✓
                         </Badge>
                       )}
@@ -319,7 +312,7 @@ export default function NctsConquistasPage() {
                       </>
                     )}
                     {ganho && (
-                      <p className="text-xs text-amber-500 font-medium">
+                      <p className="text-xs tone-violet hud-tone-text font-medium">
                         Conquistado! 🎉
                       </p>
                     )}

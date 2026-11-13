@@ -132,10 +132,10 @@ function orderTypeBadgeClass(orderType: string): string {
     .toLocaleLowerCase("pt-BR");
 
   if (normalized === "evento") {
-    return "border-purple-500 bg-purple-50 text-purple-700 hover:bg-purple-50 dark:border-purple-400 dark:bg-purple-950/70 dark:text-purple-200";
+    return "tone-violet hud-tone-chip";
   }
   if (normalized === "amostra") {
-    return "border-orange-500 bg-orange-50 text-orange-700 hover:bg-orange-50 dark:border-orange-400 dark:bg-orange-950/70 dark:text-orange-200";
+    return "tone-sky hud-tone-chip";
   }
   if (normalized === "reposicao") {
     return "border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-50 dark:border-blue-400 dark:bg-blue-950/70 dark:text-blue-200";
@@ -154,7 +154,7 @@ function orderTypeAccentClass(orderType: string): string {
     .toLocaleLowerCase("pt-BR");
 
   if (normalized === "evento") return "border-l-purple-500";
-  if (normalized === "amostra") return "border-l-orange-500";
+  if (normalized === "amostra") return "border-l-[var(--tone-pink)]";
   if (normalized === "reposicao") return "border-l-blue-500";
   if (normalized === "pedido") return "border-l-green-600";
   return "border-l-muted-foreground/40";
@@ -691,7 +691,7 @@ export function OrderRegistrationCard({
                 className={
                   issues.length === 0
                     ? "bg-primary text-primary-foreground"
-                    : "border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-100 dark:border-amber-500/70 dark:bg-amber-900 dark:text-amber-50"
+                    : "tone-pink hud-tone-chip"
                 }
               >
                 {issues.length === 0

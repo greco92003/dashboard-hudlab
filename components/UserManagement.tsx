@@ -852,7 +852,7 @@ export function UserManagement({}: UserManagementProps) {
                                       onClick={() =>
                                         updateUserApproval(user.id, false)
                                       }
-                                      className="text-amber-600 focus:text-amber-600"
+                                      className="tone-violet hud-tone-text focus:tone-violet"
                                     >
                                       <UserX className="h-4 w-4 mr-2" />
                                       Desaprovar acesso

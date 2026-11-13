@@ -112,10 +112,10 @@ export function GoalCardWithProgress({
   };
 
   const getProgressIcon = (progress: number) => {
-    if (progress >= 100) return <Trophy className="h-3 w-3 text-yellow-500" />;
+    if (progress >= 100) return <Trophy className="h-3 w-3 tone-violet hud-tone-text" />;
     if (progress >= 90) return <TrendingUp className="h-3 w-3 text-blue-500" />;
     if (progress < 50)
-      return <AlertTriangle className="h-3 w-3 text-orange-500" />;
+      return <AlertTriangle className="h-3 w-3 tone-pink hud-tone-text" />;
     return null;
   };
 
@@ -267,7 +267,7 @@ export function GoalCardWithProgress({
                 <TrendingUp className="h-4 w-4" />
                 <span className="font-medium">Meta Geral</span>
                 {generalProgress.progress >= 90 && (
-                  <Trophy className="h-4 w-4 text-yellow-500" />
+                  <Trophy className="h-4 w-4 tone-violet hud-tone-text" />
                 )}
               </div>
               <span className="text-sm text-muted-foreground">
@@ -304,10 +304,10 @@ export function GoalCardWithProgress({
             ))) &&
           goal.rewards &&
           goal.rewards.length > 0 && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <div className="mt-4 p-4 tone-violet hud-tone-card rounded-lg border">
               <div className="flex items-center gap-2 mb-3">
-                <Gift className="h-5 w-5 text-yellow-600" />
-                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200">
+                <Gift className="h-5 w-5 tone-violet hud-tone-text" />
+                <h4 className="font-semibold tone-pink hud-tone-text">
                   🎉 Premiações Liberadas!
                 </h4>
               </div>
@@ -317,8 +317,8 @@ export function GoalCardWithProgress({
                     key={reward.id}
                     className="flex items-center gap-2 text-sm"
                   >
-                    <Star className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                    <span className="text-yellow-700 dark:text-yellow-300">
+                    <Star className="h-4 w-4 tone-violet hud-tone-text flex-shrink-0" />
+                    <span className="tone-pink hud-tone-text">
                       {reward.description}
                     </span>
                   </div>

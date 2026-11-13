@@ -190,7 +190,7 @@ export default function FinancialDashboardPage() {
       )}
 
       {dados?.ultimaSync?.status === "erro" && (
-        <div className="rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <div className="rounded-md border tone-pink hud-tone-card px-4 py-3 text-sm hud-tone-text">
           Última sincronização falhou: {dados.ultimaSync.erro}
         </div>
       )}

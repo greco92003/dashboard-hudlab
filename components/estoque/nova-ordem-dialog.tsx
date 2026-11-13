@@ -234,7 +234,7 @@ export function NovaOrdemDialog({
         )}
 
         {abaixoDoMinimo && (
-          <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm">
+          <div className="flex flex-wrap items-center gap-3 rounded-md border tone-pink hud-tone-card px-3 py-2.5 text-sm">
             <span className="flex-1">
               O INPU não aceita pedido abaixo de {minimoTotal} pares. Faltam{" "}
               <strong className="tabular-nums">

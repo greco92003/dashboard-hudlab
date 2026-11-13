@@ -105,7 +105,7 @@ function ForcaSinalBadge({ forca }: { forca: string }) {
   }
   if (forca === "moderado") {
     return (
-      <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+      <Badge className="tone-pink hud-tone-chip">
         Sinal moderado
       </Badge>
     );

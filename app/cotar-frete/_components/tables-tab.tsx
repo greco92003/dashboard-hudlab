@@ -609,7 +609,7 @@ export default function TablesTab({
           </div>
 
           {pWarn.length > 0 && (
-            <div className="text-xs text-amber-700 dark:text-amber-300 space-y-0.5">
+            <div className="text-xs tone-pink hud-tone-text space-y-0.5">
               {pWarn.map((w, i) => (
                 <p key={i} className="flex items-start gap-1">
                   <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /> {w}
@@ -713,7 +713,7 @@ export default function TablesTab({
 
           {covWarn.length > 0 &&
             covWarn.map((w, i) => (
-              <p key={i} className="text-xs text-amber-700 dark:text-amber-300 flex items-start gap-1">
+              <p key={i} className="text-xs tone-pink hud-tone-text flex items-start gap-1">
                 <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" /> {w}
               </p>
             ))}

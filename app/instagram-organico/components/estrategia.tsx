@@ -53,10 +53,10 @@ function BadgeNota({ nota }: { nota: number | null }) {
   if (nota == null) return <span className="text-muted-foreground">—</span>;
   const cor =
     nota >= 7
-      ? "border-emerald-600/40 text-emerald-700 dark:text-emerald-400"
+      ? "tone-green hud-tone-chip"
       : nota >= 4
-        ? "border-amber-600/40 text-amber-700 dark:text-amber-400"
-        : "border-red-600/40 text-red-700 dark:text-red-400";
+        ? "tone-pink hud-tone-chip"
+        : "tone-rose hud-tone-chip";
   return (
     <Badge variant="outline" className={cor}>
       {nota.toFixed(1)}

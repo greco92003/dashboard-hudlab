@@ -156,7 +156,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
         </div>
 
         {me.bloqueado && (
-          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+          <p className="rounded-lg border tone-pink hud-tone-card px-3 py-2 text-sm hud-tone-text">
             Esta conta não treina na Arena: entre com a sua conta pessoal para o treino contar para você.
           </p>
         )}
@@ -178,7 +178,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
         {/* Celular: sequência e posição lado a lado, meta da semana embaixo na largura toda. */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border bg-background/60 p-3 space-y-1 sm:p-4">
-            <span className="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400">
+            <span className="flex items-center gap-2 text-sm font-semibold tone-pink hud-tone-text">
               <Flame className="h-4 w-4" /> Sequência
             </span>
             <p className="text-xl font-extrabold sm:text-2xl">
@@ -198,7 +198,7 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
                     <div
                       className={cn(
                         "h-7 w-7 rounded-full",
-                        done ? "bg-primary" : "border-2 border-dashed border-amber-500/70",
+                        done ? "bg-primary" : "border-2 border-dashed tone-pink hud-tone-card",
                       )}
                       aria-label={`${label}: ${done ? "treinou" : "não treinou"}`}
                     />
@@ -230,9 +230,9 @@ function PlayerCard({ data, onTrain }: { data: ArenaData; onTrain: () => void })
 }
 
 const MEDAL = [
-  { ring: "ring-amber-400", block: "from-amber-400/35 to-amber-400/5 border-amber-400/50", text: "text-amber-500", h: "h-36" },
-  { ring: "ring-slate-300", block: "from-slate-300/35 to-slate-300/5 border-slate-300/50", text: "text-slate-400", h: "h-28" },
-  { ring: "ring-orange-400", block: "from-orange-400/35 to-orange-400/5 border-orange-400/50", text: "text-orange-500", h: "h-20" },
+  { ring: "ring-[color:var(--tone-green)]", block: "tone-green hud-tone-card", text: "tone-green hud-tone-text", h: "h-36" },
+  { ring: "ring-[color:var(--tone-sky)]", block: "tone-sky hud-tone-card", text: "tone-sky hud-tone-text", h: "h-28" },
+  { ring: "ring-[color:var(--tone-violet)]", block: "tone-violet hud-tone-card", text: "tone-violet hud-tone-text", h: "h-20" },
 ];
 
 function Podium({ ranking, myId }: { ranking: ArenaRankingItem[]; myId: string | null }) {
@@ -252,7 +252,7 @@ function Podium({ ranking, myId }: { ranking: ArenaRankingItem[]; myId: string |
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 * k, duration: 0.5 }}
           >
-            {i === 0 && <Crown className="h-6 w-6 text-amber-500" aria-hidden="true" />}
+            {i === 0 && <Crown className="h-6 w-6 tone-violet hud-tone-text" aria-hidden="true" />}
             <Avatar className={cn("ring-4 ring-offset-2 ring-offset-card", m.ring, i === 0 ? "h-16 w-16" : "h-12 w-12")}>
               {p.avatarUrl && <AvatarImage src={p.avatarUrl} alt={p.nome} />}
               <AvatarFallback className="font-bold">{initial(p.nome)}</AvatarFallback>
@@ -279,7 +279,7 @@ function RankingCard({ data, myId }: { data: ArenaData; myId: string | null }) {
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-lg">
           <span className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-500" /> Ranking
+            <Trophy className="h-5 w-5 tone-violet hud-tone-text" /> Ranking
           </span>
           <div className="flex rounded-lg border p-0.5" role="group" aria-label="Escolher ranking">
             {(
@@ -305,7 +305,7 @@ function RankingCard({ data, myId }: { data: ArenaData; myId: string | null }) {
         {aba === "desafio" ? (
           data.desafio.ranking.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center">
-              <Zap className="mx-auto mb-2 h-8 w-8 text-amber-500" />
+              <Zap className="mx-auto mb-2 h-8 w-8 tone-violet hud-tone-text" />
               <p className="font-semibold">Ninguém jogou o desafio desta semana ainda</p>
               <p className="text-sm text-muted-foreground">{data.desafio.titulo}: a melhor nota vence.</p>
             </div>
@@ -374,7 +374,7 @@ function RankingCard({ data, myId }: { data: ArenaData; myId: string | null }) {
 }
 
 const stars = (n: number) => (
-  <span aria-label={`Dificuldade ${n} de 3`} className="tracking-wider text-amber-500">
+  <span aria-label={`Dificuldade ${n} de 3`} className="tracking-wider tone-violet hud-tone-text">
     {"★".repeat(n)}
     <span className="text-muted-foreground/40">{"★".repeat(3 - n)}</span>
   </span>
@@ -397,10 +397,10 @@ function ChallengeCard({
   const mine = d.ranking.find((r) => r.userId === myId);
   const dias = daysUntil(d.terminaEm);
   return (
-    <Card className="border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-card to-card">
+    <Card className="tone-violet hud-tone-card">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
-          <span className="flex items-center gap-2 whitespace-nowrap font-extrabold uppercase tracking-wider text-amber-600 sm:tracking-widest dark:text-amber-400">
+          <span className="flex items-center gap-2 whitespace-nowrap font-extrabold uppercase tracking-wider tone-violet hud-tone-text sm:tracking-widest">
             <Zap className="h-4 w-4" /> Desafio da semana
           </span>
           <span className="whitespace-nowrap text-xs font-normal text-muted-foreground">
@@ -429,7 +429,7 @@ function ChallengeCard({
           </li>
         </ul>
         <Button
-          className="w-full bg-amber-500 font-bold text-amber-950 hover:bg-amber-400"
+          className="hud-btn-accent w-full font-bold"
           disabled={data.me.bloqueado}
           onClick={() => onTrain(d.missaoId)}
         >
@@ -492,7 +492,7 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
                   // Celular: cartão compacto; a bloqueada mostra só título e cadeado.
                   "flex flex-col gap-1.5 rounded-xl border p-3 transition-colors sm:min-h-44 sm:gap-2 sm:p-4",
                   !m.liberada && "opacity-60",
-                  m.desafio && "border-amber-500/50",
+                  m.desafio && "tone-pink hud-tone-card",
                   m.liberada && !feita && !m.desafio && "border-primary/40",
                 )}
               >
@@ -509,11 +509,11 @@ function MissionsCard({ data, onTrain }: { data: ArenaData; onTrain: (missionId?
                 ) : (
                   <div className="flex items-center justify-between gap-2">
                     {m.melhorNota != null ? (
-                      <span className={cn("flex items-center gap-1 text-xs font-semibold", feita ? "text-primary" : "text-amber-600 dark:text-amber-400")}>
+                      <span className={cn("flex items-center gap-1 text-xs font-semibold", feita ? "text-primary" : "tone-pink hud-tone-text")}>
                         {feita && <Check className="h-3.5 w-3.5" />} Melhor nota {m.melhorNota}
                       </span>
                     ) : (
-                      <Badge className={cn(m.desafio && "bg-amber-500 text-amber-950 hover:bg-amber-500")}>
+                      <Badge className={cn(m.desafio && "tone-violet hud-tone-chip")}>
                         {m.desafio ? "Desafio da semana" : "Nova"}
                       </Badge>
                     )}
@@ -570,7 +570,7 @@ function AchievementsCard({ conquistas }: { conquistas: ArenaAchievement[] }) {
                   className={cn(
                     "flex h-12 w-12 items-center justify-center rounded-2xl",
                     c.liberada
-                      ? "bg-gradient-to-br from-amber-300 to-amber-600 text-amber-950 shadow-md shadow-amber-500/20"
+                      ? "tone-violet hud-tone-chip shadow-[0_0_18px_-4px_var(--tone-violet)]"
                       : "border border-dashed text-muted-foreground/50",
                   )}
                 >

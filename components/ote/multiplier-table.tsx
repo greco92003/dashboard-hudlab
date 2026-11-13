@@ -55,7 +55,7 @@ export function MultiplierTable({
                       : m.multiplier >= 1
                       ? "text-blue-600"
                       : m.multiplier >= 0.5
-                      ? "text-yellow-600"
+                      ? "tone-violet hud-tone-text"
                       : "text-gray-600";
 
                   return (
@@ -105,7 +105,7 @@ export function MultiplierTable({
                   : m.multiplier >= 1
                   ? "text-blue-600"
                   : m.multiplier >= 0.5
-                  ? "text-yellow-600"
+                  ? "tone-violet hud-tone-text"
                   : "text-gray-600";
 
               return (

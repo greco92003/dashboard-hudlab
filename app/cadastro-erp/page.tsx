@@ -858,7 +858,7 @@ export default function CadastroErpPage() {
                               <p>SKU {cloner.sku} · {cloner.variationSizes.join(", ") || "grade não identificada"}</p>
                               <p>Combinação usada no produto: {mapping?.soleColor || "solado não identificado"} - {mapping?.color || "gáspea não identificada"}</p>
                               {model.soleColor && mapping?.soleColor && model.soleColor !== mapping.soleColor ? (
-                                <p className="font-medium text-amber-600 dark:text-amber-400">Atenção: o solado do cloner é diferente do solado salvo no pedido.</p>
+                                <p className="font-medium tone-pink hud-tone-text">Atenção: o solado do cloner é diferente do solado salvo no pedido.</p>
                               ) : null}
                             </div>
                           )}
@@ -921,7 +921,7 @@ export default function CadastroErpPage() {
 
                 <div className="flex flex-col justify-between gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center">
                   <div className="flex items-start gap-3">
-                    {validations.length === 0 ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" /> : <TriangleAlert className="mt-0.5 h-5 w-5 text-amber-500" />}
+                    {validations.length === 0 ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" /> : <TriangleAlert className="mt-0.5 h-5 w-5 tone-violet hud-tone-text" />}
                     <div>
                       <p className="text-sm font-medium">{validations.length === 0 ? "Prévia pronta para o próximo teste" : `${validations.length} pendência(s) na prévia`}</p>
                       {validations.length > 0 && <ul className="mt-1 list-inside list-disc text-xs text-muted-foreground">{validations.slice(0, 5).map((problem) => <li key={problem}>{problem}</li>)}</ul>}

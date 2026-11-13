@@ -211,7 +211,7 @@ export function DealsCacheMonitor() {
       case "healthy":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case "warning":
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+        return <AlertTriangle className="h-4 w-4 tone-violet hud-tone-text" />;
       case "critical":
         return <XCircle className="h-4 w-4 text-red-500" />;
       default:
@@ -224,7 +224,7 @@ export function DealsCacheMonitor() {
       case "healthy":
         return "bg-green-100 text-green-800 border-green-200";
       case "warning":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "tone-pink hud-tone-chip ";
       case "critical":
         return "bg-red-100 text-red-800 border-red-200";
       default:
@@ -260,7 +260,7 @@ export function DealsCacheMonitor() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-red-500">
+          <p className="tone-rose hud-tone-text">
             Erro ao carregar dados de saúde do cache
           </p>
         </CardContent>
@@ -301,11 +301,11 @@ export function DealsCacheMonitor() {
       <CardContent className="space-y-4">
         {/* Issues */}
         {healthData.issues && healthData.issues.length > 0 && (
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h4 className="font-medium text-yellow-800 mb-2">
+          <div className="p-3 tone-pink hud-tone-card border rounded-lg">
+            <h4 className="font-medium tone-pink hud-tone-text mb-2">
               Problemas Detectados:
             </h4>
-            <ul className="text-sm text-yellow-700 space-y-1">
+            <ul className="text-sm tone-pink hud-tone-text space-y-1">
               {healthData.issues.map((issue, index) => (
                 <li key={index}>• {issue}</li>
               ))}
@@ -334,7 +334,7 @@ export function DealsCacheMonitor() {
             <div className="text-sm text-gray-500">Taxa de Sucesso</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-orange-600">
+            <div className="text-2xl font-bold tone-pink hud-tone-text">
               {healthData.responseTimeMs}ms
             </div>
             <div className="text-sm text-gray-500">Tempo Resposta</div>
@@ -355,7 +355,7 @@ export function DealsCacheMonitor() {
                   })}
                 </span>
               ) : (
-                <span className="text-red-500">Nunca</span>
+                <span className="tone-rose hud-tone-text">Nunca</span>
               )}
             </span>
           </div>
