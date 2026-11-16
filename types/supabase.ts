@@ -9,6 +9,26 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      erp_pedidos_venda: {
+        Row: {
+          deal_id: string;
+          tiny_pedido_id: number;
+          numero_pedido: string;
+          cliente: string | null;
+          origem: "cadastro-erp" | "tiny" | "script";
+          vinculado_em: string;
+        };
+        Insert: {
+          deal_id: string;
+          tiny_pedido_id: number;
+          numero_pedido: string;
+          cliente?: string | null;
+          origem: "cadastro-erp" | "tiny" | "script";
+          vinculado_em?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["erp_pedidos_venda"]["Insert"]>;
+        Relationships: [];
+      };
       pair_values: {
         Row: {
           id: number;

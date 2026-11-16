@@ -26,11 +26,11 @@ export function romaneioBySku(request: Request) {
   return new URL(request.url).searchParams.get("agrupar") === "sku";
 }
 
-export async function orderDocumentResponse(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean } = {}) {
+export async function orderDocumentResponse(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean; dealId?: string } = {}) {
   try {
     const isTalao = kind === "talao";
     const bySku = !isTalao && Boolean(options.bySku);
-    const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao });
+    const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao, dealId: options.dealId });
     const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order, { bySku });
     const label = isTalao ? "Talão" : bySku ? "Romaneio por SKU" : "Romaneio";
     const fileName = `${label} pedido ${order.number}.pdf`;

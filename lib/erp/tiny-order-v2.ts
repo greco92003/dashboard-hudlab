@@ -1,6 +1,7 @@
 import { getTinyV2Token } from "@/lib/tiny/auth";
 import { normalizeCountryName, type ErpContactDraft } from "./contact-rules";
 import { FREE_SAMPLE_NATURE } from "./order-rules";
+import { findLinkedTinyOrder, trySaveSalesOrderLink } from "./sales-order-links";
 import { getTinyContactById } from "./tiny-contact-v2";
 
 const BASE_URL = process.env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2";
@@ -111,10 +112,19 @@ export type TinySalesOrderInput = {
 };
 
 export async function createTinySalesOrder(input: TinySalesOrderInput) {
+  // Anti-duplicação: bloqueia enquanto o negócio tiver pedido ainda não
+  // aprovado/faturado. Depois disso, um pedido novo é recompra ou outro lote.
+  // O vínculo gravado vale mesmo quando o Tiny apaga o número de e-commerce.
+  const linked = await findLinkedTinyOrder(input.dealId, "open");
+  if (linked) {
+    return { id: linked.orderId, number: linked.orderNumber, existing: true };
+  }
   const ecommerceNumber = `GHL-${input.dealId}`;
   const duplicate = await findOrderByEcommerceNumber(ecommerceNumber);
   if (duplicate?.id) {
-    return { id: Number(duplicate.id), number: String(duplicate.numero ?? ""), existing: true };
+    const found = { id: Number(duplicate.id), number: String(duplicate.numero ?? ""), existing: true };
+    await trySaveSalesOrderLink({ dealId: input.dealId, orderId: found.id, orderNumber: found.number, customer: null, source: "tiny" });
+    return found;
   }
 
   const contact = await getTinyContactById(input.tinyContactId, "");
@@ -161,13 +171,12 @@ export async function createTinySalesOrder(input: TinySalesOrderInput) {
   if (result.status !== "OK") {
     throw new Error(result.erros?.map((item) => item.erro).filter(Boolean).join("; ") || "O Tiny recusou o pedido de venda.");
   }
-  const created = firstOrderRecord(result.registros);
+  const record = firstOrderRecord(result.registros);
+  const created = record?.id ? record : await findOrderByEcommerceNumber(ecommerceNumber);
   if (!created?.id) {
-    const recovered = await findOrderByEcommerceNumber(ecommerceNumber);
-    if (recovered?.id) {
-      return { id: Number(recovered.id), number: String(recovered.numero ?? ""), existing: false };
-    }
     throw new Error("O Tiny aceitou o pedido, mas ele ainda não apareceu na consulta. Aguarde alguns segundos e tente novamente; o identificador do deal impedirá duplicação.");
   }
-  return { id: Number(created.id), number: String(created.numero ?? ""), existing: false };
+  const saved = { id: Number(created.id), number: String(created.numero ?? ""), existing: false };
+  await trySaveSalesOrderLink({ dealId: input.dealId, orderId: saved.id, orderNumber: saved.number, customer: contact.name, source: "cadastro-erp" });
+  return saved;
 }

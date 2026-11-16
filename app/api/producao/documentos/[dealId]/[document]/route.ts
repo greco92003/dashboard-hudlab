@@ -27,11 +27,11 @@ export async function GET(
     const orderId = await findTinyOrderIdByDeal(dealId);
     if (!orderId) {
       return orderDocumentError(
-        "Este negócio ainda não tem pedido de venda no Tiny. Crie o pedido em Cadastro ERP antes de gerar o documento.",
+        "Não encontrei um pedido do Tiny vinculado a este negócio. Se o pedido já existe, gere o documento em Cadastro ERP → Pedidos do Tiny.",
         404,
       );
     }
-    return orderDocumentResponse(orderId, document, { bySku: romaneioBySku(request) });
+    return orderDocumentResponse(orderId, document, { bySku: romaneioBySku(request), dealId });
   } catch (error) {
     console.error("Producao order lookup failed", error);
     return orderDocumentError("Não foi possível localizar o pedido no Tiny.", 502);

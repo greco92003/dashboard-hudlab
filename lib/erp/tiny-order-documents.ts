@@ -7,6 +7,7 @@ import { extractGhlProductModels, type GhlProductModel } from "./ghl-product-mod
 import { googleDriveFileId } from "./artwork-url";
 import { downloadPublicArtworkAsJpeg } from "./google-drive-artwork";
 import { matchGhlModel } from "./order-artwork-match";
+import { findLinkedTinyOrder, trySaveSalesOrderLink } from "./sales-order-links";
 import { parseSoladoDescricao } from "@/lib/estoque/solados";
 
 export const TINY_ORDER_STATUS_LABELS: Record<number, string> = {
@@ -52,8 +53,22 @@ type TinyOrderDetail = {
   observacoes?: string | null;
   cliente?: { nome?: string | null } | null;
   ecommerce?: { numeroPedidoEcommerce?: string | null } | null;
+  numeroOrdemCompra?: string | null;
   itens?: Array<{ produto?: TinyProductRef | null; quantidade?: number | null }>;
 };
+
+/**
+ * O Cadastro ERP grava `GHL-<deal>` no número de e-commerce, e o Tiny copia para a
+ * ordem de compra. Ao faturar ou editar o pedido na tela do Tiny, o e-commerce é
+ * apagado e só a ordem de compra sobrevive — por isso as duas são aceitas.
+ */
+function ghlDealIdFromOrder(order: Pick<TinyOrderDetail, "ecommerce" | "numeroOrdemCompra">) {
+  for (const value of [order.ecommerce?.numeroPedidoEcommerce, order.numeroOrdemCompra]) {
+    const dealId = value?.trim().match(/^GHL-(.+)$/)?.[1];
+    if (dealId) return dealId;
+  }
+  return null;
+}
 
 type TinyProduction = {
   produtos?: Array<{ produto?: TinyProductRef | null; quantidade?: number | null }>;
@@ -111,8 +126,16 @@ export async function listTinyOrders(page: number, pageSize: number, search = ""
   return { orders, total: response.paginacao?.total ?? orders.length };
 }
 
-/** O Cadastro ERP grava o deal do GHL como número de e-commerce do pedido. */
+/**
+ * Pedido de venda do negócio (o mais novo ativo, se houver vários): primeiro o
+ * vínculo gravado na criação (erp_pedidos_venda); se não houver, o número de
+ * e-commerce no Tiny — que só existe enquanto o pedido não foi faturado/editado
+ * por lá. O que a busca acha volta para a tabela.
+ */
 export async function findTinyOrderIdByDeal(dealId: string) {
+  const linked = await findLinkedTinyOrder(dealId, "active");
+  if (linked) return linked.orderId;
+
   const ecommerceNumber = `GHL-${dealId}`;
   const response = await tinyV3Request<TinyOrderList>("/pedidos", {
     params: { numeroPedidoEcommerce: ecommerceNumber, limit: "10" },
@@ -120,7 +143,16 @@ export async function findTinyOrderIdByDeal(dealId: string) {
   const match = (response.itens ?? []).find(
     (item) => item.ecommerce?.numeroPedidoEcommerce === ecommerceNumber && Number(item.situacao) !== 2,
   );
-  return match?.id ?? null;
+  if (!match) return null;
+
+  await trySaveSalesOrderLink({
+    dealId,
+    orderId: match.id,
+    orderNumber: String(match.numeroPedido ?? match.id),
+    customer: match.cliente?.nome?.trim() || null,
+    source: "tiny",
+  });
+  return match.id;
 }
 
 function sizeSortKey(size: string) {
@@ -164,7 +196,7 @@ async function tryDownloadImage(url: string) {
 
 export async function loadTinyOrderDocument(
   orderId: number,
-  options: { materials: boolean; images: boolean },
+  options: { materials: boolean; images: boolean; dealId?: string },
 ): Promise<OrderDocument> {
   const order = await tinyV3Request<TinyOrderDetail>(`/pedidos/${orderId}`);
   const productCache = new Map<number, TinyProductDetail>();
@@ -248,7 +280,7 @@ export async function loadTinyOrderDocument(
 
   // A ficha do GHL só é lida se algum produto não tiver foto própria no Tiny.
   let ghlModels: Promise<GhlProductModel[]> | null = null;
-  const dealId = order.ecommerce?.numeroPedidoEcommerce?.match(/^GHL-(.+)$/)?.[1];
+  const dealId = options.dealId ?? ghlDealIdFromOrder(order);
   const loadGhlModels = () => {
     ghlModels ??= dealId
       ? Promise.all([fetchOpportunityById(dealId), fetchCustomFieldDefs("opportunity")])

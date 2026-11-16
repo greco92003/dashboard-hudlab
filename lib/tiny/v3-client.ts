@@ -9,6 +9,13 @@ type TinyV3RequestOptions = {
   timeoutMs?: number;
 };
 
+export class TinyV3HttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "TinyV3HttpError";
+  }
+}
+
 const RATE_LIMIT_RETRIES = 5;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 let writeQueue: Promise<void> = Promise.resolve();
@@ -92,7 +99,8 @@ export async function tinyV3Request<T>(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new Error(
+    throw new TinyV3HttpError(
+      response.status,
       `[Tiny v3] ${options.method ?? "GET"} ${path} → HTTP ${response.status}: ${responseBody.slice(0, 500)}`,
     );
   }
