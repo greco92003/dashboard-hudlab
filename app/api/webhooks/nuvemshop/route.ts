@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const security = await secureWebhookMiddleware(request);
     
     if (!security.isValid) {
-      console.warn("[Nuvemshop webhook] Request rejected");
+      console.warn("[Nuvemshop webhook] Request rejected", { reason: security.error, status: security.status });
       return NextResponse.json(
         { error: "Webhook rejected" },
         { status: security.status }

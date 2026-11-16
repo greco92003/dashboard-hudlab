@@ -12,7 +12,6 @@ const HeroImage = memo(function HeroImage({ className }: HeroImageProps) {
 
   // Array com as imagens do carrossel
   const images = [
-    "/images/1.webp",
     "/images/2.webp",
     "/images/3.webp",
     "/images/4.webp",
