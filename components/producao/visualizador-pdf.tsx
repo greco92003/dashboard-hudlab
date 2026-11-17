@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Minus, Plus, X } from "lucide-react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -13,7 +13,7 @@ const ZOOM_MAX = 3;
  * Visualizador de PDF dentro do app (Painel Produção no celular). O leitor do
  * navegador tira o app instalado da tela, sem volta; num iframe o iPhone mostra
  * só a 1ª página e o Android nada. Aqui o pdf.js desenha cada página num canvas,
- * em tela cheia, com zoom e Fechar. Só carrega quando alguém toca em Visualizar.
+ * em tela cheia, com zoom e Fechar. O leitor carrega quando o PDF é aberto.
  *
  * Usa a versão "legacy" do pdf.js (funciona em iPhone e Android mais antigos)
  * e roda o processamento na própria página em vez de um worker à parte: talão
@@ -23,10 +23,12 @@ export function VisualizadorPdf({
   arquivo,
   titulo,
   onFechar,
+  acoes,
 }: {
   arquivo: Blob;
   titulo: string;
   onFechar: () => void;
+  acoes?: ReactNode;
 }) {
   const corpo = useRef<HTMLDivElement>(null);
   const documento = useRef<PDFDocumentProxy | null>(null);
@@ -70,7 +72,7 @@ export function VisualizadorPdf({
     const tarefas: RenderTask[] = [];
     let cancelado = false;
     (async () => {
-      const largura = Math.max(alvo.clientWidth - 24, 200);
+      const largura = Math.min(960, Math.max(alvo.clientWidth - 24, 200));
       const nitidez = Math.min(window.devicePixelRatio || 1, 3);
       const telas = alvo.querySelectorAll<HTMLCanvasElement>("canvas[data-pagina]");
       for (let n = 1; n <= doc.numPages && !cancelado; n++) {
@@ -136,6 +138,7 @@ export function VisualizadorPdf({
             <Plus />
           </button>
         </div>
+        {acoes}
         <Button variant="outline" className="h-9" onClick={onFechar}>
           <X className="h-4 w-4" />
           Fechar

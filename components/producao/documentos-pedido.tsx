@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Download, Eye, FileText, Loader2, Package, Share2 } from "lucide-react";
+import { ChevronDown, Download, Eye, FileText, Loader2, Package, Printer, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,10 +54,11 @@ async function mensagemDeErro(resposta: Response): Promise<string> {
     : "Não foi possível gerar o documento. Tente de novo em instantes.";
 }
 
-async function buscarDocumento(endereco: string) {
+async function buscarDocumento(endereco: string, aoAguardar: () => void) {
   const buscar = () => fetch(endereco, { cache: "no-store" });
   const limite = Date.now() + 120_000;
   let resposta = await buscar();
+  if (resposta.status === 202) aoAguardar();
   while (resposta.status === 202) {
     const segundos = Number(resposta.headers.get("retry-after")) || 4;
     const espera = Math.max(1, segundos) * 1_000;
@@ -71,7 +72,8 @@ async function buscarDocumento(endereco: string) {
 
 export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; grande?: boolean }) {
   const [gerando, setGerando] = useState<Documento | null>(null);
-  const [pronto, setPronto] = useState<{ nome: string; arquivo: File; url: string } | null>(null);
+  const [aguardandoTalao, setAguardandoTalao] = useState(false);
+  const [pronto, setPronto] = useState<{ nome: string; arquivo: File; url: string; computador: boolean } | null>(null);
   const [vendo, setVendo] = useState(false);
   const fecharVisualizacao = useCallback(() => setVendo(false), []);
 
@@ -86,15 +88,16 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
     const { nome, caminho } = DOCUMENTOS[documento];
     const endereco = `/api/producao/documentos/${encodeURIComponent(deal.id)}/${caminho}`;
     const toque = telaDeToque();
-    // No computador a aba nova abre já no clique (senão o bloqueador de pop-up
-    // barra) e recebe o PDF quando ele fica pronto.
-    const janela = toque ? null : window.open("", "_blank");
+    // Talão abre no painel assim que chega. O romaneio mantém a aba do navegador no computador.
+    const janela = toque || documento === "talao" ? null : window.open("", "_blank");
     janela?.document.write(
       `<p style="font-family:system-ui,sans-serif;padding:24px;color:#555">Gerando o ${nome.toLowerCase()}…</p>`,
     );
     setGerando(documento);
     try {
-      const resposta = await buscarDocumento(endereco);
+      const resposta = await buscarDocumento(endereco, () => {
+        if (documento === "talao") setAguardandoTalao(true);
+      });
       const tipo = resposta.headers.get("content-type") ?? "";
       if (!resposta.ok || !tipo.includes("pdf")) {
         janela?.close();
@@ -111,13 +114,14 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
       const arquivo = new File([blob], `${nome} - ${deal.title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), {
         type: "application/pdf",
       });
-      setVendo(false);
-      setPronto({ nome, arquivo, url });
+      setVendo(documento === "talao");
+      setPronto({ nome, arquivo, url, computador: !toque });
     } catch {
       janela?.close();
       toast.error("Sem conexão com o servidor. Confira a internet e tente de novo.");
     } finally {
       setGerando(null);
+      setAguardandoTalao(false);
     }
   };
 
@@ -148,10 +152,13 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
           variant="outline"
           className={cn("w-full", altura)}
           disabled={gerando !== null}
+          aria-busy={gerando === "talao"}
           onClick={() => void abrir("talao")}
         >
           {icone("talao", FileText)}
-          Talão
+          <span aria-live="polite">
+            {aguardandoTalao ? "Preparando…" : gerando === "talao" ? "Abrindo…" : "Talão"}
+          </span>
         </Button>
         <div className="flex min-w-0">
           <Button
@@ -226,6 +233,14 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
           arquivo={pronto.arquivo}
           titulo={`${pronto.nome} · ${deal.title}`}
           onFechar={fecharVisualizacao}
+          acoes={pronto.computador && (
+            <Button asChild variant="outline" className="h-9">
+              <a href={pronto.url} target="_blank" rel="noopener noreferrer">
+                <Printer className="h-4 w-4" />
+                Abrir para imprimir
+              </a>
+            </Button>
+          )}
         />
       )}
     </>
