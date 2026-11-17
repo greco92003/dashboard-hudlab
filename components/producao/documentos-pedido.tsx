@@ -88,7 +88,7 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
     const { nome, caminho } = DOCUMENTOS[documento];
     const endereco = `/api/producao/documentos/${encodeURIComponent(deal.id)}/${caminho}`;
     const toque = telaDeToque();
-    // Talão abre no painel assim que chega. O romaneio mantém a aba do navegador no computador.
+    // O talão mostra as ações no painel. O romaneio mantém a aba do navegador no computador.
     const janela = toque || documento === "talao" ? null : window.open("", "_blank");
     janela?.document.write(
       `<p style="font-family:system-ui,sans-serif;padding:24px;color:#555">Gerando o ${nome.toLowerCase()}…</p>`,
@@ -114,7 +114,7 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
       const arquivo = new File([blob], `${nome} - ${deal.title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), {
         type: "application/pdf",
       });
-      setVendo(documento === "talao");
+      setVendo(false);
       setPronto({ nome, arquivo, url, computador: !toque });
     } catch {
       janela?.close();
@@ -205,12 +205,19 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
               <Eye className="h-5 w-5" />
               Visualizar
             </Button>
-            {podeCompartilhar && (
+            {podeCompartilhar ? (
               <Button className="hud-btn-accent h-12 text-base" onClick={() => void compartilhar()}>
                 <Share2 className="h-5 w-5" />
                 Imprimir ou compartilhar
               </Button>
-            )}
+            ) : pronto?.computador ? (
+              <Button asChild className="hud-btn-accent h-12 text-base">
+                <a href={pronto.url} target="_blank" rel="noopener noreferrer">
+                  <Printer className="h-5 w-5" />
+                  Abrir para imprimir
+                </a>
+              </Button>
+            ) : null}
             {pronto && (
               <Button asChild variant="outline" className="h-12 text-base">
                 <a href={pronto.url} download={pronto.arquivo.name}>
