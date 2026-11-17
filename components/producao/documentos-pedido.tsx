@@ -54,6 +54,21 @@ async function mensagemDeErro(resposta: Response): Promise<string> {
     : "Não foi possível gerar o documento. Tente de novo em instantes.";
 }
 
+async function buscarDocumento(endereco: string) {
+  const buscar = () => fetch(endereco, { cache: "no-store" });
+  const limite = Date.now() + 120_000;
+  let resposta = await buscar();
+  while (resposta.status === 202) {
+    const segundos = Number(resposta.headers.get("retry-after")) || 4;
+    const espera = Math.max(1, segundos) * 1_000;
+    if (Date.now() + espera >= limite) break;
+    await resposta.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, espera));
+    resposta = await buscar();
+  }
+  return resposta;
+}
+
 export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; grande?: boolean }) {
   const [gerando, setGerando] = useState<Documento | null>(null);
   const [pronto, setPronto] = useState<{ nome: string; arquivo: File; url: string } | null>(null);
@@ -79,7 +94,7 @@ export function DocumentosPedido({ deal, grande = false }: { deal: BoardDeal; gr
     );
     setGerando(documento);
     try {
-      const resposta = await fetch(endereco, { cache: "no-store" });
+      const resposta = await buscarDocumento(endereco);
       const tipo = resposta.headers.get("content-type") ?? "";
       if (!resposta.ok || !tipo.includes("pdf")) {
         janela?.close();

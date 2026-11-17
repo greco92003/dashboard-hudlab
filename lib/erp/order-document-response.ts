@@ -26,22 +26,30 @@ export function romaneioBySku(request: Request) {
   return new URL(request.url).searchParams.get("agrupar") === "sku";
 }
 
+export async function generateOrderDocument(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean; dealId?: string } = {}) {
+  const isTalao = kind === "talao";
+  const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao, dealId: options.dealId });
+  const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order, { bySku: options.bySku });
+  return { pdf, orderNumber: order.number };
+}
+
+export function orderPdfResponse(pdf: Buffer, orderNumber: string, kind: OrderDocumentKind, bySku = false) {
+  const isTalao = kind === "talao";
+  const label = isTalao ? "Talão" : bySku ? "Romaneio por SKU" : "Romaneio";
+  const asciiLabel = isTalao ? "Talao" : bySku ? "Romaneio-por-SKU" : "Romaneio";
+  return new NextResponse(new Uint8Array(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${asciiLabel}-pedido-${orderNumber}.pdf"; filename*=UTF-8''${encodeURIComponent(`${label} pedido ${orderNumber}.pdf`)}`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
 export async function orderDocumentResponse(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean; dealId?: string } = {}) {
   try {
-    const isTalao = kind === "talao";
-    const bySku = !isTalao && Boolean(options.bySku);
-    const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao, dealId: options.dealId });
-    const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order, { bySku });
-    const label = isTalao ? "Talão" : bySku ? "Romaneio por SKU" : "Romaneio";
-    const fileName = `${label} pedido ${order.number}.pdf`;
-    const asciiName = isTalao ? "Talao" : bySku ? "Romaneio-por-SKU" : "Romaneio";
-    return new NextResponse(new Uint8Array(pdf), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${asciiName}-pedido-${order.number}.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-        "Cache-Control": "private, no-store",
-      },
-    });
+    const { pdf, orderNumber } = await generateOrderDocument(orderId, kind, options);
+    return orderPdfResponse(pdf, orderNumber, kind, options.bySku);
   } catch (error) {
     console.error(`ERP Tiny ${kind} generation failed`, error);
     return orderDocumentError(

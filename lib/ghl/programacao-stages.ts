@@ -23,6 +23,8 @@ export function normalizeStageTitle(title: string | null | undefined): string {
     .trim();
 }
 
+export const PRODUCAO_DE_PEDIDOS_STAGE_TITLE = "Produção de Pedidos";
+
 /**
  * Etapas exibidas na /programacao: tudo que ainda depende da produção,
  * terminando em "Produção de Pedidos".
@@ -36,7 +38,7 @@ export const PROGRAMACAO_STAGE_TITLES = [
   "Cadastro ERP",
   "Cadastro Contas a Receber",
   "Produção de Amostras",
-  "Produção de Pedidos",
+  PRODUCAO_DE_PEDIDOS_STAGE_TITLE,
   // Pipeline Fábrica de Mockups — pipeline transitório dos designers. Uma venda
   // já ganha volta para cá enquanto a arte é feita, e pode estar parada em
   // QUALQUER etapa dele, então o pipeline inteiro conta como programação.
@@ -143,7 +145,7 @@ export function getExpedicaoColumnId(
  * dentro do GHL.
  */
 export const CONCLUIVEL_STAGE_TITLES = [
-  "Produção de Pedidos",
+  PRODUCAO_DE_PEDIDOS_STAGE_TITLE,
   "Produção de Amostras",
   "Produção", // pipeline Representantes
 ];

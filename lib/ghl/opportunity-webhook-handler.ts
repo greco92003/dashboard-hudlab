@@ -4,6 +4,7 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchGhlDealContext, mapGhlDealContext } from "@/lib/ghl/api";
 import { upsertGhlDeals } from "@/lib/ghl/deals-cache";
+import { PRODUCAO_DE_PEDIDOS_STAGE_TITLE } from "@/lib/ghl/programacao-stages";
 import { verifyGhlWebhook } from "@/lib/ghl/webhook";
 import {
   isGhlOpportunityEvent,
@@ -131,7 +132,18 @@ async function syncOpportunity(input: {
   }
 
   const context = await fetchGhlDealContext(input.opportunityId);
-  await upsertGhlDeals([mapGhlDealContext(context)], "webhook", input.requestId);
+  const deal = mapGhlDealContext(context);
+  await upsertGhlDeals([deal], "webhook", input.requestId);
+  if (deal.stage_title === PRODUCAO_DE_PEDIDOS_STAGE_TITLE && deal.status === "won") {
+    after(async () => {
+      try {
+        const { processarTalaoProducao } = await import("@/lib/producao/taloes");
+        await processarTalaoProducao(deal.deal_id);
+      } catch (error) {
+        console.error("Falha ao iniciar o talão pelo webhook do GHL", { dealId: deal.deal_id, error });
+      }
+    });
+  }
   await sincronizarEstoque(() => sincronizarNegocioSolados(context));
   const claim = await claimWebhookEvent(claimInput);
   return { deleted: false, duplicate: !claim.claimed };
