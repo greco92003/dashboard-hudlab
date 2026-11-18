@@ -78,7 +78,11 @@ export async function cotarFreteDoPedido(opportunityId: string, pares: number, v
   return {
     destino,
     origemDoDestino: origem,
-    opcoes: resultado.body.results.map((r) => ({ transportadora: r.carrier.name, total: Math.round(r.quote.total * 100) / 100 })),
+    // A linha da cotação tipa só `quote`; a transportadora vem como { id, name }.
+    opcoes: resultado.body.results.map((r) => ({
+      transportadora: (r.carrier as { name?: string } | undefined)?.name ?? "Transportadora",
+      total: Math.round(r.quote.total * 100) / 100,
+    })),
     avisos,
   };
 }
