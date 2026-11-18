@@ -12,6 +12,7 @@ import {
   Flame,
   Loader2,
   MessageCircle,
+  MessageSquareText,
   PictureInPicture2,
   RefreshCw,
   Send,
@@ -34,6 +35,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { MensagensDoFechamento } from "@/components/fechamento/mensagens-fechamento";
 
 type Cor = "vermelho" | "laranja" | "amarelo" | "verde" | "cinza" | "cami";
 
@@ -189,6 +191,10 @@ export function PainelDeFechamento() {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [som, setSom] = useState(false);
   const [pip, setPip] = useState<Window | null>(null);
+  // A janela flutuante tem duas abas: os leads e as mensagens do fechamento.
+  // O Chrome só deixa uma janela dessas por página, por isso ficam juntas.
+  const [abaPip, setAbaPip] = useState<AbaJanela>("leads");
+  const [mensagensNoDialogo, setMensagensNoDialogo] = useState(false);
   const [confirmar, setConfirmar] = useState<{ card: CardDoPainel; acao: "modelo" | "fechou" } | null>(null);
   const [perder, setPerder] = useState<CardDoPainel | null>(null);
   const [filtroCor, setFiltroCor] = useState<Cor | null>(null);
@@ -283,17 +289,20 @@ export function PainelDeFechamento() {
     }
   };
 
-  const abrirJanela = async () => {
+  const abrirJanela = async (aba: AbaJanela = "leads") => {
+    setAbaPip(aba);
     const dpip = (window as unknown as { documentPictureInPicture?: DocumentPiP }).documentPictureInPicture;
     if (!dpip) {
-      toast.error("A janela flutuante funciona no Chrome do computador.");
+      // Fora do Chrome do computador, as mensagens abrem numa janela dentro da página.
+      if (aba === "mensagens") setMensagensNoDialogo(true);
+      else toast.error("A janela flutuante funciona no Chrome do computador.");
       return;
     }
     if (pip) {
       pip.focus();
       return;
     }
-    const w = await dpip.requestWindow({ width: 400, height: 640 });
+    const w = await dpip.requestWindow({ width: 420, height: 720 });
     for (const folha of Array.from(document.styleSheets)) {
       try {
         const estilo = w.document.createElement("style");
@@ -354,7 +363,12 @@ export function PainelDeFechamento() {
             {som ? "Som ligado" : "Ligar som"}
           </button>
           <span className="hud-group-sep" aria-hidden />
-          <button type="button" onClick={() => void abrirJanela()}>
+          <button type="button" onClick={() => void abrirJanela("mensagens")} title="Arte aprovada, orçamento final e confirmação do pedido">
+            <MessageSquareText />
+            Mensagens
+          </button>
+          <span className="hud-group-sep" aria-hidden />
+          <button type="button" onClick={() => void abrirJanela("leads")}>
             <PictureInPicture2 />
             Janela flutuante
           </button>
@@ -465,9 +479,19 @@ export function PainelDeFechamento() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={mensagensNoDialogo} onOpenChange={setMensagensNoDialogo}>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mensagens do fechamento</DialogTitle>
+            <DialogDescription>Monte e copie a arte aprovada, o orçamento final e a confirmação do pedido.</DialogDescription>
+          </DialogHeader>
+          <MensagensDoFechamento />
+        </DialogContent>
+      </Dialog>
+
       {pip &&
         createPortal(
-          <JanelaFlutuante painel={painel} ocupado={ocupado} onAgir={agir} />,
+          <JanelaFlutuante painel={painel} ocupado={ocupado} onAgir={agir} aba={abaPip} onAba={setAbaPip} />,
           pip.document.body,
         )}
     </div>
@@ -774,47 +798,83 @@ function CardDeFechamento({
  * Versão compacta para a janela flutuante (sempre por cima do GHL). Tudo é
  * feito dentro da própria janela: diálogo e popover abririam na aba de trás.
  */
+type AbaJanela = "leads" | "mensagens";
+
 function JanelaFlutuante({
   painel,
   ocupado,
   onAgir,
+  aba,
+  onAba,
 }: {
   painel: Painel | null;
   ocupado: string | null;
   onAgir: (c: CardDoPainel, acao: string, extra?: Record<string, string>) => Promise<string | null>;
+  aba: AbaJanela;
+  onAba: (aba: AbaJanela) => void;
 }) {
   const [verTodos, setVerTodos] = useState(false);
-  if (!painel) return <p className="p-3 text-sm text-muted-foreground">Carregando…</p>;
-  const urgentes = painel.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo");
-  const demais = painel.cards.filter((c) => c.cor === "verde" || c.cor === "cinza");
+  const urgentes = painel?.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo") ?? [];
+  const demais = painel?.cards.filter((c) => c.cor === "verde" || c.cor === "cinza") ?? [];
+  const abas: { id: AbaJanela; rotulo: string; Icone: typeof Flame }[] = [
+    { id: "leads", rotulo: "Leads", Icone: Flame },
+    { id: "mensagens", rotulo: "Mensagens", Icone: MessageSquareText },
+  ];
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-sm font-semibold">
-          <Flame className="h-4 w-4 text-primary" />
-          Fechamento
-        </span>
-        <span className="text-xs text-muted-foreground">atualizado às {hora(painel.atualizadoEm)}</span>
-      </div>
-      <Contagem contagem={painel.contagem} />
-      <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
-        {urgentes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>}
-        {urgentes.map((c) => (
-          <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
-        ))}
-        {demais.length > 0 && (
+      <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Janela flutuante">
+        {abas.map(({ id, rotulo, Icone }) => (
           <button
+            key={id}
             type="button"
-            className="mt-1 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground hover:bg-muted"
-            onClick={() => setVerTodos((v) => !v)}
+            role="tab"
+            aria-selected={aba === id}
+            onClick={() => onAba(id)}
+            className={cn(
+              "flex items-center justify-center gap-1.5 rounded-md border py-1.5 text-sm font-semibold transition-colors",
+              aba === id ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted",
+            )}
           >
-            {verTodos ? "Esconder" : "Mostrar"} em dia e parados ({demais.length})
+            <Icone className={cn("h-4 w-4", aba === id && "text-primary")} />
+            {rotulo}
           </button>
+        ))}
+      </div>
+
+      {/* As duas abas ficam montadas: trocar de aba não apaga o que foi digitado. */}
+      <div className={cn("min-h-0 flex-col gap-2", aba === "leads" ? "flex" : "hidden")}>
+        {!painel ? (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-end">
+              <span className="text-xs text-muted-foreground">atualizado às {hora(painel.atualizadoEm)}</span>
+            </div>
+            <Contagem contagem={painel.contagem} />
+            <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
+              {urgentes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>}
+              {urgentes.map((c) => (
+                <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+              ))}
+              {demais.length > 0 && (
+                <button
+                  type="button"
+                  className="mt-1 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                  onClick={() => setVerTodos((v) => !v)}
+                >
+                  {verTodos ? "Esconder" : "Mostrar"} em dia e parados ({demais.length})
+                </button>
+              )}
+              {verTodos &&
+                demais.map((c) => (
+                  <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+                ))}
+            </div>
+          </>
         )}
-        {verTodos &&
-          demais.map((c) => (
-            <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
-          ))}
+      </div>
+      <div className={cn("min-h-0 overflow-y-auto pb-2", aba === "mensagens" ? "block" : "hidden")}>
+        <MensagensDoFechamento />
       </div>
     </div>
   );
