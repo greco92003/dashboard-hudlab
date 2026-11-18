@@ -4,7 +4,10 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchGhlDealContext, mapGhlDealContext } from "@/lib/ghl/api";
 import { upsertGhlDeals } from "@/lib/ghl/deals-cache";
-import { PRODUCAO_DE_PEDIDOS_STAGE_TITLE } from "@/lib/ghl/programacao-stages";
+import {
+  DADOS_EM_CONFERENCIA_STAGE_TITLE,
+  PRODUCAO_DE_PEDIDOS_STAGE_TITLE,
+} from "@/lib/ghl/programacao-stages";
 import { verifyGhlWebhook } from "@/lib/ghl/webhook";
 import {
   isGhlOpportunityEvent,
@@ -141,6 +144,18 @@ async function syncOpportunity(input: {
         await processarTalaoProducao(deal.deal_id);
       } catch (error) {
         console.error("Falha ao iniciar o talão pelo webhook do GHL", { dealId: deal.deal_id, error });
+      }
+    });
+  }
+  if (deal.stage_title === DADOS_EM_CONFERENCIA_STAGE_TITLE && deal.status === "won") {
+    // A Cami monta o rascunho da ficha do pedido pela conversa; o vendedor
+    // encontra a ficha preenchida no /cadastro-pedido. Não refaz um pronto.
+    after(async () => {
+      try {
+        const { prepararRascunhoFicha } = await import("@/lib/ghl/ficha-pedido/rascunhos");
+        await prepararRascunhoFicha(deal.deal_id);
+      } catch (error) {
+        console.error("Falha ao preparar o rascunho da ficha pelo webhook do GHL", { dealId: deal.deal_id, error });
       }
     });
   }
