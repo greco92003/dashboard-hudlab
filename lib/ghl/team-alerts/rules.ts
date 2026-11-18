@@ -94,3 +94,21 @@ export function ultimoClique(
     respostaDaCami: depois.some((m) => m.userId != null && automacao.has(m.userId)),
   };
 }
+
+/**
+ * Pedido de atendimento humano no Direct: as mesmas palavras do ramo "Quer
+ * pessoa" do workflow "Responder DM Instagram v2 Black" (pessoa, WhatsApp,
+ * número, contato, humano, atendente, vendedor), por pedaço da palavra.
+ */
+const PEDIDO_DE_PESSOA = /pessoa|hats|wpp|umero|úmero|ontato|umano|tendente|endedor/i;
+
+export function ehPedidoDePessoa(corpo: string): boolean {
+  return PEDIDO_DE_PESSOA.test(corpo);
+}
+
+/** Canal do Direct pelo tipo da mensagem do GHL; null quando não é Direct. */
+export function canalDoDirect(messageType: string): "Instagram" | "Facebook" | null {
+  if (/INSTAGRAM|_IG\b/i.test(messageType)) return "Instagram";
+  if (/FACEBOOK|_FB\b/i.test(messageType)) return "Facebook";
+  return null;
+}

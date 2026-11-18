@@ -4,6 +4,7 @@ import {
   avisoDeClique,
   avisoDeEspera,
   avisoDePassagem,
+  avisoDePedidoNoDirect,
   botaoDoClique,
   diaEHora,
   campanhaDoEnvio,
@@ -11,7 +12,7 @@ import {
   linhaDeModelo,
   linkDoContato,
 } from "../lib/ghl/team-alerts/text.ts";
-import { algumEntregue, dentroDoHorarioDeAviso, escolherVia, inicioDaBusca, ultimoClique } from "../lib/ghl/team-alerts/rules.ts";
+import { algumEntregue, canalDoDirect, dentroDoHorarioDeAviso, ehPedidoDePessoa, escolherVia, inicioDaBusca, ultimoClique } from "../lib/ghl/team-alerts/rules.ts";
 
 const brt = (local) => Date.parse(`${local}-03:00`);
 const H = 60 * 60 * 1000;
@@ -159,4 +160,48 @@ test("aviso entregue: basta um destino receber, livre ou pelo modelo", () => {
   assert.equal(algumEntregue([{ via: "falhou" }, { via: "sem_modelo" }]), false);
   assert.equal(algumEntregue([{ via: "falhou" }, { via: "modelo" }]), true);
   assert.equal(algumEntregue([{ via: "livre" }]), true);
+});
+
+test("Direct: reconhece pedido de pessoa como o ramo Quer pessoa do workflow", () => {
+  for (const s of ["Quero falar com uma pessoa", "Como posso falar pelo WhatsApp", "Qual whats de vocês?", "tem wpp?", "me passa o número", "Tem wts do vendedor", "quero um atendente humano"]) {
+    assert.equal(ehPedidoDePessoa(s), true, s);
+  }
+  for (const s of ["Quero a tabela da Black", "Qual o pedido mínimo?", "Quero amostra grátis"]) {
+    assert.equal(ehPedidoDePessoa(s), false, s);
+  }
+  assert.equal(canalDoDirect("TYPE_INSTAGRAM"), "Instagram");
+  assert.equal(canalDoDirect("TYPE_FACEBOOK"), "Facebook");
+  assert.equal(canalDoDirect("TYPE_WHATSAPP"), null);
+});
+
+test("Direct: a resposta do workflow e a da Cami não contam; a do time conta", () => {
+  const ROBO = "robo-1";
+  const base = [
+    { id: "a", direction: "outbound", body: "Boas-vindas", dateAdded: "2026-11-15T13:00:00Z", userId: ROBO, isAutomated: true },
+    { id: "b", direction: "inbound", body: "Quero falar com uma pessoa", dateAdded: "2026-11-15T13:17:00Z", userId: null, isAutomated: false },
+    { id: "c", direction: "outbound", body: "Claro! Já avisei a Schay", dateAdded: "2026-11-15T13:18:00Z", userId: ROBO, isAutomated: true },
+  ];
+  const desde = Date.parse("2026-11-15T12:00:00Z");
+  const semTime = ultimoClique(base, desde, ehPedidoDePessoa);
+  assert.equal(semTime.mensagem.id, "b");
+  assert.equal(semTime.atendido, false);
+  const comCami = ultimoClique([...base, { id: "d", direction: "outbound", body: "Oi! Aqui é a Cami", dateAdded: "2026-11-15T13:20:00Z", userId: ROBO, isAutomated: false }], desde, ehPedidoDePessoa);
+  assert.equal(comCami.atendido, false);
+  const comSchay = ultimoClique([...base, { id: "e", direction: "outbound", body: "Oi, aqui é a Schay", dateAdded: "2026-11-15T14:00:00Z", userId: "schay", isAutomated: false }], desde, ehPedidoDePessoa);
+  assert.equal(comSchay.atendido, true);
+});
+
+test("Direct: aviso diz o canal, quando, a mensagem e onde responder", () => {
+  const aviso = avisoDePedidoNoDirect({
+    nome: "Davi",
+    canal: "Instagram",
+    texto: "Como posso falar pelo WhatsApp",
+    quandoMs: brt("2026-11-18T16:38:00"),
+    link: "https://exemplo.test/contato",
+  });
+  const tudo = JSON.stringify(aviso);
+  assert.match(tudo, /Direct do Instagram/);
+  assert.match(tudo, /18\/11 às 16h38/);
+  assert.match(tudo, /Como posso falar pelo WhatsApp/);
+  assert.match(tudo, /caixa do GHL/);
 });
