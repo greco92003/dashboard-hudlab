@@ -60,6 +60,9 @@ import {
 import { cn } from "@/lib/utils";
 import { aplicarRascunhoNoFormulario, fichaSemGrade } from "@/lib/ghl/ficha-pedido/aplicar";
 import type { FichaRascunho } from "@/lib/ghl/ficha-pedido/regras";
+import { escolherFrete } from "@/lib/ghl/ficha-pedido/frete";
+import type { CotacaoDoPedido } from "@/lib/ghl/ficha-pedido/frete-servidor";
+import type { EstadoDoFrete } from "./cami-ficha";
 import { PainelCami } from "./cami-ficha";
 const GHL_LOCATION_ID = "dhz2q752HHI3xw2jHkrv";
 const PAYMENT_PROOF_ACCEPT =
@@ -502,6 +505,10 @@ export function OrderRegistrationCard({
     draft: OrderRegistrationDraft;
     files: File[];
   } | null>(null);
+  const [frete, setFrete] = useState<EstadoDoFrete | null>(null);
+  // A cotação volta depois de um await: lê a ficha como está naquele momento.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const restoredDraftRef = useRef(restoredDraft);
@@ -515,6 +522,7 @@ export function OrderRegistrationCard({
     setServerIssues([]);
     setShowIssues(false);
     setAntesDaCami(null);
+    setFrete(null);
   }, [opportunity]);
 
   const validationIssues = useMemo(
@@ -627,10 +635,63 @@ export function OrderRegistrationCard({
     );
   };
 
+  // Cota o frete para o CEP do cadastro e preenche transportadora (e o frete
+  // da Hud, quando a empresa paga) só onde o campo ainda está vazio.
+  const cotarFrete = async (base: OrderRegistrationDraft) => {
+    const pares = Math.trunc(Number(base.quantityPairs));
+    if (!Number.isFinite(pares) || pares <= 0) return;
+    setFrete({ carregando: true, cotacao: null, escolha: null, erro: null });
+    try {
+      const response = await fetch(`/api/cadastro-pedido/${opportunity.id}/frete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pares,
+          valorNf: Number(String(base.monetaryValue).replace(",", ".")) || 0,
+        }),
+      });
+      const json = (await response.json()) as { cotacao?: CotacaoDoPedido; error?: string };
+      if (!response.ok || !json.cotacao) {
+        throw new Error(json.error || "Não foi possível cotar o frete.");
+      }
+      const atual = draftRef.current;
+      const escolha = json.cotacao.opcoes.length
+        ? escolherFrete(
+            json.cotacao.opcoes,
+            atual.freightCondition || null,
+            Number(String(atual.freightClientValue).replace(",", ".")) || null,
+          )
+        : null;
+      setFrete({ carregando: false, cotacao: json.cotacao, escolha, erro: null });
+      if (escolha) {
+        const parcial: Partial<OrderRegistrationDraft> = {};
+        if (!atual.carrier.trim() && escolha.transportadora) {
+          parcial.carrier = escolha.transportadora;
+        }
+        if (escolha.valorHud !== null && !atual.freightCompanyValue.trim()) {
+          parcial.freightCompanyValue = String(escolha.valorHud);
+        }
+        if (Object.keys(parcial).length > 0) {
+          const novo = { ...atual, ...parcial };
+          setDraft(novo);
+          onDraftChange?.(novo);
+        }
+      }
+    } catch (error) {
+      setFrete({
+        carregando: false,
+        cotacao: null,
+        escolha: null,
+        erro: error instanceof Error ? error.message : "Não foi possível cotar o frete.",
+      });
+    }
+  };
+
   const aplicarCami = async (rascunho: FichaRascunho) => {
     const resultado = aplicarRascunhoNoFormulario(draft, rascunho, config);
     setAntesDaCami({ draft, files: selectedFiles });
     updateDraft(resultado.draft);
+    void cotarFrete(resultado.draft);
     // Comprovante: só quando o negócio ainda não tem nenhum anexado.
     const vagas = Math.max(0, remainingFileSlots);
     if (
@@ -656,6 +717,7 @@ export function OrderRegistrationCard({
     updateDraft(antesDaCami.draft);
     setSelectedFiles(antesDaCami.files);
     setAntesDaCami(null);
+    setFrete(null);
   };
 
   const save = async (event: FormEvent) => {
@@ -871,6 +933,8 @@ export function OrderRegistrationCard({
               }
               onAplicar={aplicarCami}
               onDesfazer={antesDaCami ? desfazerCami : null}
+              frete={frete}
+              onCotarFrete={() => void cotarFrete(draft)}
             />
             <FieldSection
               icon={ReceiptText}

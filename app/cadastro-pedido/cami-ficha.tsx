@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCcw, Sparkles, Truck, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FichaRascunho } from "@/lib/ghl/ficha-pedido/regras";
+import type { EscolhaDeFrete } from "@/lib/ghl/ficha-pedido/frete";
+import type { CotacaoDoPedido } from "@/lib/ghl/ficha-pedido/frete-servidor";
 import { cn } from "@/lib/utils";
 
 type Estado = {
@@ -13,6 +15,58 @@ type Estado = {
   geradoEm: string | null;
   atualizadoEm: string;
 };
+
+export type EstadoDoFrete = {
+  carregando: boolean;
+  cotacao: CotacaoDoPedido | null;
+  escolha: EscolhaDeFrete | null;
+  erro: string | null;
+};
+
+const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const destinoLegivel = (d: string) => (/^\d{8}$/.test(d) ? `CEP ${d.slice(0, 5)}-${d.slice(5)}` : d);
+
+/** Linha do frete cotado: transportadora escolhida, valor e as opções que a cotação trouxe. */
+function LinhaDoFrete({ frete, onCotarFrete }: { frete: EstadoDoFrete | null; onCotarFrete?: () => void }) {
+  const opcoes = frete?.cotacao?.opcoes ?? [];
+  const nomeEscolhido = frete?.escolha?.transportadora ?? null;
+  const escolhida = nomeEscolhido ? opcoes.find((o) => o.transportadora === nomeEscolhido) : undefined;
+  const avisos = [...(frete?.escolha?.aviso ? [frete.escolha.aviso] : []), ...(frete?.cotacao?.avisos ?? [])];
+  return (
+    <div className="mt-3 flex flex-wrap items-start justify-between gap-2 rounded-md border bg-background/60 p-3 text-xs">
+      <div className="flex min-w-0 gap-2">
+        <Truck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className="min-w-0 space-y-1">
+          <p className="font-medium">
+            {frete?.carregando
+              ? "Cotando o frete…"
+              : frete?.erro
+                ? frete.erro
+                : escolhida
+                  ? `Frete: ${escolhida.transportadora}, ${moeda(escolhida.total)}`
+                  : frete?.cotacao
+                    ? "Frete sem cotação"
+                    : "Frete ainda não cotado"}
+          </p>
+          {escolhida && frete?.cotacao?.destino && (
+            <p className="text-muted-foreground">
+              {opcoes.length} opção(ões) para {destinoLegivel(frete.cotacao.destino)}:{" "}
+              {opcoes.map((o) => `${o.transportadora} ${moeda(o.total)}`).join(" · ")}
+            </p>
+          )}
+          {avisos.map((a) => (
+            <p key={a} className="text-amber-800 dark:text-amber-300">{a}</p>
+          ))}
+        </div>
+      </div>
+      {onCotarFrete && !frete?.carregando && (
+        <Button type="button" size="sm" variant="outline" className="h-7" onClick={onCotarFrete}>
+          {frete?.cotacao ? "Cotar de novo" : "Cotar frete"}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 const ROTULO_ORIGEM: Record<string, string> = {
   paymentForm: "Forma de pagamento",
@@ -34,11 +88,15 @@ export function PainelCami({
   podeAplicarSozinho,
   onAplicar,
   onDesfazer,
+  frete = null,
+  onCotarFrete,
 }: {
   opportunityId: string;
   podeAplicarSozinho: boolean;
   onAplicar: (rascunho: FichaRascunho) => Promise<{ preenchidos: string[]; ignorados: string[] }>;
   onDesfazer: (() => void) | null;
+  frete?: EstadoDoFrete | null;
+  onCotarFrete?: () => void;
 }) {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -133,10 +191,10 @@ export function PainelCami({
               {gerando
                 ? "Leva de 15 a 40 segundos."
                 : rascunho
-                  ? `Gerado em ${horario(estado?.geradoEm ?? null)}. Confira tudo antes de salvar; embarque e transportadora ficam com você.`
+                  ? `Gerado em ${horario(estado?.geradoEm ?? null)}. Confira tudo antes de salvar; a data de embarque fica com você.`
                   : estado?.status === "erro"
                     ? (estado.erro ?? "Tente de novo.")
-                    : "Grade, solado, arte, preço, frete, pagamento e comprovante."}
+                    : "Grade, solado, arte, preço, frete com cotação, pagamento e comprovante."}
             </p>
           </div>
         </div>
@@ -187,6 +245,8 @@ export function PainelCami({
           ))}
         </ul>
       )}
+
+      {(aplicado || frete) && <LinhaDoFrete frete={frete} onCotarFrete={onCotarFrete} />}
 
       {rascunho && (rascunho.observacaoImportante || rascunho.observacoes.length > 0) && (
         <div className="mt-3 space-y-1 text-xs">
