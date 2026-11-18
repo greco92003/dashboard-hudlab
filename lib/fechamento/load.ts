@@ -64,8 +64,11 @@ export async function carregarPainel(): Promise<Painel> {
       combinado: l.combinado,
       pendencia: l.pendencia,
       sinal: l.sinal,
+      // Sem a caixa no endereço, o GHL abre a caixa padrão do usuário (Minhas,
+      // Não lidas…) e, se a conversa não está nela, mostra a lista sem abrir o
+      // contato. A caixa da equipe com "todas" sempre tem a conversa.
       linkConversa: l.conversation_id
-        ? `https://app.gohighlevel.com/v2/location/${location}/conversations/conversations/${l.conversation_id}`
+        ? `https://app.gohighlevel.com/v2/location/${location}/conversations/conversations/${l.conversation_id}?category=team-inbox&tab=all`
         : null,
     };
     return { card, situacao: s, sinal: l.sinal };
