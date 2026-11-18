@@ -58,6 +58,9 @@ import {
 } from "@/lib/ghl/order-registration-shared";
 
 import { cn } from "@/lib/utils";
+import { aplicarRascunhoNoFormulario, fichaSemGrade } from "@/lib/ghl/ficha-pedido/aplicar";
+import type { FichaRascunho } from "@/lib/ghl/ficha-pedido/regras";
+import { PainelCami } from "./cami-ficha";
 const GHL_LOCATION_ID = "dhz2q752HHI3xw2jHkrv";
 const PAYMENT_PROOF_ACCEPT =
   ".pdf,.docx,.doc,.jpg,.jpeg,.png,.gif,.csv,.xlsx,.xls,.mp4,.mpeg,.zip,.rar,.txt,.svg";
@@ -447,6 +450,27 @@ function FieldSection({
   );
 }
 
+/** Baixa os comprovantes que a Cami achou na conversa para anexar como arquivos. */
+async function baixarComprovantes(opportunityId: string, urls: string[]): Promise<File[]> {
+  const arquivos: File[] = [];
+  for (const url of urls) {
+    try {
+      const res = await fetch(
+        `/api/cadastro-pedido/${opportunityId}/rascunho/anexo?url=${encodeURIComponent(url)}`,
+      );
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      const nome =
+        decodeURIComponent(res.headers.get("X-Nome-Arquivo") ?? "") ||
+        `comprovante-${arquivos.length + 1}`;
+      arquivos.push(new File([blob], nome, { type: blob.type }));
+    } catch {
+      // Segue sem esse arquivo; o vendedor anexa à mão.
+    }
+  }
+  return arquivos;
+}
+
 export function OrderRegistrationCard({
   opportunity,
   config,
@@ -473,6 +497,11 @@ export function OrderRegistrationCard({
   const [saving, setSaving] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [serverIssues, setServerIssues] = useState<string[]>([]);
+  // Estado antes da Cami preencher, para o botão Desfazer.
+  const [antesDaCami, setAntesDaCami] = useState<{
+    draft: OrderRegistrationDraft;
+    files: File[];
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const restoredDraftRef = useRef(restoredDraft);
@@ -485,6 +514,7 @@ export function OrderRegistrationCard({
     setSelectedFiles([]);
     setServerIssues([]);
     setShowIssues(false);
+    setAntesDaCami(null);
   }, [opportunity]);
 
   const validationIssues = useMemo(
@@ -595,6 +625,37 @@ export function OrderRegistrationCard({
     setSelectedFiles((current) =>
       current.filter((_, currentIndex) => currentIndex !== index),
     );
+  };
+
+  const aplicarCami = async (rascunho: FichaRascunho) => {
+    const resultado = aplicarRascunhoNoFormulario(draft, rascunho, config);
+    setAntesDaCami({ draft, files: selectedFiles });
+    updateDraft(resultado.draft);
+    // Comprovante: só quando o negócio ainda não tem nenhum anexado.
+    const vagas = Math.max(0, remainingFileSlots);
+    if (
+      opportunity.paymentProofs.length === 0 &&
+      selectedFiles.length === 0 &&
+      vagas > 0 &&
+      rascunho.comprovanteUrls.length > 0
+    ) {
+      const arquivos = await baixarComprovantes(
+        opportunity.id,
+        rascunho.comprovanteUrls.slice(0, vagas),
+      );
+      if (arquivos.length > 0) {
+        setSelectedFiles((atual) => [...atual, ...arquivos]);
+        resultado.preenchidos.push(`Comprovante (${arquivos.length})`);
+      }
+    }
+    return { preenchidos: resultado.preenchidos, ignorados: resultado.ignorados };
+  };
+
+  const desfazerCami = () => {
+    if (!antesDaCami) return;
+    updateDraft(antesDaCami.draft);
+    setSelectedFiles(antesDaCami.files);
+    setAntesDaCami(null);
   };
 
   const save = async (event: FormEvent) => {
@@ -803,6 +864,14 @@ export function OrderRegistrationCard({
             noValidate
             onSubmit={save}
           >
+            <PainelCami
+              opportunityId={opportunity.id}
+              podeAplicarSozinho={
+                !restoredDraft && selectedFiles.length === 0 && fichaSemGrade(draft)
+              }
+              onAplicar={aplicarCami}
+              onDesfazer={antesDaCami ? desfazerCami : null}
+            />
             <FieldSection
               icon={ReceiptText}
               title="Dados principais"
