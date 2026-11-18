@@ -360,6 +360,73 @@ export async function searchRecentInboundWhatsappConversations(
     }));
 }
 
+/**
+ * Conversas com mensagem recente (de qualquer canal) cujo contato tem uma das
+ * tags. A busca de conversas já devolve as tags do contato, então não há
+ * chamada extra por contato. Serve para o Direct do Instagram e do Facebook,
+ * que a busca de WhatsApp acima não enxerga.
+ */
+export async function searchRecentConversationsWithTags(
+  sinceMs: number,
+  tags: string[],
+  maxPages = 3,
+): Promise<RecentInboundConversation[]> {
+  const { locationId } = requireGhlEnv();
+  const all: GhlConversationListItem[] = [];
+  let startAfter: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const params: Record<string, string> = { locationId, sortBy: "last_message_date", sort: "desc", limit: "100" };
+    if (startAfter) params.startAfterDate = startAfter;
+    const result = await ghlConversationsFetch<{ conversations?: GhlConversationListItem[] }>(
+      "/conversations/search",
+      params,
+    );
+    const conversations = result.conversations ?? [];
+    all.push(...conversations);
+    const cursor = conversations.at(-1)?.sort?.[0];
+    const oldest = conversations.at(-1)?.lastMessageDate;
+    if (conversations.length < 100 || cursor == null || (oldest != null && oldest < sinceMs)) break;
+    startAfter = String(cursor);
+  }
+  return all
+    .filter(
+      (c) =>
+        (c.lastMessageDate ?? 0) >= sinceMs &&
+        (c.tags ?? []).some((tag) => tags.includes(tag)) &&
+        !(c.tags ?? []).includes(TAG_INTERNO),
+    )
+    .map((c) => ({
+      conversationId: c.id,
+      contactId: c.contactId,
+      contactName: c.fullName || c.contactName || null,
+      lastInboundAtMs: c.lastMessageDate as number,
+    }));
+}
+
+/** Mensagens recentes de todos os canais (WhatsApp, Instagram, Facebook…), em ordem cronológica. */
+export async function getRecentMessagesAllChannels(
+  conversationId: string,
+  limit = 30,
+): Promise<Array<NegotiationMessage & { messageType: string }>> {
+  const raw = await ghlConversationsFetch<GhlMessagesResponse>(
+    `/conversations/${conversationId}/messages`,
+    { limit: String(limit) },
+  );
+  return raw.messages.messages
+    .filter((m) => !m.messageType.startsWith("TYPE_ACTIVITY"))
+    .map((m) => ({
+      id: m.id,
+      messageType: m.messageType,
+      direction: m.direction,
+      body: m.body ?? "",
+      dateAdded: m.dateAdded,
+      userId: m.userId ? m.userId : null,
+      attachments: m.attachments ?? [],
+      isAutomated: m.source === "workflow",
+    }))
+    .sort((a, b) => Date.parse(a.dateAdded) - Date.parse(b.dateAdded));
+}
+
 /** Última mensagem de WhatsApp que o contato mandou (ms), para saber se a janela de 24h está aberta. null se nunca escreveu. */
 export async function lastInboundWhatsappAt(contactId: string): Promise<number | null> {
   const { locationId } = requireGhlEnv();

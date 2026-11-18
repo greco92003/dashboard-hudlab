@@ -157,3 +157,24 @@ export function avisoDeClique(input: {
     link: input.link,
   });
 }
+
+/** Pediu para falar com uma pessoa no Direct e ninguém do time respondeu. */
+export function avisoDePedidoNoDirect(input: {
+  nome: string | null;
+  canal: "Instagram" | "Facebook";
+  texto: string;
+  quandoMs: number;
+  link: string | null;
+}): Aviso {
+  const nome = input.nome?.trim() || "Um cliente";
+  const texto = input.texto.replace(/\s+/g, " ").trim();
+  return montarAviso({
+    titulo: `Pedido de atendimento no Direct do ${input.canal}`,
+    linhas: [
+      `${nome} pediu para falar com uma pessoa no Direct do ${input.canal} em ${diaEHora(input.quandoMs)} e ainda não teve resposta do time.`,
+      texto ? `Mensagem: "${texto.length > 160 ? `${texto.slice(0, 157)}...` : texto}"` : null,
+      "Responda pela caixa do GHL, no canal do Direct.",
+    ],
+    link: input.link,
+  });
+}
