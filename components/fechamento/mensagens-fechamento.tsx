@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { brl } from "@/lib/ghl/orcamento-black/calc";
 import {
+  ESTADOS,
   FORMAS,
   GRADE_ADULTO,
   GRADE_INFANTIL,
   PEDIDO_MINIMO,
+  freteEstimadoPorEstado,
   lerValor,
   mensagemArteAprovada,
   mensagemConfirmacao,
@@ -106,6 +108,7 @@ function CampoGrade({
 export function MensagensDoFechamento() {
   const [pares, setPares] = useState("");
   const [frete, setFrete] = useState("");
+  const [uf, setUf] = useState("");
   const [forma, setForma] = useState<FormaDePagamento>("pix");
   const [evento, setEvento] = useState("");
   const [obs, setObs] = useState("");
@@ -117,19 +120,25 @@ export function MensagensDoFechamento() {
   // Sem pares digitados, o pedido segue a soma da grade.
   const nPares = pares.trim() ? Math.trunc(Number(pares) || 0) : grade;
   const freteGratis = nPares >= 36;
-  const valorFrete = lerValor(frete);
+  const freteDigitado = lerValor(frete);
+  // Sem cotação digitada, o estado dá a mesma estimativa do robô de orçamento.
+  const freteDoEstado = uf ? freteEstimadoPorEstado(uf) : null;
+  const usaEstimativa = !freteGratis && freteDigitado === null && freteDoEstado !== null;
+  const valorFrete = freteDigitado ?? freteDoEstado;
   const precos = precosDoPedido({ pares: nPares, frete: valorFrete });
   const faltaFrete = Boolean(precos) && !freteGratis && valorFrete === null;
 
   const arte = mensagemArteAprovada({ evento, obs }, modelos);
-  const orcamento = precos && !faltaFrete ? mensagemOrcamentoFinal(precos) : null;
+  const orcamento =
+    precos && !faltaFrete ? mensagemOrcamentoFinal(precos, { estimativaUf: usaEstimativa ? uf : null }) : null;
   const confirmacao = precos && !faltaFrete ? mensagemConfirmacao(precos, forma) : null;
   const textos: Record<Aba, string | null> = { arte, orcamento, confirmacao: confirmacao?.texto ?? null };
 
+  const semFrete = "Informe o estado ou o frete da cotação: até 35 pares o frete é do cliente.";
   const motivoVazio: Record<Aba, string> = {
     arte: "Preencha a grade de pelo menos um modelo.",
-    orcamento: nPares < PEDIDO_MINIMO ? `Pedido mínimo de ${PEDIDO_MINIMO} pares.` : "Informe o frete da cotação: até 35 pares o frete é do cliente.",
-    confirmacao: nPares < PEDIDO_MINIMO ? `Pedido mínimo de ${PEDIDO_MINIMO} pares.` : "Informe o frete da cotação: até 35 pares o frete é do cliente.",
+    orcamento: nPares < PEDIDO_MINIMO ? `Pedido mínimo de ${PEDIDO_MINIMO} pares.` : semFrete,
+    confirmacao: nPares < PEDIDO_MINIMO ? `Pedido mínimo de ${PEDIDO_MINIMO} pares.` : semFrete,
   };
 
   const mudarModelo = (i: number, mudar: (m: ModeloDaGrade) => ModeloDaGrade) =>
@@ -138,6 +147,7 @@ export function MensagensDoFechamento() {
   const limpar = () => {
     setPares("");
     setFrete("");
+    setUf("");
     setForma("pix");
     setEvento("");
     setObs("");
@@ -149,7 +159,7 @@ export function MensagensDoFechamento() {
 
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">Pares</span>
           <Input
@@ -163,17 +173,40 @@ export function MensagensDoFechamento() {
           />
         </label>
         <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Estado</span>
+          {/* select nativo: o da biblioteca abre no documento principal, fora da janela flutuante */}
+          <select
+            aria-label="Estado de entrega"
+            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
+            value={uf}
+            onChange={(e) => setUf(e.target.value)}
+          >
+            <option value="">UF</option>
+            {Object.keys(ESTADOS).map((sigla) => (
+              <option key={sigla} value={sigla}>
+                {sigla}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">Frete (R$)</span>
           <Input
             inputMode="decimal"
             className="h-8 tabular-nums"
-            placeholder={freteGratis ? "grátis" : "cotação"}
+            placeholder={freteGratis ? "grátis" : freteDoEstado !== null ? brl(freteDoEstado) : "cotação"}
             disabled={freteGratis}
             value={freteGratis ? "" : frete}
             onChange={(e) => setFrete(e.target.value)}
           />
         </label>
       </div>
+      {usaEstimativa && (
+        <p className="-mt-1 text-xs text-muted-foreground">
+          Frete estimado pelo estado, a mesma tabela do robô (RS R$ 59, SC e PR R$ 89, demais R$ 119). Com a cotação
+          pelo CEP, digite o valor no campo.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-muted-foreground">Forma de pagamento escolhida</span>

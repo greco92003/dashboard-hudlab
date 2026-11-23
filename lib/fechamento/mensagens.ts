@@ -92,10 +92,45 @@ export function precoDaForma(o: OrcamentoBlack, forma: FormaDePagamento): number
 
 const freteDe = (o: OrcamentoBlack) => (o.freteGratis ? 0 : (o.frete ?? 0));
 
-/** Orçamento final com as três opções numeradas; o cliente responde com o número. */
-export function mensagemOrcamentoFinal(o: OrcamentoBlack): string {
+export const ESTADOS: Record<string, string> = {
+  AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal",
+  ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão", MT: "Mato Grosso", MS: "Mato Grosso do Sul", MG: "Minas Gerais",
+  PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
+  RS: "Rio Grande do Sul", RO: "Rondônia", RR: "Roraima", SC: "Santa Catarina", SP: "São Paulo", SE: "Sergipe",
+  TO: "Tocantins",
+};
+
+/**
+ * Frete estimado pelo estado, a mesma tabela que o robô de orçamento do GHL
+ * (Orçamento Automático 03) grava de 12 a 35 pares: RS R$ 59, SC e PR R$ 89 e
+ * os demais R$ 119. Conferida em 23/11/2026 nos contatos desde 01/10. Se o robô
+ * mudar a tabela, mudar aqui também. Null para sigla desconhecida.
+ */
+export function freteEstimadoPorEstado(uf: string): number | null {
+  const sigla = uf.trim().toUpperCase();
+  if (!ESTADOS[sigla]) return null;
+  if (sigla === "RS") return 59;
+  if (sigla === "SC" || sigla === "PR") return 89;
+  return 119;
+}
+
+/**
+ * Orçamento final com as três opções numeradas; o cliente responde com o número.
+ * Com `estimativaUf`, o frete veio da tabela por estado e a mensagem avisa que
+ * o valor exato sai pelo CEP.
+ */
+export function mensagemOrcamentoFinal(o: OrcamentoBlack, opcoes: { estimativaUf?: string | null } = {}): string {
   const frete = freteDe(o);
   const rotulo = o.freteGratis ? "Total" : "Total com frete";
+  const estado = opcoes.estimativaUf ? ESTADOS[opcoes.estimativaUf.trim().toUpperCase()] : undefined;
+  const linhasDoFrete = o.freteGratis
+    ? ["*Frete: GRÁTIS*", ""]
+    : [
+        `*Frete: ${brl(frete)}*`,
+        ...(estado ? [`Estimativa para ${estado}; o valor exato sai pelo seu CEP.`] : []),
+        "Os totais abaixo já incluem o frete.",
+        "",
+      ];
   const linhas = [
     `*Seu orçamento: ${o.pares} pares*`,
     "",
@@ -105,7 +140,7 @@ export function mensagemOrcamentoFinal(o: OrcamentoBlack): string {
     "",
     "🖤 *Com o desconto da Black November*",
     "",
-    ...(o.freteGratis ? ["*Frete: GRÁTIS*", ""] : [`*Frete: ${brl(frete)}*`, "Os totais abaixo já incluem o frete.", ""]),
+    ...linhasDoFrete,
   ];
   for (const forma of ["pix", "cartao", "pix5050"] as const) {
     const preco = precoDaForma(o, forma);
