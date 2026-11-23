@@ -1,17 +1,19 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Check, Copy, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { brl } from "@/lib/ghl/orcamento-black/calc";
+import type { OpcaoDeFrete } from "@/lib/ghl/ficha-pedido/frete";
 import {
   ESTADOS,
   FORMAS,
   GRADE_ADULTO,
   GRADE_INFANTIL,
   PEDIDO_MINIMO,
+  freteDaAba,
   freteEstimadoPorEstado,
   lerValor,
   mensagemArteAprovada,
@@ -26,6 +28,11 @@ import {
 } from "@/lib/fechamento/mensagens";
 
 type Aba = "arte" | "orcamento" | "confirmacao";
+type Cotacao =
+  | { status: "vazia" }
+  | { status: "cotando" }
+  | { status: "cotada"; opcoes: OpcaoDeFrete[]; escolhida: number }
+  | { status: "erro"; mensagem: string };
 const ABAS: { id: Aba; rotulo: string }[] = [
   { id: "arte", rotulo: "Arte aprovada" },
   { id: "orcamento", rotulo: "Orçamento" },
@@ -107,8 +114,10 @@ function CampoGrade({
  */
 export function MensagensDoFechamento() {
   const [pares, setPares] = useState("");
-  const [frete, setFrete] = useState("");
+  const [freteManual, setFreteManual] = useState("");
   const [uf, setUf] = useState("");
+  const [cep, setCep] = useState("");
+  const [cotacao, setCotacao] = useState<Cotacao>({ status: "vazia" });
   const [forma, setForma] = useState<FormaDePagamento>("pix");
   const [evento, setEvento] = useState("");
   const [obs, setObs] = useState("");
@@ -120,21 +129,59 @@ export function MensagensDoFechamento() {
   // Sem pares digitados, o pedido segue a soma da grade.
   const nPares = pares.trim() ? Math.trunc(Number(pares) || 0) : grade;
   const freteGratis = nPares >= 36;
-  const freteDigitado = lerValor(frete);
-  // Sem cotação digitada, o estado dá a mesma estimativa do robô de orçamento.
+  const digitosDoCep = cep.replace(/\D/g, "");
+
+  // Com CEP completo e até 35 pares, cota o frete real (mesma cotação da ficha e da Cami).
+  useEffect(() => {
+    if (digitosDoCep.length !== 8 || nPares < PEDIDO_MINIMO || nPares >= 36) {
+      setCotacao({ status: "vazia" });
+      return;
+    }
+    const controle = new AbortController();
+    const espera = window.setTimeout(async () => {
+      setCotacao({ status: "cotando" });
+      const valorNf = Math.round(precosDoPedido({ pares: nPares, frete: 0 })?.subtotalCartao ?? 0);
+      try {
+        const resposta = await fetch(`/api/fechamento/frete?cep=${digitosDoCep}&pares=${nPares}&valor=${valorNf}`, {
+          signal: controle.signal,
+          cache: "no-store",
+        });
+        const dados = (await resposta.json()) as { opcoes?: OpcaoDeFrete[]; avisos?: string[]; uf?: string | null; error?: string };
+        if (!resposta.ok) throw new Error(dados.error ?? "falha na cotação");
+        const opcoes = dados.opcoes ?? [];
+        setCotacao(
+          opcoes.length > 0
+            ? { status: "cotada", opcoes, escolhida: 0 }
+            : { status: "erro", mensagem: dados.avisos?.[0] ?? "Sem cotação para esse CEP." },
+        );
+        // O CEP também diz o estado: preenche a UF quando ela ainda está vazia.
+        const ufDoCep = dados.uf?.toUpperCase();
+        if (ufDoCep && ESTADOS[ufDoCep]) setUf((atual) => atual || ufDoCep);
+      } catch (erro) {
+        if (controle.signal.aborted) return;
+        setCotacao({ status: "erro", mensagem: erro instanceof Error ? erro.message : "falha na cotação" });
+      }
+    }, 500);
+    return () => {
+      controle.abort();
+      window.clearTimeout(espera);
+    };
+  }, [digitosDoCep, nPares]);
+
   const freteDoEstado = uf ? freteEstimadoPorEstado(uf) : null;
-  const usaEstimativa = !freteGratis && freteDigitado === null && freteDoEstado !== null;
-  const valorFrete = freteDigitado ?? freteDoEstado;
-  const precos = precosDoPedido({ pares: nPares, frete: valorFrete });
-  const faltaFrete = Boolean(precos) && !freteGratis && valorFrete === null;
+  const opcaoCotada = cotacao.status === "cotada" ? cotacao.opcoes[cotacao.escolhida] ?? null : null;
+  // Prioridade: frete digitado, depois a cotação pelo CEP, depois a estimativa pelo estado.
+  const frete = freteDaAba({ pares: nPares, digitado: lerValor(freteManual), cotadoCep: opcaoCotada?.total ?? null, uf });
+  const precos = precosDoPedido({ pares: nPares, frete: frete.valor });
+  const faltaFrete = Boolean(precos) && frete.origem === null;
 
   const arte = mensagemArteAprovada({ evento, obs }, modelos);
   const orcamento =
-    precos && !faltaFrete ? mensagemOrcamentoFinal(precos, { estimativaUf: usaEstimativa ? uf : null }) : null;
+    precos && !faltaFrete ? mensagemOrcamentoFinal(precos, { estimativaUf: frete.origem === "estado" ? uf : null }) : null;
   const confirmacao = precos && !faltaFrete ? mensagemConfirmacao(precos, forma) : null;
   const textos: Record<Aba, string | null> = { arte, orcamento, confirmacao: confirmacao?.texto ?? null };
 
-  const semFrete = "Informe o estado ou o frete da cotação: até 35 pares o frete é do cliente.";
+  const semFrete = "Informe o estado, o CEP ou o frete da cotação: até 35 pares o frete é do cliente.";
   const motivoVazio: Record<Aba, string> = {
     arte: "Preencha a grade de pelo menos um modelo.",
     orcamento: nPares < PEDIDO_MINIMO ? `Pedido mínimo de ${PEDIDO_MINIMO} pares.` : semFrete,
@@ -146,8 +193,9 @@ export function MensagensDoFechamento() {
 
   const limpar = () => {
     setPares("");
-    setFrete("");
+    setFreteManual("");
     setUf("");
+    setCep("");
     setForma("pix");
     setEvento("");
     setObs("");
@@ -194,18 +242,68 @@ export function MensagensDoFechamento() {
           <Input
             inputMode="decimal"
             className="h-8 tabular-nums"
-            placeholder={freteGratis ? "grátis" : freteDoEstado !== null ? brl(freteDoEstado) : "cotação"}
+            placeholder={
+              freteGratis
+                ? "grátis"
+                : opcaoCotada
+                  ? brl(opcaoCotada.total)
+                  : freteDoEstado !== null
+                    ? brl(freteDoEstado)
+                    : "cotação"
+            }
             disabled={freteGratis}
-            value={freteGratis ? "" : frete}
-            onChange={(e) => setFrete(e.target.value)}
+            value={freteGratis ? "" : freteManual}
+            onChange={(e) => setFreteManual(e.target.value)}
           />
         </label>
       </div>
-      {usaEstimativa && (
+      <div className="flex flex-col gap-1.5">
+        <label className="flex items-center gap-2">
+          <span className="w-9 shrink-0 text-xs font-medium text-muted-foreground">CEP</span>
+          <Input
+            inputMode="numeric"
+            className="h-8 tabular-nums"
+            placeholder={freteGratis ? "frete grátis a partir de 36 pares" : "opcional: cota o frete real"}
+            disabled={freteGratis}
+            value={freteGratis ? "" : cep}
+            onChange={(e) => setCep(e.target.value.replace(/[^\d-]/g, "").slice(0, 9))}
+          />
+        </label>
+        {cotacao.status === "cotando" && <p className="text-xs text-muted-foreground">Cotando o frete pelo CEP…</p>}
+        {cotacao.status === "cotada" && (
+          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Transportadora">
+            {cotacao.opcoes.slice(0, 4).map((o, i) => (
+              <button
+                key={`${o.transportadora}-${i}`}
+                type="button"
+                role="radio"
+                aria-checked={cotacao.escolhida === i}
+                onClick={() => setCotacao({ ...cotacao, escolhida: i })}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-xs transition-colors",
+                  cotacao.escolhida === i ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {o.transportadora} · <span className="tabular-nums">{brl(o.total)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {cotacao.status === "erro" && (
+          <p className="text-xs text-amber-800 dark:text-amber-300">
+            {cotacao.mensagem}
+            {freteDoEstado !== null ? " Segue a estimativa pelo estado." : ""}
+          </p>
+        )}
+      </div>
+      {frete.origem === "estado" && (
         <p className="-mt-1 text-xs text-muted-foreground">
-          Frete estimado pelo estado, a mesma tabela do robô (RS R$ 59, SC e PR R$ 89, demais R$ 119). Com a cotação
-          pelo CEP, digite o valor no campo.
+          Frete estimado pelo estado, a mesma tabela do robô (RS R$ 59, SC e PR R$ 89, demais R$ 119). Para o valor
+          exato, informe o CEP.
         </p>
+      )}
+      {frete.origem === "digitado" && opcaoCotada && (
+        <p className="-mt-1 text-xs text-muted-foreground">Vale o frete digitado; apague o campo para usar a cotação do CEP.</p>
       )}
 
       <div className="flex flex-col gap-1">

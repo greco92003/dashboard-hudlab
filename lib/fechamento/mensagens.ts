@@ -114,6 +114,26 @@ export function freteEstimadoPorEstado(uf: string): number | null {
   return 119;
 }
 
+export type OrigemDoFrete = "gratis" | "digitado" | "cep" | "estado";
+
+/**
+ * Qual frete vai no orçamento: grátis a partir de 36 pares; senão o valor
+ * digitado (a Schay manda), depois a cotação pelo CEP e, por último, a
+ * estimativa pelo estado. Null quando não há nenhum dos três.
+ */
+export function freteDaAba(entrada: {
+  pares: number;
+  digitado: number | null;
+  cotadoCep: number | null;
+  uf: string;
+}): { valor: number | null; origem: OrigemDoFrete | null } {
+  if (entrada.pares >= 36) return { valor: 0, origem: "gratis" };
+  if (entrada.digitado !== null) return { valor: entrada.digitado, origem: "digitado" };
+  if (entrada.cotadoCep !== null) return { valor: entrada.cotadoCep, origem: "cep" };
+  const estimado = entrada.uf ? freteEstimadoPorEstado(entrada.uf) : null;
+  return estimado !== null ? { valor: estimado, origem: "estado" } : { valor: null, origem: null };
+}
+
 /**
  * Orçamento final com as três opções numeradas; o cliente responde com o número.
  * Com `estimativaUf`, o frete veio da tabela por estado e a mensagem avisa que

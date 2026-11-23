@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  freteDaAba,
   freteEstimadoPorEstado,
   lerValor,
   mensagemArteAprovada,
@@ -102,4 +103,14 @@ test("orçamento com frete estimado pelo estado: avisa que o valor exato sai pel
   assert.doesNotMatch(mensagemOrcamentoFinal(o), /Estimativa/);
   // com frete grátis, não há aviso de estimativa
   assert.doesNotMatch(mensagemOrcamentoFinal(precosDoPedido({ pares: 40, frete: 119 }), { estimativaUf: "PE" }), /Estimativa/);
+});
+
+test("qual frete vai no orçamento: grátis, digitado, CEP e, por último, estado", () => {
+  assert.deepEqual(freteDaAba({ pares: 40, digitado: 80, cotadoCep: 150, uf: "PE" }), { valor: 0, origem: "gratis" });
+  assert.deepEqual(freteDaAba({ pares: 30, digitado: 80, cotadoCep: 150, uf: "PE" }), { valor: 80, origem: "digitado" });
+  assert.deepEqual(freteDaAba({ pares: 30, digitado: null, cotadoCep: 150, uf: "PE" }), { valor: 150, origem: "cep" });
+  assert.deepEqual(freteDaAba({ pares: 30, digitado: null, cotadoCep: null, uf: "PE" }), { valor: 119, origem: "estado" });
+  assert.deepEqual(freteDaAba({ pares: 30, digitado: null, cotadoCep: null, uf: "" }), { valor: null, origem: null });
+  // frete digitado zero vale (combinado com o cliente)
+  assert.deepEqual(freteDaAba({ pares: 30, digitado: 0, cotadoCep: 150, uf: "PE" }), { valor: 0, origem: "digitado" });
 });

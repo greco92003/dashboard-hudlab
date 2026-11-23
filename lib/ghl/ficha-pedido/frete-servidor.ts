@@ -54,35 +54,55 @@ async function destinoDoPedido(opportunityId: string) {
   return { destino: null, origem: null };
 }
 
-/** Cota o frete do pedido com as caixas cadastradas; opções da mais barata para a mais cara. */
-export async function cotarFreteDoPedido(opportunityId: string, pares: number, valorNf: number): Promise<CotacaoDoPedido> {
-  const { destino, origem } = await destinoDoPedido(opportunityId);
-  if (!destino) {
-    return { destino: null, origemDoDestino: null, opcoes: [], avisos: ["Sem CEP: o cliente ainda não fez o cadastro completo."] };
-  }
+export interface CotacaoPorDestino {
+  opcoes: OpcaoDeFrete[];
+  avisos: string[];
+  /** UF que a cotação resolveu para o destino (pelo CEP), quando houver. */
+  uf: string | null;
+}
+
+/**
+ * Cota o frete para um destino (CEP ou "cidade/UF") com as caixas cadastradas,
+ * a mesma cotação da Cami e da ficha; opções da mais barata para a mais cara.
+ */
+export async function cotarFretePorDestino(destino: string, pares: number, valorNf: number): Promise<CotacaoPorDestino> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) throw new Error("Supabase URL is not configured");
   const supabase = createClient(url, getSupabaseSecretKey(), { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: volumes, error } = await supabase.from("freight_volumes").select("id, pairs_capacity").eq("active", true);
   if (error) throw new Error(`freight_volumes: ${error.message}`);
   const selecao = packPairsIntoVolumes(pares, (volumes ?? []) as Array<{ id: string; pairs_capacity: number }>);
-  if (selecao.length === 0) return { destino, origemDoDestino: origem, opcoes: [], avisos: ["Sem caixas cadastradas para essa quantidade de pares."] };
+  if (selecao.length === 0) return { opcoes: [], avisos: ["Sem caixas cadastradas para essa quantidade de pares."], uf: null };
 
   const resultado = await quoteFreight(supabase, { destino, volumes: selecao, valor_nf: valorNf });
   if (!resultado.ok) {
     const erro = (resultado.body as { error?: string }).error ?? "falha na cotação";
-    return { destino, origemDoDestino: origem, opcoes: [], avisos: [`Não consegui cotar: ${erro}.`] };
+    return { opcoes: [], avisos: [`Não consegui cotar: ${erro}.`], uf: null };
   }
-  const avisos = [...(resultado.body.warnings ?? [])];
-  if (origem === "cidade do cadastro") avisos.unshift("Cotação pela cidade (sem CEP no cadastro): confira o valor.");
   return {
-    destino,
-    origemDoDestino: origem,
     // A linha da cotação tipa só `quote`; a transportadora vem como { id, name }.
-    opcoes: resultado.body.results.map((r) => ({
-      transportadora: (r.carrier as { name?: string } | undefined)?.name ?? "Transportadora",
-      total: Math.round(r.quote.total * 100) / 100,
-    })),
-    avisos,
+    opcoes: resultado.body.results
+      .map((r) => ({
+        transportadora: (r.carrier as { name?: string } | undefined)?.name ?? "Transportadora",
+        total: Math.round(r.quote.total * 100) / 100,
+      }))
+      // A mesma transportadora com o mesmo valor pode vir de duas tabelas: fica uma.
+      .filter((o, i, todas) => todas.findIndex((x) => x.transportadora === o.transportadora && x.total === o.total) === i)
+      .sort((a, b) => a.total - b.total),
+    avisos: [...(resultado.body.warnings ?? [])],
+    uf: resultado.body.resolved?.uf ?? null,
   };
+}
+
+/** Cota o frete do pedido com as caixas cadastradas; opções da mais barata para a mais cara. */
+export async function cotarFreteDoPedido(opportunityId: string, pares: number, valorNf: number): Promise<CotacaoDoPedido> {
+  const { destino, origem } = await destinoDoPedido(opportunityId);
+  if (!destino) {
+    return { destino: null, origemDoDestino: null, opcoes: [], avisos: ["Sem CEP: o cliente ainda não fez o cadastro completo."] };
+  }
+  const { opcoes, avisos } = await cotarFretePorDestino(destino, pares, valorNf);
+  if (opcoes.length > 0 && origem === "cidade do cadastro") {
+    avisos.unshift("Cotação pela cidade (sem CEP no cadastro): confira o valor.");
+  }
+  return { destino, origemDoDestino: origem, opcoes, avisos };
 }
