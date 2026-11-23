@@ -45,6 +45,8 @@ const centavos = (valor: number) => Math.round(valor * 100);
 export interface OrcamentoBlack {
   /** Pares do orçamento: o informado, ou 12 quando veio menos (o 02 já avisou o mínimo). */
   pares: number;
+  /** A promoção entrou no preço (false fora do período, quando a aba do Fechamento passa null). */
+  black: boolean;
   parTabela: number;
   parCartao: number;
   parPix: number;
@@ -77,11 +79,19 @@ export function freteDoCampo(valor: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-/** Orçamento Black para essa quantidade e esse frete. null sem quantidade válida. */
-export function orcamentoBlack(paresInformados: number | null, freteInformado: number | null): OrcamentoBlack | null {
+/**
+ * Orçamento Black para essa quantidade e esse frete. null sem quantidade válida.
+ * `promo` null dá a tabela cheia com os 5% do PIX: a aba Mensagens do
+ * Fechamento passa null fora do período; o webhook do robô usa o padrão.
+ */
+export function orcamentoBlack(
+  paresInformados: number | null,
+  freteInformado: number | null,
+  promo: Promocao | null = PROMO_BLACK_NOVEMBER,
+): OrcamentoBlack | null {
   if (paresInformados == null) return null;
   const pares = Math.max(MIN_PARES, paresInformados);
-  const preco = precoComPromocao(pares, PROMO_BLACK_NOVEMBER);
+  const preco = precoComPromocao(pares, promo);
   if (!preco) return null;
 
   const freteGratis = pares >= FREE_SHIPPING_MIN_PARES;
@@ -90,6 +100,7 @@ export function orcamentoBlack(paresInformados: number | null, freteInformado: n
 
   const o = {
     pares,
+    black: preco.aplicada,
     parTabela: preco.unitarioCheio,
     parCartao: preco.unitario,
     parPix: preco.pixUnitario,

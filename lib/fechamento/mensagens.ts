@@ -4,8 +4,9 @@
 // a partir da conversa. Preços e frete vêm do mesmo cálculo do orçamento
 // automático da Black (orcamentoBlack), para os números nunca divergirem.
 // Módulo puro: sem rede, testado em tests/fechamento-mensagens.test.mjs.
-import { brl, orcamentoBlack, type OrcamentoBlack } from "../ghl/orcamento-black/calc";
+import { brl, orcamentoBlack, PROMO_BLACK_NOVEMBER, type OrcamentoBlack } from "../ghl/orcamento-black/calc";
 import { MIN_PARES } from "../ghl/ai-seller/pricing";
+import { vigencia, type Promocao } from "../ghl/ai-seller/vigentes";
 
 export const GRADE_ADULTO = ["34/35", "36/37", "38/39", "40/41", "42/43", "44/45"] as const;
 export const GRADE_INFANTIL = ["28/29", "30/31", "32/33"] as const;
@@ -79,10 +80,15 @@ export function mensagemArteAprovada(dados: Pick<DadosDoPedido, "evento" | "obs"
   return linhas.join("\n");
 }
 
-/** Preços da Black para o pedido; null abaixo do mínimo de 12 pares. */
-export function precosDoPedido(dados: Pick<DadosDoPedido, "pares" | "frete">): OrcamentoBlack | null {
+/** A Black vale de 01 a 30/11 (até 23:59); fora disso, tabela cheia com os 5% do Pix. */
+export function promocaoDoFechamento(agoraMs: number): Promocao | null {
+  return vigencia(PROMO_BLACK_NOVEMBER, agoraMs) === "ativa" ? PROMO_BLACK_NOVEMBER : null;
+}
+
+/** Preços do pedido (com a Black só no período); null abaixo do mínimo de 12 pares. */
+export function precosDoPedido(dados: Pick<DadosDoPedido, "pares" | "frete">, agoraMs = Date.now()): OrcamentoBlack | null {
   if (!Number.isFinite(dados.pares) || dados.pares < PEDIDO_MINIMO) return null;
-  return orcamentoBlack(Math.trunc(dados.pares), dados.frete);
+  return orcamentoBlack(Math.trunc(dados.pares), dados.frete, promocaoDoFechamento(agoraMs));
 }
 
 export function precoDaForma(o: OrcamentoBlack, forma: FormaDePagamento): number {
@@ -100,6 +106,18 @@ export const ESTADOS: Record<string, string> = {
   TO: "Tocantins",
 };
 
+const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+/** Sigla do estado a partir do que vem do GHL ("PE", "pe", "Pernambuco"); null se não reconhecer. */
+export function ufDoTexto(valor: unknown): string | null {
+  const texto = String(valor ?? "").trim();
+  if (!texto) return null;
+  const sigla = texto.toUpperCase();
+  if (ESTADOS[sigla]) return sigla;
+  const nome = semAcento(texto);
+  return Object.keys(ESTADOS).find((s) => semAcento(ESTADOS[s]) === nome) ?? null;
+}
+
 /**
  * Frete estimado pelo estado, a mesma tabela que o robô de orçamento do GHL
  * (Orçamento Automático 03) grava de 12 a 35 pares: RS R$ 59, SC e PR R$ 89 e
@@ -114,10 +132,39 @@ export function freteEstimadoPorEstado(uf: string): number | null {
   return 119;
 }
 
+export type OrigemDoFrete = "gratis" | "digitado" | "cep" | "estado";
+
 /**
- * Orçamento final com as três opções numeradas; o cliente responde com o número.
- * Com `estimativaUf`, o frete veio da tabela por estado e a mensagem avisa que
- * o valor exato sai pelo CEP.
+ * Qual frete vai no orçamento: grátis a partir de 36 pares; senão o valor
+ * digitado (a Schay manda), depois a cotação pelo CEP e, por último, a
+ * estimativa pelo estado. Null quando não há nenhum dos três.
+ */
+export function freteDaAba(entrada: {
+  pares: number;
+  digitado: number | null;
+  cotadoCep: number | null;
+  uf: string;
+}): { valor: number | null; origem: OrigemDoFrete | null } {
+  if (entrada.pares >= 36) return { valor: 0, origem: "gratis" };
+  if (entrada.digitado !== null) return { valor: entrada.digitado, origem: "digitado" };
+  if (entrada.cotadoCep !== null) return { valor: entrada.cotadoCep, origem: "cep" };
+  const estimado = entrada.uf ? freteEstimadoPorEstado(entrada.uf) : null;
+  return estimado !== null ? { valor: estimado, origem: "estado" } : { valor: null, origem: null };
+}
+
+/**
+ * O pedido só é confirmado com frete exato (grátis, combinado ou cotado pelo
+ * CEP): a confirmação é a condição final que a Cami grava na ficha.
+ */
+export function freteExato(origem: OrigemDoFrete | null): boolean {
+  return origem === "gratis" || origem === "digitado" || origem === "cep";
+}
+
+/**
+ * Orçamento com as três opções numeradas; o cliente responde com o número.
+ * Com `estimativaUf`, o frete veio da tabela por estado: a linha vira
+ * "*Frete estimado: R$ X*" e a Cami sabe que esse frete não é o combinado
+ * (o exato vai na confirmação). Fora da Black, sai só o preço de cada forma.
  */
 export function mensagemOrcamentoFinal(o: OrcamentoBlack, opcoes: { estimativaUf?: string | null } = {}): string {
   const frete = freteDe(o);
@@ -125,23 +172,26 @@ export function mensagemOrcamentoFinal(o: OrcamentoBlack, opcoes: { estimativaUf
   const estado = opcoes.estimativaUf ? ESTADOS[opcoes.estimativaUf.trim().toUpperCase()] : undefined;
   const linhasDoFrete = o.freteGratis
     ? ["*Frete: GRÁTIS*", ""]
-    : [
-        `*Frete: ${brl(frete)}*`,
-        ...(estado ? [`Estimativa para ${estado}; o valor exato sai pelo seu CEP.`] : []),
-        "Os totais abaixo já incluem o frete.",
-        "",
-      ];
-  const linhas = [
-    `*Seu orçamento: ${o.pares} pares*`,
-    "",
-    "*Preço normal*",
-    `${brl(o.parTabela)} o par`,
-    `Total dos pares sem desconto: ${brl(o.subtotalCheio)}`,
-    "",
-    "🖤 *Com o desconto da Black November*",
-    "",
-    ...linhasDoFrete,
-  ];
+    : estado
+      ? [
+          `*Frete estimado: ${brl(frete)}*`,
+          `Para ${estado}; o valor exato sai pelo seu CEP.`,
+          "Os totais abaixo já incluem o frete estimado.",
+          "",
+        ]
+      : [`*Frete: ${brl(frete)}*`, "Os totais abaixo já incluem o frete.", ""];
+  const linhas = [`*Seu orçamento: ${o.pares} pares*`, ""];
+  if (o.black) {
+    linhas.push(
+      "*Preço normal*",
+      `${brl(o.parTabela)} o par`,
+      `Total dos pares sem desconto: ${brl(o.subtotalCheio)}`,
+      "",
+      "🖤 *Com o desconto da Black November*",
+      "",
+    );
+  }
+  linhas.push(...linhasDoFrete);
   for (const forma of ["pix", "cartao", "pix5050"] as const) {
     const preco = precoDaForma(o, forma);
     linhas.push(`*${FORMAS[forma].titulo}*`, `${brl(preco)} o par`, `${rotulo}: ${brl(centavos(o.pares * preco + frete))}`, "");
