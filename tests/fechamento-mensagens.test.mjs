@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  freteEstimadoPorEstado,
   lerValor,
   mensagemArteAprovada,
   mensagemConfirmacao,
@@ -76,4 +77,29 @@ test("abaixo de 12 pares não há orçamento; valores em reais são lidos com v�
   assert.equal(lerValor("R$ 1.059,38"), 1059.38);
   assert.equal(lerValor("94.87"), 94.87);
   assert.equal(lerValor(""), null);
+});
+
+test("frete estimado pelo estado: a tabela do robô de orçamento", () => {
+  assert.equal(freteEstimadoPorEstado("RS"), 59);
+  assert.equal(freteEstimadoPorEstado("sc"), 89);
+  assert.equal(freteEstimadoPorEstado("PR"), 89);
+  assert.equal(freteEstimadoPorEstado("PE"), 119);
+  assert.equal(freteEstimadoPorEstado(" sp "), 119);
+  assert.equal(freteEstimadoPorEstado("XX"), null);
+  assert.equal(freteEstimadoPorEstado(""), null);
+});
+
+test("orçamento com frete estimado pelo estado: avisa que o valor exato sai pelo CEP", () => {
+  const o = precosDoPedido({ pares: 30, frete: freteEstimadoPorEstado("PE") });
+  const texto = mensagemOrcamentoFinal(o, { estimativaUf: "PE" });
+  assert.ok(texto.includes("*Seu orçamento: 30 pares*"));
+  assert.ok(
+    texto.includes(
+      "*Frete: R$ 119,00*\nEstimativa para Pernambuco; o valor exato sai pelo seu CEP.\nOs totais abaixo já incluem o frete.",
+    ),
+  );
+  // sem estimativa (frete da cotação), a mensagem não muda
+  assert.doesNotMatch(mensagemOrcamentoFinal(o), /Estimativa/);
+  // com frete grátis, não há aviso de estimativa
+  assert.doesNotMatch(mensagemOrcamentoFinal(precosDoPedido({ pares: 40, frete: 119 }), { estimativaUf: "PE" }), /Estimativa/);
 });
