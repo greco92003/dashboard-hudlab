@@ -510,17 +510,23 @@ export function MensagensDoFechamento({ estado }: { estado: EstadoDasMensagens }
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs font-medium text-muted-foreground">Estado</span>
-              {/* select nativo: o da biblioteca abre no documento principal, fora da janela flutuante */}
+              {/*
+                select nativo: o da biblioteca abre no documento principal, fora da janela flutuante.
+                A lista é desenhada pelo navegador: sem color-scheme escuro e cores explícitas nas
+                opções, ela abria clara com o texto claro do tema e as siglas sumiam.
+              */}
               <select
                 aria-label="Estado de entrega"
-                className="h-8 rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-50"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground disabled:opacity-50 dark:[color-scheme:dark]"
                 disabled={freteGratis}
                 value={r.uf}
                 onChange={(e) => mudar({ uf: e.target.value })}
               >
-                <option value="">UF</option>
+                <option value="" className="bg-background text-muted-foreground">
+                  UF
+                </option>
                 {Object.keys(ESTADOS).map((sigla) => (
-                  <option key={sigla} value={sigla}>
+                  <option key={sigla} value={sigla} className="bg-background text-foreground">
                     {sigla}
                   </option>
                 ))}
