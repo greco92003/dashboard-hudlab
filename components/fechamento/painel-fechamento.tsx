@@ -35,7 +35,11 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { MensagensDoFechamento } from "@/components/fechamento/mensagens-fechamento";
+import {
+  MensagensDoFechamento,
+  useMensagensDoFechamento,
+  type EstadoDasMensagens,
+} from "@/components/fechamento/mensagens-fechamento";
 
 type Cor = "vermelho" | "laranja" | "amarelo" | "verde" | "cinza" | "cami";
 
@@ -195,6 +199,8 @@ export function PainelDeFechamento() {
   // O Chrome só deixa uma janela dessas por página, por isso ficam juntas.
   const [abaPip, setAbaPip] = useState<AbaJanela>("leads");
   const [mensagensNoDialogo, setMensagensNoDialogo] = useState(false);
+  // Um rascunho por cliente, compartilhado pelo diálogo e pela janela flutuante.
+  const mensagens = useMensagensDoFechamento();
   const [confirmar, setConfirmar] = useState<{ card: CardDoPainel; acao: "modelo" | "fechou" } | null>(null);
   const [perder, setPerder] = useState<CardDoPainel | null>(null);
   const [filtroCor, setFiltroCor] = useState<Cor | null>(null);
@@ -324,6 +330,12 @@ export function PainelDeFechamento() {
     setPip(w);
   };
 
+  /** Botão Mensagens do card: a aba abre com o nome, os pares, o CEP e o estado desse cliente. */
+  const abrirMensagensDo = (card: CardDoPainel) => {
+    mensagens.abrirCliente(card);
+    void abrirJanela("mensagens");
+  };
+
   const cards = painel?.cards ?? [];
   // Filtro cruzado: os números de cada filtro já respeitam o outro.
   const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
@@ -363,7 +375,7 @@ export function PainelDeFechamento() {
             {som ? "Som ligado" : "Ligar som"}
           </button>
           <span className="hud-group-sep" aria-hidden />
-          <button type="button" onClick={() => void abrirJanela("mensagens")} title="Arte aprovada, orçamento final e confirmação do pedido">
+          <button type="button" onClick={() => void abrirJanela("mensagens")} title="Orçamento, arte aprovada e pedido confirmado, na ordem da conversa">
             <MessageSquareText />
             Mensagens
           </button>
@@ -425,6 +437,7 @@ export function PainelDeFechamento() {
               onModelo={() => setConfirmar({ card, acao: "modelo" })}
               onFechou={() => setConfirmar({ card, acao: "fechou" })}
               onPerdido={() => setPerder(card)}
+              onMensagens={() => abrirMensagensDo(card)}
             />
           ))}
         </div>
@@ -483,15 +496,22 @@ export function PainelDeFechamento() {
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Mensagens do fechamento</DialogTitle>
-            <DialogDescription>Monte e copie a arte aprovada, o orçamento final e a confirmação do pedido.</DialogDescription>
+            <DialogDescription>Orçamento, arte aprovada e pedido confirmado, na ordem da conversa.</DialogDescription>
           </DialogHeader>
-          <MensagensDoFechamento />
+          <MensagensDoFechamento estado={mensagens} />
         </DialogContent>
       </Dialog>
 
       {pip &&
         createPortal(
-          <JanelaFlutuante painel={painel} ocupado={ocupado} onAgir={agir} aba={abaPip} onAba={setAbaPip} />,
+          <JanelaFlutuante
+            painel={painel}
+            ocupado={ocupado}
+            onAgir={agir}
+            aba={abaPip}
+            onAba={setAbaPip}
+            mensagens={mensagens}
+          />,
           pip.document.body,
         )}
     </div>
@@ -681,6 +701,7 @@ function CardDeFechamento({
   onModelo,
   onFechou,
   onPerdido,
+  onMensagens,
 }: {
   card: CardDoPainel;
   ocupado: boolean;
@@ -689,6 +710,7 @@ function CardDeFechamento({
   onModelo: () => void;
   onFechou: () => void;
   onPerdido: () => void;
+  onMensagens: () => void;
 }) {
   const [data, setData] = useState(amanha());
   const alerta = card.cor === "vermelho" || card.ultimaChance;
@@ -706,11 +728,19 @@ function CardDeFechamento({
         {card.sinal && SINAL[card.sinal] ? (
           <span className={cn("hud-chip hud-tone-chip", SINAL[card.sinal].tom)}>{SINAL[card.sinal].nome}</span>
         ) : null}
-        {card.linkConversa && (
-          <span className="ml-auto">
-            <CopiarLink link={card.linkConversa} />
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            title={`Orçamento, arte aprovada e confirmação de ${card.nome}`}
+            onClick={onMensagens}
+          >
+            <MessageSquareText className="h-4 w-4" />
+            Mensagens
+          </Button>
+          {card.linkConversa && <CopiarLink link={card.linkConversa} />}
+        </span>
       </div>
       <p className={cn("text-sm font-semibold", COR[card.cor].texto, card.ultimaChance && "hud-tone-blink")}>{card.rotulo}</p>
       {detalhes.length > 0 && <p className="-mt-1 text-xs text-muted-foreground">{detalhes.join(" · ")}</p>}
@@ -806,13 +836,19 @@ function JanelaFlutuante({
   onAgir,
   aba,
   onAba,
+  mensagens,
 }: {
   painel: Painel | null;
   ocupado: string | null;
   onAgir: (c: CardDoPainel, acao: string, extra?: Record<string, string>) => Promise<string | null>;
   aba: AbaJanela;
   onAba: (aba: AbaJanela) => void;
+  mensagens: EstadoDasMensagens;
 }) {
+  const abrirMensagensDo = (card: CardDoPainel) => {
+    mensagens.abrirCliente(card);
+    onAba("mensagens");
+  };
   const [verTodos, setVerTodos] = useState(false);
   const urgentes = painel?.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo") ?? [];
   const demais = painel?.cards.filter((c) => c.cor === "verde" || c.cor === "cinza") ?? [];
@@ -854,7 +890,13 @@ function JanelaFlutuante({
             <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
               {urgentes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>}
               {urgentes.map((c) => (
-                <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+                <CardCompacto
+                  key={c.oportunidadeId}
+                  card={c}
+                  ocupado={ocupado === c.oportunidadeId}
+                  onAgir={onAgir}
+                  onMensagens={() => abrirMensagensDo(c)}
+                />
               ))}
               {demais.length > 0 && (
                 <button
@@ -867,14 +909,20 @@ function JanelaFlutuante({
               )}
               {verTodos &&
                 demais.map((c) => (
-                  <CardCompacto key={c.oportunidadeId} card={c} ocupado={ocupado === c.oportunidadeId} onAgir={onAgir} />
+                  <CardCompacto
+                    key={c.oportunidadeId}
+                    card={c}
+                    ocupado={ocupado === c.oportunidadeId}
+                    onAgir={onAgir}
+                    onMensagens={() => abrirMensagensDo(c)}
+                  />
                 ))}
             </div>
           </>
         )}
       </div>
       <div className={cn("min-h-0 overflow-y-auto pb-2", aba === "mensagens" ? "block" : "hidden")}>
-        <MensagensDoFechamento />
+        <MensagensDoFechamento estado={mensagens} />
       </div>
     </div>
   );
@@ -886,10 +934,12 @@ function CardCompacto({
   card: c,
   ocupado,
   onAgir,
+  onMensagens,
 }: {
   card: CardDoPainel;
   ocupado: boolean;
   onAgir: (c: CardDoPainel, acao: string, extra?: Record<string, string>) => Promise<string | null>;
+  onMensagens: () => void;
 }) {
   const [etapa, setEtapa] = useState<Etapa>("fechado");
   const [data, setData] = useState(amanha());
@@ -919,6 +969,16 @@ function CardCompacto({
           </p>
         </button>
         <div className="flex shrink-0 gap-1">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-7 w-7"
+            title={`Mensagens de ${c.nome}: orçamento, arte aprovada e confirmação`}
+            aria-label={`Mensagens de ${c.nome}`}
+            onClick={onMensagens}
+          >
+            <MessageSquareText className="h-3.5 w-3.5" />
+          </Button>
           {c.linkConversa && <CopiarLink link={c.linkConversa} compacto />}
           <Button size="sm" variant={etapa === "fechado" ? "outline" : "secondary"} className={botao} onClick={alternar}>
             Ações
