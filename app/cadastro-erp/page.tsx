@@ -69,7 +69,7 @@ import {
 } from "@/lib/erp/product-rules";
 import { ContactImportCard } from "./contact-import-card";
 import { SalesOrderCard } from "./sales-order-card";
-import { artworkEmbedUrl, artworkThumbnailUrl } from "@/lib/erp/artwork-url";
+import { artworkEmbedUrl, artworkOpenUrl, artworkThumbnailUrl } from "@/lib/erp/artwork-url";
 import { CabecalhoDaPagina, GrupoDeAcoes } from "@/components/hud/pagina";
 
 type ProductMapping = {
@@ -220,7 +220,7 @@ function ArtworkPreview({ url, modelNumber }: { url: string | null; modelNumber:
 
   return (
     <a
-      href={url}
+      href={artworkOpenUrl(url)}
       target="_blank"
       rel="noreferrer"
       className="group relative flex h-32 overflow-hidden rounded-lg border bg-muted/20"
