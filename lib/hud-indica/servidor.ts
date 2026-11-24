@@ -328,6 +328,12 @@ export async function registrarResposta(contactId: string, resposta: unknown): P
   }
   await gravarCampos(contactId, campos);
   await adicionarTags(contactId, codigo && satisfacao === "Nota 10" ? [tag, TAGS.indicador] : [tag]);
+  if (satisfacao === "Tive um problema") {
+    await avisarAmanda("Cliente com problema no pós-venda", [
+      `${contato.nome || "Um cliente"} tocou em "Tive um problema" na pesquisa de entrega.`,
+      "A mensagem pedindo para contar o que houve já foi. Responder ainda hoje.",
+    ]);
+  }
   return { satisfacao, codigo, link };
 }
 
