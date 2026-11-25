@@ -1,7 +1,8 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { buildRomaneioPdf, buildTalaoPdf } from "./order-pdfs";
+import { buildRomaneioPdf, buildRomaneioPorSetorPdf, buildTalaoPdf } from "./order-pdfs";
+import { dealIdDoPedido, lerParesIdentificados } from "./pares-identificados-db";
 import { loadTinyOrderDocument } from "./tiny-order-documents";
 
 export type OrderDocumentKind = "talao" | "romaneio";
@@ -29,7 +30,14 @@ export function romaneioBySku(request: Request) {
 export async function generateOrderDocument(orderId: number, kind: OrderDocumentKind, options: { bySku?: boolean; dealId?: string } = {}) {
   const isTalao = kind === "talao";
   const order = await loadTinyOrderDocument(orderId, { materials: isTalao, images: isTalao, dealId: options.dealId });
-  const pdf = isTalao ? await buildTalaoPdf(order) : buildRomaneioPdf(order, { bySku: options.bySku });
+  if (isTalao) return { pdf: await buildTalaoPdf(order), orderNumber: order.number };
+
+  // Negócio com lista de pessoas: uma filial + setor por caixa, sempre.
+  const dealId = order.dealId ?? (await dealIdDoPedido(orderId));
+  const pares = dealId ? await lerParesIdentificados(dealId) : [];
+  const pdf = pares.length > 0
+    ? buildRomaneioPorSetorPdf(order, pares)
+    : buildRomaneioPdf(order, { bySku: options.bySku });
   return { pdf, orderNumber: order.number };
 }
 

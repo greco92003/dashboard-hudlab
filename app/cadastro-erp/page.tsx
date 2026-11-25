@@ -794,6 +794,17 @@ export default function CadastroErpPage() {
               <div className="flex h-48 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 animate-spin" /> Lendo grades e artes…</div>
             ) : preview && preview.models.length > 0 ? (
               <div className="space-y-5">
+                {preview.identifiedPairs && (
+                  <div className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
+                    <UserRound className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                    <div className="space-y-1">
+                      <p className="font-medium">Pedido com lista de pessoas: {preview.identifiedPairs.total} pares, {preview.identifiedPairs.named} com nome</p>
+                      <p className="text-xs text-muted-foreground">
+                        A grade abaixo vem da lista, não da ficha do GHL{preview.identifiedPairs.ghlPairs !== null ? ` (que informa ${preview.identifiedPairs.ghlPairs} pares)` : ""}. As etiquetas levam nome, filial e setor; o romaneio separa as caixas por filial e setor. Os {preview.identifiedPairs.total - preview.identifiedPairs.named} pares extras saem com a etiqueta normal.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {preview.models.some((model) => (mappings[productModelKey(model)]?.mode ?? "clone") === "clone") && <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                     <div className="space-y-2">

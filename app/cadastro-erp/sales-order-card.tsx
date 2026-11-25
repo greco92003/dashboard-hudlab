@@ -180,7 +180,7 @@ export function SalesOrderCard({ preview, mappings, tinyContactId, contact }: Pr
           <Field label="Data do pedido"><Input type="date" value={orderDate} onChange={(event) => setOrderDate(event.target.value)} /></Field>
           <Field label="Data prevista de entrega"><Input type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} /></Field>
           <Field label="Frete pago pelo cliente"><Input type="number" min="0" step="0.01" value={freight} onChange={(event) => setFreight(Number(event.target.value))} /></Field>
-          <Field label="Quantidade no GHL"><Input value={expectedPairs ?? "Não encontrada"} readOnly /></Field>
+          <Field label={preview.identifiedPairs ? "Quantidade da lista de pessoas" : "Quantidade no GHL"}><Input value={expectedPairs ?? "Não encontrada"} readOnly /></Field>
           <Field label="Soma da grade"><Input value={itemPairs} readOnly className={pairsMatch ? "border-emerald-500" : isFreeSample ? "border-[color:var(--tone-pink)]" : "border-destructive"} /></Field>
         </div>
 

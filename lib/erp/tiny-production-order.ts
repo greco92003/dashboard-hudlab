@@ -4,6 +4,9 @@ import { getTinyV2Token } from "@/lib/tiny/auth";
 import { tinyV3Request } from "@/lib/tiny/v3-client";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildProductionLabels } from "./production-labels";
+import { etiquetasComPessoas } from "./pares-identificados";
+import { dealIdDoPedido, lerParesIdentificados } from "./pares-identificados-db";
+import { ghlDealIdFromOrder } from "./tiny-order-documents";
 import {
   checkProductionOrder,
   isProducedItem,
@@ -25,6 +28,8 @@ type TinyOrderDetail = {
   id: number;
   numeroPedido?: number | string | null;
   cliente?: { nome?: string | null } | null;
+  ecommerce?: { numeroPedidoEcommerce?: string | null } | null;
+  numeroOrdemCompra?: string | null;
   itens?: Array<{
     produto?: { id?: number | null; sku?: string | null; descricao?: string | null } | null;
     quantidade?: number | null;
@@ -108,6 +113,7 @@ async function loadOrder(orderId: number) {
     orderId: order.id,
     orderNumber: String(order.numeroPedido ?? order.id),
     customer: order.cliente?.nome?.trim() || "Cliente não informado",
+    dealId: ghlDealIdFromOrder(order),
     items,
   };
 }
@@ -211,5 +217,12 @@ export async function generateProductionOrder(
 
 export async function loadProductionLabels(orderId: number) {
   const order = await loadOrder(orderId);
-  return { orderNumber: order.orderNumber, labels: buildProductionLabels(order.items) };
+  const labels = buildProductionLabels(order.items);
+  // Pedido de negócio com lista de pessoas: cada par leva nome, filial e setor.
+  const dealId = (await dealIdDoPedido(orderId)) ?? order.dealId;
+  const pares = dealId ? await lerParesIdentificados(dealId) : [];
+  return {
+    orderNumber: order.orderNumber,
+    labels: pares.length > 0 ? etiquetasComPessoas(labels, pares) : labels,
+  };
 }

@@ -2,7 +2,8 @@ import { jsPDF } from "jspdf";
 import autoTable, { type CellInput, type UserOptions } from "jspdf-autotable";
 import sharp from "sharp";
 import type { OrderDocument } from "./tiny-order-documents";
-import { packVolumes, packVolumesBySku } from "./romaneio-packing";
+import { packVolumes, packVolumesBySku, type PackedVolume } from "./romaneio-packing";
+import { romaneioPorSetor, type ParIdentificado } from "./pares-identificados";
 
 const MARGIN = 15;
 const PAGE_WIDTH = 210;
@@ -123,11 +124,25 @@ export async function buildTalaoPdf(order: OrderDocument) {
   return Buffer.from(doc.output("arraybuffer"));
 }
 
+type RomaneioVolume = PackedVolume & { filial?: string | null; setor?: string | null; extras?: boolean };
+
 export function buildRomaneioPdf(order: OrderDocument, options: { bySku?: boolean } = {}) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
   const lines = order.products.flatMap((product) =>
     product.sizes.map((entry) => ({ reference: product.reference, size: entry.size, quantity: entry.quantity })));
-  const volumes = options.bySku ? packVolumesBySku(lines) : packVolumes(lines);
+  return drawRomaneio(order, options.bySku ? packVolumesBySku(lines) : packVolumes(lines));
+}
+
+/** Romaneio com uma filial + setor por caixa (pedidos com lista de pessoas). */
+export function buildRomaneioPorSetorPdf(order: OrderDocument, pares: ParIdentificado[]) {
+  const lines = order.products.flatMap((product) =>
+    product.sizes.map((entry) => ({ reference: product.reference, size: entry.size, quantity: entry.quantity })));
+  const volumes = romaneioPorSetor(lines, pares).flatMap((grupo) =>
+    grupo.volumes.map((volume) => ({ ...volume, filial: grupo.filial, setor: grupo.setor, extras: grupo.filial === null })));
+  return drawRomaneio(order, volumes);
+}
+
+function drawRomaneio(order: OrderDocument, volumes: RomaneioVolume[]) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
   if (volumes.length === 0) {
     doc.setFontSize(11).setFont("helvetica", "normal").text(`Pedido ${order.number} sem pares para despacho.`, MARGIN, 20);
   }
@@ -138,7 +153,8 @@ export function buildRomaneioPdf(order: OrderDocument, options: { bySku?: boolea
   let top = MARGIN;
   for (const [index, volume] of volumes.entries()) {
     const references = new Set(volume.lines.map((line) => line.reference)).size;
-    const estimatedHeight = (5 + references) * 9 + 12;
+    const hasDestination = volume.filial !== undefined;
+    const estimatedHeight = (5 + references + (hasDestination ? 1 : 0)) * 9 + 12;
     if (index > 0) {
       if (top + VOLUME_GAP + estimatedHeight > pageHeight - MARGIN) {
         doc.addPage();
@@ -154,10 +170,15 @@ export function buildRomaneioPdf(order: OrderDocument, options: { bySku?: boolea
       }
     }
 
+    const destination: CellInput[][] = !hasDestination
+      ? []
+      : volume.extras
+        ? [[bold("Filial:"), bold("—"), bold("Setor:"), bold("Pares extras")]]
+        : [[bold("Filial:"), bold(volume.filial ?? "—"), bold("Setor:"), bold(volume.setor ?? "—")]];
     autoTable(doc, {
       ...baseTable,
       startY: top,
-      body: [[bold("Pedido:"), order.number, bold("Cliente:"), order.customer]],
+      body: [[bold("Pedido:"), order.number, bold("Cliente:"), order.customer], ...destination],
       columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 40 }, 2: { cellWidth: 22 } },
     });
 

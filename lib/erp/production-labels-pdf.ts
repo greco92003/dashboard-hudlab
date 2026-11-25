@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { ProductionLabel } from "./production-labels";
+import type { EtiquetaProducao, Pessoa } from "./pares-identificados";
 
 /** Rolo da térmica POS-9210: 80 × 50 mm, uma etiqueta por página. */
 const WIDTH = 80;
@@ -67,6 +68,60 @@ function drawParsed(doc: jsPDF, label: ProductionLabel) {
   doc.text(size.lines, cardX + SIZE_CARD_WIDTH / 2, cardY + SIZE_CARD_HEIGHT - 3, { align: "center" });
 }
 
+/**
+ * Etiqueta de par com dono: o nome ganha o destaque que o modelo tem na
+ * etiqueta normal; modelo e cor vão na linha do código, e filial/setor
+ * ficam ao lado do tamanho.
+ */
+function drawWithPerson(doc: jsPDF, label: ProductionLabel, pessoa: Pessoa) {
+  let y = MARGIN + 2.6;
+  doc.setFont("helvetica", "normal");
+  const kind = fitText(doc, label.kind.toUpperCase(), CONTENT_WIDTH, 7, 5.5, 1);
+  doc.text(kind.lines, MARGIN, y);
+
+  y += 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text(label.code, MARGIN, y);
+  const codeWidth = doc.getTextWidth(label.code);
+  doc.setFont("helvetica", "normal");
+  const modelAndColor = [label.model, label.color].filter(Boolean).join(" - ");
+  const model = fitText(doc, modelAndColor, CONTENT_WIDTH - codeWidth - 2, 8, 6, 1);
+  doc.text(model.lines, MARGIN + codeWidth + 2, y);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN, y + 1.3, WIDTH - MARGIN, y + 1.3);
+
+  doc.setFont("helvetica", "bold");
+  const name = fitText(doc, pessoa.nome.toUpperCase(), CONTENT_WIDTH, 15, 8, 2);
+  y += 1.3 + lineHeight(name.size) * 0.95;
+  doc.text(name.lines, MARGIN, y, { lineHeightFactor: 1.1 });
+
+  const cardX = WIDTH - MARGIN - SIZE_CARD_WIDTH;
+  const cardY = HEIGHT - MARGIN - SIZE_CARD_HEIGHT;
+  const leftWidth = cardX - MARGIN - 2;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.text("FILIAL", MARGIN, cardY + 2.2);
+  doc.setFont("helvetica", "bold");
+  const filial = fitText(doc, pessoa.filial, leftWidth, 11, 7, 1);
+  doc.text(filial.lines, MARGIN, cardY + 2.2 + lineHeight(filial.size));
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.text("SETOR", MARGIN, cardY + 10.2);
+  doc.setFont("helvetica", "bold");
+  const setor = fitText(doc, pessoa.setor, leftWidth, 11, 7, 1);
+  doc.text(setor.lines, MARGIN, cardY + 10.2 + lineHeight(setor.size));
+
+  doc.setLineWidth(0.7);
+  doc.roundedRect(cardX, cardY, SIZE_CARD_WIDTH, SIZE_CARD_HEIGHT, 2.5, 2.5, "S");
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6);
+  doc.text("TAMANHO", cardX + SIZE_CARD_WIDTH / 2, cardY + 3.6, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  const size = fitText(doc, label.size, SIZE_CARD_WIDTH - 3, 20, 10, 1);
+  doc.text(size.lines, cardX + SIZE_CARD_WIDTH / 2, cardY + SIZE_CARD_HEIGHT - 3, { align: "center" });
+}
+
 function drawFallback(doc: jsPDF, label: ProductionLabel) {
   doc.setFont("helvetica", "bold");
   const text = fitText(doc, label.description, CONTENT_WIDTH, 16, 8, 6);
@@ -75,12 +130,13 @@ function drawFallback(doc: jsPDF, label: ProductionLabel) {
   doc.text(text.lines, MARGIN, top, { lineHeightFactor: 1.15 });
 }
 
-export function buildProductionLabelsPdf(labels: ProductionLabel[]): Buffer {
+export function buildProductionLabelsPdf(labels: EtiquetaProducao[]): Buffer {
   const doc = new jsPDF({ unit: "mm", format: [WIDTH, HEIGHT], orientation: "landscape" });
   labels.forEach((label, index) => {
     if (index > 0) doc.addPage([WIDTH, HEIGHT], "landscape");
     ink(doc);
-    if (label.parsed) drawParsed(doc, label);
+    if (label.parsed && label.pessoa) drawWithPerson(doc, label, label.pessoa);
+    else if (label.parsed) drawParsed(doc, label);
     else drawFallback(doc, label);
   });
   return Buffer.from(doc.output("arraybuffer"));

@@ -5,6 +5,8 @@ import { createTinySalesOrder } from "@/lib/erp/tiny-order-v2";
 import { listTinyOrders } from "@/lib/erp/tiny-order-documents";
 import { extractGhlOrderSource, FREE_SAMPLE_NATURE, TINY_NATURE_OPTIONS } from "@/lib/erp/order-rules";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
+import { quantidadeEsperada } from "@/lib/erp/pares-identificados";
+import { lerParesIdentificados } from "@/lib/erp/pares-identificados-db";
 
 const schema = z.object({
   dealId: z.string().min(1),
@@ -81,14 +83,17 @@ export async function POST(request: Request) {
       fetchOpportunityById(parsed.data.dealId),
       fetchCustomFieldDefs("opportunity"),
     ]);
-    const source = extractGhlOrderSource(opportunity, definitions);
+    const ghlSource = extractGhlOrderSource(opportunity, definitions);
+    const pares = await lerParesIdentificados(parsed.data.dealId);
+    const source = { ...ghlSource, expectedPairs: quantidadeEsperada(ghlSource.expectedPairs, pares) };
     const isFreeSample = parsed.data.natureName === FREE_SAMPLE_NATURE;
     if (!isFreeSample && source.expectedPairs === null) {
       return NextResponse.json({ error: "A quantidade de pares não está preenchida no GHL." }, { status: 409 });
     }
     const totalPairs = parsed.data.items.filter((item) => !item.productId).reduce((sum, item) => sum + item.quantity, 0);
     if (!isFreeSample && source.expectedPairs !== null && parsed.data.expectedPairs !== null && (Math.abs(totalPairs - source.expectedPairs) > 0.001 || Math.abs(parsed.data.expectedPairs - source.expectedPairs) > 0.001)) {
-      return NextResponse.json({ error: `A soma dos itens (${totalPairs}) não confere com a quantidade atual do GHL (${source.expectedPairs}).` }, { status: 409 });
+      const fonte = pares.length > 0 ? "da lista de pessoas do negócio" : "atual do GHL";
+      return NextResponse.json({ error: `A soma dos itens (${totalPairs}) não confere com a quantidade ${fonte} (${source.expectedPairs}).` }, { status: 409 });
     }
     return NextResponse.json(await createTinySalesOrder(parsed.data));
   } catch (error) {

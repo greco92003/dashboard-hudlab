@@ -44,6 +44,9 @@ export function normalizeColorName(value: string): string {
     VERMELHA: "Vermelho",
   };
   if (masculine[normalized]) return masculine[normalized];
+  // Sola EVA: "EVA PRETO" → "EVA Preto", sem confundir com a sola PVC preta.
+  const eva = normalized.match(/^EVA-(.+)$/)?.[1];
+  if (eva) return `EVA ${normalizeColorName(eva)}`;
   if (!normalized) return "";
   return `${normalized.charAt(0)}${normalized.slice(1).toLowerCase()}`;
 }
@@ -59,6 +62,8 @@ export function inferUpperColorFromCloner(description: string): string {
 
 export function abbreviateColor(color: string): string {
   const normalized = normalizeSkuPart(normalizeColorName(color));
+  const eva = normalized.match(/^EVA-(.+)$/)?.[1];
+  if (eva) return `EVA${abbreviateColor(eva)}`;
   return COLOR_ABBREVIATIONS[normalized] ?? normalized.slice(0, 3);
 }
 

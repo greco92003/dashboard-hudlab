@@ -33,6 +33,11 @@ export type ErpDealProductPreview = {
   deal: ErpDeal & { contactId: string | null };
   models: ErpProductModel[];
   order: ErpOrderSource;
+  /**
+   * Negócio com lista de pessoas (erp_pares_identificados): a grade e a
+   * quantidade vêm da lista, e etiquetas/romaneio levam filial e setor.
+   */
+  identifiedPairs?: { total: number; named: number; ghlPairs: number | null } | null;
 };
 
 export type TinyCloner = {

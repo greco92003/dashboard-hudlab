@@ -62,7 +62,7 @@ type TinyOrderDetail = {
  * ordem de compra. Ao faturar ou editar o pedido na tela do Tiny, o e-commerce é
  * apagado e só a ordem de compra sobrevive — por isso as duas são aceitas.
  */
-function ghlDealIdFromOrder(order: Pick<TinyOrderDetail, "ecommerce" | "numeroOrdemCompra">) {
+export function ghlDealIdFromOrder(order: Pick<TinyOrderDetail, "ecommerce" | "numeroOrdemCompra">) {
   for (const value of [order.ecommerce?.numeroPedidoEcommerce, order.numeroOrdemCompra]) {
     const dealId = value?.trim().match(/^GHL-(.+)$/)?.[1];
     if (dealId) return dealId;
@@ -98,6 +98,8 @@ export type OrderDocumentProduct = {
 
 export type OrderDocument = {
   id: number;
+  /** Negócio do GHL do pedido, quando se sabe. */
+  dealId: string | null;
   number: string;
   customer: string;
   orderDate: string | null;
@@ -326,6 +328,7 @@ export async function loadTinyOrderDocument(
 
   return {
     id: order.id,
+    dealId,
     number: String(order.numeroPedido ?? order.id),
     customer: order.cliente?.nome?.trim() || "Cliente não informado",
     orderDate: order.data ?? null,

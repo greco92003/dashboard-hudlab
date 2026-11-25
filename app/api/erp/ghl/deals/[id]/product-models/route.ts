@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { extractGhlProductModels } from "@/lib/erp/ghl-product-models";
 import { extractGhlOrderSource } from "@/lib/erp/order-rules";
+import { modelosComLista, quantidadeEsperada } from "@/lib/erp/pares-identificados";
+import { lerParesIdentificados } from "@/lib/erp/pares-identificados-db";
 import type { ErpDealProductPreview } from "@/lib/erp/types";
 import { fetchCustomFieldDefs, fetchOpportunityById } from "@/lib/ghl/api";
 import { requireApprovedUser } from "@/lib/security/route-guards";
@@ -14,10 +16,12 @@ export async function GET(
 
   const { id } = await context.params;
   try {
-    const [opportunity, definitions] = await Promise.all([
+    const [opportunity, definitions, pares] = await Promise.all([
       fetchOpportunityById(id),
       fetchCustomFieldDefs("opportunity"),
+      lerParesIdentificados(id),
     ]);
+    const order = extractGhlOrderSource(opportunity, definitions);
     const response: ErpDealProductPreview = {
       deal: {
         id: opportunity.id,
@@ -28,8 +32,11 @@ export async function GET(
         createdAt: opportunity.createdAt,
         updatedAt: opportunity.updatedAt,
       },
-      models: extractGhlProductModels(opportunity, definitions),
-      order: extractGhlOrderSource(opportunity, definitions),
+      models: modelosComLista(extractGhlProductModels(opportunity, definitions), pares),
+      order: { ...order, expectedPairs: quantidadeEsperada(order.expectedPairs, pares) },
+      identifiedPairs: pares.length > 0
+        ? { total: pares.length, named: pares.filter((par) => par.nome).length, ghlPairs: order.expectedPairs }
+        : null,
     };
     return NextResponse.json(response, {
       headers: { "Cache-Control": "no-store" },
