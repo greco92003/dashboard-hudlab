@@ -23,6 +23,8 @@ export interface CardDoPainel {
   pendencia: string | null;
   sinal: string | null;
   linkConversa: string | null;
+  /** Hud Friday: "100mais", "ate99", "enviado" ou null. */
+  hudFriday: string | null;
 }
 
 export interface Painel {
@@ -64,6 +66,7 @@ export async function carregarPainel(): Promise<Painel> {
       combinado: l.combinado,
       pendencia: l.pendencia,
       sinal: l.sinal,
+      hudFriday: l.hud_friday ?? null,
       // Sem a caixa no endereço, o GHL abre a caixa padrão do usuário (Minhas,
       // Não lidas…) e, se a conversa não está nela, mostra a lista sem abrir o
       // contato. A caixa da equipe com "todas" sempre tem a conversa.

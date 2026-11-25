@@ -4,7 +4,7 @@
 // a partir da conversa. Preços e frete vêm do mesmo cálculo do orçamento
 // automático da Black (orcamentoBlack), para os números nunca divergirem.
 // Módulo puro: sem rede, testado em tests/fechamento-mensagens.test.mjs.
-import { brl, orcamentoBlack, PROMO_BLACK_NOVEMBER, type OrcamentoBlack } from "../ghl/orcamento-black/calc";
+import { brl, orcamentoBlack, PROMO_BLACK_NOVEMBER, PROMO_HUD_FRIDAY, type OrcamentoBlack } from "../ghl/orcamento-black/calc";
 import { MIN_PARES } from "../ghl/ai-seller/pricing";
 import { vigencia, type Promocao } from "../ghl/ai-seller/vigentes";
 
@@ -86,9 +86,20 @@ export function promocaoDoFechamento(agoraMs: number): Promocao | null {
 }
 
 /** Preços do pedido (com a Black só no período); null abaixo do mínimo de 12 pares. */
-export function precosDoPedido(dados: Pick<DadosDoPedido, "pares" | "frete">, agoraMs = Date.now()): OrcamentoBlack | null {
+export function precosDoPedido(
+  dados: Pick<DadosDoPedido, "pares" | "frete">,
+  agoraMs = Date.now(),
+  opcoes: { hudFriday?: boolean } = {},
+): OrcamentoBlack | null {
   if (!Number.isFinite(dados.pares) || dados.pares < PEDIDO_MINIMO) return null;
-  return orcamentoBlack(Math.trunc(dados.pares), dados.frete, promocaoDoFechamento(agoraMs));
+  // Com a chave da Hud Friday ligada na sexta, vale a Hud Friday no lugar da Black.
+  const promo = opcoes.hudFriday && hudFridayNoAr(agoraMs) ? PROMO_HUD_FRIDAY : promocaoDoFechamento(agoraMs);
+  return orcamentoBlack(Math.trunc(dados.pares), dados.frete, promo);
+}
+
+/** A chave da Hud Friday só aparece (e só vale) na sexta, 27/11, até 23:59. */
+export function hudFridayNoAr(agoraMs: number): boolean {
+  return vigencia(PROMO_HUD_FRIDAY, agoraMs) === "ativa";
 }
 
 export function precoDaForma(o: OrcamentoBlack, forma: FormaDePagamento): number {
@@ -187,7 +198,7 @@ export function mensagemOrcamentoFinal(o: OrcamentoBlack, opcoes: { estimativaUf
       `${brl(o.parTabela)} o par`,
       `Total dos pares sem desconto: ${brl(o.subtotalCheio)}`,
       "",
-      "🖤 *Com o desconto da Black November*",
+      o.promocao === PROMO_HUD_FRIDAY.nome ? "⚡ *Hud Friday: só hoje, até meia-noite*" : "🖤 *Com o desconto da Black November*",
       "",
     );
   }

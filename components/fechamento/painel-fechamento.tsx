@@ -61,6 +61,8 @@ interface CardDoPainel {
   pendencia: string | null;
   sinal: string | null;
   linkConversa: string | null;
+  /** Hud Friday: "100mais", "ate99", "enviado" ou null. */
+  hudFriday: string | null;
 }
 
 interface Painel {
@@ -205,6 +207,7 @@ export function PainelDeFechamento() {
   const [perder, setPerder] = useState<CardDoPainel | null>(null);
   const [filtroCor, setFiltroCor] = useState<Cor | null>(null);
   const [filtroTemp, setFiltroTemp] = useState<Temperatura | null>(null);
+  const [soHudFriday, setSoHudFriday] = useState(false);
   const audio = useRef<AudioContext | null>(null);
   const alertasAntes = useRef<number | null>(null);
 
@@ -336,8 +339,10 @@ export function PainelDeFechamento() {
     void abrirJanela("mensagens");
   };
 
-  const cards = painel?.cards ?? [];
+  const todosOsCards = painel?.cards ?? [];
+  const cards = soHudFriday ? todosOsCards.filter((c) => c.hudFriday) : todosOsCards;
   // Filtro cruzado: os números de cada filtro já respeitam o outro.
+  const totalHudFriday = (painel?.cards ?? []).filter((c) => c.hudFriday).length;
   const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
   const porSituacao = filtroCor ? cards.filter((c) => c.cor === filtroCor) : cards;
   const visiveis = filtroCor ? porTemperatura.filter((c) => c.cor === filtroCor) : porTemperatura;
@@ -349,10 +354,11 @@ export function PainelDeFechamento() {
   }
   const contagemTemp: Record<Temperatura, number> = { quente: 0, neutro: 0, esfriando: 0, perdendo: 0, sem: 0 };
   for (const c of porSituacao) contagemTemp[temperaturaDe(c)]++;
-  const filtrando = filtroCor !== null || filtroTemp !== null;
+  const filtrando = filtroCor !== null || filtroTemp !== null || soHudFriday;
   const limparFiltros = () => {
     setFiltroCor(null);
     setFiltroTemp(null);
+    setSoHudFriday(false);
   };
 
   return (
@@ -409,6 +415,16 @@ export function PainelDeFechamento() {
             total={cards.length}
             onLimpar={filtrando ? limparFiltros : null}
           />
+          {totalHudFriday > 0 && (
+            <button
+              type="button"
+              aria-pressed={soHudFriday}
+              onClick={() => setSoHudFriday((v) => !v)}
+              className={cn("hud-chip self-start", soHudFriday ? "hud-tone-chip tone-green" : undefined)}
+            >
+              ⚡ Hud Friday · {totalHudFriday}
+            </button>
+          )}
         </>
       )}
 
@@ -725,6 +741,11 @@ function CardDeFechamento({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{card.nome}</span>
         <span className="hud-chip">{card.etapa}</span>
+        {card.hudFriday ? (
+          <span className="hud-chip hud-tone-chip tone-green">
+            ⚡ Hud Friday{card.hudFriday === "100mais" ? " · 100+" : card.hudFriday === "ate99" ? " · até 99" : ""}
+          </span>
+        ) : null}
         {card.sinal && SINAL[card.sinal] ? (
           <span className={cn("hud-chip hud-tone-chip", SINAL[card.sinal].tom)}>{SINAL[card.sinal].nome}</span>
         ) : null}
