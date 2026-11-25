@@ -42,7 +42,9 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
   const [draft, setDraft] = useState<ErpContactDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<ErpContactDraft | null>(null);
   const [existing, setExisting] = useState<ErpContactPreview["existingTinyContact"]>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [fiscalLoading, setFiscalLoading] = useState(false);
   const [ready, setReady] = useState(false);
@@ -52,7 +54,9 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     setLoading(true);
+    setLoadError("");
     setDraft(null);
     setSavedDraft(null);
     setExisting(null);
@@ -63,7 +67,9 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
     onReadyChange(false);
     onTinyContactIdChange(null);
     onContactDraftChange(null);
-    apiJson<ErpContactPreview>(`/api/erp/ghl/contacts/${encodeURIComponent(contactId)}/tiny-preview`)
+    apiJson<ErpContactPreview>(`/api/erp/ghl/contacts/${encodeURIComponent(contactId)}/tiny-preview`, {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(180_000)]),
+    })
       .then((data) => {
         if (!active) return;
         setDraft(data.draft);
@@ -75,10 +81,19 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
         onReadyChange(isReady);
         onTinyContactIdChange(data.existingTinyContact?.id ?? null);
       })
-      .catch((error) => active && toast.error(error.message))
+      .catch((error) => {
+        if (!active) return;
+        const message = error instanceof Error && error.name === "TimeoutError"
+          ? "A consulta do cliente demorou demais. Tente novamente em instantes."
+          : error instanceof Error ? error.message : "Não foi possível preparar o contato.";
+        setLoadError(message);
+      })
       .finally(() => active && setLoading(false));
-    return () => { active = false; };
-  }, [contactId, onReadyChange, onTinyContactIdChange, onContactDraftChange]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [contactId, loadAttempt, onReadyChange, onTinyContactIdChange, onContactDraftChange]);
 
   const update = <K extends keyof ErpContactDraft>(key: K, value: ErpContactDraft[K]) => {
     setDraft((current) => current ? { ...current, [key]: value } : current);
@@ -180,8 +195,22 @@ export function ContactImportCard({ contactId, onReadyChange, onTinyContactIdCha
         </div>
       </CardHeader>
       <CardContent>
-        {loading || !draft ? (
+        {loading ? (
           <div className="flex h-32 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importando contato e verificando duplicidade…</div>
+        ) : loadError || !draft ? (
+          <div className="space-y-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4" role="alert">
+            <div className="flex gap-3 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">Não foi possível carregar o cliente</p>
+                <p className="mt-1">{loadError || "Os dados do contato não foram carregados. Tente novamente."}</p>
+                {/armazenamento.*excedid/i.test(loadError) && (
+                  <p className="mt-2">O Tiny/Olist bloqueou a consulta por falta de espaço na conta. Verifique o armazenamento em Início → Minha conta no Tiny e, depois de regularizar, tente novamente.</p>
+                )}
+              </div>
+            </div>
+            <Button type="button" variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Tentar novamente</Button>
+          </div>
         ) : (
           <div className="space-y-5">
             {existing && (

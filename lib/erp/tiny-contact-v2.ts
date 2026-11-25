@@ -2,6 +2,7 @@ import { getTinyV2Token } from "@/lib/tiny/auth";
 import { normalizeCountryName, onlyDigits, type ErpContactDraft } from "./contact-rules";
 
 const BASE_URL = process.env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2";
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function formatDocument(document: string): string {
   const digits = onlyDigits(document);
@@ -87,6 +88,7 @@ async function tinyV2Post(path: string, params: Record<string, string>) {
       ...params,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`Tiny API v2 respondeu HTTP ${response.status}.`);

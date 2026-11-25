@@ -30,8 +30,12 @@ export async function GET(
   } catch (error) {
     console.error("ERP contact preview failed", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Não foi possível preparar o contato." },
-      { status: 502 },
+      {
+        error: error instanceof Error && error.name === "TimeoutError"
+          ? "O Tiny demorou demais para responder à consulta do cliente. Tente novamente em instantes."
+          : error instanceof Error ? error.message : "Não foi possível preparar o contato.",
+      },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 }
