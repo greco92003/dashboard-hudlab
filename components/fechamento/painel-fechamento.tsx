@@ -872,6 +872,9 @@ function JanelaFlutuante({
     onAba("mensagens");
   };
   const [verTodos, setVerTodos] = useState(false);
+  // Hud Friday: a Schay acompanha por aqui quem tocou numa quantidade, todos juntos (sem separar em dia/parados).
+  const [soHudFriday, setSoHudFriday] = useState(false);
+  const hudFriday = painel?.cards.filter((c) => clicouHudFriday(c.hudFriday)) ?? [];
   const urgentes = painel?.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo") ?? [];
   const demais = painel?.cards.filter((c) => c.cor === "verde" || c.cor === "cinza") ?? [];
   const abas: { id: AbaJanela; rotulo: string; Icone: typeof Flame }[] = [
@@ -905,9 +908,35 @@ function JanelaFlutuante({
           <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : (
           <>
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                aria-pressed={soHudFriday}
+                onClick={() => setSoHudFriday((v) => !v)}
+                className={cn("hud-chip", soHudFriday ? "hud-tone-chip tone-green" : undefined)}
+                title="Mostrar só quem tocou numa quantidade no disparo da Hud Friday"
+              >
+                ⚡ Hud Friday · {hudFriday.length}
+              </button>
               <span className="text-xs text-muted-foreground">atualizado às {hora(painel.atualizadoEm)}</span>
             </div>
+            {soHudFriday ? (
+              <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
+                {hudFriday.length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">Ninguém tocou numa quantidade ainda.</p>
+                )}
+                {hudFriday.map((c) => (
+                  <CardCompacto
+                    key={c.oportunidadeId}
+                    card={c}
+                    ocupado={ocupado === c.oportunidadeId}
+                    onAgir={onAgir}
+                    onMensagens={() => abrirMensagensDo(c)}
+                  />
+                ))}
+              </div>
+            ) : (
+            <>
             <Contagem contagem={painel.contagem} />
             <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
               {urgentes.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">Nada pedindo ação agora.</p>}
@@ -940,6 +969,8 @@ function JanelaFlutuante({
                   />
                 ))}
             </div>
+            </>
+            )}
           </>
         )}
       </div>
@@ -986,6 +1017,7 @@ function CardCompacto({
           <p className={cn("text-xs", COR[c.cor].texto, c.ultimaChance && "hud-tone-blink")}>{c.rotulo}</p>
           <p className="truncate text-[11px] text-muted-foreground">
             {c.etapa}
+            {clicouHudFriday(c.hudFriday) ? ` · ⚡ ${c.hudFriday === "100mais" ? "100+" : "até 99"}` : ""}
             {c.pares ? ` · ${c.pares} pares` : ""}
             {c.janelaTexto ? ` · ${c.janelaTexto}` : ""}
           </p>
