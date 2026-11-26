@@ -40,7 +40,7 @@ import {
   useMensagensDoFechamento,
   type EstadoDasMensagens,
 } from "@/components/fechamento/mensagens-fechamento";
-import { clicouHudFriday } from "@/lib/fechamento/mensagens";
+import { cardsHudFriday, clicouHudFriday } from "@/lib/fechamento/mensagens";
 
 type Cor = "vermelho" | "laranja" | "amarelo" | "verde" | "cinza" | "cami";
 
@@ -341,7 +341,7 @@ export function PainelDeFechamento() {
   };
 
   const todosOsCards = painel?.cards ?? [];
-  const cards = soHudFriday ? todosOsCards.filter((c) => clicouHudFriday(c.hudFriday)) : todosOsCards;
+  const cards = soHudFriday ? cardsHudFriday(todosOsCards) : todosOsCards;
   // Filtro cruzado: os números de cada filtro já respeitam o outro.
   const totalHudFriday = (painel?.cards ?? []).filter((c) => clicouHudFriday(c.hudFriday)).length;
   const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
@@ -874,7 +874,7 @@ function JanelaFlutuante({
   const [verTodos, setVerTodos] = useState(false);
   // Hud Friday: a Schay acompanha por aqui quem tocou numa quantidade, todos juntos (sem separar em dia/parados).
   const [soHudFriday, setSoHudFriday] = useState(false);
-  const hudFriday = painel?.cards.filter((c) => clicouHudFriday(c.hudFriday)) ?? [];
+  const hudFriday = cardsHudFriday(painel?.cards ?? []);
   const urgentes = painel?.cards.filter((c) => c.cor === "vermelho" || c.cor === "laranja" || c.cor === "amarelo") ?? [];
   const demais = painel?.cards.filter((c) => c.cor === "verde" || c.cor === "cinza") ?? [];
   const abas: { id: AbaJanela; rotulo: string; Icone: typeof Flame }[] = [
