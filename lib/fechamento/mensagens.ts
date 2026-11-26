@@ -110,6 +110,12 @@ export function clicouHudFriday(marca: string | null | undefined): boolean {
   return marca === "ate99" || marca === "100mais";
 }
 
+/** Só quem tocou numa quantidade, com os de 100 pares ou mais no topo (mantém a ordem do painel dentro de cada faixa). */
+export function cardsHudFriday<T extends { hudFriday: string | null }>(cards: readonly T[]): T[] {
+  const tocaram = cards.filter((c) => clicouHudFriday(c.hudFriday));
+  return [...tocaram.filter((c) => c.hudFriday === "100mais"), ...tocaram.filter((c) => c.hudFriday !== "100mais")];
+}
+
 export function precoDaForma(o: OrcamentoBlack, forma: FormaDePagamento): number {
   // O Pix 50/50 usa o preço do cartão.
   return forma === "pix" ? o.parPix : o.parCartao;

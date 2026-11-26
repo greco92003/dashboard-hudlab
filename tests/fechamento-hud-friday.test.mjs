@@ -50,3 +50,16 @@ test("filtro da Hud Friday: só quem tocou numa quantidade", () => {
   assert.equal(clicouHudFriday("enviado"), false);
   assert.equal(clicouHudFriday(null), false);
 });
+
+test("filtro Hud Friday: 100 pares ou mais no topo, sem quem só recebeu", async () => {
+  const { cardsHudFriday } = await import("../lib/fechamento/mensagens.ts");
+  const cards = [
+    { id: "a", hudFriday: "ate99" },
+    { id: "b", hudFriday: "enviado" },
+    { id: "c", hudFriday: "100mais" },
+    { id: "d", hudFriday: null },
+    { id: "e", hudFriday: "ate99" },
+    { id: "f", hudFriday: "100mais" },
+  ];
+  assert.deepEqual(cardsHudFriday(cards).map((c) => c.id), ["c", "f", "a", "e"]);
+});
