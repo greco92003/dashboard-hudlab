@@ -102,6 +102,14 @@ export function hudFridayNoAr(agoraMs: number): boolean {
   return vigencia(PROMO_HUD_FRIDAY, agoraMs) === "ativa";
 }
 
+/**
+ * Tocou numa quantidade no disparo da Hud Friday ("ate99" ou "100mais"). Só receber ("enviado")
+ * não conta: o filtro do painel e a chave da aba Mensagens são para quem demonstrou interesse.
+ */
+export function clicouHudFriday(marca: string | null | undefined): boolean {
+  return marca === "ate99" || marca === "100mais";
+}
+
 export function precoDaForma(o: OrcamentoBlack, forma: FormaDePagamento): number {
   // O Pix 50/50 usa o preço do cartão.
   return forma === "pix" ? o.parPix : o.parCartao;

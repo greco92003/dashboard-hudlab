@@ -40,6 +40,7 @@ import {
   useMensagensDoFechamento,
   type EstadoDasMensagens,
 } from "@/components/fechamento/mensagens-fechamento";
+import { clicouHudFriday } from "@/lib/fechamento/mensagens";
 
 type Cor = "vermelho" | "laranja" | "amarelo" | "verde" | "cinza" | "cami";
 
@@ -340,9 +341,9 @@ export function PainelDeFechamento() {
   };
 
   const todosOsCards = painel?.cards ?? [];
-  const cards = soHudFriday ? todosOsCards.filter((c) => c.hudFriday) : todosOsCards;
+  const cards = soHudFriday ? todosOsCards.filter((c) => clicouHudFriday(c.hudFriday)) : todosOsCards;
   // Filtro cruzado: os números de cada filtro já respeitam o outro.
-  const totalHudFriday = (painel?.cards ?? []).filter((c) => c.hudFriday).length;
+  const totalHudFriday = (painel?.cards ?? []).filter((c) => clicouHudFriday(c.hudFriday)).length;
   const porTemperatura = filtroTemp ? cards.filter((c) => temperaturaDe(c) === filtroTemp) : cards;
   const porSituacao = filtroCor ? cards.filter((c) => c.cor === filtroCor) : cards;
   const visiveis = filtroCor ? porTemperatura.filter((c) => c.cor === filtroCor) : porTemperatura;
@@ -741,9 +742,9 @@ function CardDeFechamento({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{card.nome}</span>
         <span className="hud-chip">{card.etapa}</span>
-        {card.hudFriday ? (
+        {clicouHudFriday(card.hudFriday) ? (
           <span className="hud-chip hud-tone-chip tone-green">
-            ⚡ Hud Friday{card.hudFriday === "100mais" ? " · 100+" : card.hudFriday === "ate99" ? " · até 99" : ""}
+            ⚡ Hud Friday{card.hudFriday === "100mais" ? " · 100+" : " · até 99"}
           </span>
         ) : null}
         {card.sinal && SINAL[card.sinal] ? (

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { brl } from "@/lib/ghl/orcamento-black/calc";
 import type { OpcaoDeFrete } from "@/lib/ghl/ficha-pedido/frete";
 import {
+  clicouHudFriday,
   ESTADOS,
   FORMAS,
   GRADE_ADULTO,
@@ -116,8 +117,8 @@ export function useMensagensDoFechamento() {
         setCliente({ oportunidadeId: id, nome: card.nome, buscando: false });
         return;
       }
-      // Quem recebeu o disparo da Hud Friday já abre com a chave ligada.
-      const base: Partial<Rascunho> = { pares: card.pares ? String(card.pares) : "", hudFriday: Boolean(card.hudFriday) };
+      // Quem tocou numa quantidade no disparo da Hud Friday já abre com a chave ligada.
+      const base: Partial<Rascunho> = { pares: card.pares ? String(card.pares) : "", hudFriday: clicouHudFriday(card.hudFriday) };
       bases.current[id] = base;
       setRascunhos((todos) => ({ ...todos, [id]: { ...rascunhoVazio(), ...base } }));
       setCliente({ oportunidadeId: id, nome: card.nome, buscando: true });
