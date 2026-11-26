@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hudFridayNoAr, mensagemOrcamentoFinal, precosDoPedido } from "../lib/fechamento/mensagens.ts";
+import { clicouHudFriday, hudFridayNoAr, mensagemOrcamentoFinal, precosDoPedido } from "../lib/fechamento/mensagens.ts";
 
 const QUINTA = Date.parse("2026-11-26T15:00:00-03:00");
 const SEXTA_CEDO = Date.parse("2026-11-27T00:00:00-03:00");
@@ -42,4 +42,11 @@ test("o orçamento da sexta diz Hud Friday, não Black", () => {
   const texto = mensagemOrcamentoFinal(precosDoPedido({ pares: 40, frete: 0 }, SEXTA_CEDO, { hudFriday: true }));
   assert.match(texto, /Hud Friday: só hoje, até meia-noite/);
   assert.doesNotMatch(texto, /Black November/);
+});
+
+test("filtro da Hud Friday: só quem tocou numa quantidade", () => {
+  assert.equal(clicouHudFriday("ate99"), true);
+  assert.equal(clicouHudFriday("100mais"), true);
+  assert.equal(clicouHudFriday("enviado"), false);
+  assert.equal(clicouHudFriday(null), false);
 });
