@@ -17,6 +17,14 @@ import { encerrarTarefa, sincronizarTarefa } from "./tarefa";
 
 export const PIPELINE_DO_PAINEL = "Atendimento";
 /** Etapas do painel, pelo nome (a ordem no CRM muda quando criam etapa). */
+/** Marca da Hud Friday pelas tags do contato: a faixa que tocou, ou só que recebeu. */
+export function hudFridayDasTags(tags: readonly string[]): string | null {
+  if (tags.includes("hudfriday_100mais")) return "100mais";
+  if (tags.includes("hudfriday_ate99")) return "ate99";
+  if (tags.includes("campanha_blackhudfriday_enviado")) return "enviado";
+  return null;
+}
+
 export const ETAPAS_DO_PAINEL = ["Quero aproveitar", "Prioridade de Fechamento", "Finalizando Venda"] as const;
 const TABELA = "fechamento_cards";
 const CONCORRENCIA = 3;
@@ -114,6 +122,7 @@ export async function atualizarPainelDeFechamento(): Promise<{
         conversa_atualizada_em: ISO(conversa?.lastMessageDate),
         ...resumo,
         cami_atendendo: Boolean(conversa?.tags.includes(AI_TAG)),
+        hud_friday: hudFridayDasTags(conversa?.tags ?? []),
         combinado: antes?.combinado ?? null,
         data_combinada: antes?.data_combinada ?? null,
         pendencia: antes?.pendencia ?? null,

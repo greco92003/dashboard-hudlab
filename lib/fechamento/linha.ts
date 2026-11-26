@@ -18,6 +18,8 @@ export interface LinhaDoCard {
   ultima_nossa_em: string | null;
   cliente_esperando: boolean;
   cami_atendendo: boolean;
+  /** Hud Friday: "100mais" ou "ate99" (tocou na faixa), "enviado" (recebeu), null (fora). */
+  hud_friday: string | null;
   combinado: string | null;
   data_combinada: string | null;
   pendencia: string | null;

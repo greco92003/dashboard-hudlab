@@ -21,6 +21,21 @@ export const PROMO_BLACK_NOVEMBER: Promocao = {
   texto: "",
 };
 
+/**
+ * Hud Friday (sex 27/11/2026, até 23:59): 15% no cartão em até 6x e, com os 5% do PIX,
+ * 20% no PIX, em qualquer quantidade. Só para a base: a Schay liga na aba Mensagens
+ * do Fechamento. O robô e a Cami seguem com a Black (decisão de 25/11).
+ */
+export const PROMO_HUD_FRIDAY: Promocao = {
+  nome: "Hud Friday",
+  inicio: "2026-11-27T00:00:00-03:00",
+  fim: "2026-11-28T00:00:00-03:00",
+  descontoPct: 15,
+  minPares: MIN_PARES,
+  faixas: [],
+  texto: "",
+};
+
 const BONUS = [
   { min: 500, texto: "arte digital de divulgação + frete grátis + fotos de estúdio dos seus slides + takes de produção" },
   { min: 100, texto: "arte digital de divulgação + frete grátis + fotos de estúdio dos seus slides" },
@@ -47,6 +62,8 @@ export interface OrcamentoBlack {
   pares: number;
   /** A promoção entrou no preço (false fora do período, quando a aba do Fechamento passa null). */
   black: boolean;
+  /** Nome da promoção que entrou no preço ("Black November", "Hud Friday"); null sem promoção. */
+  promocao: string | null;
   parTabela: number;
   parCartao: number;
   parPix: number;
@@ -101,6 +118,7 @@ export function orcamentoBlack(
   const o = {
     pares,
     black: preco.aplicada,
+    promocao: preco.aplicada ? (promo?.nome ?? null) : null,
     parTabela: preco.unitarioCheio,
     parCartao: preco.unitario,
     parPix: preco.pixUnitario,

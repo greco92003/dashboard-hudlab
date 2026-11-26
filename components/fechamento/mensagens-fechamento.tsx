@@ -20,6 +20,7 @@ import {
   mensagemConfirmacao,
   mensagemOrcamentoFinal,
   precoDaForma,
+  hudFridayNoAr,
   precosDoPedido,
   totalDaGrade,
   totalDoModelo,
@@ -46,6 +47,8 @@ export interface Rascunho {
   /** Transportadora escolhida na cotação pelo CEP; null = a mais barata. */
   transportadora: string | null;
   forma: FormaDePagamento;
+  /** Hud Friday ligada para esse cliente (só vale na sexta, 27/11). */
+  hudFriday: boolean;
   evento: string;
   obs: string;
   modelos: ModeloDaGrade[];
@@ -62,6 +65,7 @@ const rascunhoVazio = (): Rascunho => ({
   freteCombinado: "",
   transportadora: null,
   forma: "pix",
+  hudFriday: false,
   evento: "",
   obs: "",
   modelos: [modeloVazio()],
@@ -106,13 +110,14 @@ export function useMensagensDoFechamento() {
   );
 
   const abrirCliente = useCallback(
-    (card: { oportunidadeId: string; nome: string; pares: number | null }) => {
+    (card: { oportunidadeId: string; nome: string; pares: number | null; hudFriday?: string | null }) => {
       const id = card.oportunidadeId;
       if (rascunhos[id]) {
         setCliente({ oportunidadeId: id, nome: card.nome, buscando: false });
         return;
       }
-      const base: Partial<Rascunho> = { pares: card.pares ? String(card.pares) : "" };
+      // Quem recebeu o disparo da Hud Friday já abre com a chave ligada.
+      const base: Partial<Rascunho> = { pares: card.pares ? String(card.pares) : "", hudFriday: Boolean(card.hudFriday) };
       bases.current[id] = base;
       setRascunhos((todos) => ({ ...todos, [id]: { ...rascunhoVazio(), ...base } }));
       setCliente({ oportunidadeId: id, nome: card.nome, buscando: true });
@@ -122,6 +127,7 @@ export function useMensagensDoFechamento() {
           const dados = (await resposta.json()) as { cep?: string | null; uf?: string | null; pares?: number | null };
           if (!resposta.ok) return;
           const doCadastro: Partial<Rascunho> = {
+            ...base,
             pares: base.pares || (dados.pares ? String(dados.pares) : ""),
             cep: dados.cep ? formatarCep(dados.cep) : "",
             uf: dados.uf ?? "",
@@ -322,7 +328,7 @@ export function MensagensDoFechamento({ estado }: { estado: EstadoDasMensagens }
     const controle = new AbortController();
     const espera = window.setTimeout(async () => {
       setCotacao({ status: "cotando" });
-      const valorNf = Math.round(precosDoPedido({ pares: nPares, frete: 0 })?.subtotalCartao ?? 0);
+      const valorNf = Math.round(precosDoPedido({ pares: nPares, frete: 0 }, Date.now(), { hudFriday: r.hudFriday })?.subtotalCartao ?? 0);
       try {
         const resposta = await fetch(`/api/fechamento/frete?cep=${digitosDoCep}&pares=${nPares}&valor=${valorNf}`, {
           signal: controle.signal,
@@ -348,13 +354,14 @@ export function MensagensDoFechamento({ estado }: { estado: EstadoDasMensagens }
       window.clearTimeout(espera);
     };
     // `mudar` só muda quando muda o cliente: a correção da UF vai para o rascunho certo.
-  }, [digitosDoCep, nPares, mudar]);
+  }, [digitosDoCep, nPares, mudar, r.hudFriday]);
 
   const opcaoCotada =
     cotacao.status === "cotada" ? (cotacao.opcoes.find((o) => o.transportadora === r.transportadora) ?? cotacao.opcoes[0]) : null;
   // Prioridade: frete combinado (digitado), depois a cotação pelo CEP, depois a estimativa pelo estado.
   const frete = freteDaAba({ pares: nPares, digitado: lerValor(r.freteCombinado), cotadoCep: opcaoCotada?.total ?? null, uf: r.uf });
-  const precos = precosDoPedido({ pares: nPares, frete: frete.valor });
+  const sextaHudFriday = hudFridayNoAr(Date.now());
+  const precos = precosDoPedido({ pares: nPares, frete: frete.valor }, Date.now(), { hudFriday: r.hudFriday });
   const exato = freteExato(frete.origem);
 
   const orcamento =
@@ -491,6 +498,22 @@ export function MensagensDoFechamento({ estado }: { estado: EstadoDasMensagens }
             </>
           ) : null}
         </p>
+      )}
+
+      {sextaHudFriday && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={r.hudFriday}
+          onClick={() => mudar({ hudFriday: !r.hudFriday })}
+          className={cn(
+            "flex items-center justify-between rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+            r.hudFriday ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          <span>⚡ Hud Friday: 20% no Pix e 15% no cartão</span>
+          <span>{r.hudFriday ? "ligada" : "desligada"}</span>
+        </button>
       )}
 
       {passo === "orcamento" && (
