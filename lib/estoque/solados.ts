@@ -137,6 +137,16 @@ export type SoladoParametros = {
   consumoMensalMedio: number;
   /** Dias corridos de embarques que formam o consumo médio. */
   diasJanelaConsumo: number;
+  /**
+   * Corte manual no consumo que dimensiona o mínimo, em fração (0,4 = −40%).
+   *
+   * A média dos últimos 90 dias olha para trás e não enxerga a queda de
+   * dezembro e janeiro. Em 27/11/2026 o dono pediu −40% "na canetada" para
+   * não imobilizar caixa na virada; o ajuste será revisto com o tempo.
+   * Mexe só no estoque controlador: a necessidade dos pedidos já vendidos
+   * continua inteira. Zero desliga.
+   */
+  reducaoManualConsumo: number;
 };
 
 export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
@@ -148,7 +158,14 @@ export const SOLADO_PARAMETROS_PADRAO: SoladoParametros = {
   tetoInfluenciaPedido: 0.1,
   consumoMensalMedio: 0,
   diasJanelaConsumo: 90,
+  reducaoManualConsumo: 0.4,
 };
+
+/** Consumo mensal que de fato dimensiona o mínimo, já com o corte manual. */
+export function consumoConsiderado(p: SoladoParametros): number {
+  const reducao = Math.min(Math.max(p.reducaoManualConsumo ?? 0, 0), 1);
+  return Math.round(p.consumoMensalMedio * (1 - reducao));
+}
 
 /** Dias de um mês médio, para converter a janela em média mensal. */
 const DIAS_POR_MES = 365.25 / 12;
@@ -224,6 +241,17 @@ export const NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP = new Set([
   "wb1Tcna4ImnT7dIRgWSD", // 1973 — Henrique - CNG
   "7KWZaxqbLki11GMyjeAW", // 1974 — Carolina Menezes - Quintal 542
   "8OholN63l2Ge9Bz2ZymN", // 1975 — Bia - Bateria Cilada
+]);
+
+/**
+ * Pedidos que o time decidiu não contar no estoque de solados: ficam fora da
+ * necessidade, da curva e do consumo médio. Decisão caso a caso, com a data.
+ *
+ * Diferente da lista acima, esta não tem prazo para esvaziar. Para voltar a
+ * contar um pedido, basta tirar a linha.
+ */
+export const NEGOCIOS_FORA_DO_ESTOQUE = new Set([
+  "T8dZtkrley4DOPkBGT85", // 2350 — Caroline Atlas Brasil (27/11/2026)
 ]);
 
 /** Um modelo de um pedido: a grade e a cor de solado escolhida. */
@@ -532,11 +560,14 @@ export function montarResumo(input: {
   const necessidade = new Map<string, number>();
   const aCaminho = new Map<string, number>();
 
+  const contaveis = input.negocios.filter(
+    (negocio) => !NEGOCIOS_FORA_DO_ESTOQUE.has(negocio.dealId),
+  );
   // Exceção temporária: ver NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP.
-  const negocios = input.negocios.filter(
+  const negocios = contaveis.filter(
     (negocio) => !NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP.has(negocio.dealId),
   );
-  const legadosForaDaConta = input.negocios.length - negocios.length;
+  const legadosForaDaConta = contaveis.length - negocios.length;
 
   for (const negocio of negocios) {
     for (const item of negocio.itens) {
@@ -552,7 +583,7 @@ export function montarResumo(input: {
   const curva = curvaDeDemanda(negocios, p.tetoInfluenciaPedido);
   const somaCurva = [...curva.values()].reduce((a, b) => a + b, 0);
   const coberturaEmPares = Math.round(
-    (p.consumoMensalMedio / p.diasUteisPorMes) * p.diasUteisCobertura,
+    (consumoConsiderado(p) / p.diasUteisPorMes) * p.diasUteisCobertura,
   );
 
   const linhas = combinacoesSolado().map(({ cor, numeracao, publico }) => {

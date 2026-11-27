@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Settings2 } from "lucide-react";
-import type { SoladoResumo } from "@/lib/estoque/solados";
+import { consumoConsiderado, type SoladoResumo } from "@/lib/estoque/solados";
 
 function Item({
   rotulo,
@@ -43,8 +43,10 @@ function Item({
  */
 export function PainelPolitica({ dados }: { dados: SoladoResumo }) {
   const p = dados.parametros;
+  const considerado = consumoConsiderado(p);
+  const reducao = Math.round((p.reducaoManualConsumo ?? 0) * 100);
   const porDiaUtil = p.diasUteisPorMes
-    ? Math.round(p.consumoMensalMedio / p.diasUteisPorMes)
+    ? Math.round(considerado / p.diasUteisPorMes)
     : 0;
 
   return (
@@ -71,6 +73,16 @@ export function PainelPolitica({ dados }: { dados: SoladoResumo }) {
             valor={`${p.consumoMensalMedio} pares`}
             nota={`Embarques dos últimos ${p.diasJanelaConsumo} dias. Nenhum pedido pesa mais que ${Math.round(p.tetoInfluenciaPedido * 100)}% da janela, para um pedido atípico não virar base.`}
           />
+          {reducao > 0 && (
+            <>
+              <Item
+                rotulo="Ajuste manual"
+                valor={`−${reducao}%`}
+                nota="Corte decidido pelo time para dezembro e janeiro: as vendas caem e o caixa pesa, e a média dos últimos meses não enxerga essa queda. Vale só para o mínimo; os pedidos já vendidos contam inteiros."
+              />
+              <Item rotulo="Consumo considerado" valor={`${considerado} pares`} />
+            </>
+          )}
           <Item rotulo="Por dia útil" valor={`${porDiaUtil} pares`} />
 
           <h3 className="pb-1 pt-6 text-xs font-medium uppercase tracking-wide text-muted-foreground">

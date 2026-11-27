@@ -7,6 +7,8 @@ import {
   curvaDeDemanda,
   montarResumo,
   NEGOCIOS_BAIXADOS_NO_CADASTRO_ERP,
+  NEGOCIOS_FORA_DO_ESTOQUE,
+  consumoConsiderado,
   parseSoladoDescricao,
   publicoDaNumeracao,
   SOLADO_PARAMETROS_PADRAO,
@@ -40,9 +42,10 @@ const negocio = (over = {}) => ({
 /**
  * O pedido mínimo total sai de cena por padrão: quase todo teste aqui olha uma
  * linha isolada, e completar até 240 mascararia o que se quer medir. Os testes
- * do pedido mínimo o ligam de volta.
+ * do pedido mínimo o ligam de volta. O corte manual do consumo também fica
+ * desligado: tem testes próprios.
  */
-const isolado = { pedidoMinimoTotal: 0 };
+const isolado = { pedidoMinimoTotal: 0, reducaoManualConsumo: 0 };
 
 /** Parâmetros com a cobertura desligada, para isolar trava e lote. */
 const semCobertura = {
@@ -301,6 +304,58 @@ test("a lista de legados é finita e some quando esvaziar", () => {
     parametros: semCobertura,
   });
   assert.equal(semLegados.legadosForaDaConta, 0);
+});
+
+test("pedido fora do estoque não conta na necessidade, na curva nem como legado", () => {
+  const fora = [...NEGOCIOS_FORA_DO_ESTOQUE][0];
+  const resumo = montarResumo({
+    skus: [sku("Preto", "40/41", 0)],
+    negocios: [
+      negocio({
+        dealId: fora,
+        itens: [{ cor: "Branco", numeracao: "44/45", pares: 900 }],
+      }),
+      negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 100 }] }),
+    ],
+    parametros: comCobertura,
+  });
+  assert.equal(linha(resumo, "Branco", "44/45").necessidade, 0);
+  assert.equal(linha(resumo, "Branco", "44/45").curva, 0);
+  assert.equal(linha(resumo, "Preto", "40/41").necessidade, 100);
+  assert.equal(resumo.negocios.length, 1);
+  assert.equal(resumo.legadosForaDaConta, 0);
+});
+
+test("corte manual de 40% encolhe o mínimo e não a necessidade dos pedidos", () => {
+  const entrada = (reducaoManualConsumo) =>
+    montarResumo({
+      skus: [sku("Preto", "40/41", 0)],
+      negocios: [
+        negocio({ itens: [{ cor: "Preto", numeracao: "40/41", pares: 100 }] }),
+      ],
+      parametros: { ...comCobertura, reducaoManualConsumo },
+    });
+  const cheio = entrada(0);
+  const cortado = entrada(0.4);
+  // 1.390 × 0,6 = 834 pares/mês ÷ 21 × 15 = 596 de cobertura (antes 993).
+  assert.equal(cheio.coberturaEmPares, 993);
+  assert.equal(cortado.coberturaEmPares, 596);
+  assert.equal(linha(cortado, "Preto", "40/41").minimo, 596);
+  assert.equal(linha(cortado, "Preto", "40/41").necessidade, 100);
+  assert.equal(linha(cortado, "Preto", "40/41").sugestaoCompra, 696);
+});
+
+test("o corte manual vale hoje em 40% e nunca passa de 100%", () => {
+  assert.equal(SOLADO_PARAMETROS_PADRAO.reducaoManualConsumo, 0.4);
+  const base = { ...SOLADO_PARAMETROS_PADRAO, consumoMensalMedio: 2453 };
+  assert.equal(consumoConsiderado(base), 1472);
+  assert.equal(consumoConsiderado({ ...base, reducaoManualConsumo: 0 }), 2453);
+  assert.equal(consumoConsiderado({ ...base, reducaoManualConsumo: 2 }), 0);
+  assert.equal(consumoConsiderado({ ...base, reducaoManualConsumo: -1 }), 2453);
+});
+
+test("Caroline Atlas Brasil está fora do estoque", () => {
+  assert.ok(NEGOCIOS_FORA_DO_ESTOQUE.has("T8dZtkrley4DOPkBGT85"));
 });
 
 test("demanda sem SKU correspondente aparece como erro, não some da conta", () => {
