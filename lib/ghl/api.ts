@@ -294,25 +294,36 @@ export async function searchGhlOpportunitiesByStage(
   status: "open" | "won" = "open",
 ): Promise<GhlOpportunity[]> {
   const { locationId } = requireEnv();
-  const data = await ghlFetch<{
-    opportunities?: GhlOpportunity[];
-    meta?: { total?: number };
-  }>("/opportunities/search", {
-    location_id: locationId,
-    pipeline_id: pipelineId,
-    pipeline_stage_id: pipelineStageId,
-    status,
-    limit: "100",
-  });
-
-  const opportunities = data.opportunities ?? [];
-  if ((data.meta?.total ?? opportunities.length) > opportunities.length) {
-    throw new Error(
-      "GHL returned more than 100 opportunities for the order registration stage",
-    );
+  // O GHL devolve no máximo 100 por página: pagina até acabar (a etapa
+  // Quero aproveitar passou de 100 na Hud Friday e o painel parou).
+  const porId = new Map<string, GhlOpportunity>();
+  for (let page = 1; page <= MAX_PAGINAS_ETAPA; page++) {
+    const data = await ghlFetch<{
+      opportunities?: GhlOpportunity[];
+      meta?: { total?: number };
+    }>("/opportunities/search", {
+      location_id: locationId,
+      pipeline_id: pipelineId,
+      pipeline_stage_id: pipelineStageId,
+      status,
+      limit: String(POR_PAGINA_ETAPA),
+      page: String(page),
+    });
+    const lote = data.opportunities ?? [];
+    const antes = porId.size;
+    for (const opp of lote) porId.set(opp.id, opp);
+    const total = data.meta?.total;
+    if (lote.length < POR_PAGINA_ETAPA || porId.size === antes) break;
+    if (total != null && porId.size >= total) break;
+    if (page === MAX_PAGINAS_ETAPA) {
+      throw new Error(`GHL: etapa com mais de ${MAX_PAGINAS_ETAPA * POR_PAGINA_ETAPA} oportunidades`);
+    }
   }
-  return opportunities;
+  return [...porId.values()];
 }
+
+const POR_PAGINA_ETAPA = 100;
+const MAX_PAGINAS_ETAPA = 20;
 
 /**
  * Id da etapa `stageName` dentro de `pipelineId`. Resolvido no ar em vez de
