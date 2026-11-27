@@ -32,6 +32,7 @@ import { tinyV3Request } from "@/lib/tiny/v3-client";
 import {
   consumoMensalComTeto,
   montarResumo,
+  NEGOCIOS_FORA_DO_ESTOQUE,
   parseSoladoDescricao,
   SOLADO_PARAMETROS_PADRAO,
   SOLADO_PRODUTOS_DUPLICADOS,
@@ -415,7 +416,7 @@ async function lerConsumoMensalMedio(): Promise<number> {
   for (let offset = 0; ; offset += PAGINA_DEALS) {
     const url =
       `${supabaseUrl}/rest/v1/deals_cache` +
-      `?select=quantidade-de-pares&status=eq.won` +
+      `?select=deal_id,quantidade-de-pares&status=eq.won` +
       `&data_embarque_date=gte.${desde}&data_embarque_date=lt.${ate}` +
       `&order=deal_id&limit=${PAGINA_DEALS}&offset=${offset}`;
     const resposta = await fetch(url, {
@@ -425,6 +426,7 @@ async function lerConsumoMensalMedio(): Promise<number> {
     if (!resposta.ok) return 0;
     const linhas = (await resposta.json()) as Array<Record<string, unknown>>;
     for (const linha of linhas) {
+      if (NEGOCIOS_FORA_DO_ESTOQUE.has(String(linha.deal_id))) continue;
       paresPorPedido.push(Number(linha["quantidade-de-pares"]));
     }
     if (linhas.length < PAGINA_DEALS) break;
