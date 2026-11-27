@@ -162,7 +162,7 @@ export async function executeTool(
   call: FunctionCall,
   actions: SellerActions,
   /** Promoção que vale agora (Controle): o orçamento já sai com o desconto. */
-  ctx: { promocao?: Promocao | null } = {},
+  ctx: { promocao?: Promocao | null; limitePedidoGrande?: number } = {},
 ): Promise<ToolExecution> {
   const args = parseArgs(call.arguments);
   if (!args) return erro("argumentos inválidos");
@@ -225,10 +225,11 @@ export async function executeTool(
     case "atualizar_orcamento": {
       const pares = Number(args.pares);
       if (!Number.isInteger(pares)) return erro("pares precisa ser um número inteiro");
-      if (pares >= LARGE_ORDER_PARES) {
+      const limite = ctx.limitePedidoGrande ?? LARGE_ORDER_PARES;
+      if (pares >= limite) {
         return ok({
           erro: "pedido_grande",
-          instrucao: `Pedidos de ${LARGE_ORDER_PARES} pares ou mais vão para uma pessoa do time: use escalar_para_humano com motivo pedido_grande.`,
+          instrucao: `Pedidos de ${limite} pares ou mais vão para uma pessoa do time: use escalar_para_humano com motivo pedido_grande.`,
         });
       }
       const preco = precoComPromocao(pares, ctx.promocao ?? null);

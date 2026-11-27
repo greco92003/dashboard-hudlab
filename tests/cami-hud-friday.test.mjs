@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { contextoHudFriday, faixaHudFriday, promocaoDoContato } from "../lib/ghl/ai-seller/hud-friday.ts";
+import { contextoHudFriday, faixaHudFriday, limitePedidoGrande, promocaoDoContato } from "../lib/ghl/ai-seller/hud-friday.ts";
 import { PROMO_BLACK_NOVEMBER } from "../lib/ghl/orcamento-black/calc.ts";
 import { precoComPromocao } from "../lib/ghl/ai-seller/vigentes.ts";
 
@@ -46,4 +46,12 @@ test("contexto: quinta avisa sem antecipar preço, sexta manda usar a ferramenta
 test("faixa pelo botão", () => {
   assert.equal(faixaHudFriday(["hudfriday_100mais"]), "100 pares ou mais");
   assert.equal(faixaHudFriday(RECEBEU), null);
+});
+
+test("corte da Cami na Hud Friday: de 20 pares para cima vai para a Schay, só na sexta", () => {
+  assert.equal(limitePedidoGrande(RECEBEU, SEXTA), 20);
+  assert.equal(limitePedidoGrande(RECEBEU, QUINTA), 500);
+  assert.equal(limitePedidoGrande(RECEBEU, SABADO), 500);
+  assert.equal(limitePedidoGrande(["lead"], SEXTA), 500);
+  assert.match(contextoHudFriday(RECEBEU, SEXTA), /até 19 pares/);
 });
