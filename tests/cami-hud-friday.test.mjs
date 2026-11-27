@@ -34,6 +34,10 @@ test("contexto: quinta avisa sem antecipar preço, sexta manda usar a ferramenta
   assert.match(quinta, /12 a 99 pares/);
   assert.match(quinta, /Não calcule nem grave orçamento com a Hud Friday antes de sexta/);
   assert.match(contextoHudFriday(RECEBEU, SEXTA), /Hud Friday HOJE/);
+  for (const t of [quinta, contextoHudFriday(RECEBEU, SEXTA)]) {
+    assert.match(t, /pedido mínimo de 12 pares/);
+    assert.match(t, /menos de 12 pares/);
+  }
   assert.equal(contextoHudFriday(CLICOU, SABADO), "");
   assert.equal(contextoHudFriday(["lead"], QUINTA), "");
   assert.ok(!/—/.test(quinta + contextoHudFriday(RECEBEU, SEXTA)), "sem travessão");

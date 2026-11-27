@@ -39,11 +39,14 @@ export function contextoHudFriday(tags: readonly string[] | null | undefined, no
   if (fase === "encerrada") return "";
   const faixa = faixaHudFriday(tags);
   const condicao =
-    "20% de desconto no PIX e 15% no cartão em até 6x, em qualquer quantidade, só para pedido fechado na sexta até 23:59";
+    "20% de desconto no PIX e 15% no cartão em até 6x, em qualquer faixa de quantidade a partir do pedido mínimo de 12 pares, só para pedido fechado na sexta até 23:59";
+  // "Qualquer quantidade" fez cliente pedir 10 pares (27/11): a Cami fala em faixa e lembra o mínimo.
+  const minimo =
+    " Diga \"qualquer faixa de quantidade\", nunca \"qualquer quantidade\". Se o cliente quiser menos de 12 pares, explique com gentileza que a Hud Friday vale em todas as faixas, mas o pedido mínimo é de 12 pares, e ofereça fechar 12.";
   if (fase === "agendada") {
     return `\n\nHud Friday (só para este cliente, que recebeu a campanha da base): amanhã, sexta 27/11, ${condicao}.${
       faixa ? ` Ele já tocou em "${faixa}" e vai receber aqui o preço da faixa dele na sexta, a partir das 8h.` : ""
-    } Hoje vale a condição normal (Black November). Se ele perguntar da Hud Friday ou disser que vai esperar, confirme a condição e que amanhã a partir das 8h ele recebe o preço aqui. Não calcule nem grave orçamento com a Hud Friday antes de sexta.`;
+    } Hoje vale a condição normal (Black November). Se ele perguntar da Hud Friday ou disser que vai esperar, confirme a condição e que amanhã a partir das 8h ele recebe o preço aqui. Não calcule nem grave orçamento com a Hud Friday antes de sexta.${minimo}`;
   }
-  return `\n\nHud Friday HOJE (só para este cliente, que recebeu a campanha da base): ${condicao}. Ela substitui a Black November para ele hoje: a ferramenta atualizar_orcamento já calcula com a Hud Friday (15% no valor dos pares e mais 5% no PIX, 20% no total); cite os valores que ela devolver. Reforce que vale só hoje, até meia-noite, e só com o pedido fechado hoje.`;
+  return `\n\nHud Friday HOJE (só para este cliente, que recebeu a campanha da base): ${condicao}. Ela substitui a Black November para ele hoje: a ferramenta atualizar_orcamento já calcula com a Hud Friday (15% no valor dos pares e mais 5% no PIX, 20% no total); cite os valores que ela devolver. Reforce que vale só hoje, até meia-noite, e só com o pedido fechado hoje.${minimo}`;
 }
