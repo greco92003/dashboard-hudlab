@@ -5,6 +5,7 @@
 // preço; na sexta o orçamento sai com a Hud Friday no lugar da Black November. Para os
 // outros (tráfego novo) nada muda (decisão de 25/11).
 import { PROMO_HUD_FRIDAY } from "../orcamento-black/calc";
+import { LARGE_ORDER_PARES } from "./config";
 import { vigencia, type Promocao } from "./vigentes";
 
 export const TAG_HUD_FRIDAY_RECEBEU = "campanha_blackhudfriday_enviado";
@@ -32,6 +33,17 @@ export function promocaoDoContato(
   return promoControle;
 }
 
+/**
+ * Na Hud Friday a Cami ajuda só nos pedidos pequenos da base (decisão de 27/11):
+ * de 20 pares para cima o pedido vai para a Schay (pedido_grande).
+ */
+export const HUD_FRIDAY_LIMITE_CAMI = 20;
+
+/** A partir de quantos pares o pedido vai para uma pessoa do time, para esse contato agora. */
+export function limitePedidoGrande(tags: readonly string[] | null | undefined, nowMs: number): number {
+  return recebeuHudFriday(tags) && vigencia(PROMO_HUD_FRIDAY, nowMs) === "ativa" ? HUD_FRIDAY_LIMITE_CAMI : LARGE_ORDER_PARES;
+}
+
 /** Linha extra do contexto da Cami, só para quem recebeu o disparo, na quinta e na sexta. Vazio fora disso. */
 export function contextoHudFriday(tags: readonly string[] | null | undefined, nowMs: number): string {
   if (!recebeuHudFriday(tags)) return "";
@@ -48,5 +60,5 @@ export function contextoHudFriday(tags: readonly string[] | null | undefined, no
       faixa ? ` Ele já tocou em "${faixa}" e vai receber aqui o preço da faixa dele na sexta, a partir das 8h.` : ""
     } Hoje vale a condição normal (Black November). Se ele perguntar da Hud Friday ou disser que vai esperar, confirme a condição e que amanhã a partir das 8h ele recebe o preço aqui. Não calcule nem grave orçamento com a Hud Friday antes de sexta.${minimo}`;
   }
-  return `\n\nHud Friday HOJE (só para este cliente, que recebeu a campanha da base): ${condicao}. Ela substitui a Black November para ele hoje: a ferramenta atualizar_orcamento já calcula com a Hud Friday (15% no valor dos pares e mais 5% no PIX, 20% no total); cite os valores que ela devolver. Reforce que vale só hoje, até meia-noite, e só com o pedido fechado hoje.${minimo}`;
+  return `\n\nHud Friday HOJE (só para este cliente, que recebeu a campanha da base): ${condicao}. Ela substitui a Black November para ele hoje: a ferramenta atualizar_orcamento já calcula com a Hud Friday (15% no valor dos pares e mais 5% no PIX, 20% no total); cite os valores que ela devolver. Reforce que vale só hoje, até meia-noite, e só com o pedido fechado hoje.${minimo} Hoje você atende só pedidos de até ${HUD_FRIDAY_LIMITE_CAMI - 1} pares: se o cliente quiser ${HUD_FRIDAY_LIMITE_CAMI} pares ou mais, confirme a quantidade e passe para a Schay com escalar_para_humano, motivo pedido_grande.`;
 }

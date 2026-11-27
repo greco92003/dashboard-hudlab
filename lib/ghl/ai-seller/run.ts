@@ -45,7 +45,7 @@ import { notifyHandoffNow } from "./alerts-send";
 import { escalationAvailability } from "./hours";
 import { isImageTooLargeError, withLowDetailImages } from "./images";
 import { avisosAtivos, contextoVigentes, promocaoAtiva } from "./vigentes";
-import { contextoHudFriday, promocaoDoContato } from "./hud-friday";
+import { contextoHudFriday, limitePedidoGrande, promocaoDoContato } from "./hud-friday";
 import { findCurrentOpportunity } from "./opportunity";
 import { loadActiveAnnex } from "./annex-store";
 import { runAgentLoop, type CallModel, type LoopResult } from "./loop";
@@ -613,7 +613,7 @@ async function respondToContactUnsafe(
     callModel: makeCallModel(
       buildSellerInstructions({ persona, escalationName: settings.escalationName, anexo: await loadActiveAnnex() }),
     ),
-    executeTool: (call) => executeTool(call, actions, { promocao }),
+    executeTool: (call) => executeTool(call, actions, { promocao, limitePedidoGrande: limitePedidoGrande(contact.tags, Date.now()) }),
     maxSteps: MAX_AGENT_STEPS,
     deadlineMs: startedAt + AGENT_DEADLINE_MS,
   });
