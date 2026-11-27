@@ -36,6 +36,7 @@ import {
   Factory,
   Bot,
   Flame,
+  Gift,
 } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMeta } from "@fortawesome/free-brands-svg-icons";
@@ -204,6 +205,11 @@ const menuGroups: MenuGroup[] = [
         title: "Fechamento",
         url: "/fechamento",
         icon: Flame,
+      },
+      {
+        title: "Hud Indica",
+        url: "/indica",
+        icon: Gift,
       },
       {
         title: "Designers",
